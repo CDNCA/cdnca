@@ -107,6 +107,19 @@ describe('入口判断', () => {
     assert.equal(r.stderr, '', 'main 若被执行会打印用法')
   })
 
+  test('check 结果中英双语（英文文档引用的就是这行输出）', () => {
+    const project = join(temp, 'check-bilingual')
+    const run = (...args) => spawnSync(process.execPath, [bin, ...args], { encoding: 'utf8' })
+    assert.equal(run('init', project, '--template', 'site', '--plugin-id', 'acme.dev.check').status, 0)
+    const ok = run('check', project)
+    assert.equal(ok.status, 0, ok.stderr)
+    assert.match(ok.stdout, /^预检通过（\d+ 字节）\/ check passed \(\d+ bytes\)\n$/)
+    writeFileSync(join(project, 'site/index.html'), '<script src="https://cdn.example.com/x.js"></script>')
+    const bad = run('check', project)
+    assert.equal(bad.status, 1)
+    assert.match(bad.stderr, /^预检发现 1 个问题 \/ check found 1 problem\(s\)：\n/)
+  })
+
   test('用法错误与未知命令保持退出码 2', () => {
     const r = spawnSync(process.execPath, [bin, 'nope'], { encoding: 'utf8' })
     assert.equal(r.status, 2)

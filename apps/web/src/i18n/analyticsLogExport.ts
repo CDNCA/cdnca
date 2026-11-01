@@ -16,6 +16,7 @@ const messages = {
     reasonOther: '生成失败，请稍后重新申请', noRows: '当前条件没有日志，文件只有表头',
     filterSummary: '原查询条件', filterAll: '全部日志',
     scopeExisting: '当前条件已有下载申请：', retryThis: '重试这次申请',
+    status: '状态', requestedBy: '申请人', downloads: '下载记录', notDownloaded: '未下载', downloadCount: '共下载 {count} 次',
   },
   'en-US': {
     create: 'Request download', title: 'Access log exports', refresh: 'Refresh export status', download: 'Download',
@@ -34,6 +35,7 @@ const messages = {
     reasonOther: 'Generation failed; request again later', noRows: 'No logs match; the file has only the header',
     filterSummary: 'Original query', filterAll: 'All logs',
     scopeExisting: 'A download request already exists for these filters: ', retryThis: 'Retry this request',
+    status: 'Status', requestedBy: 'Requested by', downloads: 'Downloads', notDownloaded: 'Not downloaded', downloadCount: 'Downloaded {count} times',
   },
   'qps-ploc': {
     create: '[!! Rêqüêsţ ðöwñlöåð !!]', title: '[!! Åççêss lög êxþörţs !!]', refresh: '[!! Rêfrêsh êxþörţ sţåţüs !!]', download: '[!! Ðöwñlöåð !!]',
@@ -50,6 +52,7 @@ const messages = {
     reasonInvalidFilter: '[!! Ïñvålïð qüêrÿ !!]', reasonRejected: '[!! Rêjêçţêð !!]', reasonOther: '[!! Fåïlêð !!]', noRows: '[!! Ñö lögs måţçh !!]',
     filterSummary: '[!! Örïgïñål qüêrÿ !!]', filterAll: '[!! Åll lögs !!]',
     scopeExisting: '[!! Rêqüêsţ êxïsţs: !!]', retryThis: '[!! Rêţrÿ ţhïs rêqüêsţ !!]',
+    status: '[!! Šţåţüs !!]', requestedBy: '[!! Rêqüêsţêð ßÿ !!]', downloads: '[!! Ðöwñlöåðs !!]', notDownloaded: '[!! Ñöţ ðöwñlöåðêð !!]', downloadCount: '[!! Ðöwñlöåðêð {count} ţïmês !!]',
   },
 } as const
 

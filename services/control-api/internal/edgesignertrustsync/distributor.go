@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/libs/entitlement/edgesignertrust"
+	"github.com/cdnca/cdnca/services/control-api/internal/natsready"
 )
 
 // Transport carries bundles to agent-gateway and receipts back.
@@ -209,7 +210,7 @@ func (distributor *Distributor) consumeReceipts(ctx context.Context) {
 		delivery, err := distributor.config.Transport.NextReceipt(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				distributor.config.Logger.Warn("edge signer trust receipts unavailable", "error", err)
+				natsready.LogUnbound(distributor.config.Logger, "edge signer trust receipts unavailable", err)
 				select {
 				case <-ctx.Done():
 				case <-time.After(distributor.config.Interval):

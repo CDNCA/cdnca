@@ -7,6 +7,7 @@
 # 调用方提供 log/fail/progress_line/progress_tick，并在 EXIT 时启动 PAUSED_APT_TIMERS 里的定时器。
 KEEP_UNATTENDED_UPGRADES=false
 PAUSED_APT_TIMERS=()
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 # apt-get update 不理会 DPkg::Lock::Timeout 就去拿 lists 锁：先停定时器，再等正在跑的自动更新结束
 # （不打断正在写 dpkg 的进程），最后按开关停用或只暂停。
@@ -22,12 +23,12 @@ quiesce_package_automation() {
     pgrep -f '/usr/bin/unattended-upgrade( |$)' >/dev/null; do
     [ "$SECONDS" -lt "$deadline" ] || fail 'package automation (apt-daily/unattended-upgrades) is still running after 15 minutes'
     [ -n "$waiting" ] || { log 'waiting for the running automatic package update to finish'; waiting=1; }
-    progress_tick '系统自动更新（apt-daily/unattended-upgrades）结束' 900
+    progress_tick "$(msg '系统自动更新（apt-daily/unattended-upgrades）结束' ' the automatic package update (apt-daily/unattended-upgrades) to finish')" 900
     sleep 5
   done
   if [ "$KEEP_UNATTENDED_UPGRADES" = true ]; then
     [ "${#PAUSED_APT_TIMERS[@]}" -eq 0 ] ||
-      progress_line "已按 --keep-unattended-upgrades 保留系统自动更新：安装期间暂停 ${PAUSED_APT_TIMERS[*]}，结束后恢复"
+      progress_line "$(msg "已按 --keep-unattended-upgrades 保留系统自动更新：安装期间暂停 ${PAUSED_APT_TIMERS[*]}，结束后恢复" "automatic system updates kept (--keep-unattended-upgrades): ${PAUSED_APT_TIMERS[*]} paused during the installation and restored afterwards")"
   else
     # 只处理存在且启用（或正在运行）的单元；未安装、已停用或被 mask 的不动。
     for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service; do
@@ -38,7 +39,7 @@ quiesce_package_automation() {
     # 已停用的定时器退出时不再恢复。
     PAUSED_APT_TIMERS=()
     [ -z "$disabled" ] ||
-      progress_line "已停用系统自动更新（${disabled# }）：生产机默认关闭，避免无人值守升级在运行中替换并重启依赖服务；软件包保留，可手动 apt-get update && apt-get upgrade；恢复系统默认：systemctl enable --now${disabled}"
+      progress_line "$(msg "已停用系统自动更新（${disabled# }）：生产机默认关闭，避免无人值守升级在运行中替换并重启依赖服务；软件包保留，可手动 apt-get update && apt-get upgrade；恢复系统默认：systemctl enable --now${disabled}" "automatic system updates disabled (${disabled# }): off by default on production hosts so unattended upgrades cannot replace and restart dependencies while running; the packages stay, upgrade manually with apt-get update && apt-get upgrade; restore the system default: systemctl enable --now${disabled}")"
   fi
   # dnf waits on the rpm lock itself; only pause the cache timer for the install.
   if command -v dnf >/dev/null 2>&1 && systemctl is-active --quiet dnf-makecache.timer; then

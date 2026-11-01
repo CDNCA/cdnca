@@ -264,3 +264,20 @@ test('installers accept --yes and run preflight before any mutation', () => {
     assert.ok(main.indexOf('  run_preflight\n') > 0 && main.indexOf('  run_preflight\n') < main.indexOf(`  ${first}\n`), relative)
   }
 })
+
+// installer-i18n B：INSTALL_LANG=en 时检测报告（项目名、详情、建议、结论）为英文；记录里的项目名保持中文。
+test('English report translates items, details, hints and the verdict', () => {
+  const fixture = host({ uid: 1000, cores: 1, listen: [443, 19443] })
+  const en = run(fixture, report("INSTALL_LANG=en; preflight_check_root; preflight_check_cpu control; preflight_check_ports 443:网站HTTPS 19443:节点注册; preflight_check_commands bash -- definitely-missing-cmd; printf '%s\\n' \"${PREFLIGHT_ITEM[@]}\""))
+  assert.equal(en.status, 9)
+  assert.match(en.stderr, /Pre-installation checks/)
+  assert.match(en.stderr, /\[FAIL\] Root: current user /)
+  assert.match(en.stderr, /Hint: run as root or prefix the command with sudo/)
+  assert.match(en.stderr, /\[WARN\] CPU cores: 1 cores \(4\+ recommended for the control plane\)/)
+  assert.match(en.stderr, /\[FAIL\] Ports: in use: 443 \(website HTTPS\), 19443 \(node enrollment\)/)
+  assert.match(en.stderr, /Result: 2 failed, 1 warnings\. .*nothing on this host was changed\./)
+  assert.doesNotMatch(en.stderr, /\p{Script=Han}/u)
+  assert.match(en.stdout, /root权限/)
+  const zh = run(fixture, report('preflight_check_root'))
+  assert.match(zh.stderr, /\[不通过\] root权限：当前用户 /)
+})

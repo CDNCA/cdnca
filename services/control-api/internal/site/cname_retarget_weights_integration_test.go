@@ -11,6 +11,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsacme"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnscheck"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsreconcile"
@@ -58,6 +59,7 @@ func newRetargetFixture(t *testing.T, failoverMode string, endpoints []nodesched
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "cname_retarget")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

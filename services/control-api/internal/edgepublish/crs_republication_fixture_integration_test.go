@@ -70,6 +70,12 @@ func (scope *SystemRepublishScope) BindManagedWAF(t *testing.T) {
 			{`INSERT INTO security_system_rules(system_key,kind,name,sort,hidden,revision,body,status,delivery_id,first_seen_at,updated_at)
 				VALUES($1,'waf_rule_set','OWASP CRS',101,true,1,$2,'active',$3,$4,$4) ON CONFLICT (system_key) DO NOTHING`,
 				[]any{CRSRuleCatalogKey, crsBody, uuid.New(), now}},
+			// A WAF binding publishes only on a package with WAF
+			// (package_runtime.go, spec.protection.waf of the entitlement).
+			{`UPDATE package_subscriptions SET product_snapshot=jsonb_set(product_snapshot,'{spec,protection}','{"waf":true}')
+				WHERE id=$1`, []any{scope.SubscriptionID}},
+			{`UPDATE package_subscription_entitlement_versions SET product_snapshot=jsonb_set(product_snapshot,'{spec,protection}','{"waf":true}')
+				WHERE subscription_id=$1`, []any{scope.SubscriptionID}},
 			{`SELECT advance_edge_configuration_scope_revision($1)`, []any{scope.ScopeID}},
 		} {
 			if _, err := tx.Exec(t.Context(), statement.sql, statement.args...); err != nil {

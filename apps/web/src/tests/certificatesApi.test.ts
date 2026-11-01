@@ -69,6 +69,11 @@ describe('certificatesApi', () => {
     { tenant: null },
     { tenant: { id: 'tenant', display_id: '0', name: 'Tenant' } },
     { display_id: 'asset-uuid' },
+    // 同步状态只接受三种状态，失败码只在失败时出现且符合码格式。
+    { sync: { state: 'unknown' } },
+    { sync: { state: 'pending', failure_code: 'target_no_nodes' } },
+    { sync: { state: 'failed', failure_code: 'Target No Nodes' } },
+    { sync: { state: 'failed', reason: 'raw text' } },
   ])('rejects invalid ownership and tenant projections %#', async (patch) => {
     const asset = {
       id: 'asset', display_id: '1', tenant_scope_id: 'scope', tenant: { id: 'tenant', display_id: '9', name: 'Tenant' },
@@ -77,6 +82,17 @@ describe('certificatesApi', () => {
     }
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ items: [asset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } }))
     await expect(certificatesApi.listAssets('token')).rejects.toMatchObject({ status: 502, code: 'invalid_response' })
+  })
+
+  it('accepts a list row sync state with its failure code (node-logs3)', async () => {
+    const asset = {
+      id: 'asset', display_id: '1', tenant_scope_id: 'scope', tenant: { id: 'tenant', display_id: '9', name: 'Tenant' },
+      owner: null, owner_status: 'legacy_unknown', name: 'Certificate', source: 'uploaded', revision: 1,
+      created_by: 'creator', updated_by: 'creator', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+      sync: { state: 'failed', failure_code: 'target_node_offline.0b5a3c1e-2f4d-4a6b-8c9d-0e1f2a3b4c5d' },
+    }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ items: [asset], total: 1 }))
+    await expect(certificatesApi.listAssets('token')).resolves.toMatchObject({ items: [{ sync: asset.sync }] })
   })
 
   it('lists and creates only through the tenant certificate-order route', async () => {
@@ -189,6 +205,24 @@ describe('certificatesApi', () => {
       status: 502, code: 'invalid_response',
     })
     expect(calls[0]?.url).toBe(`/v1/certificate-assets?target_scope_id=${scopeID}`)
+  })
+
+  // 绑定行的同步状态只允许出现在已绑定行，格式同列表行。
+  it.each([
+    { patch: { sync: { state: 'failed', failure_code: 'target_node_offline.0b5a3c1e-2f4d-4a6b-8c9d-0e1f2a3b4c5d' } }, valid: true },
+    { patch: { sync: { state: 'complete' } }, valid: true },
+    { patch: { bound: false, sync: { state: 'pending' } }, valid: false },
+    { patch: { sync: { state: 'complete', failure_code: 'target_no_nodes' } }, valid: false },
+    { patch: { sync: { state: 'failed', failure_code: 'Raw Text' } }, valid: false },
+  ])('validates a binding row sync state %#', async ({ patch, valid }) => {
+    const binding = {
+      tenant_scope_id: 'scope', site_id: 'site', asset_id: 'asset', version_id: 'version',
+      revision: 1, default: true, bound: true, changed_by: 'user', changed_at: '2026-01-01T00:00:00Z', ...patch,
+    }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ items: [binding] }))
+    const result = certificatesApi.listAssetBindings('token', 'asset')
+    if (valid) await expect(result).resolves.toMatchObject({ items: [{ sync: binding.sync }] })
+    else await expect(result).rejects.toMatchObject({ status: 502, code: 'invalid_response' })
   })
 
   it('rejects a site binding whose version identity or state is inconsistent', async () => {

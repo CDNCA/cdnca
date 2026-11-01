@@ -3,7 +3,6 @@
 package gatewayregistry
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -17,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -26,43 +24,7 @@ import (
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if strings.TrimSpace(os.Getenv("TEST_DATABASE_URL")) == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-		return pool
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, os.Getenv("TEST_DATABASE_URL"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "gateway_registry_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := databasetest.CleanupContext()
-		defer cleanupCancel()
-		_, _ = admin.Exec(cleanupCtx, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE")
-		admin.Close()
-	})
-	config, err := pgxpool.ParseConfig(os.Getenv("TEST_DATABASE_URL"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 func seedAdmin(t *testing.T, pool *pgxpool.Pool, now time.Time) Actor {
@@ -330,5 +292,79 @@ func TestPublishPutsTheLocalGatewayAfterStandaloneGateways(t *testing.T) {
 	after, _ := service.Publish(ctx)
 	if got := addresses(); strings.Join(got, ",") != strings.Join(want[2:], ",") || after.EndpointsVersion == before.EndpointsVersion {
 		t.Fatalf("after disabling the standalone Gateways = %v (version %q→%q)", got, before.EndpointsVersion, after.EndpointsVersion)
+	}
+}
+
+// Q20: switching an entry point to ws on the management page rewrites the
+// copied node command's defaults at once.
+func TestUpdateSettingsRewritesNodeInstallDefaults(t *testing.T) {
+	pool := integrationPool(t)
+	now := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	local := Entrypoint{Address: "203.0.113.20:20407", ServerName: "203.0.113.20", Transport: TransportGRPC, EnrollmentAddress: "203.0.113.20:29402"}
+	file := t.TempDir() + "/node-install-defaults"
+	pinLine := "upgrade_trust_sha256=" + strings.Repeat("a", 64)
+	if err := os.WriteFile(file, []byte(pinLine+"\ngateway_enrollment_address=203.0.113.20:29402\ngateway_address=203.0.113.20:20407\ngateway_server_name=203.0.113.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(Config{Pool: pool, Signer: Signer{Client: testCA(t, "client CA"), Server: testCA(t, "root CA")}, RootCAPEM: "root", NodeCAPEM: "node",
+		InstallationID: "00000000-0000-4000-8000-0000000000ab", LocalGateway: local, NodeDefaultsFile: file, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	actor := seedAdmin(t, pool, now)
+	current, err := service.Settings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := Entrypoint{Address: "gw.example.com:443", ServerName: "gw.example.com", Transport: TransportWS, TunnelHost: "gw.example.com"}
+	saved, err := service.UpdateSettings(ctx, actor, SettingsETag(current), Settings{Entrypoints: []Entrypoint{ws}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(file)
+	want := pinLine + "\ngateway_enrollment_address=gw.example.com:443\ngateway_address=gw.example.com:443\ngateway_server_name=gw.example.com\n" +
+		"gateway_transport=ws\ngateway_tunnel_host=gw.example.com\ngateway_endpoints=203.0.113.20:20407|203.0.113.20|grpc\n"
+	if string(got) != want {
+		t.Fatalf("defaults after ws =\n%s", got)
+	}
+	if _, err := service.UpdateSettings(ctx, actor, SettingsETag(saved), Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(file); string(got) != pinLine+"\ngateway_enrollment_address=203.0.113.20:29402\ngateway_address=203.0.113.20:20407\ngateway_server_name=203.0.113.20\n" {
+		t.Fatalf("defaults after removing ws =\n%s", got)
+	}
+}
+
+func TestEnsureInstallEntrypointIsIdempotentAndTrustsTheConsoleProxy(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := t.Context()
+	ws := Entrypoint{Address: "GW.example.com:443", ServerName: "gw.example.com", Transport: TransportWS, TunnelHost: "gw.example.com"}
+	for range 2 {
+		if err := EnsureInstallEntrypoint(ctx, pool, ws, "x-real-ip"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settings, err := readSettings(ctx, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(settings.Entrypoints) != 1 || settings.Entrypoints[0].Address != "gw.example.com:443" || settings.Entrypoints[0].Transport != TransportWS {
+		t.Fatalf("entry points = %+v", settings.Entrypoints)
+	}
+	loopback := 0
+	for _, r := range settings.TrustedProxies {
+		if r.CIDR == "127.0.0.1/32" {
+			loopback++
+			if r.Header != "X-Real-Ip" && r.Header != "X-Real-IP" {
+				t.Fatalf("loopback header = %q", r.Header)
+			}
+		}
+	}
+	if loopback != 1 {
+		t.Fatalf("trusted ranges = %+v", settings.TrustedProxies)
+	}
+	if err := EnsureInstallEntrypoint(ctx, pool, Entrypoint{Address: "bad", ServerName: "x", Transport: TransportWS}, ""); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("invalid entry err = %v", err)
 	}
 }

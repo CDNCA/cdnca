@@ -62,6 +62,9 @@ func serverOptions(config Config, tlsConfig *tls.Config) []grpc.ServerOption {
 		grpc.MaxRecvMsgSize(config.MaxReceiveMessageBytes),
 		grpc.MaxSendMsgSize(config.MaxSendMessageBytes),
 		grpc.MaxConcurrentStreams(config.MaxConcurrentStreams),
+		// each node connection returns its 32 KiB write buffer after
+		// a flush instead of holding it while idle.
+		grpc.SharedWriteBuffer(true),
 		grpc.ConnectionTimeout(config.ConnectionTimeout),
 		grpc.KeepaliveParams(keepalive.ServerParameters{Time: config.KeepaliveTime, Timeout: config.KeepaliveTimeout}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: config.MinimumClientPingTime, PermitWithoutStream: false}),
@@ -87,6 +90,13 @@ func logStreamRPCError(srv any, stream grpc.ServerStream, info *grpc.StreamServe
 		return err
 	}
 	converted := status.Convert(err)
+	// The Agent closed the stream (it reconnects to advertise a learned
+	// capability, or shut down): whatever was in flight, such as a JetStream
+	// consumer bind, was cancelled by that, not broken.
+	if stream.Context().Err() != nil {
+		log.Printf("agent-gateway stream closed by peer method=%s code=%s error=%q", info.FullMethod, converted.Code(), converted.Message())
+		return err
+	}
 	log.Printf("agent-gateway stream failed method=%s code=%s error=%q", info.FullMethod, converted.Code(), converted.Message())
 	return err
 }

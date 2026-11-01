@@ -11,6 +11,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/apikeycredential"
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsacme"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
@@ -31,6 +32,7 @@ func TestCNAMERandomZoneAllocation(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "cname_random")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

@@ -5,7 +5,7 @@
 //   const context = verifier.verify({ method, pathWithQuery, body, headers })
 //
 // publicKey / keyId: shown on the control plane's plugin installation detail
-// ("安装签名公钥", GET /v1/plugin-ui/signing-key). basePath is the path part
+// ("Installation signing key", GET /v1/plugin-ui/signing-key). basePath is the path part
 // of your api_base_url: the signature covers the path relative to it.
 // verify throws on any failure; on success it returns the decoded context
 // (installation_id, plugin_id, page_id, user_id, role, tenant_scope_id,

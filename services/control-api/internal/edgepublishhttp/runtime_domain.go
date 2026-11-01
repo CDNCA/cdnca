@@ -452,6 +452,9 @@ func loadRuntimeDeployments(
 		item.ErrorCode = code
 		item.Superseded = edgedeployment.DeploymentSuperseded(item.State, code, unchanged)
 		item.CanRetry = retryAllowed && runtimeDeploymentFailed(item.State) && !item.Superseded && item.Attempt < maxAttempts
+		if runtimeDeploymentFailed(item.State) {
+			item.ErrorMessage = edgedeployment.DeploymentErrorMessage(payload)
+		}
 		item.Warnings = edgedeployment.DeploymentWarnings(payload)
 		edgedeployment.ApplyFrozenMark(&item, frozenMark)
 		result = append(result, item)

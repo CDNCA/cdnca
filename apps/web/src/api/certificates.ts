@@ -112,6 +112,15 @@ export interface CertificateAsset {
   created_at: string
   updated_at: string
   deleted_at?: string
+  // node-logs3/4：列表行与详情的同步状态（未绑定网站时无）；失败时带首个失败码（码[.节点 ID]）。
+  sync?: CertificateAssetSync
+}
+
+export type CertificateAssetSyncState = 'complete' | 'pending' | 'failed'
+
+export interface CertificateAssetSync {
+  state: CertificateAssetSyncState
+  failure_code?: string
 }
 
 export interface CertificateAssetVersion {
@@ -197,6 +206,8 @@ export interface CertificateAssetBinding {
 	bound: boolean
 	changed_by: string
 	changed_at: string
+	// 绑定列表里当前已绑定行的同步状态，失败码为本网站的失败码。
+	sync?: CertificateAssetSync
 }
 
 export interface CertificateAssetBindingList {
@@ -259,7 +270,18 @@ function isAsset(value: unknown): value is CertificateAsset {
     (value.disabled === undefined || typeof value.disabled === 'boolean') &&
     Number.isSafeInteger(value.revision) && typeof value.created_by === 'string' && typeof value.updated_by === 'string' &&
     typeof value.created_at === 'string' && typeof value.updated_at === 'string' &&
-    (value.deleted_at === undefined || typeof value.deleted_at === 'string')
+    (value.deleted_at === undefined || typeof value.deleted_at === 'string') &&
+    (value.sync === undefined || isAssetSync(value.sync))
+}
+
+const assetSyncStates = new Set<CertificateAssetSyncState>(['complete', 'pending', 'failed'])
+const publicationFailureCodePattern = /^[a-z][a-z0-9._-]{0,127}$/
+
+function isAssetSync(value: unknown): value is CertificateAssetSync {
+  return isRecord(value) && Object.keys(value).every((key) => key === 'state' || key === 'failure_code') &&
+    assetSyncStates.has(value.state as CertificateAssetSyncState) &&
+    (value.failure_code === undefined || (value.state === 'failed' && typeof value.failure_code === 'string' &&
+      publicationFailureCodePattern.test(value.failure_code)))
 }
 
 function isAssetVersion(value: unknown): value is CertificateAssetVersion {
@@ -294,7 +316,8 @@ function isAssetDetail(value: unknown): value is CertificateAssetDetail {
 function isBinding(value: unknown): value is CertificateAssetBinding {
   return isRecord(value) && typeof value.tenant_scope_id === 'string' && typeof value.site_id === 'string' &&
     typeof value.asset_id === 'string' && typeof value.version_id === 'string' && Number.isSafeInteger(value.revision) &&
-    typeof value.default === 'boolean' && typeof value.bound === 'boolean' && typeof value.changed_by === 'string' && typeof value.changed_at === 'string'
+    typeof value.default === 'boolean' && typeof value.bound === 'boolean' && typeof value.changed_by === 'string' && typeof value.changed_at === 'string' &&
+    (value.sync === undefined || (value.bound === true && isAssetSync(value.sync)))
 }
 
 function isBindingList(value: unknown): value is CertificateAssetBindingList {

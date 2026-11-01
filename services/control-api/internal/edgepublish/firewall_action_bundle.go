@@ -26,9 +26,26 @@ const loadFirewallActionFactsSQL = `
 		  ON revision.tenant_scope_id=head.tenant_scope_id AND revision.site_id=head.site_id
 		 AND revision.policy_id=head.id
 		 AND revision.revision=CASE WHEN head.deployment_state='pending' THEN head.revision ELSE head.lkg_revision END
-		WHERE head.tenant_scope_id=$1 AND head.site_id=ANY($2::uuid[])
+		WHERE head.tenant_scope_id=$1 AND head.site_id=ANY($2::uuid[]) AND NOT head.inherited AND head.enabled
 		  AND (head.deployment_state='pending' OR head.lkg_revision>0)
 		ORDER BY head.site_id`
+
+// loadInheritedFirewallActionDefaultSQL: the scope's saved tenant default
+//; sites without a policy of their own deliver it. As a
+// site policy: a pending default delivers its candidate, an active or failed
+// one its LKG (609 receipts), none without an LKG.
+const loadInheritedFirewallActionDefaultSQL = `
+		SELECT revision.revision,revision.document_bytes
+		FROM firewall_action_tenant_defaults head
+		JOIN firewall_action_tenant_default_revisions revision ON revision.tenant_scope_id=head.tenant_scope_id
+		 AND revision.revision=CASE WHEN head.deployment_state='pending' THEN head.revision ELSE head.lkg_revision END
+		WHERE head.tenant_scope_id=$1 AND (head.deployment_state='pending' OR head.lkg_revision>0)`
+
+// loadOwnFirewallActionSitesSQL: sites with a policy of their own (an
+// inherited head is not one, whatever it delivered before).
+const loadOwnFirewallActionSitesSQL = `
+		SELECT site_id FROM firewall_action_policy_heads
+		WHERE tenant_scope_id=$1 AND site_id=ANY($2::uuid[]) AND NOT inherited`
 
 type siteRuntimeV2FirewallActionBinding struct {
 	PolicyID       string `json:"policy_id"`
@@ -72,7 +89,67 @@ func loadFirewallActionFacts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("%w: iterate firewall action facts", ErrPersistence)
 	}
+	rows.Close()
+	inherited, err := loadInheritedFirewallActionFacts(ctx, tx, scopeID, siteIDs)
+	if err != nil {
+		return nil, err
+	}
+	result = append(result, inherited...)
+	sort.Slice(result, func(i, j int) bool { return compareUUID(result[i].siteID, result[j].siteID) < 0 })
 	return result, nil
+}
+
+// loadInheritedFirewallActionFacts: every site without a policy of its own
+// delivers the tenant default (none saved: nothing, the system default is not
+// delivered), under its inherited policy ID and the default's revision.
+func loadInheritedFirewallActionFacts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs []uuid.UUID) ([]firewallActionFact, error) {
+	var revision int64
+	var stored []byte
+	err := tx.QueryRow(ctx, loadInheritedFirewallActionDefaultSQL, scopeID).Scan(&revision, &stored)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: load firewall action tenant default", ErrPersistence)
+	}
+	rows, err := tx.Query(ctx, loadOwnFirewallActionSitesSQL, scopeID, siteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("%w: load firewall action own sites", ErrPersistence)
+	}
+	own := map[uuid.UUID]bool{}
+	for rows.Next() {
+		var siteID uuid.UUID
+		if err := rows.Scan(&siteID); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("%w: scan firewall action own site", ErrPersistence)
+		}
+		own[siteID] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%w: iterate firewall action own sites", ErrPersistence)
+	}
+	result := make([]firewallActionFact, 0, len(siteIDs))
+	for _, siteID := range siteIDs {
+		if own[siteID] {
+			continue
+		}
+		fact, err := inheritedFirewallActionFact(scopeID, siteID, revision, stored)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, fact)
+	}
+	return result, nil
+}
+
+func inheritedFirewallActionFact(scopeID, siteID uuid.UUID, revision int64, stored []byte) (firewallActionFact, error) {
+	document, err := firewallactioncontrol.InheritedDocument(scopeID, siteID, revision, stored)
+	if err != nil {
+		return firewallActionFact{}, fmt.Errorf("%w: compose inherited firewall action", ErrPersistence)
+	}
+	return firewallActionFact{siteID: siteID, policyID: firewallactioncontrol.InheritedPolicyID(scopeID, siteID),
+		revision: revision, document: document, digest: sha256.Sum256(document)}, nil
 }
 
 func compileFirewallActionArtifacts(scopeID uuid.UUID, document *siteRuntimeV2Document, facts []firewallActionFact) (map[string][]byte, error) {

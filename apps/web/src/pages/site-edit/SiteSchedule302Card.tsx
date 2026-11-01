@@ -9,7 +9,7 @@ import {
   type Schedule302Settings, type Schedule302State, type Schedule302Target,
 } from '../../api/siteSchedule302'
 import '../../i18n/siteSchedule302'
-import { FormRow } from './SiteEditFields'
+import { FormRow, SettingGroup } from './SiteEditFields'
 import { useInstantDraft, useInstantFeedback } from './instantSave'
 import { FeedbackWhen } from '@cdnca/ui'
 
@@ -108,15 +108,15 @@ export function SiteSchedule302Card({ siteId, accessToken, canManage }: {
     : null
   const blocked = draft.enabled && !state.plain_http
 
-  return <section className="site-setting-section site-schedule302" aria-labelledby="site-schedule302-title" aria-busy={save.isPending} {...instant.typingProps}>
-    <div className="site-basic-title-line"><h2 id="site-schedule302-title">{t('title')}</h2></div>
-    <p className="site-setting-section-help">{t('hint')}</p>
+  // 与「更多设置」其它卡片同一形态；开关在标题右侧，整段原理说明收进 (?)，
+  // 开启后的短字段（目标/保留/有效期/HTTPS 转 HTTP、扩展名/前缀/最小大小）多列并排
+  return <SettingGroup title={t('title')} titleId="site-schedule302-title" tip={t('hint')} className="site-schedule302 is-wide"
+    extra={<Switch checked={draft.enabled} disabled={disabled} aria-label={t('enabled')} onChange={(enabled) => set({ enabled })} />}>
+    <div aria-busy={save.isPending} {...instant.typingProps}>
     <Alert type="warning" showIcon message={t('warning')} />
-    <FormRow label={t('enabled')}>
-      <Switch checked={draft.enabled} disabled={disabled} aria-label={t('enabled')} onChange={(enabled) => set({ enabled })} />
-    </FormRow>
     {blocked ? <Alert type="error" showIcon message={t('noPlainHTTP')} /> : null}
     {draft.enabled ? <>
+      <div className="site-setting-inline-fields">
       <FormRow label={t('target')} labelId="site-schedule302-target-label">
         <Radio.Group name="site-schedule302-target" aria-labelledby="site-schedule302-target-label" value={draft.target} disabled={disabled}
           onChange={(event) => set({ target: event.target.value as Schedule302Target })}
@@ -135,8 +135,10 @@ export function SiteSchedule302Card({ siteId, accessToken, canManage }: {
       <FormRow label={t('httpsToHttp')} tip={t('httpsToHttpHint')}>
         <Checkbox checked={draft.httpsToHttp} disabled={disabled} onChange={(event) => set({ httpsToHttp: event.target.checked })}>{t('httpsToHttp')}</Checkbox>
       </FormRow>
-      <h3 className="site-setting-subtitle">{t('filters')}</h3>
+      </div>
+      <h4 className="site-setting-subtitle">{t('filters')}</h4>
       <p className="site-setting-section-help">{t('filtersHint')}</p>
+      <div className="site-setting-inline-fields">
       <FormRow label={t('extensions')}>
         <Input aria-label={t('extensions')} value={draft.extensions} disabled={disabled} placeholder={t('extensionsPlaceholder')}
           onChange={(event) => set({ extensions: event.target.value })} />
@@ -149,7 +151,9 @@ export function SiteSchedule302Card({ siteId, accessToken, canManage }: {
         <InputNumber aria-label={t('minSize')} min={0} value={draft.minSizeMB} disabled={disabled}
           status={sizeInvalid ? 'error' : undefined} onChange={(minSizeMB) => set({ minSizeMB })} />
       </FormRow>
+      </div>
     </> : null}
     {errorMessage ? <FeedbackWhen title={errorMessage} /> : null}
-  </section>
+    </div>
+  </SettingGroup>
 }

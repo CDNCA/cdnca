@@ -317,7 +317,9 @@ func (s *diskStore) commitStage(stagePath string, compiled CompiledConfig) (stri
 	return versionDir, nil
 }
 
-func (s *diskStore) commitStageV2(stagePath string, compiled CompiledConfigV2) (string, error) {
+// sibling allows another directory of the same version ID (the DNS refresh
+// of the active release, l4-isolate2).
+func (s *diskStore) commitStageV2(stagePath string, compiled CompiledConfigV2, sibling bool) (string, error) {
 	versionDir := compiled.Config.VersionID + "-" + compiled.Digest
 	destination := filepath.Join(s.versionsDir, versionDir)
 	entries, err := os.ReadDir(s.versionsDir)
@@ -329,7 +331,7 @@ func (s *diskStore) commitStageV2(stagePath string, compiled CompiledConfigV2) (
 		if !valid || !entry.IsDir() {
 			return "", ErrCorruptState
 		}
-		if existingVersionID == compiled.Config.VersionID && entry.Name() != versionDir {
+		if existingVersionID == compiled.Config.VersionID && entry.Name() != versionDir && !sibling {
 			return "", ErrConflict
 		}
 	}

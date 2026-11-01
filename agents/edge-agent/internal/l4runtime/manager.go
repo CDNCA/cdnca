@@ -9,8 +9,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 type Runtime interface {
@@ -129,11 +132,18 @@ func (m *Manager) ApplyV2(ctx context.Context, config ConfigV2, coordinator *DNS
 	if err := m.recoverActivation(ctx); err != nil {
 		return Result{}, err
 	}
-	compiledV2, err := m.prepareV2(ctx, config, coordinator)
+	compiledV2, reasons, err := m.prepareV2(ctx, config, coordinator)
 	if err != nil {
 		return Result{}, err
 	}
-	return m.applyCompiledLocked(ctx, compatibleCompiledV2(*compiledV2), compiledV2)
+	result, err := m.applyCompiledLocked(ctx, compatibleCompiledV2(*compiledV2), compiledV2, false)
+	if err == nil && reasons != nil && result.State == StateApplied {
+		// the degraded forwards survive an agent restart.
+		if recordErr := m.store.recordStreamReasons(compiledV2.Config.VersionID+"-"+compiledV2.Digest, reasons); recordErr != nil {
+			slog.Warn("persist degraded L4 forwards failed", "error", recordErr)
+		}
+	}
+	return result, err
 }
 
 func (m *Manager) applyCompiled(ctx context.Context, compiled CompiledConfig, compiledV2 *CompiledConfigV2) (Result, error) {
@@ -148,15 +158,17 @@ func (m *Manager) applyCompiled(ctx context.Context, compiled CompiledConfig, co
 		return Result{}, err
 	}
 
-	return m.applyCompiledLocked(ctx, compiled, compiledV2)
+	return m.applyCompiledLocked(ctx, compiled, compiledV2, false)
 }
 
-func (m *Manager) applyCompiledLocked(ctx context.Context, compiled CompiledConfig, compiledV2 *CompiledConfigV2) (Result, error) {
+// refresh activates new address sets of the active
+// release: same version ID, new digest directory.
+func (m *Manager) applyCompiledLocked(ctx context.Context, compiled CompiledConfig, compiledV2 *CompiledConfigV2, refresh bool) (Result, error) {
 	previous, err := m.store.loadActive()
 	if err != nil {
 		return Result{}, err
 	}
-	if previous != nil && previous.VersionID == compiled.Config.VersionID {
+	if previous != nil && previous.VersionID == compiled.Config.VersionID && !(refresh && previous.Digest != compiled.Digest) {
 		if previous.Digest != compiled.Digest {
 			return Result{}, ErrConflict
 		}
@@ -183,13 +195,13 @@ func (m *Manager) applyCompiledLocked(ctx context.Context, compiled CompiledConf
 		}
 	}()
 	if err := m.runtime.Precheck(ctx, stagePath); err != nil {
-		return failedResult(compiled, previous, "PRECHECK_FAILED", true, listenerResults, err), fmt.Errorf("%w: %v", ErrPrecheck, err)
+		return failedResult(compiled, previous, "PRECHECK_FAILED", true, listenerResults, err), logPrecheckFailure("apply", compiled.Config.VersionID, err)
 	}
 	var versionDir string
 	if compiledV2 == nil {
 		versionDir, err = m.store.commitStage(stagePath, compiled)
 	} else {
-		versionDir, err = m.store.commitStageV2(stagePath, *compiledV2)
+		versionDir, err = m.store.commitStageV2(stagePath, *compiledV2, refresh)
 	}
 	if err != nil {
 		return Result{}, err
@@ -317,7 +329,7 @@ func (m *Manager) Rollback(ctx context.Context, versionID, digest string) (Resul
 	listenerResults := listenerLifecycle(previousConfig, compiled.Config)
 	versionPath := filepath.Join(m.store.versionsDir, versionDir)
 	if err := m.runtime.Precheck(ctx, versionPath); err != nil {
-		return failedResult(compiled, previous, "PRECHECK_FAILED", true, listenerResults, err), fmt.Errorf("%w: %v", ErrPrecheck, err)
+		return failedResult(compiled, previous, "PRECHECK_FAILED", true, listenerResults, err), logPrecheckFailure("rollback", versionID, err)
 	}
 	active := activeRecord{
 		SchemaVersion: stateSchemaVersion, VersionID: versionID, Digest: digest,
@@ -607,4 +619,52 @@ func failedListenerResults(listenerResults []ListenerResult, cause error) []List
 		}
 	}
 	return failed
+}
+
+// precheckLogLimit bounds the logged error like the summary reported to the
+// controller (gatewayclient sanitizeSummary: 512 bytes).
+const precheckLogLimit = 512
+
+// logPrecheckFailure writes the failed L4 precheck to the agent journal and
+// returns the error reported to the controller (node-logs 10-31: the failure
+// was only reported, the node journal had nothing). The logged message is the
+// reported one: "L4 configuration precheck failed: <OpenResty output>".
+func logPrecheckFailure(operation, versionID string, cause error) error {
+	err := &precheckFailure{message: fmt.Sprintf("%v: %v", ErrPrecheck, cause)}
+	err.summary = precheckLogSummary(err.message)
+	attributes := []any{"event", "l4_precheck_failed", "operation", operation, "version_id", versionID,
+		"error", err.summary}
+	var listenerCause interface {
+		ListenerID() string
+		ReasonCode() string
+	}
+	if errors.As(cause, &listenerCause) && listenerCause.ListenerID() != "" {
+		attributes = append(attributes, "listener_id", listenerCause.ListenerID(), "reason_code", listenerCause.ReasonCode())
+	}
+	slog.Warn("L4 configuration precheck failed", attributes...)
+	return err
+}
+
+// precheckFailure is ErrPrecheck with its cause. PrecheckSummary is the line
+// logged as l4_precheck_failed; the deployment manager reports it as the
+// status summary instead of its fixed "release precheck failed".
+type precheckFailure struct{ message, summary string }
+
+func (failure *precheckFailure) Error() string           { return failure.message }
+func (failure *precheckFailure) Unwrap() error           { return ErrPrecheck }
+func (failure *precheckFailure) PrecheckSummary() string { return failure.summary }
+
+// precheckLogSummary flattens control characters (multi-line OpenResty
+// output) and keeps at most precheckLogLimit bytes on a UTF-8 boundary.
+func precheckLogSummary(value string) string {
+	value = strings.Join(strings.FieldsFunc(value, unicode.IsControl), " ")
+	value = strings.Join(strings.Fields(value), " ")
+	if len(value) <= precheckLogLimit {
+		return value
+	}
+	cut := precheckLogLimit
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
+		cut--
+	}
+	return value[:cut]
 }

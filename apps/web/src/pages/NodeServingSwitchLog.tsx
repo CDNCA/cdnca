@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, ConfigProvider, Input, Pagination, Select, Space, Table, Typography, type TableColumnsType } from 'antd'
 import { FeedbackWhen } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
@@ -42,12 +43,15 @@ export default function NodeServingSwitchLog({ ownerKey }: { ownerKey: string })
     ...(applied.source ? { source: applied.source } : {}), ...(applied.event ? { event: applied.event } : {}),
     ...(applied.ip.trim() ? { ip: applied.ip.trim() } : {}), ...(nodeIDOf(applied.node) ? { nodeID: nodeIDOf(applied.node) } : {}),
   }), [applied, page, windowEnd])
+  // control-log-ui：条件变了按新数据读；同一条件下翻页 30 秒内用缓存。
+  const [generation] = useLogListGeneration({ ...query, page: undefined })
   const result = useQuery({
-    queryKey: ['node-serving-switch-log', ownerKey, query],
+    queryKey: ['node-serving-switch-log', ownerKey, generation, query],
     queryFn: ({ signal }) => nodeMonitoringApi.listScopeServingEvents(accessToken!, query, signal),
     enabled: Boolean(accessToken) && canRead && !nodeInvalid,
     retry: false,
     refetchOnWindowFocus: false,
+    ...logListQueryOptions,
   })
   const language = i18n.resolvedLanguage ?? 'zh-CN'
 

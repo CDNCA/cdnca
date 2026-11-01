@@ -44,6 +44,7 @@ import {
 import { OutcomeUnknown, FeedbackWhen } from '@cdnca/ui'
 import { rebaseDraft, useCommitRequest, useInstantFeedback } from './site-edit/instantSave'
 import { siteAccessGap } from './site-edit/cnameFailureText'
+import { openTabAt } from './site-edit/siteTabSummaryJump'
 import { accessStatusLabel } from './site-edit/accessReadinessText'
 import { SiteAccessReadinessCard } from './site-edit/SiteAccessReadiness'
 
@@ -1309,6 +1310,13 @@ function SiteEditPageContent({
         ) : (
           <Tag data-testid="site-edit-access" color="success">{t('states.accessReady')}</Tag>
         )}
+        {/* 接入未就绪时页头直接去「基本配置」的接入状态卡（逐项原因、去 DNS 配置/重新生成）。 */}
+        {detail.access_readiness && detail.access_readiness.state !== 'ready' ? (
+          <Button type="link" size="small" className="site-edit-access-reason" data-testid="site-edit-access-reason"
+            onClick={() => openTabAt((tab) => setTab(tab as TabKey), 'basic', 'site-access-card')}>
+            {tAccess('actions.viewReason')}
+          </Button>
+        ) : null}
         {/* WEB/FLOW-STATE-01: one stable way from the site to what was published
             (the owner's publication records; an administrator lands on the owner). */}
         <a className="site-edit-publications-link" data-testid="site-edit-publications"
@@ -1416,7 +1424,7 @@ function SiteEditPageContent({
           {/* 服务端接入状态逐项（线路/CNAME/解析/证书/发布）与“立即检查”。 */}
           {detail.access_readiness ? (
             <SiteAccessReadinessCard readiness={detail.access_readiness} siteID={detail.id} admin={role === 'admin'}
-              cname={detail.basic.cname}
+              cname={detail.basic.cname} cnameFailureCode={detail.basic.cname_state === 'failed' ? detail.basic.cname_failure_code : null}
               onCheckNow={accessToken ? async () => {
                 const readiness = await sitesApi.checkAccess(accessToken, detail.id)
                 queryClient.setQueryData<SiteDetail | null>(detailQueryKey,

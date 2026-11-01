@@ -662,13 +662,18 @@ func authorizeActor(ctx context.Context, tx pgx.Tx, actor Actor, targetTenantSco
 		permission = PermissionResellerCustomersManage
 	}
 
-	var tenantActive, granted bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(
-		SELECT 1 FROM access_scopes scope
-		JOIN tenants tenant ON tenant.id = scope.tenant_id AND tenant.status = 'active'
-		WHERE scope.id = $1 AND scope.kind = 'tenant'
-	)`, targetTenantScopeID).Scan(&tenantActive); err != nil {
+	// A tenant actor reaches here only for its own scope or a reseller's
+	// customer, so only operators learn that a target scope does not exist.
+	var tenantExists, tenantActive, granted bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM access_scopes scope
+			WHERE scope.id = $1 AND scope.kind = 'tenant' AND scope.tenant_id IS NOT NULL),
+		EXISTS(SELECT 1 FROM access_scopes scope
+			JOIN tenants tenant ON tenant.id = scope.tenant_id AND tenant.status = 'active'
+			WHERE scope.id = $1 AND scope.kind = 'tenant')`, targetTenantScopeID).Scan(&tenantExists, &tenantActive); err != nil {
 		return err
+	}
+	if !tenantExists {
+		return ErrTenantScopeNotFound
 	}
 	if !tenantActive {
 		return ErrPermissionDenied

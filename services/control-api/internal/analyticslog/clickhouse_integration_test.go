@@ -115,6 +115,9 @@ func TestClickHouseAnalyticsLogIntegration(t *testing.T) {
 	debugParameters.Set("param_has_cursor", "0")
 	debugParameters.Set("param_cursor_occurred_at_ms", "0")
 	debugParameters.Set("param_cursor_event_id", "")
+	// log-read-perf 分段分页：整窗一段、首段带冲突扫描（同 querySegmentedPage 首轮）。
+	debugParameters.Set("param_segment_from_ms", strconv.FormatInt(from.UnixMilli(), 10))
+	debugParameters.Set("param_conflict_scan", "1")
 	if _, err := database.execute(context.Background(), accessPageSQL, true, debugParameters); err != nil {
 		t.Fatalf("execute access page SQL: %v", err)
 	}
@@ -779,6 +782,7 @@ func (database *integrationDatabase) create(t *testing.T) {
 		"022_security_event_evidence.up.sql",
 		"025_security_event_count.up.sql",
 		"028_access_upstream_addr.up.sql",
+		"030_analytics_log_list_digest.up.sql",
 	} {
 		migration, err := os.ReadFile(filepath.Join(root, "infra", "clickhouse", "migrations", name))
 		if err != nil {

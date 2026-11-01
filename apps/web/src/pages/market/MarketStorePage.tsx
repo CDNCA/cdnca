@@ -13,13 +13,14 @@ import { useGrantedModules } from '../../components/useGrantedModules'
 import '../../i18n/pluginStore'
 import { AdvisoryList } from '../plugin-market/AdvisoryList'
 import { LicensesTab } from '../plugin-market/PluginStorePage'
-import { PlatformPluginsPanel } from '../plugin-market/PluginMarketPage'
 import { activePlans, highRiskPermission } from '../plugin-market/pluginStoreModel'
 import { useAdvisories } from '../plugin-market/useAdvisories'
+import { pluginDescription, pluginSummary, pluginTitle } from '../plugin-market/usePluginCatalog'
 import { enablePath, planPrice, publisherOf, storeState, type StoreState } from './marketModel'
 import { PriceTag, PublisherBadge } from './PriceTag'
 import { PurchaseModal } from './PurchaseModal'
 import { MarketNotJoined } from './MarketNotJoined'
+import { OwnedPlugins } from './OwnedPlugins'
 import { useMarketConnection } from './useMarketConnection'
 import { CursorPager, LoadFailure, useCursorPages } from '../node-market/supplier/shared'
 import './messages'
@@ -39,7 +40,7 @@ function LoadError({ error }: { error: unknown }) {
   return <LoadFailure error={error} title={t('errors.load', { code: codeOf(error) })} />
 }
 
-interface Holdings { licenses: MarketLicense[]; library: MarketLibraryItem[]; modules: readonly string[] }
+interface Holdings { licenses: MarketLicense[]; library: MarketLibraryItem[]; modules: readonly string[]; loading: boolean }
 
 function StateHint({ plugin, state }: { plugin: MarketPlugin; state: StoreState }) {
   const { t } = useTranslation('marketStore')
@@ -78,6 +79,12 @@ function StoreAction({ plugin, state, canBuy, onBuy, onDownload, downloading }: 
       const path = enablePath(plugin)
       return path ? <Link to={path}><Button>{t('state.enable')}</Button></Link> : <Tag color="processing">{t('state.pendingConfirm')}</Tag>
     }
+    case 'installed': {
+      // Installed and usable; whether a site actually uses it is decided on its own page.
+      const path = enablePath(plugin)
+      return <Space size={4} wrap><Tag color="success">{t('state.installed')}</Tag>
+        {path ? <Link to={path}>{t('state.goManage')}</Link> : null}</Space>
+    }
     case 'enabled': return <Tag color="success">{t('state.enabled')}</Tag>
     case 'activating': return <Tag color="processing">{t('state.activating')}</Tag>
     case 'revoked': return <Tag color="error">{t('state.revoked')}</Tag>
@@ -94,7 +101,7 @@ function useHoldings(token: string): Holdings & { refresh: () => void } {
     void client.invalidateQueries({ queryKey: ['marketStore', 'library'] })
     void client.invalidateQueries({ queryKey: ['entitlement', 'modules'] })
   }, [client])
-  return { licenses: licenses.data?.items ?? [], library: library.data ?? [], modules, refresh }
+  return { licenses: licenses.data?.items ?? [], library: library.data ?? [], modules, loading: licenses.isLoading || library.isLoading, refresh }
 }
 
 function PluginDetail({ plugin, state, actions }: {
@@ -113,13 +120,17 @@ function PluginDetail({ plugin, state, actions }: {
       {query.error ? <LoadError error={query.error} /> : null}
       <Space wrap><PublisherBadge plugin={info} /><PriceTag plugin={{ ...info, price_plans: plans }} />{actions}</Space>
       <StateHint plugin={info} state={state} />
-      <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{info.description_md || info.summary || info.plugin_id}</Typography.Paragraph>
+      <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{pluginDescription(info, i18n.resolvedLanguage) || pluginSummary(info, i18n.resolvedLanguage) || info.plugin_id}</Typography.Paragraph>
       <Descriptions bordered size="small" column={1}>
         <Descriptions.Item label={t('detail.publisher')}>{t(`publisher.${publisherOf(info)}`)} · {info.namespace}</Descriptions.Item>
         <Descriptions.Item label={t('detail.kind')}>{info.kind}</Descriptions.Item>
         <Descriptions.Item label={t('detail.version')}>{latest?.version ?? info.latest_version ?? '—'}</Descriptions.Item>
         {info.feature_code ? <Descriptions.Item label={t('detail.featureCode')}><code>{info.feature_code}</code></Descriptions.Item> : null}
-        <Descriptions.Item label={t('detail.plans')}>{plans.length ? plans.map((p) => planPrice(t, p)).join(' / ') : t('price.none')}</Descriptions.Item>
+        <Descriptions.Item label={t('detail.plans')}>{plans.length ? <Space direction="vertical" size={0}>
+          <span>{plans.map((p) => planPrice(t, p)).join(' / ')}</span>
+          {/* The market prices buyer reads for this controller's edition (market 068): say which one. */}
+          {plans[0].edition ? <Typography.Text type="secondary" data-edition={plans[0].edition}>{t(`price.edition.${plans[0].edition}`)}</Typography.Text> : null}
+        </Space> : t('price.none')}</Descriptions.Item>
       </Descriptions>
       <div>
         <Typography.Title level={5}>{t('detail.permissions')}</Typography.Title>
@@ -151,7 +162,7 @@ function PluginDetail({ plugin, state, actions }: {
 }
 
 function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
-  const { t } = useTranslation('marketStore')
+  const { t, i18n } = useTranslation('marketStore')
   const { message } = App.useApp()
   const feedback = useFeedback()
   const token = useSessionStore((s) => s.accessToken) ?? ''
@@ -218,10 +229,10 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
           return <Col key={plugin.id} xs={24} sm={12} lg={8}>
             <Badge dot={pendingAdvisories.has(plugin.plugin_id)} offset={[-6, 6]} className="market-store-badge">
               <Card size="small" className={`market-store-card market-store-card--${state}`} data-testid={`market-card-${plugin.plugin_id}`}
-                title={<Button type="link" className="market-store-title" onClick={() => setSelected(plugin)}>{plugin.title}</Button>}
+                title={<Button type="link" className="market-store-title" onClick={() => setSelected(plugin)}>{pluginTitle(plugin, i18n.resolvedLanguage)}</Button>}
                 extra={<PublisherBadge plugin={plugin} />}
                 actions={[<div key="action" className="market-store-action">{action(plugin)}</div>]}>
-                <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }}>{plugin.summary || plugin.plugin_id}</Typography.Paragraph>
+                <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }}>{pluginSummary(plugin, i18n.resolvedLanguage) || plugin.plugin_id}</Typography.Paragraph>
                 <Space size={4} wrap>
                   <PriceTag plugin={plugin} />
                   {plugin.latest_version ? <Tag>{t('card.latest', { version: plugin.latest_version })}</Tag> : null}
@@ -235,12 +246,18 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
       {query.data && (pages.page > 1 || query.data.next_cursor)
         ? <CursorPager pages={pages} pageSize={50} count={query.data.items.length} next={query.data.next_cursor} busy={query.isFetching} /> : null}
       <Drawer className="plugin-market-drawer" width="min(760px, 100vw)" open={!!selected} onClose={() => setSelected(null)}
-        title={selected ? `${selected.title} · ${selected.plugin_id}` : ''} destroyOnHidden>
+        title={selected ? `${pluginTitle(selected, i18n.resolvedLanguage)} · ${selected.plugin_id}` : ''} destroyOnHidden>
         {selected ? <PluginDetail plugin={selected} state={stateOf(selected)} actions={action(selected)} /> : null}
       </Drawer>
       {buying ? <PurchaseModal plugin={buying} plans={buying.price_plans ?? []} token={token} onClose={() => setBuying(null)} onDone={bought} /> : null}
     </Space>
   )
+}
+
+function MineTab({ platformPlugins }: { platformPlugins: boolean }) {
+  const holdings = useHoldings(useSessionStore((s) => s.accessToken) ?? '')
+  return <OwnedPlugins licenses={holdings.licenses} library={holdings.library} modules={holdings.modules} loading={holdings.loading}
+    platformPlugins={platformPlugins} />
 }
 
 export default function MarketStorePage() {
@@ -254,7 +271,7 @@ export default function MarketStorePage() {
   const advisories = useAdvisories(token, access.browse && connected === true)
   if (!access.browse) return <Result status="error" icon={<ShieldOff size={72} aria-hidden="true" />} title={t('errors.forbidden')} />
   const pendingCount = advisories.items.filter((a) => !a.acknowledgement).length
-  // 我的插件：本主控的平台插件（主题、规则包）待确认/已安装/失败，只给持平台插件安装权限的主控管理员。
+  // 我的插件：本主控已拥有的全部插件；主题、规则包的待确认/已安装/失败另列在其中，只给持平台插件安装权限的主控管理员。
   const platformPlugins = principal?.scope_kind === 'platform' &&
     Boolean(principal.permissions.includes('plugin_installations.platform.read'))
   const requestedTab = searchParams.get('tab')
@@ -265,10 +282,10 @@ export default function MarketStorePage() {
         <Typography.Text type="secondary">{t('subtitle')}</Typography.Text>
       </div>
       {connected === undefined ? <Spin /> : !connected ? <MarketNotJoined recheck={recheck} rechecking={rechecking} /> : <div className="market-store-v2-panel"><SellerSiteGuide scope="plugin" /><Tabs destroyOnHidden
-        activeKey={requestedTab === 'mine' && platformPlugins ? 'mine' : requestedTab === 'licenses' || requestedTab === 'advisories' ? requestedTab : 'browse'}
+        activeKey={requestedTab === 'mine' || requestedTab === 'licenses' || requestedTab === 'advisories' ? requestedTab : 'browse'}
         onChange={(key) => setSearchParams((current) => { const next = new URLSearchParams(current); next.set('tab', key); return next })} items={[
         { key: 'browse', label: t('tabs.browse'), children: <BrowseTab pendingAdvisories={advisories.pending} /> },
-        ...(platformPlugins ? [{ key: 'mine', label: t('tabs.mine'), children: <PlatformPluginsPanel /> }] : []),
+        { key: 'mine', label: t('tabs.mine'), children: <MineTab platformPlugins={platformPlugins} /> },
         { key: 'licenses', label: t('tabs.licenses'), children: <LicensesTab /> },
         { key: 'advisories', label: <Space size={6}>{t('tabs.advisories')}{pendingCount ? <Tag color="error" style={{ marginInlineEnd: 0 }}>{storeT('advisories.banner', { count: pendingCount })}</Tag> : null}</Space>,
           children: advisories.query.error ? <LoadError error={advisories.query.error} />

@@ -62,14 +62,35 @@ func authenticate(_ context.Context, token string) (identity.AuthenticatedSessio
 	}
 }
 
+var tenantKeyID = uuid.New()
+
+// authenticateKey: "cfk_reader.s" holds dns.read, "cfk_writer.s" dns.read +
+// dns.records.manage, "cfk_platform.s" is not a tenant key.
+func authenticateKey(_ context.Context, raw string) (identity.Principal, uuid.UUID, error) {
+	switch raw {
+	case "cfk_reader.s":
+		return identity.Principal{UserID: tenantUser, ScopeID: tenantScope, ScopeKind: "tenant",
+			Permissions: []string{"dns.read"}}, tenantKeyID, nil
+	case "cfk_writer.s":
+		return identity.Principal{UserID: tenantUser, ScopeID: tenantScope, ScopeKind: "tenant",
+			Permissions: []string{"dns.read", "dns.records.manage"}}, tenantKeyID, nil
+	case "cfk_platform.s":
+		return identity.Principal{UserID: uuid.New(), ScopeID: uuid.New(), ScopeKind: "platform"}, uuid.New(), nil
+	default:
+		return identity.Principal{}, uuid.Nil, errors.New("bad key")
+	}
+}
+
 func serve(t *testing.T, hub *fakeHub, method, target, token, body string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
-	handler, err := NewHandler(hub, authenticate)
+	handler, err := NewHandler(hub, authenticate, authenticateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(method, target, strings.NewReader(body))
-	if token != "" {
+	if strings.HasPrefix(token, "CdncaKey ") {
+		request.Header.Set("Authorization", token)
+	} else if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
 	if body != "" {
@@ -113,6 +134,42 @@ func TestSessionGate(t *testing.T) {
 	}
 	if recorder.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("hub responses must not be cached")
+	}
+}
+
+// TestAPIKeyGate (plugapi-S1): a tenant API key reaches the hub with its id
+// and scopes (the hub intersects them with the live RBAC); an unknown or
+// platform key never does; without an API key authenticator CdncaKey is 401.
+func TestAPIKeyGate(t *testing.T) {
+	hub := &fakeHub{}
+	for token, want := range map[string]int{"CdncaKey cfk_bad.s": http.StatusUnauthorized,
+		"CdncaKey  cfk_reader.s": http.StatusUnauthorized, "CdncaKey cfk_platform.s": http.StatusForbidden} {
+		if recorder := serve(t, hub, http.MethodGet, "/v1/dns/hub/domains", token, "", nil); recorder.Code != want {
+			t.Fatalf("%q status %d, want %d", token, recorder.Code, want)
+		}
+	}
+	if len(hub.actors) != 0 {
+		t.Fatal("hub called with a refused key")
+	}
+	recorder := serve(t, hub, http.MethodGet, "/v1/dns/hub/domains", "CdncaKey cfk_writer.s", "", nil)
+	if recorder.Code != http.StatusOK || len(hub.actors) != 1 {
+		t.Fatalf("status %d actors %d", recorder.Code, len(hub.actors))
+	}
+	actor := hub.actors[0]
+	if actor.UserID != tenantUser || actor.ScopeID != tenantScope || actor.APIKeyID != tenantKeyID ||
+		strings.Join(actor.APIKeyScopes, ",") != "dns.read,dns.records.manage" {
+		t.Fatalf("actor %+v", actor)
+	}
+	sessionOnly, err := NewHandler(hub, authenticate, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/v1/dns/hub/domains", nil)
+	request.Header.Set("Authorization", "CdncaKey cfk_writer.s")
+	response := httptest.NewRecorder()
+	sessionOnly.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("session-only handler accepted an API key: %d", response.Code)
 	}
 }
 

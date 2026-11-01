@@ -25,6 +25,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/apikeycredential"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish/capabilitytest"
@@ -720,6 +721,7 @@ func openIntegrationDatabase(t *testing.T, queryTrace *integrationQueryTrace) *p
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
 	ctx := context.Background()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "edge_publish_http_test")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

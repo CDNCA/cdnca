@@ -122,8 +122,10 @@ func (component clickhouseComponent) Preflight(ctx context.Context, host *Host, 
 	if err != nil {
 		return fmt.Errorf("restore_clickhouse_unavailable: %w", err)
 	}
-	if version != record.Detail["server_version"] {
-		return fmt.Errorf("restore_clickhouse_version_mismatch:%s!=%s", version, record.Detail["server_version"])
+	// RESTORE reads backups of older servers; an older target cannot.
+	if order, ok := compareDottedVersions(version, record.Detail["server_version"]); !ok || order < 0 {
+		return fmt.Errorf("restore_clickhouse_version_mismatch:%s<%s: the target ClickHouse is older than the backup's; install ClickHouse %s or later",
+			version, record.Detail["server_version"], record.Detail["server_version"])
 	}
 	exists, err := component.query(ctx, host, "EXISTS DATABASE "+clickhouseDatabase)
 	if err != nil {
@@ -206,4 +208,41 @@ func sleepContext(ctx context.Context, duration time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+// compareDottedVersions orders two dotted numeric versions ("25.3.2.39");
+// a missing component counts as 0. ok is false when either is not numeric.
+func compareDottedVersions(left, right string) (order int, ok bool) {
+	parse := func(value string) ([]int, bool) {
+		var parts []int
+		for _, field := range strings.Split(strings.TrimSpace(value), ".") {
+			number, err := strconv.Atoi(field)
+			if err != nil || number < 0 {
+				return nil, false
+			}
+			parts = append(parts, number)
+		}
+		return parts, len(parts) > 0
+	}
+	a, okA := parse(left)
+	b, okB := parse(right)
+	if !okA || !okB {
+		return 0, false
+	}
+	for index := 0; index < len(a) || index < len(b); index++ {
+		var x, y int
+		if index < len(a) {
+			x = a[index]
+		}
+		if index < len(b) {
+			y = b[index]
+		}
+		if x != y {
+			if x < y {
+				return -1, true
+			}
+			return 1, true
+		}
+	}
+	return 0, true
 }

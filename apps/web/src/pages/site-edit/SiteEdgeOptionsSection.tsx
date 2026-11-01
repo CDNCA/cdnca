@@ -88,12 +88,11 @@ export default function SiteEdgeOptionsSection({
       <SettingGroup title={t('fields.defaultSite')} help={t('short.defaultSite')} tip={t('help.defaultSite')}
         extra={<Switch aria-label={t('fields.defaultSite')} disabled={basicReadOnly} checked={basic.is_default}
           onChange={(checked) => onBasicChange({ ...basic, is_default: checked })} />} />
+      {/* 三选一直接放标题下一行（标题即标签），不再在窄卡片的标签列旁竖排成三行 */}
       <SettingGroup title={t('fields.l2')} tip={t('help.l2')}>
-        <FormRow label={t('fields.l2Mode')}>
-          <Radio.Group aria-label={t('fields.l2')} disabled={readOnly} value={l2Mode} optionType="button"
-            options={(['package', 'off', 'custom'] as const).map((value) => ({ value, label: t(`options.${value}`) }))}
-            onChange={(event) => update({ l2_mode: event.target.value, l2_config_id: event.target.value === 'custom' ? pool.l2_config_id ?? null : null })} />
-        </FormRow>
+        <Radio.Group className="site-setting-group-choice" aria-label={t('fields.l2')} disabled={readOnly} value={l2Mode} optionType="button"
+          options={(['package', 'off', 'custom'] as const).map((value) => ({ value, label: t(`options.${value}`) }))}
+          onChange={(event) => update({ l2_mode: event.target.value, l2_config_id: event.target.value === 'custom' ? pool.l2_config_id ?? null : null })} />
         {l2Mode === 'custom' ? (
           <FormRow label={t('fields.l2Config')}>
             <Select aria-label={t('fields.l2Config')} disabled={readOnly} loading={configs.isLoading} style={{ width: 'min(320px, 100%)' }}

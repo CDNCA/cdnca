@@ -579,7 +579,7 @@ func (handler *Handler) restoreCommands(response http.ResponseWriter, backupID s
 		"# 1. 在全新服务器上（同为 " + manifest.Control.Version + "）安装依赖：bash install-ubuntu-dependencies.sh install（来自本机 " + nativebackup.DependenciesScript + "）",
 		fmt.Sprintf("# 2. 把整个备份目录复制到新服务器：scp -r root@本机:%s/%s /var/lib/cdnca-control-backup/bundles/", nativebackup.BackupRoot, backupID),
 		"# 3. 把本机 " + binary + " 复制到新服务器 /root/control-api（版本必须一致）",
-		"# 4. 在新服务器执行（恢复口令包由“导出恢复密钥”下载；签名指纹见下）：",
+		"# 4. 在新服务器执行（恢复密钥文件由“导出恢复密钥”下载，放到 /root/cdnca-recovery-kit.json；导出时设了口令才会提示输入；签名指纹见下）：",
 		fmt.Sprintf("/root/control-api native-backup restore --bundle /var/lib/cdnca-control-backup/bundles/%s --recovery-kit /root/cdnca-recovery-kit.json --signer %s", backupID, manifest.SignerKeyHint),
 		fmt.Sprintf("%s native-backup verify-migration --bundle /var/lib/cdnca-control-backup/bundles/%s --wait-nodes 10m", binary, backupID),
 		"# 5. 把管理端与 Gateway 域名的 DNS 改到新服务器；旧服务器仍在运行时先停掉：" + binary + " native-backup create --reason migration --hold 或直接关机",

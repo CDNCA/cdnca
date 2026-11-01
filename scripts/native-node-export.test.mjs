@@ -56,7 +56,27 @@ export function staticELF(extra = Buffer.alloc(0)) {
   return Buffer.concat([elf, extra])
 }
 
-function exportFixture(t, h3probe) {
+// A dynamically linked x86-64 executable (PT_INTERP + PT_DYNAMIC), like LuaJIT.
+function dynamicELF(extra = Buffer.alloc(0)) {
+  const elf = Buffer.alloc(176)
+  Buffer.from('7f454c46', 'hex').copy(elf)
+  elf[4] = 2; elf[5] = 1; elf.writeUInt16LE(2, 16); elf.writeUInt16LE(62, 18)
+  elf.writeBigUInt64LE(64n, 32); elf.writeUInt16LE(56, 54); elf.writeUInt16LE(2, 56); elf.writeUInt32LE(3, 64); elf.writeUInt32LE(2, 120)
+  return Buffer.concat([elf, extra])
+}
+
+// patchelf is only on the image builder; record its arguments instead.
+function fakePatchelf(t) {
+  const bin = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'cdnca-fake-patchelf-')))
+  const log = path.join(bin, 'calls.log')
+  fs.writeFileSync(path.join(bin, 'patchelf'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\n`, { mode: 0o755 })
+  const previous = process.env.PATH
+  process.env.PATH = `${bin}:${previous}`
+  t.after(() => { process.env.PATH = previous; fs.rmSync(bin, { recursive: true, force: true }) })
+  return () => fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : []
+}
+
+function exportFixture(t, h3probe, luajit = true) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'cdnca-runtime-export-')))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
   const image = path.join(root, 'image')
@@ -67,16 +87,46 @@ function exportFixture(t, h3probe) {
   put('usr/lib/.keep', '')
   put('usr/local/share/cdnca/x.lua', '-- x\n'); put('opt/cdnca/l4geo/x.lua', '-- x\n')
   if (h3probe) put('usr/local/bin/h3probe', h3probe, 0o755)
+  // The image ships bin/luajit as a link to the versioned interpreter.
+  if (luajit) {
+    put('usr/local/openresty/luajit/bin/luajit-2.1.ROLLING', dynamicELF(Buffer.from('luajit fixture')), 0o755)
+    fs.symlinkSync('luajit-2.1.ROLLING', path.join(image, 'usr/local/openresty/luajit/bin/luajit'))
+  }
   return { image, output: path.join(root, 'payload') }
 }
 
 test('exports the static h3probe as runtime/bin/h3probe without patchelf', (t) => {
+  const calls = fakePatchelf(t)
   const f = exportFixture(t, staticELF(Buffer.from('h3probe fixture')))
   const exported = exportNativeRuntime(f.image, f.output)
   const entry = exported.files.find((file) => file.path === 'runtime/bin/h3probe')
   assert.ok(entry, 'h3probe missing from the export')
   assert.equal(fs.statSync(path.join(f.output, 'runtime/bin/h3probe')).mode & 0o777, 0o555)
   assert.deepEqual(fs.readFileSync(path.join(f.output, 'runtime/bin/h3probe')), staticELF(Buffer.from('h3probe fixture')))
+  assert.ok(calls().every((call) => !call.includes('h3probe')), 'h3probe must not be patched')
+})
+
+// The Agent's EDGE_WEBP probe runs <prefix>/openresty/luajit/bin/luajit.
+test('exports luajit/bin/luajit as a relinked executable resolved from its versioned link', (t) => {
+  const calls = fakePatchelf(t)
+  const f = exportFixture(t, staticELF())
+  const exported = exportNativeRuntime(f.image, f.output)
+  const target = path.join(f.output, 'runtime/openresty/luajit/bin/luajit')
+  assert.ok(exported.files.some((file) => file.path === 'runtime/openresty/luajit/bin/luajit'), 'luajit missing from the export')
+  assert.equal(fs.lstatSync(target).isSymbolicLink(), false)
+  assert.equal(fs.statSync(target).mode & 0o777, 0o555)
+  assert.deepEqual(fs.readFileSync(target), dynamicELF(Buffer.from('luajit fixture')))
+  const prefix = '/opt/cdnca-node/current/runtime'
+  assert.ok(calls().includes(`--set-rpath ${prefix}/openresty/luajit/lib:${prefix}/openresty/openssl3/lib:${prefix}/openresty/pcre2/lib:${prefix}/lib:${prefix}/usr/lib --set-interpreter ${prefix}/lib/ld-musl-x86_64.so.1 ${target}`), calls().join('\n'))
+})
+
+test('export refuses a runtime without an ELF luajit', (t) => {
+  const missing = exportFixture(t, staticELF(), false)
+  assert.throws(() => exportNativeRuntime(missing.image, missing.output), /luajit/)
+  const script = exportFixture(t, staticELF(), false)
+  fs.mkdirSync(path.join(script.image, 'usr/local/openresty/luajit/bin'), { recursive: true })
+  fs.writeFileSync(path.join(script.image, 'usr/local/openresty/luajit/bin/luajit'), '#!/bin/sh\n', { mode: 0o755 })
+  assert.throws(() => exportNativeRuntime(script.image, script.output), /luajit/)
 })
 
 test('export refuses a runtime without a static h3probe', (t) => {

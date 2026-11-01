@@ -2,13 +2,11 @@ package sitetrafficlimit_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/sitetrafficlimit"
 	"github.com/google/uuid"
@@ -18,43 +16,7 @@ import (
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if os.Getenv("TEST_DATABASE_URL") == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-		return pool
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, os.Getenv("TEST_DATABASE_URL"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "site_traffic_limit_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := databasetest.CleanupContext()
-		defer cleanupCancel()
-		_, _ = admin.Exec(cleanupCtx, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE")
-		admin.Close()
-	})
-	config, err := pgxpool.ParseConfig(os.Getenv("TEST_DATABASE_URL"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 type fakeUsage struct {

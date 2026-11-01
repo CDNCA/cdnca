@@ -78,6 +78,16 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
     expect(await screen.findByText('用户甲')).toBeInTheDocument()
   })
 
+  // 说明文字与工具条按钮同一行（同一个 flex 工具条），不再单独一行。
+  it('keeps the panel description and actions in one toolbar row', async () => {
+    setup(panel, true)
+    const add = await screen.findByRole('button', { name: panel.add })
+    const toolbar = add.closest('.stream-panel-toolbar')!
+    const description = document.querySelector('.stream-panel-description')
+    if (panel.kind === 'defaults') expect(toolbar).toContainElement(description as HTMLElement)
+    expect(toolbar.classList.contains('is-end')).toBe(false)
+  })
+
   it('retries failed reads and renders an empty result without raw errors', async () => {
     vi.mocked(streamGroupsApi[panel.read]).mockRejectedValueOnce(new ApiError('private raw response', 503, 'request_failed')).mockResolvedValueOnce(list([]))
     const { user } = setup(panel)

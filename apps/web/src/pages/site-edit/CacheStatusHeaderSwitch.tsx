@@ -6,7 +6,7 @@ import { ApiError } from '../../api/auth'
 import { sitesApi, type SiteDetail } from '../../api/sites'
 import { localizedUnknownApiError } from '../../i18n/apiError'
 import '../../i18n/cachePolicy'
-import './CacheSiteTab.css'
+import CacheSettingRow, { cacheSettingBriefId } from './CacheSettingRow'
 import { useFeedback } from '@cdnca/ui'
 
 const knownErrors = ['version_conflict', 'site_locked', 'permission_denied'] as const
@@ -45,19 +45,15 @@ export default function CacheStatusHeaderSwitch({ detail, accessToken, disabled,
   })
   const checked = save.isPending ? Boolean(save.variables) : detail.basic.cache_status_header ?? true
   return (
-    <div className="site-basic-ipv6-row cache-status-header-row">
-      <div>
-        <strong id="cache-status-header-label">{t('statusHeader.label')}</strong>
-        <p id="cache-status-header-help">{t('statusHeader.help')}</p>
-      </div>
+    <CacheSettingRow name="status-header" label={t('statusHeader.label')} brief={t('statusHeader.help')} toggle>
       <Switch
         aria-label={t('statusHeader.label')}
-        aria-describedby="cache-status-header-help"
+        aria-describedby={cacheSettingBriefId('status-header')}
         checked={checked}
         loading={save.isPending}
         disabled={disabled || save.isPending}
         onChange={(enabled) => save.mutate(enabled)}
       />
-    </div>
+    </CacheSettingRow>
   )
 }

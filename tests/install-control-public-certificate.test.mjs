@@ -117,7 +117,7 @@ test('upgrade configurator reads the downloaded artifact trust from a root-priva
   const result = spawnSync('/bin/bash', ['-c', `set -Eeuo pipefail\n${setup}\nsetup_native_upgrade`], { encoding: 'utf8', env: {
     PATH: `${bin}:/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin`, TEMP_DIR: temp, RESPONSE_DIR: responses, NATIVE_SUPPORT: root,
     NATIVE_ARTIFACT_TRUST_FILE: join(temp, 'native-install-trust.json'), INSTALLATION_ID: 'id', CONTROL_ORIGIN: 'https://cdnca.com', NATIVE_ROOT: root,
-    PUBLIC_CERT_FILE: '',
+    PUBLIC_CERT_FILE: '', PKI_DIR: '/pki', WEB_PORT: '443',
   } })
   const recorded = existsSync(join(root, 'trust.args')) ? readFileSync(join(root, 'trust.args'), 'utf8').trim() : ''
   rmSync(root, { recursive: true, force: true })
@@ -239,7 +239,7 @@ test('node upgrade trust embeds an operator certificate the system store cannot 
 // roots, so a temporary self-signed operator certificate kept it unconfirmed.
 // setup_native_upgrade passes that certificate as the runner's web CA only
 // when public_https_trust_args (the self-check rule) says the store cannot verify it.
-function webCAArgs({ certFile, certPath }) {
+function configureArgs({ certFile, certPath, webPort = '443' }) {
   const setup = source.match(/^setup_native_upgrade\(\) \{[\s\S]*?^\}\n/m)?.[0]
   assert.ok(setup && trustHelper, 'extract the real setup_native_upgrade and public_https_trust_args functions')
   const root = mkdtempSync(join(tmpdir(), 'cdnca-native-webca-'))
@@ -253,19 +253,39 @@ function webCAArgs({ certFile, certPath }) {
     for (const name of ['python3', 'bash']) chmodSync(join(bin, name), 0o755)
     const result = spawnSync('/bin/bash', ['-c', `set -Eeuo pipefail\n${trustHelper}\n${setup}\nsetup_native_upgrade`], { encoding: 'utf8', env: {
       PATH: `${bin}:/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin`, TEMP_DIR: temp, RESPONSE_DIR: root, NATIVE_SUPPORT: root, PKI_DIR: '/pki',
-      PUBLIC_CERT_FILE: certFile, PUBLIC_CERT_PATH: certPath, NATIVE_ARTIFACT_TRUST_FILE: join(temp, 'native-install-trust.json'), INSTALLATION_ID: 'id', CONTROL_ORIGIN: 'https://cdnca.com', NATIVE_ROOT: root,
+      PUBLIC_CERT_FILE: certFile, PUBLIC_CERT_PATH: certPath, NATIVE_ARTIFACT_TRUST_FILE: join(temp, 'native-install-trust.json'), INSTALLATION_ID: 'id', CONTROL_ORIGIN: 'https://cdnca.com', NATIVE_ROOT: root, WEB_PORT: webPort,
     } })
     assert.equal(result.status, 0, result.stderr)
-    const args = readFileSync(join(root, 'configure.args'), 'utf8').trim().split('\n')
-    const index = args.indexOf('--web-ca-file')
-    return index < 0 ? null : args[index + 1]
+    return readFileSync(join(root, 'configure.args'), 'utf8').trim().split('\n')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
 }
 
+function argValue(args, name) {
+  const index = args.indexOf(name)
+  return index < 0 ? null : args[index + 1]
+}
+
+const webCAArgs = (options) => argValue(configureArgs(options), '--web-ca-file')
+
+// 10-30 73: the console index URL is the public domain, which sat behind a CDN
+// that injected a beacon script, so the digest never matched. The runner must
+// dial the local control-web (nginx WEB_PORT), keeping the URL for SNI/Host.
+test('upgrade runner console index check dials the local control-web, not the public domain', () => {
+  for (const webPort of ['443', '18443']) {
+    const args = configureArgs({ certFile: '', certPath: '/pki/public-server.pem', webPort })
+    assert.equal(argValue(args, '--web-index-url'), 'https://cdnca.com/dashboard/')
+    assert.equal(argValue(args, '--web-index-address'), `127.0.0.1:${webPort}`)
+    // IP master (private CA) keeps its console CA.
+    assert.equal(argValue(args, '--web-ca-file'), '/pki/root-ca-cert.pem')
+  }
+})
+
 test('upgrade runner gets the operator certificate as console CA only when the system store cannot verify it', () => {
-  assert.equal(webCAArgs({ certFile: '', certPath: '/pki/public-server.pem' }), null)
+  // 10-30 98（IP 主控）：没有运营方证书时 nginx 用本机私有 CA 签的叶子，runner 的
+  // console 索引检查必须用这把私有根，否则 [11/12] control_upgrade_runner_unconfirmed。
+  assert.equal(webCAArgs({ certFile: '', certPath: '/pki/public-server.pem' }), '/pki/root-ca-cert.pem')
   const root = mkdtempSync(join(tmpdir(), 'cdnca-webca-cert-'))
   try {
     const cert = join(root, 'self.pem')
@@ -278,5 +298,5 @@ test('upgrade runner gets the operator certificate as console CA only when the s
   }
   // A store-verifiable certificate keeps the system roots: no web CA argument.
   const setup = source.match(/^setup_native_upgrade\(\) \{[\s\S]*?^\}\n/m)?.[0]
-  assert.match(setup, /if \[ -n "\$PUBLIC_CERT_FILE" \] && \[ -n "\$\(public_https_trust_args\)" \]; then\n\s+artifact_options\+=\(--web-ca-file "\$PUBLIC_CERT_PATH"\)/)
+  assert.match(setup, /elif \[ -n "\$\(public_https_trust_args\)" \]; then\n\s+artifact_options\+=\(--web-ca-file "\$PUBLIC_CERT_PATH"\)/)
 })

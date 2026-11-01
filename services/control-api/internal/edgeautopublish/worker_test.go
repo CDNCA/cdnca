@@ -143,6 +143,10 @@ func TestWorkerFailsUnpublishableAutomaticPublication(t *testing.T) {
 		// as publish_outcome_unknown until the deadline.
 		fmt.Errorf("publish: %w", &edgepublish.CrossScopeConflictError{NodeID: uuid.New(),
 			Reason: "domain a.example is already served by another tenant"}): FailureNodeScopeConflict,
+		// fix-https443-scope (73 demo-nodes, 10-30): a site with HTTPS off and
+		// https_ports {443} was retried every 5 seconds as an unknown outcome.
+		fmt.Errorf("publish: %w", &edgepublish.SiteConfigInvalidError{SiteID: uuid.New(),
+			Reason: "https_ports_mismatch"}): FailureSiteConfigInvalid,
 	} {
 		reference := automaticReference(t)
 		repository := &workerRepositoryStub{references: []edgepublish.AutomaticClaimReference{reference}}

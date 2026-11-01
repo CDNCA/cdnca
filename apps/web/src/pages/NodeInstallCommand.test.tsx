@@ -96,12 +96,44 @@ describe('reusable node installation command', () => {
       `(f=$(mktemp) || exit 1; trap 'rc=$?; rm -f "$f"; exit $rc' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; { curl --proto '=https' --proto-redir '=https' -fsSL -o "$f" 'https://control.example:8443/downloads/install-node.sh'; } || { rc=$?; echo '[cdnca-edge] error: 无法下载安装脚本' >&2; exit $rc; }; { [ "$(head -c 2 "$f")" = '#!' ] && [ "$(tail -n 1 "$f")" = 'main "$@"' ]; } || { echo '[cdnca-edge] error: 下载的安装脚本为空或不完整' >&2; exit 1; }; printf '%s\\n' '${credential().credential}' | bash "$f" --control-plane 'https://control.example:8443' --registration-key-stdin)`)
   })
 
+  // a Chinese console UI passes --lang zh explicitly (stock Ubuntu LANG=C.UTF-8 would pick English).
+  it('appends --lang zh for a Chinese and --lang en for an English console UI', () => {
+    const plain = buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust)
+    const zh = buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'zh-CN')
+    expect(zh).toBe(plain.replace('--registration-key-stdin)', '--registration-key-stdin --lang zh)'))
+    expect(buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'zh-TW')).toBe(zh)
+    expect(buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'en-US'))
+      .toBe(zh.replace('--registration-key-stdin --lang zh)', '--registration-key-stdin --lang en)').replace('无法下载安装脚本', 'cannot download the installer').replace('下载的安装脚本为空或不完整', 'the downloaded installer is empty or incomplete'))
+  })
+
   it.each(['https://evil.example/$(id)', 'https://name:password@control.example', 'http://control.example', 'https://control.example?x=1'])('rejects unsafe command origin %s', (origin) => {
     expect(() => buildNodeInstallCommand(credential().credential, origin, upgradeTrust)).toThrow()
   })
 
   it.each(['fixture-one-time-secret', `nrk1.${'0'.repeat(32)}.${'A'.repeat(42)}'`, `nrk1.${'G'.repeat(32)}.${'A'.repeat(43)}`])('rejects an invalid registration credential %s', (value) => {
     expect(() => buildNodeInstallCommand(value, 'https://control.example', upgradeTrust)).toThrow()
+  })
+
+  // a console on the installer-generated self-signed root publishes its digest.
+  it('pins the published management root for a self-signed console and passes it to the installer', () => {
+    const digest = 'ef'.repeat(32)
+    const pinned = buildNodeInstallCommand(credential().credential, 'https://198.51.100.126', { ...upgradeTrust, __CDNCA_CONTROL_CA_SHA256__: digest })
+    expect(pinned).toContain(`curl --proto '=https' --proto-redir '=https' -k -fsSL --max-filesize 65536 -o "$a" 'https://198.51.100.126/downloads/gateway-ca.pem'`)
+    expect(pinned).toContain(`[ "$(sha256sum "$a" | cut -d ' ' -f 1)" = '${digest}' ]`)
+    expect(pinned).toContain(`--cacert "$a" -fsSL -o "$f" 'https://198.51.100.126/downloads/install-node.sh'`)
+    expect(pinned).toContain(`--registration-key-stdin --control-plane-ca-file "$a" --control-plane-ca-sha256 '${digest}')`)
+    expect(pinned).not.toContain('--cacert "$a" -k')
+    // A publicly trusted console (empty digest) keeps the plain command.
+    expect(buildNodeInstallCommand(credential().credential, 'https://control.example', { ...upgradeTrust, __CDNCA_CONTROL_CA_SHA256__: '' }))
+      .toBe(buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust))
+    const english = buildNodeInstallCommand(credential().credential, 'https://198.51.100.126', { ...upgradeTrust, __CDNCA_CONTROL_CA_SHA256__: digest }, 'en-US')
+    expect(english).toContain('cannot download the management root CA or its fingerprint does not match')
+    expect(english).not.toMatch(/[\u4e00-\u9fff]/)
+    expect(english).toMatch(/--control-plane-ca-sha256 '[0-9a-f]{64}' --lang en\)$/)
+  })
+
+  it.each(['AB'.repeat(32), 'ab'.repeat(31), `${'ab'.repeat(32)}'; id`])('refuses a malformed management root digest (%s)', (digest) => {
+    expect(() => buildNodeInstallCommand(credential().credential, 'https://control.example', { ...upgradeTrust, __CDNCA_CONTROL_CA_SHA256__: digest })).toThrow()
   })
 
   it.each([undefined, '', 'AB'.repeat(32), 'ab'.repeat(31), `${'ab'.repeat(32)}'; id`])('refuses to build a command without published upgrade trust (%s)', (digest) => {

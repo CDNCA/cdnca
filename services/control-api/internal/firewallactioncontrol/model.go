@@ -25,6 +25,13 @@ const (
 	StatePending = "pending"
 	StateActive  = "active"
 	StateFailed  = "failed"
+	// StateInherited: the site has no policy of its own and uses the tenant
+	// default, else the system default.
+	StateInherited = "inherited"
+
+	SourceSite          = "site"
+	SourceTenantDefault = "tenant_default"
+	SourceSystemDefault = "system_default"
 )
 
 var (
@@ -87,13 +94,26 @@ type Policy struct {
 	TenantScopeID uuid.UUID `json:"tenant_scope_id"`
 	SiteID        uuid.UUID `json:"site_id"`
 	PolicyInput
-	Revision        int64     `json:"revision"`
-	ActiveRevision  int64     `json:"active_revision"`
-	LKGRevision     int64     `json:"lkg_revision"`
-	DeploymentState string    `json:"deployment_state"`
-	DocumentSHA256  string    `json:"document_sha256"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	Revision        int64  `json:"revision"`
+	ActiveRevision  int64  `json:"active_revision"`
+	LKGRevision     int64  `json:"lkg_revision"`
+	DeploymentState string `json:"deployment_state"`
+	// Enabled (migration 608): a disabled policy keeps its revisions and LKG
+	// but is not delivered to the nodes; enabling delivers it again. Only a
+	// site's own policy is switched; an inherited view is always true (whether
+	// it reaches the nodes is Delivered).
+	Enabled        bool       `json:"enabled"`
+	DocumentSHA256 string     `json:"document_sha256"`
+	CreatedAt      *time.Time `json:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at"`
+	// Inherited: no policy of the site's own; the fields are the effective
+	// tenant or system default, Revision the site's own revision counter (the
+	// If-Match of its next PUT) and ID the inherited delivery's policy ID.
+	Inherited bool   `json:"inherited"`
+	Source    string `json:"source"`
+	// Delivered: whether nodes receive the policy; the system default (its
+	// block network is a documentation placeholder) is not delivered.
+	Delivered bool `json:"delivered"`
 	// HostEscalation says where the nftables escalation runs (A08): "owned"
 	// when the scope owns an active node, "shared_unsupported" when it has
 	// only shared platform nodes there the escalation stays in OpenResty
@@ -135,6 +155,60 @@ type RecoverRequest struct {
 	RequestSHA256    [32]byte
 }
 
+// SetEnabledRequest enables or disables the site's own policy (PATCH,
+// If-Match the current revision); the revision does not change.
+type SetEnabledRequest struct {
+	Actor            Actor
+	TargetScopeID    uuid.UUID
+	SiteID           uuid.UUID
+	ExpectedRevision int64
+	IdempotencyKey   string
+	RequestID        string
+	Enabled          bool
+	RequestSHA256    [32]byte
+}
+
+type InheritRequest struct {
+	Actor            Actor
+	TargetScopeID    uuid.UUID
+	SiteID           uuid.UUID
+	ExpectedRevision int64
+	IdempotencyKey   string
+	RequestID        string
+	RequestSHA256    [32]byte
+}
+
+// DefaultPolicy is a tenant scope's default firewall action, the policy of
+// every site without its own (Source system_default, Revision 0: never saved).
+type DefaultPolicy struct {
+	TenantScopeID uuid.UUID `json:"tenant_scope_id"`
+	Source        string    `json:"source"`
+	Revision      int64     `json:"revision"`
+	PolicyInput
+	InheritingSiteCount int64      `json:"inheriting_site_count"`
+	UpdatedAt           *time.Time `json:"updated_at"`
+}
+
+type DefaultReadRequest struct {
+	Actor         Actor
+	TargetScopeID uuid.UUID
+}
+
+type DefaultPutRequest struct {
+	Actor            Actor
+	TargetScopeID    uuid.UUID
+	ExpectedRevision int64
+	IdempotencyKey   string
+	RequestID        string
+	Policy           PolicyInput
+	RequestSHA256    [32]byte
+}
+
+type DefaultWriteResult struct {
+	Policy   DefaultPolicy `json:"policy"`
+	Replayed bool          `json:"replayed"`
+}
+
 type WriteResult struct {
 	Policy   Policy `json:"policy"`
 	Replayed bool   `json:"replayed"`
@@ -173,4 +247,8 @@ type storePort interface {
 	Put(context.Context, PutRequest) (WriteResult, error)
 	Get(context.Context, ReadRequest) (Policy, error)
 	Recover(context.Context, RecoverRequest) (WriteResult, error)
+	SetEnabled(context.Context, SetEnabledRequest) (WriteResult, error)
+	Inherit(context.Context, InheritRequest) (WriteResult, error)
+	GetDefault(context.Context, DefaultReadRequest) (DefaultPolicy, error)
+	PutDefault(context.Context, DefaultPutRequest) (DefaultWriteResult, error)
 }

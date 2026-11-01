@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { logListQueryOptions } from './logListQuery'
 import {
   Alert,
   Button,
@@ -535,6 +536,8 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
     refetchOnWindowFocus: false,
     gcTime: Infinity,
     staleTime: Infinity,
+    // control-log-ui：翻页/改条件时保留上一页的行盖加载遮罩，不闪空表（卸载时 removeQueries 清掉本页缓存）。
+    placeholderData: logListQueryOptions.placeholderData,
   })
 
   // 最近一次 apply 的草稿（含校验不过的那次，避免同一非法草稿反复校验）。
@@ -607,9 +610,12 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
     [t('filters.country'), appliedFilters.countryCode],
     [t('filters.carrier'), appliedFilters.carrier],
   ] as const).filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
-  const tableLoading = query.isFetching && !query.data
+  const tableLoading = query.isFetching && (!query.data || query.isPlaceholderData)
   const exportText = (key: Parameters<typeof analyticsLogExportMessage>[1]) =>
     analyticsLogExportMessage(i18n.resolvedLanguage ?? 'zh-CN', key)
+  const exportUserText = (user: AnalyticsLogExport['last_downloaded_by'] | undefined) => !user ? '—'
+    : user.display_name && user.display_name !== user.username ? `${user.display_name}（${user.username}）` : user.username
+  const exportCountText = (count: number) => exportText('downloadCount').replace('{count}', formatNumber(count, locale))
   const [downloadError, setDownloadError] = useState(false)
   const [exportHint, setExportHint] = useState(false)
   const [exportsVisible, setExportsVisible] = useState(false)
@@ -1168,7 +1174,7 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
           <Button aria-label={t('actions.previous')} icon={<ChevronLeft size={15} />} disabled={pageIndex === 0 || query.isFetching} onClick={() => setPageIndex((current) => Math.max(0, current - 1))} />
           <span aria-hidden="true">{pageIndex + 1}</span>
           <span className="visually-hidden">{t('pagination.page', { page: pageIndex + 1 })}</span>
-          <Button aria-label={t('actions.next')} icon={<ChevronRight size={15} />} disabled={!query.data?.meta.next_cursor || query.isFetching} onClick={nextPage} />
+          <Button aria-label={t('actions.next')} icon={<ChevronRight size={15} />} disabled={!query.data?.meta.next_cursor || query.isFetching || query.isPlaceholderData} onClick={nextPage} />
           <span>{t('pagination.pageSize', { size: pageSize })}</span>
         </div>
         </> : null}
@@ -1201,8 +1207,9 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
                   ) : '—',
                 },
                 { title: exportText('createdAt'), dataIndex: 'created_at', key: 'created_at', render: (value: string) => formatDateTime(value, locale) },
+                { title: exportText('requestedBy'), key: 'requested_by', render: (_value: unknown, item: AnalyticsLogExport) => item.requested_by ? exportUserText(item.requested_by) : '—' },
                 {
-                  title: t('table.status'), dataIndex: 'status', key: 'status',
+                  title: exportText('status'), dataIndex: 'status', key: 'status',
                   // LOG-02：失败显示原因；已过期明确提示重新申请
                   render: (status: AnalyticsLogExport['status'], item: AnalyticsLogExport) => (
                     <span>
@@ -1218,6 +1225,16 @@ function AnalyticsLogPageContent({ kind, owner, ownerKey, embedded, layout, seed
                     : `${formatNumber(item.row_count, locale)}${item.byte_count === null ? '' : ` / ${formatBytes(item.byte_count, locale)}`}`,
                 },
                 { title: exportText('expiresAt'), dataIndex: 'expires_at', key: 'expires_at', render: (value: string | null) => value ? formatDateTime(value, locale) : '—' },
+                {
+                  title: exportText('downloads'), key: 'downloads',
+                  render: (_value: unknown, item: AnalyticsLogExport) => item.download_count === undefined ? '—'
+                    : item.download_count === 0 || !item.last_downloaded_at ? exportText('notDownloaded') : (
+                      <span className="analytics-log-export-filter">
+                        <span>{exportUserText(item.last_downloaded_by)} · {formatDateTime(item.last_downloaded_at, locale)}</span>
+                        <small>{exportCountText(item.download_count)}</small>
+                      </span>
+                    ),
+                },
                 {
                   title: t('table.actions'), key: 'actions',
                   render: (_value, item: AnalyticsLogExport) => item.downloadable && !exportExpired(item) ? (

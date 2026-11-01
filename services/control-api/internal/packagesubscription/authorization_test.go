@@ -54,6 +54,23 @@ func TestPostgresSubscriptionAuthorizationRejectsInvalidSessionsAndMissingPermis
 	if err != nil {
 		t.Fatal(err)
 	}
+	// fix-https443-scope (73): an operator sending tenants.id instead of the
+	// tenant's scope ID got 403 permission_denied; it is not found, saying so.
+	var tenantRowID uuid.UUID
+	if err := pool.QueryRow(t.Context(), `SELECT tenant_id FROM access_scopes WHERE id=$1`, tenantA.scopeID).Scan(&tenantRowID); err != nil {
+		t.Fatal(err)
+	}
+	for name, target := range map[string]uuid.UUID{"tenants.id": tenantRowID, "unknown": uuid.New()} {
+		_, err := service.Open(t.Context(), owner, OpenRequest{
+			TenantScopeID: target, OwnerUserID: tenantA.userID, ProductID: productID, ProductRevision: 1,
+			SiteLimit: 1, NodeLimit: 1, Terms: packageperiod.Terms{Duration: &month}, TimeZone: "UTC",
+			CyclePolicy: packageperiod.CyclePolicy{Kind: packageperiod.CycleMonthly}, TrafficFactor: factor,
+			IdempotencyKey: "auth-tenant-row-" + name, RequestID: "auth-tenant-row-" + name,
+		})
+		if !errors.Is(err, ErrTenantScopeNotFound) || !errors.Is(err, ErrNotFound) || errors.Is(err, ErrPermissionDenied) {
+			t.Fatalf("Open(%s) error = %v, want %v", name, err, ErrTenantScopeNotFound)
+		}
+	}
 
 	newPlatformMember := func(name string) Actor {
 		userID := uuid.New()

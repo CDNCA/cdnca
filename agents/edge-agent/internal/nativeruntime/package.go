@@ -45,6 +45,7 @@ const (
 // Paths inside a native release the switch relies on.
 const (
 	NginxPath    = "runtime/openresty/nginx/sbin/nginx"
+	LuaJITPath   = "runtime/openresty/luajit/bin/luajit" // EDGE_WEBP probe
 	LoaderPath   = "runtime/lib/ld-musl-x86_64.so.1"
 	SecurityRoot = "lua/share/cdnca/security"
 	AgentPath    = "bin/edge-agent"
@@ -60,7 +61,7 @@ var (
 	memberPrefixes = []string{"runtime/openresty/", "runtime/lib/", "runtime/usr/lib/", "lua/share/cdnca/", "lua/l4geo/",
 		"evidence/", "packaging/", "upgrade/"}
 	memberExact = map[string]bool{"bin/edge-agent": true, "bin/cdnca-edge-agent-helper": true, "runtime/bin/h3probe": true}
-	required    = []string{NginxPath, "runtime/openresty/bin/openresty", LoaderPath, AgentPath,
+	required    = []string{NginxPath, "runtime/openresty/bin/openresty", LuaJITPath, LoaderPath, AgentPath,
 		SecurityRoot + "/cdnca_waf.lua", SecurityRoot + "/cc.lua", SecurityRoot + "/cc_adaptive.lua"}
 )
 

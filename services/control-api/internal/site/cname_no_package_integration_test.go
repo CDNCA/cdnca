@@ -12,6 +12,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/apikeycredential"
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/jobstate"
@@ -34,6 +35,7 @@ func TestCNAMEWithoutPackageUsesPlatformDefaultLineGroup(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "cname_nopkg")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

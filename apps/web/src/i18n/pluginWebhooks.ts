@@ -1,5 +1,6 @@
 import i18n from './index'
-import { enUS, zhCN } from './resources'
+import { enUS } from './resources.enUS'
+import { zhCN } from './resources.zhCN'
 
 export type PluginWebhooksMessageTree = { [key: string]: string | PluginWebhooksMessageTree }
 type MessageShape<T> = { [K in keyof T]: T[K] extends string ? string : MessageShape<T[K]> }

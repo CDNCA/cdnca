@@ -536,6 +536,9 @@ func newSiteRuntimeV2OracleFixture(t *testing.T) *publishFixture {
 		pool: pool, service: service, signer: signer,
 		tenantID: ids.tenant, scopeID: ids.scope, userID: ids.user,
 		platformScopeID: ids.platformScope, platformUserID: ids.platformUser, nodeID: ids.node,
+		// Only a site on a valid package is published; the
+		// package is not part of the S0 document.
+		subscriptionID: seedPublishPackage(t, pool, ids.scope, ids.user, ids.platformScope, ids.platformUser),
 	}
 }
 
@@ -557,9 +560,19 @@ func seedSiteRuntimeV2OracleSite(t *testing.T, fixture *publishFixture) fixtureS
 		INSERT INTO site_origin_pools(site_id,balance_method,failover_tries,connect_timeout_ms,read_timeout_ms,updated_at)
 			VALUES($1,'round_robin',1,3000,30000,$5);
 		INSERT INTO site_origins(site_id,position,host,port,weight,enabled)
-			VALUES($1,1,'203.0.113.10',8080,1,true);
-		UPDATE edge_configuration_scopes SET source_revision=41,updated_at=$5 WHERE scope_id=$2`,
+			VALUES($1,1,'203.0.113.10',8080,1,true)`,
 		pgx.QueryExecModeSimpleProtocol, site.ID, fixture.scopeID, fixture.userID, site.Domain, publishTestClock); err != nil {
+		t.Fatal(err)
+	}
+	// Only a site on a valid package is published; bound
+	// before the source revision is pinned (binding advances it).
+	if err := pgx.BeginFunc(t.Context(), fixture.pool, func(tx pgx.Tx) error {
+		return bindFixtureSitePackage(t.Context(), tx, fixture.scopeID, fixture.userID, fixture.subscriptionID, site.ID)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.pool.Exec(t.Context(), `UPDATE edge_configuration_scopes SET source_revision=41,updated_at=$2 WHERE scope_id=$1`,
+		fixture.scopeID, publishTestClock); err != nil {
 		t.Fatal(err)
 	}
 	return fixtureSiteResult{Site: site}

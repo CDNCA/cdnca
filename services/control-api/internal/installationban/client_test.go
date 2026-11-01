@@ -23,6 +23,7 @@ func TestClientFetchDecodesLicenseServiceErrorCode(t *testing.T) {
 	for name, body := range map[string]string{
 		"top level": `{"code":"master_ip_rebound","request_id":"r1"}`,
 		"nested":    `{"error":{"code":"master_ip_rebound"}}`,
+		"reinstall": `{"code":"master_ip_rebound","request_id":"r2","retired_reason":"reinstall"}`,
 	} {
 		client, err := NewClient("https://auth.cdnca.com", uuid.New(), key, doerFunc(func(*http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader(body))}, nil
@@ -34,6 +35,10 @@ func TestClientFetchDecodesLicenseServiceErrorCode(t *testing.T) {
 		var httpError *HTTPError
 		if !errors.As(err, &httpError) || httpError.Code != CodeMasterIPRebound || !isRebound(err) {
 			t.Fatalf("%s: err = %v", name, err)
+		}
+		// only retired_reason=reinstall marks a reinstall.
+		if isReinstalled(err) != (name == "reinstall") {
+			t.Fatalf("%s: reinstalled = %v", name, isReinstalled(err))
 		}
 	}
 }

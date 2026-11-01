@@ -224,26 +224,7 @@ type sessionLogRow struct {
 
 const sessionLogTable = "l4_session_logs_v1"
 
-// sessionLogTableExists asks ClickHouse whether the session log table is
-// installed (a control plane installed before migration 017 lacks it).
-func (source *ClickHouseSource) sessionLogTableExists(ctx context.Context) (bool, error) {
-	var row struct {
-		Result int `json:"result"`
-	}
-	if err := source.doJSON(ctx, "EXISTS TABLE "+sessionLogTable+" FORMAT JSONEachRow", url.Values{}, &row); err != nil {
-		return false, err
-	}
-	return row.Result == 1, nil
-}
-
 func (source *ClickHouseSource) readSessionLogs(ctx context.Context, scope Scope, filter sessionLogFilter, after *sessionLogAfter) ([]SessionLogRow, error) {
-	exists, err := source.sessionLogTableExists(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, ErrSessionLogUnavailable
-	}
 	const layout = "2006-01-02 15:04:05.000"
 	conditions := []string{"finalized_at >= {from:DateTime64(3)}", "finalized_at < {to:DateTime64(3)}"}
 	params := url.Values{"from": {filter.From.UTC().Format(layout)}, "to": {filter.To.UTC().Format(layout)},
@@ -334,17 +315,14 @@ type l4SessionLogInsertRow struct {
 }
 
 // NewClickHouseFactWriterWithSessionLogs is NewClickHouseFactWriter that
-// also writes the session logs of logging streams, when the table exists.
-func NewClickHouseFactWriterWithSessionLogs(ctx context.Context, source *ClickHouseSource) (*ClickHouseFactWriter, error) {
+// also writes the session logs of logging streams. l4_session_logs_v1 is part
+// of the 1.0.35 baseline schema, so it is not probed.
+func NewClickHouseFactWriterWithSessionLogs(_ context.Context, source *ClickHouseSource) (*ClickHouseFactWriter, error) {
 	writer, err := NewClickHouseFactWriter(source)
 	if err != nil {
 		return nil, err
 	}
-	exists, err := source.sessionLogTableExists(ctx)
-	if err != nil {
-		return nil, ErrDependencyUnavailable
-	}
-	writer.sessionLogs = exists
+	writer.sessionLogs = true
 	return writer, nil
 }
 

@@ -539,6 +539,24 @@ func (handler *authorizedHandler) writeAuthenticationError(
 
 func authorizationFor(request *http.Request, route handlerRoute) (AuthorizationRequest, error) {
 	authorization := AuthorizationRequest{Permission: ReadPermission, Audience: route.audience}
+	if route.kind == routeAccessExportCollection && request.Method == http.MethodGet {
+		// 带查询条件的申请列表（LOG-01 按范围找回）与 handler 用同一解析，
+		// 否则这里只认 tenant_id 会在进 handler 前回 400；站点/节点照查询接口一并授权。
+		tenantID, filter, _, err := parseExportListScope(request, route.audience)
+		if err != nil {
+			return AuthorizationRequest{}, err
+		}
+		if filter.From.IsZero() && filter.To.IsZero() {
+			authorization.TenantID = tenantID
+			return authorization, nil
+		}
+		if err := validateFilter(filter); err != nil {
+			return AuthorizationRequest{}, ErrInvalidInput
+		}
+		filter = normalizeFilter(filter)
+		authorization.TenantID, authorization.SiteID, authorization.NodeID = tenantID, filter.SiteID, filter.NodeID
+		return authorization, nil
+	}
 	if route.kind >= routeAccessExportCollection {
 		tenantID, err := parseExportScope(request, route.audience)
 		if err != nil {

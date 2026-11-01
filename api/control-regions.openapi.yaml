@@ -200,7 +200,8 @@ components:
         code:
           type: string
           pattern: '^[a-z0-9][a-z0-9-]{0,62}$'
-          description: >-
+          description: "Stable lower-case ASCII code of the region, generated when the region is created and never changed (renaming keeps it): the lower-cased name when it fits the pattern and is free, \"default\" for the built-in default region, else region-<id>. Nodes learn their region by it from the control plane; error page region overrides and origin routes' node_regions match on it."
+          x-description-zh: >-
             Stable lower-case ASCII code of the region, generated when the region is created and never
             changed (renaming keeps it): the lower-cased name when it fits the pattern and is free,
             "default" for 默认, else region-<id>. Nodes learn their region by it from the control plane;

@@ -2,7 +2,9 @@ import { ApiError, networkApiError, responseApiError } from './auth'
 
 export type FirewallNormalAction = 'disconnect' | 'return_page'
 export type FirewallEscalatedAction = 'nftables'
-export type FirewallActionState = 'pending' | 'active' | 'failed'
+// 'inherited' = 本站没有自有策略，用租户默认/系统默认。
+export type FirewallActionState = 'pending' | 'active' | 'failed' | 'inherited'
+export type FirewallActionSource = 'site' | 'tenant_default' | 'system_default'
 // Where the nftables escalation runs (A08): only on nodes the tenant owns.
 export type FirewallHostEscalation = 'owned' | 'shared_unsupported'
 
@@ -38,10 +40,35 @@ export interface FirewallActionPolicy extends FirewallActionPolicyInput {
   active_revision: number
   lkg_revision: number
   deployment_state: FirewallActionState
+  /** 迁移 608：false = 本站自有策略已停用（不下发到节点，修订与 LKG 保留）；继承中恒 true。 */
+  enabled: boolean
   host_escalation: FirewallHostEscalation
   document_sha256: string
-  created_at: string
-  updated_at: string
+  /** 继承系统默认时为 null。 */
+  created_at: string | null
+  updated_at: string | null
+  /** true：本站没有自有策略，字段是当前有效的租户默认/系统默认；revision 是本站自有修订计数（PUT 的 If-Match）。 */
+  inherited: boolean
+  source: FirewallActionSource
+  /** 是否下发到节点：系统默认（文档网段占位）与停用的自有策略为 false。 */
+  delivered: boolean
+}
+
+/** 租户默认（GET/PUT /v1/firewall-actions/default）：没有自有策略的站点都用它。 */
+export interface FirewallActionDefault extends FirewallActionPolicyInput {
+  tenant_scope_id: string
+  source: 'tenant_default' | 'system_default'
+  /** 0 = 从未保存（系统默认）；PUT 的 If-Match。 */
+  revision: number
+  inheriting_site_count: number
+  updated_at: string | null
+}
+
+/** A new site policy's defaults (防火墙动作页「新建」与自动防御标签「打开」共用). */
+export const defaultFirewallActionPolicy: FirewallActionPolicyInput = {
+  normal_action: 'return_page', escalated_action: 'nftables', engage_threshold: 100, recover_threshold: 20,
+  recovery_windows: 3, block_networks: ['198.51.100.0/24'], trusted_proxies: [], trusted_crawlers: [],
+  return_page: { status: 429, content_type: 'text/plain; charset=utf-8', body: 'Request limited' },
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -71,27 +98,58 @@ function isReturnPage(value: unknown): value is FirewallReturnPage {
     (value.content_type === 'text/html; charset=utf-8' || value.content_type === 'text/plain; charset=utf-8') && typeof value.body === 'string'
 }
 
+function isTime(value: unknown, nullable: boolean): boolean {
+  return value === null ? nullable : typeof value === 'string' && !Number.isNaN(Date.parse(value))
+}
+
+/** The 9 policy fields, as the site PUT validates them. */
+function isPolicyInput(value: Record<string, unknown>): boolean {
+  if (value.normal_action !== 'disconnect' && value.normal_action !== 'return_page' || value.escalated_action !== 'nftables') return false
+  if (![value.engage_threshold, value.recover_threshold, value.recovery_windows].every((item) => Number.isSafeInteger(item) && Number(item) >= 0)) return false
+  if (Number(value.engage_threshold) < 1 || Number(value.recover_threshold) >= Number(value.engage_threshold) || Number(value.recovery_windows) < 1 || Number(value.recovery_windows) > 60) return false
+  return isStringArray(value.block_networks, false) && isStringArray(value.trusted_proxies) && Array.isArray(value.trusted_crawlers) &&
+    value.trusted_crawlers.every(isCrawler) && isReturnPage(value.return_page)
+}
+
+const policyInputKeys = ['normal_action', 'escalated_action', 'engage_threshold', 'recover_threshold', 'recovery_windows',
+  'block_networks', 'trusted_proxies', 'trusted_crawlers', 'return_page'] as const
+
 function isPolicy(value: unknown): value is FirewallActionPolicy {
   if (!isRecord(value) || !exactKeys(value, [
-    'id', 'tenant_scope_id', 'site_id', 'normal_action', 'escalated_action', 'engage_threshold', 'recover_threshold',
-    'recovery_windows', 'block_networks', 'trusted_proxies', 'trusted_crawlers', 'return_page', 'revision', 'active_revision',
-    'lkg_revision', 'deployment_state', 'host_escalation', 'document_sha256', 'created_at', 'updated_at',
+    'id', 'tenant_scope_id', 'site_id', ...policyInputKeys, 'revision', 'active_revision',
+    'lkg_revision', 'deployment_state', 'enabled', 'host_escalation', 'document_sha256', 'created_at', 'updated_at',
+    'inherited', 'source', 'delivered',
   ])) return false
+  if (typeof value.enabled !== 'boolean' || typeof value.inherited !== 'boolean' || typeof value.delivered !== 'boolean') return false
   if (value.host_escalation !== 'owned' && value.host_escalation !== 'shared_unsupported') return false
   if (![value.id, value.tenant_scope_id, value.site_id].every((item) => typeof item === 'string' && uuidPattern.test(item))) return false
-  if (value.normal_action !== 'disconnect' && value.normal_action !== 'return_page' || value.escalated_action !== 'nftables') return false
-  if (![value.engage_threshold, value.recover_threshold, value.recovery_windows, value.revision, value.active_revision, value.lkg_revision]
-    .every((item) => Number.isSafeInteger(item) && Number(item) >= 0)) return false
-  if (Number(value.engage_threshold) < 1 || Number(value.recover_threshold) >= Number(value.engage_threshold) || Number(value.recovery_windows) < 1 || Number(value.recovery_windows) > 60) return false
-  if (!isStringArray(value.block_networks, false) || !isStringArray(value.trusted_proxies) || !Array.isArray(value.trusted_crawlers) || !value.trusted_crawlers.every(isCrawler) || !isReturnPage(value.return_page)) return false
+  if (!isPolicyInput(value)) return false
+  if (![value.revision, value.active_revision, value.lkg_revision].every((item) => Number.isSafeInteger(item) && Number(item) >= 0)) return false
+  if (typeof value.document_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(value.document_sha256)) return false
+  if (value.inherited) {
+    // 契约 §3：继承视图 active/lkg=0、deployment_state=inherited；系统默认不下发、时间为 null。
+    if (value.deployment_state !== 'inherited' || value.active_revision !== 0 || value.lkg_revision !== 0 || !value.enabled) return false
+    if (value.source === 'system_default') return !value.delivered && value.created_at === null && value.updated_at === null
+    return value.source === 'tenant_default' && value.delivered === true && isTime(value.created_at, false) && isTime(value.updated_at, false)
+  }
+  if (value.source !== 'site' || value.delivered !== value.enabled) return false
   if (!['pending', 'active', 'failed'].includes(String(value.deployment_state)) || Number(value.revision) < 1 || Number(value.active_revision) > Number(value.revision) || Number(value.lkg_revision) > Number(value.active_revision)) return false
-  return typeof value.document_sha256 === 'string' && /^[0-9a-f]{64}$/.test(value.document_sha256) &&
-    typeof value.created_at === 'string' && !Number.isNaN(Date.parse(value.created_at)) && typeof value.updated_at === 'string' && !Number.isNaN(Date.parse(value.updated_at))
+  return isTime(value.created_at, false) && isTime(value.updated_at, false)
+}
+
+function isDefault(value: unknown): value is FirewallActionDefault {
+  if (!isRecord(value) || !exactKeys(value, ['tenant_scope_id', 'source', 'revision', ...policyInputKeys, 'inheriting_site_count', 'updated_at'])) return false
+  if (typeof value.tenant_scope_id !== 'string' || !uuidPattern.test(value.tenant_scope_id) || !isPolicyInput(value)) return false
+  if (![value.revision, value.inheriting_site_count].every((item) => Number.isSafeInteger(item) && Number(item) >= 0)) return false
+  if (value.source === 'system_default') return value.revision === 0 && value.updated_at === null
+  return value.source === 'tenant_default' && Number(value.revision) >= 1 && isTime(value.updated_at, false)
 }
 
 function invalidResponse(): ApiError { return new ApiError('Invalid firewall action response', 0, 'invalid_response') }
 
-async function request(token: string, path: string, init: RequestInit = {}): Promise<FirewallActionPolicy> {
+async function request(token: string, path: string, init?: RequestInit): Promise<FirewallActionPolicy>
+async function request<T>(token: string, path: string, init: RequestInit, valid: (value: unknown) => value is T): Promise<T>
+async function request(token: string, path: string, init: RequestInit = {}, valid: (value: unknown) => boolean = isPolicy): Promise<unknown> {
   let response: Response
   try {
     response = await fetch(`${apiRoot}${path}`, { ...init, credentials: 'include', headers: {
@@ -102,7 +160,7 @@ async function request(token: string, path: string, init: RequestInit = {}): Pro
   if (!response.ok) throw await responseApiError(response)
   let value: unknown
   try { value = await response.json() } catch { throw invalidResponse() }
-  if (!isPolicy(value)) throw invalidResponse()
+  if (!valid(value)) throw invalidResponse()
   return value
 }
 
@@ -114,6 +172,19 @@ function policyPath(scopeId: string, siteId: string): string {
 function recoveryPath(scopeId: string, siteId: string): string {
   const query = new URLSearchParams({ target_scope_id: scopeId, site_id: siteId })
   return `/v1/firewall-actions/policy/recover?${query.toString()}`
+}
+
+function defaultPath(scopeId: string): string {
+  return `/v1/firewall-actions/default?${new URLSearchParams({ target_scope_id: scopeId }).toString()}`
+}
+
+function writeHeaders(expectedRevision: number, idempotencyKey?: string, requestId?: string): Record<string, string> {
+  return { 'If-Match': `"${expectedRevision}"`, 'Idempotency-Key': idempotencyKey ?? crypto.randomUUID(), ...(requestId ? { 'X-Request-ID': requestId } : {}) }
+}
+
+/** The policy input fields of a policy or default (what the page edits). */
+export function policyInputOf(policy: FirewallActionPolicyInput): FirewallActionPolicyInput {
+  return serializePolicy(policy)
 }
 
 function serializePolicy(policy: FirewallActionPolicyInput): FirewallActionPolicyInput {
@@ -135,6 +206,28 @@ export const firewallActionApi = {
         ...(input.requestId ? { 'X-Request-ID': input.requestId } : {}) },
       body: JSON.stringify(serializePolicy(input.policy)),
     })
+  },
+  /** PATCH 启停（迁移 608）：If-Match 当前 revision，revision 不变。 */
+  setEnabled(token: string, input: { scopeId: string; siteId: string; expectedRevision: number; enabled: boolean; idempotencyKey?: string; requestId?: string }): Promise<FirewallActionPolicy> {
+    return request(token, policyPath(input.scopeId, input.siteId), {
+      method: 'PATCH', headers: { 'If-Match': `"${input.expectedRevision}"`, 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID(),
+        ...(input.requestId ? { 'X-Request-ID': input.requestId } : {}) },
+      body: JSON.stringify({ enabled: input.enabled }),
+    })
+  },
+  /** DELETE = 恢复继承：If-Match 当前 revision（≥1），返回继承视图。 */
+  inherit(token: string, input: { scopeId: string; siteId: string; expectedRevision: number; idempotencyKey?: string; requestId?: string }): Promise<FirewallActionPolicy> {
+    return request(token, policyPath(input.scopeId, input.siteId), {
+      method: 'DELETE', headers: writeHeaders(input.expectedRevision, input.idempotencyKey, input.requestId),
+    })
+  },
+  getDefault(token: string, scopeId: string): Promise<FirewallActionDefault> {
+    return request(token, defaultPath(scopeId), {}, isDefault)
+  },
+  putDefault(token: string, input: { scopeId: string; expectedRevision: number; policy: FirewallActionPolicyInput; idempotencyKey?: string; requestId?: string }): Promise<FirewallActionDefault> {
+    return request(token, defaultPath(input.scopeId), {
+      method: 'PUT', headers: writeHeaders(input.expectedRevision, input.idempotencyKey, input.requestId), body: JSON.stringify(serializePolicy(input.policy)),
+    }, isDefault)
   },
   recover(token: string, input: { scopeId: string; siteId: string; expectedRevision: number; idempotencyKey?: string; requestId?: string }): Promise<FirewallActionPolicy> {
     return request(token, recoveryPath(input.scopeId, input.siteId), {

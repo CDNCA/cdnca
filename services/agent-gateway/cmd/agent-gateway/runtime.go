@@ -63,6 +63,8 @@ type runtime struct {
 	siteDropErr error
 	// gatewayAddressErr records why Gateway address change delivery stays disabled.
 	gatewayAddressErr error
+	// sshAccessErr records why SSH access delivery stays disabled.
+	sshAccessErr error
 	// sched302Err records why HTTP 302 scheduling tables stay undelivered; it never fails startup.
 	sched302Err error
 	// autoDefenseErr records why the automatic defense channel stays disabled; it never fails startup.
@@ -251,6 +253,7 @@ func buildRuntime(ctx context.Context, c config) (_ *runtime, returnedError erro
 	r.securityBanErr = configureSecurityBans(startupContext, service, r.natsConnection)
 	r.siteDropErr = configureSiteDrops(startupContext, service, r.natsConnection)
 	r.gatewayAddressErr = configureGatewayAddressChanges(startupContext, service, r.natsConnection)
+	r.sshAccessErr = configureSSHAccess(startupContext, service, r.natsConnection)
 	r.sched302Err = configureSched302(startupContext, service, r.natsConnection)
 	r.autoDefenseErr = configureAutoDefense(startupContext, service, r.natsConnection)
 	r.marketProbesErr = configureMarketProbes(service, r.natsConnection)
@@ -539,6 +542,16 @@ func configureGatewayAddressChanges(ctx context.Context, service *gateway.Gatewa
 		return err
 	}
 	return service.ConfigureGatewayAddressChanges(bus)
+}
+
+// configureSSHAccess creates the SSH access streams and
+// enables delivery. Optional, like gateway address changes.
+func configureSSHAccess(ctx context.Context, service *gateway.Gateway, connection *nats.Conn) error {
+	bus, err := gateway.NewNATSSSHAccessBus(ctx, connection, gateway.DefaultNATSSSHAccessBusConfig())
+	if err != nil {
+		return err
+	}
+	return service.ConfigureSSHAccess(bus)
 }
 
 // configureSched302 creates the HTTP 302 scheduling table stream and enables

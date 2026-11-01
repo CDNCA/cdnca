@@ -575,3 +575,24 @@ func assertNoPrivateMaterial(t *testing.T, root string) {
 		}
 	}
 }
+
+// demo-fill 11-01: 73's controller saw only "certificate activation failed"
+// (UNAVAILABLE) for site B and could not tell which certstore stage failed.
+// The message names the stage with a stable reason the controller stores
+// and the console translates (the proto code stays UNAVAILABLE).
+func TestClassifyCertificateErrorNamesActivationStage(t *testing.T) {
+	for _, test := range []struct {
+		err    error
+		reason string
+	}{
+		{certstore.ErrPrecheck, "CERTIFICATE_PRECHECK_FAILED"},
+		{certstore.ErrActivation, "CERTIFICATE_ACTIVATION_FAILED"},
+		{certstore.ErrHealth, "CERTIFICATE_HEALTH_FAILED"},
+		{fmt.Errorf("apply: %w", certstore.ErrHealth), "CERTIFICATE_HEALTH_FAILED"},
+	} {
+		code, summary := classifyCertificateError(test.err)
+		if code != commonv1.ErrorCode_ERROR_CODE_UNAVAILABLE || !strings.HasPrefix(summary, test.reason+": ") {
+			t.Fatalf("%v → (%s, %q), want UNAVAILABLE with %s", test.err, code, summary, test.reason)
+		}
+	}
+}

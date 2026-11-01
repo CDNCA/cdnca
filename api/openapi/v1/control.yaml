@@ -482,6 +482,10 @@ paths:
     $ref: '../../control-node-scheduling.openapi.yaml#/paths/~1v1~1node-line-groups~1{id}~1rollback'
   /v1/node-line-groups/{id}/platform-default:
     $ref: '../../control-node-scheduling.openapi.yaml#/paths/~1v1~1node-line-groups~1{id}~1platform-default'
+  /v1/node-line-groups/{id}/smart-schedule:
+    $ref: '../../control-node-scheduling.openapi.yaml#/paths/~1v1~1node-line-groups~1{id}~1smart-schedule'
+  /v1/node-line-groups/{id}/latency-matrix:
+    $ref: '../../control-node-scheduling.openapi.yaml#/paths/~1v1~1node-line-groups~1{id}~1latency-matrix'
   /v1/l2-configs:
     $ref: '../../control-node-scheduling.openapi.yaml#/paths/~1v1~1l2-configs'
   /v1/l2-configs/{id}:
@@ -836,7 +840,8 @@ paths:
   /v1/account/inbox:
     get:
       operationId: listAccountInbox
-      summary: List the tenant member's in-app messages (站内信), newest first
+      summary: "List the tenant member's in-app messages, newest first"
+      x-summary-zh: List the tenant member's in-app messages (站内信), newest first
       description: Tenant in-app notices addressed to the caller in the session's tenant scope (attack escalation security.escalate.blackhole once the blackhole is in force, security.escalate.cname_change_required). Written whatever the platform email/SMS settings say. Tenant-scope sessions only (platform sessions use /v1/admin/inbox). params holds the event's public template values; the console renders the text per language.
       parameters:
         - {name: unread, in: query, required: false, schema: {type: string, enum: ['true']}}
@@ -3432,7 +3437,8 @@ paths:
     get:
       operationId: getNodeIPLocation
       summary: Get a node's IP location (automatic resolution and manual fields)
-      description: >-
+      description: "Requires nodes.read in a platform scope. effective is the value condition matching actually uses (node country code / carrier / province / city of L2 conditions, market supply groups); fields in manual_fields were corrected by an administrator, the rest come from resolution (the first result the control plane's IP intelligence library resolves for IPv4, IPv6 and sub-IPs in that order, re-resolved within a minute of a node being added, an address change or an IP library update). resolution is null when not yet resolved; outcome unresolved means the IP library has no match, no_library means the control plane has no IP library yet."
+      x-description-zh: >-
         Requires nodes.read in a platform scope. effective 是条件匹配（L2 条件的节点国家代码/运营商/省份/城市、
         市场供货分组）实际使用的值；manual_fields 里的字段是管理员修正的，其余来自 resolution（主控 IP 情报库按
         IPv4、IPv6、子 IP 的顺序解析出的第一个结果，新增节点、地址变化、IP 库更新后一分钟内重新解析）。
@@ -3935,7 +3941,8 @@ paths:
     post:
       operationId: registerNode
       summary: Self-register a node host (called by install-node.sh)
-      description: >-
+      description: "Unauthenticated except for the registration credential in the body; rate limited per source IP (10/min) and globally (120/min) per control-api process. Creates a pending node (awaiting initialisation) named after the host and records the observed public source IP and OS details, then returns a one-time initial_enrollment token (10 minutes) for the Gateway enrollment. Dedupe: the node ID is a keyed hash of the machine fingerprint, so the same machine reuses its pending node (200) instead of creating a duplicate; once it has enrolled or been initialized the call returns 409 node_already_registered. A deleted (retired) node lets the machine register again as a new node. Self-registered nodes stay pending after enrollment and receive no configuration until an administrator sets admin_state=active. A new node gets the region of the region catalog when it has exactly one region, else an empty region."
+      x-description-zh: >-
         Unauthenticated except for the registration credential in the body; rate limited per source IP
         (10/min) and globally (120/min) per control-api process. Creates a pending node (待初始化) named after
         the host and records the observed public source IP and OS details, then returns a one-time
@@ -4117,7 +4124,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/APIKeyFieldsRequest'}
+            schema: {$ref: '#/components/schemas/CreateSelfAPIKeyRequest'}
       responses:
         '201':
           description: Active key and its one-time secret.
@@ -4530,7 +4537,8 @@ paths:
   /v1/dns/platform-config:
     get:
       operationId: getPlatformDNSConfig
-      summary: Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)
+      summary: "Read the installation-wide DNS configuration (Node management > DNS settings, platform administrator)"
+      x-summary-zh: Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)
       responses:
         '200':
           description: Provider, non-secret identifiers, TTL, IP weight, tenant sync summary and the last DNS write failure.
@@ -4571,7 +4579,8 @@ paths:
   /v1/dns/platform-config/connection-test:
     post:
       operationId: testPlatformDNSConnection
-      summary: 连接测试 - verify DNS credentials and the CNAME domains they host (read-only)
+      summary: "Connection test - verify DNS credentials and the CNAME domains they host (read-only)"
+      x-summary-zh: 连接测试 - verify DNS credentials and the CNAME domains they host (read-only)
       description: >-
         Verifies the entered credentials (or, without credentials, the saved ones of provider_type) with the
         same provider check as a save, then lists the account's domains once per CNAME domain. Nothing is saved
@@ -4627,8 +4636,10 @@ paths:
   /v1/dns/platform-config/{kind}:
     post:
       operationId: startPlatformDNSOperation
-      summary: Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs
-      description: >-
+      summary: "Start record repair (repair) or remove non-CDN records (cleanup) as background jobs"
+      x-summary-zh: Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs
+      description: "repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner); cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the result lines shown under System > Background jobs."
+      x-description-zh: >-
         repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner);
         cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per
         A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the
@@ -4665,7 +4676,8 @@ paths:
   /v1/dns/platform-zones:
     get:
       operationId: listPlatformDNSZones
-      summary: List the CNAME domains (CNAME域名)
+      summary: "List the CNAME domains"
+      x-summary-zh: List the CNAME domains (CNAME域名)
       parameters:
         - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
@@ -6177,6 +6189,8 @@ paths:
     $ref: '../../control-firewall-actions.openapi.yaml#/paths/~1v1~1firewall-actions~1policy'
   /v1/firewall-actions/policy/recover:
     $ref: '../../control-firewall-actions.openapi.yaml#/paths/~1v1~1firewall-actions~1policy~1recover'
+  /v1/firewall-actions/default:
+    $ref: '../../control-firewall-actions.openapi.yaml#/paths/~1v1~1firewall-actions~1default'
   /v1/site-publications/security-activations:
     $ref: '../../control-site-publications.openapi.yaml#/paths/~1v1~1site-publications~1security-activations'
   /v1/site-publications/security-activations/rebind-status:
@@ -9105,7 +9119,8 @@ components:
     SecurityPolicyCCSettings:
       type: object
       additionalProperties: false
-      description: "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+      description: "CC only. Site-level ban/pass durations (override every rule's) and the auto switch. Omitted keeps the rules' own values."
+      x-description-zh: "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
       properties:
         ban_seconds: {$ref: '#/components/schemas/SecurityPolicyCCDuration'}
         pass_seconds: {$ref: '#/components/schemas/SecurityPolicyCCDuration'}
@@ -9341,7 +9356,7 @@ components:
         revoked_at: {type: string, format: date-time}
     URLAuthMigrationMarker:
       type: string
-      enum: [cdnfly_type_a_md5, cdnfly_type_b_md5]
+      enum: [legacy_type_a_md5, legacy_type_b_md5]
       readOnly: true
       description: Read-only import provenance. It never selects the executable edge algorithm.
     URLAuthPolicy:
@@ -9512,6 +9527,39 @@ components:
         revision: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        plugin_installation_authorization_id:
+          type: string
+          format: uuid
+          description: >-
+            Present when the key is a plugin identity bound to this plugin installation (ADR 0007 §3.2). Its
+            write requests are audited as actor_kind=plugin and rate limited per installation (429 +
+            Retry-After); once the installation is disabled or uninstalled the key is refused with 401.
+        plugin_installation_id: {type: string, format: uuid}
+        plugin_id: {type: string, minLength: 3, maxLength: 128}
+    CreateSelfAPIKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scopes]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
+        ip_allowlist: {$ref: '#/components/schemas/APIKeyIPAllowlist'}
+        expires_at:
+          type: string
+          format: date-time
+          description: Must be in the future and no more than 366 days from the server clock.
+        plugin_installation_authorization_id:
+          type: string
+          format: uuid
+          description: >-
+            Optional. Binds the key to an enabled plugin installation of the current tenant (plugin
+            identity). The binding cannot be changed later; 409 plugin_installation_unavailable when the
+            installation is not enabled in this tenant.
     APIKeyFieldsRequest:
       type: object
       additionalProperties: false
@@ -9713,7 +9761,7 @@ components:
       properties:
         name: {type: string, minLength: 1, maxLength: 253}
         remark: {type: string, maxLength: 255}
-        random_allocation: {type: boolean, description: '参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.'}
+        random_allocation: {type: boolean, description: "Random allocation. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.", x-description-zh: '参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.'}
     PlatformDNSZone:
       type: object
       required: [id, display_id, name, remark, in_use, random_allocation, version, created_at, updated_at]
@@ -9723,7 +9771,7 @@ components:
         name: {type: string}
         remark: {type: string}
         in_use: {type: boolean, description: Some tenant still has CNAME hostnames allocated under this domain.}
-        random_allocation: {type: boolean, description: 参与随机分配 (see PlatformDNSZoneInput).}
+        random_allocation: {type: boolean, description: "Random allocation (see PlatformDNSZoneInput).", x-description-zh: 参与随机分配 (see PlatformDNSZoneInput).}
         version: {type: integer, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -10899,12 +10947,14 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: 可用余额 = 余额 − 套餐预扣 − 退款处理中（在途充值退款），所有扣余额的操作按此判定。
+          description: "Available balance = balance − package reservations − refunds in progress (recharge refunds in flight); every balance deduction is checked against it."
+          x-description-zh: 可用余额 = 余额 − 套餐预扣 − 退款处理中（在途充值退款），所有扣余额的操作按此判定。
         refunding_minor:
           type: integer
           format: int64
           minimum: 0
-          description: 退款处理中（已发起、未到终态的充值退款/撤销）预留的金额。
+          description: "Amount reserved for refunds in progress (recharge refunds/reversals started but not final)."
+          x-description-zh: 退款处理中（已发起、未到终态的充值退款/撤销）预留的金额。
         revision: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -11871,13 +11921,15 @@ components:
         record_kind: {type: string, enum: [metric, host_metric]}
         telemetry_detail:
           type: boolean
-          description: >-
+          description: "The node's latest session declared NODE_TELEMETRY_DETAIL v1 (capability 69): telemetry carries mounts and port_group_overrides. When false the console shows \"node version not reported\"."
+          x-description-zh: >-
             节点最近一次会话声明 NODE_TELEMETRY_DETAIL v1（能力号 69，fz-x11）：遥测带 mounts 与
             port_group_overrides。false 时控制台显示“节点版本未上报”。
         storage_supported:
           type: boolean
-          description: >-
-            节点最近一次会话声明 NODE_STORAGE v1（能力号 71）：可在编辑节点 → 节点设置修改缓存目录、
+          description: "The node's latest session declared NODE_STORAGE v1 (capability 71): the cache directory, cache limit and log directory can be changed under Edit node → Node settings. When false these three are read only (409 node_storage_unsupported)."
+          x-description-zh: >-
+            节点最近一次会话声明 NODE_STORAGE v1（能力号 71，fix-nodesettings）：可在编辑节点 → 节点设置修改缓存目录、
             缓存上限与日志目录。false 时这三项只读（409 node_storage_unsupported）。
         node_id: {type: string, format: uuid}
         node_name: {type: string, minLength: 1, maxLength: 128}
@@ -11908,6 +11960,24 @@ components:
         total_tx_bytes: {type: [integer, 'null'], format: int64, minimum: 0}
         telemetry:
           $ref: '#/components/schemas/NodeTelemetry'
+        monthly_traffic:
+          type: object
+          additionalProperties: false
+          required: [state, period_key, period_start, period_end, timezone, usage_bytes, source_finalized_through, samples, counter_resets]
+          description: >-
+            节点本自然月（timezone 时区）外网卡计数器增量。state：available 样本连续；incomplete 相邻样本间隔超过 5 分钟；
+            stale 最后样本早于 2 分钟前；insufficient_data 本月样本少于 2 个（usage_bytes 为 0 不代表没有流量）。
+            counter_resets 为本月计数器归零重启次数（重启后的流量计入，重启前最后一个样本到重启之间的流量不可观测）。
+          properties:
+            state: {type: string, enum: [available, incomplete, stale, insufficient_data]}
+            period_key: {type: string, pattern: '^[0-9]{4}-[0-9]{2}$'}
+            period_start: {type: string, format: date-time}
+            period_end: {type: string, format: date-time}
+            timezone: {type: string, minLength: 1}
+            usage_bytes: {type: integer, format: int64, minimum: 0}
+            source_finalized_through: {type: [string, 'null'], format: date-time}
+            samples: {type: integer, minimum: 0}
+            counter_resets: {type: integer, minimum: 0}
         latest_recovery:
           type: object
           additionalProperties: false
@@ -11976,6 +12046,36 @@ components:
               kind: {type: string, enum: [ct_invalid, tcp_all, tcp_fin, tcp_null, tcp_syn_fin, tcp_syn_rst, tcp_xmas]}
               packets: {type: integer, format: int64, minimum: 0}
               bytes: {type: integer, format: int64, minimum: 0}
+        xdp:
+          type: object
+          additionalProperties: false
+          required: [mode]
+          description: >-
+            节点 XDP 过滤器状态（NodeXDPStatusV1，agent internal/xdp）。native/generic 已挂载：interfaces 为 "<网卡>=<模式>"
+            （按字典序、唯一），reason 为空，drops 是 XDP 各过滤器累计丢弃；nftables/disabled 未挂载：reason 说明原因，
+            interfaces 与 drops 为空。旧 Agent 不带。
+          properties:
+            mode: {type: string, enum: [native, generic, nftables, disabled]}
+            reason:
+              type: string
+              enum: [attach_failed, bpf_unavailable, disabled, kernel_too_old, load_failed, no_interface, self_test_failed, unsupported_os, update_failed, verify_failed]
+            detail: {type: string, maxLength: 256}
+            interfaces:
+              type: array
+              maxItems: 64
+              uniqueItems: true
+              items: {type: string, pattern: '^[^/= \t\r\n]{1,15}=(native|generic)$'}
+            drops:
+              type: array
+              maxItems: 9
+              items:
+                type: object
+                additionalProperties: false
+                required: [kind, packets, bytes]
+                properties:
+                  kind: {type: string, enum: [tcp_all, tcp_null, tcp_syn_fin, tcp_syn_rst, tcp_xmas, xdp_ban, xdp_block, xdp_port_ban, xdp_rate]}
+                  packets: {type: integer, format: int64, minimum: 0}
+                  bytes: {type: integer, format: int64, minimum: 0}
         site_drop:
           type: object
           additionalProperties: false
@@ -11992,6 +12092,17 @@ components:
               items: {type: string, format: uuid}
             packets: {type: integer, format: int64, minimum: 0}
             bytes: {type: integer, format: int64, minimum: 0}
+        ddos_protection:
+          type: object
+          additionalProperties: false
+          required: [state]
+          description: >-
+            节点 DDoS 防护表状态（NodeDDoSProtectionV1）。applied 已生效；off 未开启；pending 待生效；failed 写表失败（detail 说明）；
+            unavailable 节点不支持（reason 说明，可带 detail）。控制台把 failed/unavailable 显示为防护故障。旧 Agent 不带。
+          properties:
+            state: {type: string, enum: [applied, failed, off, pending, unavailable]}
+            reason: {type: string, enum: [init_failed, nft_missing, nft_unusable, unsupported_os]}
+            detail: {type: string, maxLength: 256}
         network_interfaces:
           type: array
           maxItems: 128

@@ -241,7 +241,7 @@ describe('site publications API', () => {
   // Node warnings ride a successful platform deployment only.
   it('accepts platform deployment warnings and refuses unknown, duplicate or tenant ones', async () => {
     const healthy = { ...adminDeployment, state: 'healthy', can_retry: false, error_code: undefined }
-    const warnings = ['ddos_protection_fault', 'post_activation_maintenance_failed']
+    const warnings = ['ddos_protection_fault', 'l4_stream_degraded', 'post_activation_maintenance_failed']
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(json({ items: [{ ...healthy, warnings }] }))
       .mockResolvedValueOnce(json({ items: [{ ...healthy, warnings: ['disk_on_fire'] }] }))
@@ -257,6 +257,23 @@ describe('site publications API', () => {
     }
     await expect(sitePublicationsApi.listDeployments('token', { kind: 'tenant' }, rolloutID))
       .rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
+  // the node's failure text rides a deployment beside error_code.
+  it('accepts a deployment failure text and refuses an empty, multi-line or oversized one', async () => {
+    const message = 'L4 configuration precheck failed: OpenResty command failed: nginx: [emerg] 端口被占用'
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ items: [{ ...adminDeployment, error_message: message }] }))
+      .mockResolvedValueOnce(json({ items: [{ ...adminDeployment, error_message: '' }] }))
+      .mockResolvedValueOnce(json({ items: [{ ...adminDeployment, error_message: 'line\nbreak' }] }))
+      .mockResolvedValueOnce(json({ items: [{ ...adminDeployment, error_message: '节'.repeat(171) }] }))
+
+    await expect(sitePublicationsApi.listDeployments('token', { kind: 'platform', targetScopeId: scopeID }, rolloutID))
+      .resolves.toMatchObject({ items: [{ error_message: message }] })
+    for (let index = 0; index < 3; index++) {
+      await expect(sitePublicationsApi.listDeployments('token', { kind: 'platform', targetScopeId: scopeID }, rolloutID))
+        .rejects.toMatchObject({ code: 'invalid_response' })
+    }
   })
 
   it.each([

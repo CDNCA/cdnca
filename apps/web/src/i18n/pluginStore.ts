@@ -49,7 +49,7 @@ const zhCN = {
     reasons: { not_as_described: '与描述不符', not_working: '无法使用', duplicate_charge: '重复扣费', other: '其他' },
     kinds: { trial: '试用', one_time: '买断', subscription: '订阅', free: '免费' },
     claims: { free_permanent: '永久免费领取', free_promo: '限免领取', paid_once: '一次性购买', paid_monthly: '按月订阅', paid_yearly: '按年订阅' },
-    promoCharge: '限免领取，{{at}} 起按月收费',
+    promoCharge: '限免领取，{{at}} 起按月收费 {{price}}',
     states: { trialing: '试用中', active: '有效', past_due: '欠费宽限中', cancelled: '已退订', expired: '已过期', refunded: '已退款', revoked: '已吊销' },
   },
   advisories: {
@@ -117,7 +117,7 @@ const enUS: Messages = {
     reasons: { not_as_described: 'Not as described', not_working: 'Does not work', duplicate_charge: 'Charged twice', other: 'Other' },
     kinds: { trial: 'Trial', one_time: 'One-time', subscription: 'Subscription', free: 'Free' },
     claims: { free_permanent: 'Claimed free for good', free_promo: 'Claimed during a free promo', paid_once: 'One-time purchase', paid_monthly: 'Monthly subscription', paid_yearly: 'Yearly subscription' },
-    promoCharge: 'Claimed free, billed monthly from {{at}}',
+    promoCharge: 'Claimed free, billed {{price}} monthly from {{at}}',
     states: { trialing: 'Trialing', active: 'Active', past_due: 'Past due (grace)', cancelled: 'Cancelled', expired: 'Expired', refunded: 'Refunded', revoked: 'Revoked' },
   },
   advisories: {

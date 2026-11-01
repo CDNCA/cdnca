@@ -33,7 +33,7 @@ import (
 //	docker build -t cdnca-test-sshd:ge-nodes internal/nodesshinstall/testdata/sshd
 const sshdImage = "cdnca-test-sshd:ge-nodes"
 
-const testRegistrationKey = "nrk1.0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+// testRegistrationKey 定义在 controlca_test.go（同包，无构建标签）。
 
 type fixedRegistration struct{}
 
@@ -129,6 +129,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
 	ctx := t.Context()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "node_ssh_install")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

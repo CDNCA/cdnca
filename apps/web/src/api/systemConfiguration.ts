@@ -1,4 +1,5 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { responseETag } from './etag'
 
 export const systemConfigurationCategories = [
   'nginx',
@@ -1141,7 +1142,7 @@ async function rollbackRequest(
   }
   const result = parseRollbackResult(body, targetRevision)
   const replayedHeader = response.headers.get('Idempotency-Replayed')
-  if (response.headers.get('ETag') !== `"${result.revision}"` ||
+  if (responseETag(response) !== `"${result.revision}"` ||
     (result.replayed ? replayedHeader !== 'true' : replayedHeader !== null)) throw invalidResponse()
   return result
 }
@@ -1183,7 +1184,7 @@ async function request<C extends SystemConfigurationCategory>(
     throw invalidResponse()
   }
   const document = parseDocument(category, body)
-  if (response.headers.get('ETag') !== `"${document.head_revision}"`) throw invalidResponse()
+  if (responseETag(response) !== `"${document.head_revision}"`) throw invalidResponse()
   return document
 }
 

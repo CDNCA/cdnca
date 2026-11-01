@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	controlmigrations "github.com/cdnca/cdnca/services/control-api/migrations"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -176,7 +177,8 @@ func TestIAMGlobalLock069LoginNonOwnerCannotPreclaimGlobalAuthority(t *testing.T
 		t.Fatal(err)
 	}
 
-	config, err := pgxpool.ParseConfig(strings.TrimSpace(os.Getenv("TEST_DATABASE_URL")))
+	// pool 所在的独立库（new069Pool 经 FreshDatabaseURL 建）。
+	config, err := pgxpool.ParseConfig(pool.Config().ConnString())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +450,8 @@ func TestIAMGlobalLock069NonOwnerCannotForgeOrTamperScopeIdentityState(t *testin
 		t.Fatal(err)
 	}
 
-	config, err := pgxpool.ParseConfig(strings.TrimSpace(os.Getenv("TEST_DATABASE_URL")))
+	// pool 所在的独立库（new069Pool 经 FreshDatabaseURL 建）。
+	config, err := pgxpool.ParseConfig(pool.Config().ConnString())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1186,6 +1189,7 @@ func new069Pool(t *testing.T) (*pgxpool.Pool, func()) {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "iam069")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

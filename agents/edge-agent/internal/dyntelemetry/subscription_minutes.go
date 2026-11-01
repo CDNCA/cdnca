@@ -61,11 +61,18 @@ func (source *SubscriptionMinutes) Sync(ctx context.Context, sink eventspool.Bat
 		return nil
 	}
 	source.last = now
+	active := source.Sites()
+	if len(active) == 0 {
+		// No site to bind a minute to (before the first publication OpenResty
+		// is not running and its control socket does not exist): the minutes
+		// could only be dropped, so they are not taken.
+		return nil
+	}
 	minutes, err := source.Take(ctx)
 	if err != nil || len(minutes) == 0 {
 		return err
 	}
-	sites := minuteSites(source.Sites())
+	sites := minuteSites(active)
 	for _, minute := range minutes {
 		site, ok := sites[minute.SubscriptionID]
 		var record eventspool.Envelope

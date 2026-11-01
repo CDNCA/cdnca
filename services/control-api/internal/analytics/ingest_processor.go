@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 )
 
@@ -234,6 +235,11 @@ func (processor *IngestProcessor) Process(ctx context.Context, deliveries []Inge
 		}
 		chunk = newIngestChunk()
 	}
+	// 准备必须严格连号（analytics_ingest_mark_prepared_098）。重投消息的 nak 延迟各不相同，
+	// 一批里序号可能乱序到达；按到达顺序处理会让后到的小序号之前的项全部 nak 并退避。
+	sort.SliceStable(parsed, func(i, j int) bool {
+		return parsed[i].receipt.Key.StreamSequence < parsed[j].receipt.Key.StreamSequence
+	})
 	for _, item := range parsed {
 		chunk.add(item)
 		flush()
@@ -299,6 +305,14 @@ func (processor *IngestProcessor) processChunk(
 		cancelPrepare()
 		if prepareErr != nil {
 			settlementErrors := []error{prepareErr}
+			// PG 的 broker ack 地板可能落后于 NATS（例如 PG 单独从转储还原），此时
+			// 后续序号永远不连号。排期一次 broker 对账，下一轮 RunScheduledHistoryRecovery
+			// 会把 NATS 实际 ack 地板同步回 PG，准备链才能继续推进。
+			recoveryCtx, cancelRecovery := context.WithTimeout(context.Background(), processor.operationTimeout)
+			if err := processor.history.ScheduleRecovery(recoveryCtx, processor.historyGeneration); err != nil {
+				settlementErrors = append(settlementErrors, err)
+			}
+			cancelRecovery()
 			for _, delivery := range item.deliveries {
 				if err := processor.nak(settlementCtx, delivery, result); err != nil {
 					settlementErrors = append(settlementErrors, errors.Join(prepareErr, err))
@@ -309,8 +323,14 @@ func (processor *IngestProcessor) processChunk(
 		item.receiptState = IngestReceiptStatePrepared
 		return processor.ackChunk(settlementCtx, chunk, result)
 	}
-	processor.logger.Warn("analytics ingest write failed",
-		"class", writerErrorClass(writeErr), "messages", deliveryCount(chunk.items))
+	attributes := []any{"class", writerErrorClass(writeErr), "messages", deliveryCount(chunk.items), "kind", chunk.kind}
+	// The storage status only (never the body or the error text, which may
+	// carry payload): 403 is a grant fault, 5xx the storage itself.
+	var httpError *HTTPError
+	if errors.As(writeErr, &httpError) {
+		attributes = append(attributes, "http_status", httpError.StatusCode)
+	}
+	processor.logger.Warn("analytics ingest write failed", attributes...)
 	var settlementErrors []error
 	for _, item := range chunk.items {
 		for _, delivery := range item.deliveries {

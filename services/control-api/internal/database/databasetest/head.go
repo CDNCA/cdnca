@@ -2,6 +2,7 @@ package databasetest
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -34,9 +35,15 @@ func MigratedPool(t testing.TB, configure func(*pgxpool.Config)) *pgxpool.Pool {
 	})
 }
 
-// FreshSchemaPool creates schema <prefix>_<uuid> in TEST_DATABASE_URL, opens a
-// pool whose search_path is that schema, runs prepare (nil: nothing) and drops
-// the schema on cleanup. Skips when TEST_DATABASE_URL is not set.
+// FreshSchemaPool creates database <prefix>_<uuid> (from template0) on the
+// TEST_DATABASE_URL server with a schema of the same name, opens a pool whose
+// search_path is that schema, runs prepare (nil: nothing) and drops the
+// database on cleanup. Skips when TEST_DATABASE_URL is not set.
+//
+// The schema gets its own database because migration guards read
+// information_schema without a table_schema filter (e.g. 580 refuses with
+// P5800 when any schema already has analytics_log_exports_v1.scope_generation),
+// so a sibling schema at a later head in the shared database breaks them.
 func FreshSchemaPool(
 	t testing.TB,
 	prefix string,
@@ -44,27 +51,18 @@ func FreshSchemaPool(
 	prepare func(context.Context, *pgxpool.Pool) error,
 ) *pgxpool.Pool {
 	t.Helper()
-	if !templateName.MatchString(prefix) {
-		t.Fatalf("unsafe schema prefix %q", prefix)
-	}
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	admin, err := pgxpool.New(ctx, databaseURL)
+	config, name := freshDatabase(t, os.Getenv("TEST_DATABASE_URL"), prefix)
+	identifier := pgx.Identifier{name}
+	schemaConfig := config.ConnConfig.Copy()
+	schemaConn, err := pgx.ConnectConfig(ctx, schemaConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	identifier := pgx.Identifier{prefix + "_" + strings.ReplaceAll(uuid.NewString(), "-", "")}
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier.Sanitize()); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
+	_, err = schemaConn.Exec(ctx, "CREATE SCHEMA "+identifier.Sanitize())
+	_ = schemaConn.Close(ctx)
 	if err != nil {
-		admin.Close()
 		t.Fatal(err)
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = identifier[0]
@@ -73,24 +71,85 @@ func FreshSchemaPool(
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
-		admin.Close()
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		pool.Close()
-		dropCtx, dropCancel := CleanupContext()
-		defer dropCancel()
-		if _, err := admin.Exec(dropCtx, "DROP SCHEMA "+identifier.Sanitize()+" CASCADE"); err != nil {
-			t.Logf("drop test schema %s (left behind): %v", identifier[0], err)
-		}
-		admin.Close()
-	})
+	// Registered after the drop, so it runs first.
+	t.Cleanup(pool.Close)
 	if prepare != nil {
 		if err := prepare(ctx, pool); err != nil {
 			t.Fatalf("prepare schema %s: %v", identifier[0], err)
 		}
 	}
 	return pool
+}
+
+// FreshDatabaseURL creates database <prefix>_<uuid> (from template0) on the
+// server of base and returns base pointed at it; the database is dropped on
+// cleanup. Skips when base is empty. For a fixture that sets up its own schema,
+// roles or partial migrations: open every connection of that fixture with the
+// returned URL instead of base, and its schema no longer shares a database
+// with sibling schemas (see FreshSchemaPool for why that matters).
+func FreshDatabaseURL(t testing.TB, base, prefix string) string {
+	t.Helper()
+	config, _ := freshDatabase(t, base, prefix)
+	return config.ConnString()
+}
+
+// freshDatabase creates the database and returns a pool config pointed at it
+// (ConnString is the rewritten URL) and its name.
+func freshDatabase(t testing.TB, base, prefix string) (*pgxpool.Config, string) {
+	t.Helper()
+	if !templateName.MatchString(prefix) || len(prefix) > 30 {
+		t.Fatalf("unsafe database prefix %q", prefix)
+	}
+	base = strings.TrimSpace(base)
+	if base == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	admin, err := pgx.Connect(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := prefix + "_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	identifier := pgx.Identifier{name}.Sanitize()
+	if _, err := admin.Exec(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0"); err != nil {
+		_ = admin.Close(ctx)
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		dropCtx, dropCancel := CleanupContext()
+		defer dropCancel()
+		if _, err := admin.Exec(dropCtx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)"); err != nil {
+			t.Logf("drop test database %s (left behind): %v", name, err)
+		}
+		_ = admin.Close(dropCtx)
+	})
+	url, err := WithDatabase(base, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return config, name
+}
+
+// WithDatabase returns the connection string base with its database replaced.
+func WithDatabase(base, name string) (string, error) {
+	if !strings.Contains(base, "://") {
+		// keyword/value form: a later dbname overrides an earlier one.
+		return base + " dbname=" + name, nil
+	}
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	parsed.Path = "/" + name
+	parsed.RawPath = ""
+	return parsed.String(), nil
 }
 
 // MigratedThroughPool returns a fresh schema migrated through target only

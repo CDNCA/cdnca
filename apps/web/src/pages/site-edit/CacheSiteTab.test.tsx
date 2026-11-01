@@ -96,7 +96,7 @@ function text(key: string, options?: Record<string, unknown>): string {
 type User = ReturnType<typeof userEvent.setup>
 
 // The tags Select labels its wrapper; its search input is the combobox inside.
-const varyInput = () => within(screen.getByText(text('fields.varyHeaders'), { selector: '.cache-policy-field > span' }).parentElement!).getByRole('combobox')
+const varyInput = () => within(screen.getByText(text('fields.varyHeaders'), { selector: '.cache-setting-label' }).closest('.cache-setting-row')!).getByRole('combobox')
 
 // openEdit opens rule index's 编辑 dialog (the rules table, tp-b3c-be).
 async function openEdit(user: User, index = 0) {

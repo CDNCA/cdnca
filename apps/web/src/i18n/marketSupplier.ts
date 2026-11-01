@@ -131,6 +131,11 @@ const zhCN = {
       body: '授权中心已把这份授权的主控 IP 改成另一台服务器，本主控不再获取新授权。已在运行的网站不受影响；当前授权到期后，新建、扩容和升级将不可用。',
       action: '处理办法：如果是误改，请到授权中心把主控 IP 改回本机出口 IP，再点「重新检查」；如果已迁移到新服务器，请在新服务器上继续使用。',
     },
+    reinstalled: {
+      title: '授权已用于重装',
+      body: '这份授权已在授权中心「我的授权 → 重装主控」中用于重新安装主控，本主控已退役，不再获取新授权。已在运行的网站和节点流量不受影响；当前授权到期后，新建、扩容和升级将不可用。',
+      action: '处理办法：请在新安装的主控上继续使用。重装主控不能撤销；如果这次重装不是你操作的，请立即修改授权中心账号密码并联系授权方。',
+    },
   },
 }
 
@@ -262,6 +267,11 @@ const enUS: typeof zhCN = {
       title: 'License moved to another server',
       body: 'The license center changed this license\'s master IP to another server, so this controller no longer receives new licenses. Running websites are not affected; once the current license expires, creating, scaling and upgrading become unavailable.',
       action: 'What to do: if the change was a mistake, set the master IP back to this server\'s egress IP in the license center and select "Check again"; if you moved to the new server, continue there.',
+    },
+    reinstalled: {
+      title: 'License used for a reinstall',
+      body: 'This license was used to reinstall the controller (license center: My licenses → Reinstall controller), so this controller is retired and no longer receives new licenses. Running websites and node traffic are not affected; once the current license expires, creating, scaling and upgrading become unavailable.',
+      action: 'What to do: continue on the newly installed controller. A reinstall cannot be undone; if you did not do it, change your license center password now and contact your license provider.',
     },
   },
 }

@@ -215,18 +215,18 @@ func TestServerRejectsUnknownTargetAndMissingSubprotocol(t *testing.T) {
 
 func TestServerLimits(t *testing.T) {
 	server := &Server{TotalLimit: 2}
-	if !server.acquire("a") || !server.acquire("b") || server.acquire("c") {
+	if !server.take(server.TotalLimit, "a") || !server.take(server.TotalLimit, "b") || server.take(server.TotalLimit, "c") {
 		t.Fatal("total limit not enforced")
 	}
-	server.release("a")
-	server.release("b")
+	server.give("a")
+	server.give("b")
 	server = &Server{}
 	for range PerSourceLimit {
-		if !server.acquire("a") {
+		if !server.take(server.TotalLimit, "a") {
 			t.Fatal("per-source limit too small")
 		}
 	}
-	if server.acquire("a") || !server.acquire("b") {
+	if server.take(server.TotalLimit, "a") || !server.take(server.TotalLimit, "b") {
 		t.Fatal("per-source limit not enforced per source")
 	}
 }

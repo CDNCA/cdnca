@@ -38,6 +38,8 @@ func TestAddonAdminAllocationAtomicNoDebitAndEffectiveQuota(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	// The fresh database is task-owned; its name carries the marker the guard below checks.
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "package_admin_test")
 	if !strings.Contains(dsn, "package_admin_test") {
 		t.Fatal("requires task-owned package_admin_test database")
 	}
@@ -312,6 +314,7 @@ func TestAddonAdminAllocationAtomicNoDebitAndEffectiveQuota(t *testing.T) {
 		t.Fatalf("expired=%v", err)
 	}
 }
+
 // assertAddonDownRetainsFacts checks 263's own down guard. database.Migrate
 // "down" rolls back only the current head, which is no longer 263, so the
 // guard runs on a schema migrated through 263 with an (uncommitted) addon

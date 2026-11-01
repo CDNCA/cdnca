@@ -17,6 +17,7 @@ import (
 
 	"github.com/cdnca/cdnca/libs/edgeconfig/artifactset"
 	"github.com/cdnca/cdnca/libs/edgeconfig/sched302"
+	"github.com/cdnca/cdnca/libs/edgeconfig/sshaccess"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 	controlv1 "github.com/cdnca/cdnca/proto/gen/go/controlinternal/v1"
@@ -140,6 +141,7 @@ type Gateway struct {
 	securityBans     SecurityBanBus
 	siteDrops        SiteDropBus
 	gatewayAddresses GatewayAddressBus
+	sshAccess        SSHAccessBus
 	sched302         Sched302Bus
 	autoDefense      AutoDefenseBus
 	marketProbes     MarketProbeBus
@@ -433,6 +435,7 @@ func (g *Gateway) Connect(stream grpc.BidiStreamingServer[agentv1.ConnectRequest
 	autoDefenseCapable, _ := autoDefenseCapabilityFromFeatures(hello.Capabilities.Features)
 	siteDropCapable, _ := siteDropCapabilityFromFeatures(hello.Capabilities.Features)
 	gatewayAddressCapable, _ := gatewayAddressCapabilityFromFeatures(hello.Capabilities.Features)
+	sshAccessCapable, _ := sshAccessCapabilityFromFeatures(hello.Capabilities.Features)
 	cacheCancelCapable, _ := cacheControlCancelCapabilityFromFeatures(hello.Capabilities.Features)
 	marketProbeVersion, _ := marketProbeCapabilityFromFeatures(hello.Capabilities.Features)
 	l4LiveVersion, _ := l4LiveCapabilityFromFeatures(hello.Capabilities.Features)
@@ -578,6 +581,13 @@ func (g *Gateway) Connect(stream grpc.BidiStreamingServer[agentv1.ConnectRequest
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE, ApiVersion: gatewayAddressAPIVersion,
 		})
 	}
+	// SSH access follows no deployment gate either (a paused
+	// node's sshd exposure is still the operator's to change).
+	if sshAccessCapable && g.sshAccess != nil {
+		enabledCapabilities = append(enabledCapabilities, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_SSH_ACCESS, ApiVersion: sshaccess.APIVersion,
+		})
+	}
 	// CACHE-ADD-07: cache cancels ride the cache command subject, so they
 	// need cache control and the cache bus.
 	cacheCancelEnabled := cacheCancelCapable && g.cache != nil && hasCacheControlCapability(hello.Capabilities)
@@ -630,7 +640,7 @@ func (g *Gateway) Connect(stream grpc.BidiStreamingServer[agentv1.ConnectRequest
 	if err != nil {
 		return err
 	}
-	return g.serveSessionWithInstallation(stream, receive, lease, replay, first.request.Stream.Sequence, identity, hello.Capabilities.AgentVersion, hello.SupportedProtocolVersions, selected, hello.ArtifactEncryptionKeyId, upgradeInstallationID, authorization.SnapshotExpirationTime.AsTime(), authorization.DeploymentsAllowed, hasACMEHTTP01OverlayCapability(hello.Capabilities), hasCacheControlCapability(hello.Capabilities), activeIdentityCapable, activeIdentityCapable && ackReceiptCapable && g.receipts != nil, upgradeEnabled, upgradeStatusPubAckEnabled, upgradeStatusAckReceiptEnabled, firewallCapable, drainCapable, nodeMonitoringCapable, portTransitionEnabled, marketProbeEnabled, multiTenantEnabled, l4LiveVersion >= 1, l4LiveVersion >= 2, signerTrustEnabled, sched302Enabled, autoDefenseEnabled, securityBansEnabled, installationBanEnabled, endpointMigrationEnabled, siteDropEnabled, cacheCancelEnabled, gatewayAddressCapable)
+	return g.serveSessionWithInstallation(stream, receive, lease, replay, first.request.Stream.Sequence, identity, hello.Capabilities.AgentVersion, hello.SupportedProtocolVersions, selected, hello.ArtifactEncryptionKeyId, upgradeInstallationID, authorization.SnapshotExpirationTime.AsTime(), authorization.DeploymentsAllowed, hasACMEHTTP01OverlayCapability(hello.Capabilities), hasCacheControlCapability(hello.Capabilities), activeIdentityCapable, activeIdentityCapable && ackReceiptCapable && g.receipts != nil, upgradeEnabled, upgradeStatusPubAckEnabled, upgradeStatusAckReceiptEnabled, firewallCapable, drainCapable, nodeMonitoringCapable, portTransitionEnabled, marketProbeEnabled, multiTenantEnabled, l4LiveVersion >= 1, l4LiveVersion >= 2, signerTrustEnabled, sched302Enabled, autoDefenseEnabled, securityBansEnabled, installationBanEnabled, endpointMigrationEnabled, siteDropEnabled, cacheCancelEnabled, gatewayAddressCapable, sshAccessCapable)
 }
 
 // knownCapabilities lists every capability name this build understands
@@ -935,6 +945,9 @@ func (g *Gateway) validateHello(hello *agentv1.AgentHello) error {
 	if _, err := gatewayAddressCapabilityFromFeatures(hello.Capabilities.Features); err != nil {
 		return err
 	}
+	if _, err := sshAccessCapabilityFromFeatures(hello.Capabilities.Features); err != nil {
+		return err
+	}
 	if _, err := cacheControlCancelCapabilityFromFeatures(hello.Capabilities.Features); err != nil {
 		return err
 	}
@@ -1176,6 +1189,10 @@ func (g *Gateway) serveSessionWithInstallation(
 	// configured; a node without the capability is answered not_supported.
 	gatewayAddressCapable := len(cacheControlCapability) >= 23 && cacheControlCapability[22]
 	var gatewayAddresses *sessionGatewayAddresses
+	// SSH access commands are read for every node once the bus is
+	// configured; a node without SSH_ACCESS v1 is answered not_supported.
+	sshAccessCapable := len(cacheControlCapability) >= 24 && cacheControlCapability[23]
+	var sshAccessSource *sessionSSHAccess
 	var siteDrops *sessionSiteDrops
 	// Disabled Gateway (ADR 0013 §5.2): once per session, ask the node to
 	// migrate; close the session at the eviction time unless re-enabled.
@@ -1387,6 +1404,13 @@ func (g *Gateway) serveSessionWithInstallation(
 		}
 	}
 	defer func() { gatewayAddresses.stop() }()
+	if g.sshAccess != nil {
+		var err error
+		if sshAccessSource, err = g.startSessionSSHAccess(stream.Context(), identity.NodeID); err != nil {
+			return err
+		}
+	}
+	defer func() { sshAccessSource.stop() }()
 	if sched302Enabled {
 		var err error
 		if sched302Source, err = g.startSessionSched302(stream.Context(), identity.NodeID); err != nil {
@@ -1739,6 +1763,30 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			gatewayAddresses.pending = command
+		case received := <-sshAccessSource.receive():
+			stopTimer(authorizationTimer)
+			stopTimer(offlineTimer)
+			sshAccessSource.next = nil
+			if received.err != nil || received.command == nil {
+				return status.Error(codes.Unavailable, "SSH access delivery failed")
+			}
+			command := received.command
+			if err := validateSSHAccessCommand(command, identity.NodeID); err != nil {
+				continue // a malformed command can never become valid: skip it and keep the session
+			}
+			if !sshAccessCapable {
+				if err := g.publishSSHAccessReceipt(stream.Context(), identity.NodeID, notSupportedSSHAccessReceipt(command, g.now())); err != nil {
+					return err
+				}
+				continue
+			}
+			responseSequence++
+			if err := sendSessionResponse(lease, stream, &agentv1.ConnectResponse{
+				Stream:  responseStreamMetadata(responseSequence, g.now()),
+				Payload: &agentv1.ConnectResponse_SshAccessCommand{SshAccessCommand: proto.Clone(command).(*agentv1.SSHAccessCommand)},
+			}); err != nil {
+				return err
+			}
 		case received := <-nodeMonitoringReceive:
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
@@ -2018,6 +2066,16 @@ func (g *Gateway) serveSessionWithInstallation(
 					return status.Error(codes.FailedPrecondition, "gateway address change receipt without a pending document")
 				}
 				if err := g.settleGatewayAddressReceipt(stream.Context(), gatewayAddresses, identity.NodeID, payload.GatewayAddressChangeReceipt); err != nil {
+					return err
+				}
+			case *agentv1.ConnectRequest_SshAccessReceipt:
+				if !sshAccessCapable || g.sshAccess == nil {
+					return status.Error(codes.PermissionDenied, "SSH access receipt is not negotiated")
+				}
+				if duplicate {
+					continue
+				}
+				if err := g.publishSSHAccessReceipt(stream.Context(), identity.NodeID, payload.SshAccessReceipt); err != nil {
 					return err
 				}
 			case *agentv1.ConnectRequest_AutoDefenseReceipt:

@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { logListQueryOptions } from './logListQuery'
 import { Alert, Button, Input, Result, Spin, Tabs } from 'antd'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import dayjs, { type Dayjs } from 'dayjs'
@@ -288,6 +289,8 @@ function WafOverview({ ownerKey, owner, state, onState, onViewLogs }: {
     },
     retry: false,
     refetchOnWindowFocus: false,
+    // control-log-ui：概览/明细 tab 用 destroyOnHidden，切回来 30 秒内用缓存不重查。
+    staleTime: logListQueryOptions.staleTime,
   })
   const apply = (draftToApply: WafDraft) => {
     // A quick range is relative: query it from the moment the user asks again.

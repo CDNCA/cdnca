@@ -1,10 +1,10 @@
-import { useEffect, type PropsWithChildren } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, type PropsWithChildren } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Spin } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { matchPath, useLocation } from 'react-router-dom'
 
-import { isTransientRefreshError, refreshSession, useSessionStore } from './session'
+import { homeForPrincipal, isTransientRefreshError, refreshSession, useSessionStore } from './session'
 
 const bootstrapRetries = 3
 const transientRetryMilliseconds = 15_000
@@ -27,9 +27,22 @@ export function SessionBootstrap({ children }: PropsWithChildren) {
   const { t } = useTranslation('common')
   const isPublicAuthentication = isPublicAuthenticationPath(location.pathname)
 
+  // the restored session opens the admin overview (directly or
+  // through "/"); start its dashboard read as soon as the refresh answers, not
+  // after the console shell and page chunk have loaded and React committed them.
+  const queryClient = useQueryClient()
+  const restoredPath = useRef(location.pathname)
+  const restore = useCallback(async () => {
+    const principal = await refreshSession()
+    if (['/', '/admin-home'].includes(restoredPath.current) && homeForPrincipal(principal) === '/admin-home') {
+      void import('../pages/adminHomeDashboardQuery').then(({ prefetchAdminDashboard }) => prefetchAdminDashboard(queryClient))
+    }
+    return principal
+  }, [queryClient])
+
   const bootstrap = useQuery({
     queryKey: ['auth', 'bootstrap'],
-    queryFn: refreshSession,
+    queryFn: restore,
     // A transient failure (network, 5xx) is retried; a refusal is final.
     retry: (failures, error) => failures < bootstrapRetries && isTransientRefreshError(error),
     retryDelay: (failures) => Math.min(1_000 * 2 ** failures, 8_000),

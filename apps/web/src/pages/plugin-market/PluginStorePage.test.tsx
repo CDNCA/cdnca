@@ -211,6 +211,17 @@ describe('PluginStorePage', () => {
     expect(body).toEqual({ subject_kind: 'plugin_order', order_id: order.id, reason_code: 'not_working', note: '无法加载规则' })
   })
 
+  // store-pricing (user 10-31): a promo holder converted to monthly sees how much it will be charged, not only when.
+  it('names the monthly price a converted promo licence is billed from its first charge', async () => {
+    const licence = { id: '69696969-6969-4969-8969-696969696969', plugin_id: 'acme.waf', installation_id: 'i', kind: 'subscription',
+      status: 'active', claim_pricing: 'free_promo', current_period_end: '2026-11-16T00:00:00Z', promo_first_charge_at: '2026-11-16T00:00:00Z',
+      price_minor: 990, currency: 'CNY' }
+    vi.stubGlobal('fetch', routes({ '/v1/admin/market/licenses': () => json({ items: [licence], next_cursor: null }) }))
+    renderWithProviders(<PluginStorePage />)
+    fireEvent.click(await screen.findByRole('tab', { name: '许可证' }))
+    expect(await screen.findByText(/^限免领取，.+ 起按月收费 9\.90 CNY$/)).toBeInTheDocument()
+  })
+
   it('explains up front that a prepaid licence has no order to dispute (PL-PREPAID-DISPUTE-01)', async () => {
     const licence = { id: '68686868-6868-4868-8868-686868686868', plugin_id: 'acme.waf', installation_id: 'i', kind: 'one_time',
       status: 'active', order_id: null }

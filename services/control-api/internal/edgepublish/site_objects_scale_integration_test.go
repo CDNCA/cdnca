@@ -5,6 +5,8 @@ package edgepublish
 import (
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // siteObjectScaleSites is the local scale bound (the node side measured the
@@ -18,15 +20,39 @@ const siteObjectScaleSites = 5000
 func TestSiteObjectPublicationAtFiveThousandSites(t *testing.T) {
 	fixture := newPublishFixture(t)
 	key := seedV2DefaultNode(t, fixture, fixture.nodeID)
+	// Only a site on a valid package is published: the scale
+	// sites go on the fixture's subscription, whose domain limit must hold
+	// them (the guard refuses the write, so it is written as a replica).
+	if err := pgx.BeginFunc(t.Context(), fixture.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(t.Context(), `SET LOCAL session_replication_role = replica`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(t.Context(), `UPDATE package_subscriptions SET domain_limit=-1,site_limit=-1 WHERE id=$1`,
+			fixture.subscriptionID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(t.Context(), `UPDATE package_subscription_entitlement_versions SET domain_limit=-1,site_limit=-1
+			WHERE subscription_id=$1`, fixture.subscriptionID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.pool.Exec(t.Context(), `INSERT INTO package_monitor_subscription_owners(subscription_id,state_revision,
+		tenant_scope_id,owner_user_id,source_kind,created_at) VALUES($1,1,$2,$3,'subscription_state',clock_timestamp())
+		ON CONFLICT DO NOTHING`, fixture.subscriptionID, fixture.scopeID, fixture.userID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := fixture.pool.Exec(t.Context(), `
 		WITH generated AS (
 			SELECT gen_random_uuid() AS id, n FROM generate_series(1,$4::int) n
 		), inserted AS (
 			INSERT INTO sites (
 				id,display_id,scope_id,owner_user_id,domain,http_ports,https_ports,origins,origin_hosts,
-				https_enabled,enabled,status,created_by_user_id,updated_by_user_id,created_at,updated_at)
+				https_enabled,enabled,status,package_subscription_id,package_id,
+				created_by_user_id,updated_by_user_id,created_at,updated_at)
 			SELECT id,n,$1,$2,'scale-'||n||'.example.test',ARRAY['80'],ARRAY[]::text[],
-				ARRAY['203.0.113.10:8080'],ARRAY['203.0.113.10'],false,true,'active',$2,$2,$3,$3
+				ARRAY['203.0.113.10:8080'],ARRAY['203.0.113.10'],false,true,'active',
+				$5,(SELECT product_id FROM package_subscriptions WHERE id=$5),$2,$2,$3,$3
 			FROM generated RETURNING id
 		), pools AS (
 			INSERT INTO site_origin_pools(site_id,balance_method,failover_tries,connect_timeout_ms,read_timeout_ms,updated_at)
@@ -34,7 +60,7 @@ func TestSiteObjectPublicationAtFiveThousandSites(t *testing.T) {
 		)
 		INSERT INTO site_origins(site_id,position,host,port,weight,enabled)
 		SELECT site_id,1,'203.0.113.10',8080,1,true FROM pools`,
-		fixture.scopeID, fixture.userID, publishTestClock, siteObjectScaleSites); err != nil {
+		fixture.scopeID, fixture.userID, publishTestClock, siteObjectScaleSites, fixture.subscriptionID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fixture.pool.Exec(t.Context(), `INSERT INTO site_display_id_sequences(scope_id,next_value,updated_at)

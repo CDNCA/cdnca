@@ -490,6 +490,16 @@ export function withPluginPages(
 /** pluginPageRoute matches /plugin-ui/<plugin id>/<page id>. */
 export const pluginPageRoute = /^\/plugin-ui\/[a-z0-9]+(?:[.-][a-z0-9]+)+\/[a-z][a-z0-9-]{0,31}$/
 
+/** moduleRoutePath is the first page of role gated by featureCode (requiredModule), or undefined when none is. */
+export function moduleRoutePath(role: AppRole, featureCode: string): string | undefined {
+  for (const item of getNavigationDefinitions(role)) {
+    if (item.requiredModule === featureCode && item.key.startsWith('/')) return item.key
+    const child = item.children?.find((entry) => entry.requiredModule === featureCode)
+    if (child) return child.key
+  }
+  return directRouteDefinitions.find((route) => route.requiredModule === featureCode && route.roles.includes(role))?.path
+}
+
 export function getDeclaredPaths(): string[] {
   // The parent is an actual redirect route (not merely a menu group), so keep
   // it in the declared-path contract for route coverage and bookmark checks.

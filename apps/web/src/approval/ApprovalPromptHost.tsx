@@ -1,20 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
-import { App, Input, Modal, Typography } from 'antd'
-import { useTranslation } from 'react-i18next'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { useApp } from '@cdnca/ui'
 
-import '../i18n/approvalCenter'
+import i18n from '../i18n'
 import { createApprovalFetch } from './approvalFetch'
+
+// The dialog and its approvalCenter texts load on the first prompt, not with
+// the first page: the host itself is on every page.
+const loadDialog = () => import('./ApprovalPromptDialog')
+const ApprovalPromptDialog = lazy(loadDialog)
 
 // ApprovalPromptHost installs the 428 approval_required fetch wrapper once and
 // renders the reason dialog it asks for. Mounted inside the antd App context.
 export function ApprovalPromptHost() {
-  const { t } = useTranslation('approvalCenter')
-  const { message } = App.useApp()
+  const { message } = useApp()
   const [rule, setRule] = useState<string | null>(null)
+  // Once shown, the dialog stays mounted so the close animation still plays.
+  const [shown, setShown] = useState(false)
   const [reason, setReason] = useState('')
   const resolver = useRef<((value: string | null) => void) | null>(null)
-  const notify = useRef({ t, message })
-  notify.current = { t, message }
+  const notify = useRef(message)
+  notify.current = message
 
   useEffect(() => {
     const original = globalThis.fetch
@@ -22,10 +27,15 @@ export function ApprovalPromptHost() {
       resolver.current = resolve
       setReason('')
       setRule(next)
+      setShown(true)
     }), (result) => {
-      const { t: translate, message: api } = notify.current
-      if (result === 'submitted') void api.success(translate('notices.submitted'))
-      else void api.info(translate('notices.cancelled'))
+      // The dialog module registers the approvalCenter namespace; a notice
+      // always follows a prompt, so this only waits when the load is still running.
+      void loadDialog().then(() => {
+        const api = notify.current
+        if (result === 'submitted') void api.success(i18n.t('notices.submitted', { ns: 'approvalCenter' }))
+        else void api.info(i18n.t('notices.cancelled', { ns: 'approvalCenter' }))
+      })
     })
     return () => { globalThis.fetch = original }
   }, [])
@@ -35,12 +45,10 @@ export function ApprovalPromptHost() {
     resolver.current = null
     setRule(null)
   }
-  const trimmed = reason.trim()
+  if (!shown) return null
   return (
-    <Modal open={rule !== null} title={t('prompt.title')} okText={t('prompt.submit')} cancelText={t('prompt.cancel')}
-      okButtonProps={{ disabled: trimmed.length === 0 || trimmed.length > 500 }} onOk={() => close(trimmed)} onCancel={() => close(null)} destroyOnHidden>
-      <Typography.Paragraph>{t('prompt.description', { rule: rule ? t(`rules.${rule}`, { defaultValue: rule }) : '' })}</Typography.Paragraph>
-      <Input.TextArea aria-label={t('prompt.reason')} placeholder={t('prompt.reasonPlaceholder')} maxLength={500} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
-    </Modal>
+    <Suspense fallback={null}>
+      <ApprovalPromptDialog rule={rule} reason={reason} onReasonChange={setReason} onClose={close} />
+    </Suspense>
   )
 }

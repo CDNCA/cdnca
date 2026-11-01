@@ -237,7 +237,7 @@ func (runtime *IngestRuntime) RunOnce(ctx context.Context) (IngestBatchResult, e
 	if processErr != nil {
 		runtime.logger.Error("analytics ingest batch settlement failed",
 			"fetched", result.Fetched, "acknowledged", result.Acknowledged,
-			"naked", result.Naked, "terminated", result.Terminated)
+			"naked", result.Naked, "terminated", result.Terminated, "error", processErr)
 	}
 	return result, processErr
 }

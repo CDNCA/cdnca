@@ -1,0 +1,358 @@
+/* 修复域名解析向导。只作用于 .dns-fix-page，颜色一律用 cdnca 变量。 */
+.dns-fix-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  max-width: 1120px;
+  color: var(--cdnca-color-text);
+}
+
+.dns-fix-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dns-fix-header h2.ant-typography {
+  margin-bottom: 4px;
+}
+
+.dns-fix-header .ant-typography-secondary {
+  max-width: 72ch;
+  margin-bottom: 0;
+}
+
+.dns-fix-steps {
+  padding: 4px 0;
+}
+
+.dns-fix-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 8px;
+}
+
+.dns-fix-panel h3.ant-typography,
+.dns-fix-diagnosis h3.ant-typography {
+  margin: 0;
+  font-size: 16px;
+}
+
+.dns-fix-diagnosis {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dns-fix-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.dns-fix-next {
+  display: block;
+  margin-top: 4px;
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+}
+
+.dns-fix-facts .ant-descriptions-item-label {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.dns-fix-facts .ant-descriptions-item-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 高级设置：默认收起；展开后两列网格，窄屏单列。 */
+.dns-fix-advanced.ant-collapse {
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+}
+
+.dns-fix-advanced-summary {
+  margin-left: 12px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.dns-fix-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+
+.dns-fix-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dns-fix-field-label {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+}
+
+.dns-fix-field-help {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dns-fix-field-error {
+  color: var(--cdnca-color-error);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dns-fix-unit {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.dns-fix-error-summary {
+  padding: 8px 12px;
+  color: var(--cdnca-color-error);
+  border: 1px solid var(--cdnca-color-error);
+  border-radius: 6px;
+}
+
+.dns-fix-error-summary:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring, #2d8cf0);
+  outline-offset: 2px;
+}
+
+.dns-fix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.dns-fix-pending {
+  color: var(--cdnca-color-text-secondary);
+}
+
+/* 选择域名 */
+.dns-fix-picker .dns-fix-field {
+  max-width: 560px;
+}
+
+.dns-fix-picker-select {
+  width: 100%;
+}
+
+.dns-fix-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dns-fix-option > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dns-fix-option-meta {
+  flex: none;
+  color: var(--cdnca-color-text-secondary);
+}
+
+/* 方案：新增/修改/删除分组，组色只作辅助，组名始终有文字。 */
+.dns-fix-summary {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.dns-fix-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dns-fix-group {
+  padding-left: 12px;
+  border-left: 3px solid var(--cdnca-color-border);
+}
+
+.dns-fix-group-create {
+  border-left-color: var(--cdnca-color-success);
+}
+
+.dns-fix-group-update {
+  border-left-color: var(--cdnca-color-primary);
+}
+
+.dns-fix-group-delete {
+  border-left-color: var(--cdnca-color-error);
+}
+
+.dns-fix-group h4.ant-typography {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.dns-fix-action-tag.ant-tag {
+  margin: 0;
+}
+
+.dns-fix-count {
+  color: var(--cdnca-color-text-secondary);
+  font-weight: 400;
+}
+
+.dns-fix-records {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dns-fix-record {
+  padding: 10px 12px;
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+
+.dns-fix-record-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.dns-fix-record-name {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.dns-fix-record-value {
+  overflow-wrap: anywhere;
+}
+
+.dns-fix-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 4px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.dns-fix-note {
+  margin: 8px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+/* 执行与生效 */
+.dns-fix-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dns-fix-resolvers h4.ant-typography {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.dns-fix-resolver-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dns-fix-resolver-list li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1.4fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.dns-fix-resolver-list li.is-live {
+  color: var(--cdnca-color-success);
+}
+
+.dns-fix-resolver-name {
+  min-width: 0;
+  color: var(--cdnca-color-text);
+  overflow-wrap: anywhere;
+}
+
+.dns-fix-resolver-values {
+  min-width: 0;
+  color: var(--cdnca-color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.dns-fix-technical-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dns-fix-technical-body h5.ant-typography {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 768px) {
+  .dns-fix-header {
+    flex-direction: column;
+  }
+
+  .dns-fix-panel {
+    padding: 16px;
+  }
+
+  .dns-fix-advanced-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dns-fix-advanced-summary {
+    display: block;
+    margin-left: 0;
+  }
+
+  .dns-fix-steps .ant-steps-item-title {
+    font-size: 12px;
+  }
+
+  .dns-fix-resolver-list li {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+  }
+
+  .dns-fix-resolver-values {
+    grid-column: 2 / -1;
+  }
+}
+
+.dns-fix-steps-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+}

@@ -514,7 +514,7 @@ export default function AdvancedSiteTab(props: AdvancedSiteTabProps) {
   const statusChoices = commonStatuses[category] ?? []
   const exactStatus = statusChoice === 'range' ? 'range' : statusChoice === 'custom' ? 'other' : statusFrom
   const errorPages = errorRead ? (
-    <SettingGroup title={t('errorPages')} status={t('count', { count: rules.length })}
+    <SettingGroup title={t('errorPages')} status={t('count', { count: rules.length })} className={rules.length ? 'is-wide' : undefined}
       extra={errorWrite ? <Button type="primary" icon={<Plus size={15} />} disabled={writesLocked} onClick={() => openRule(null)}>{t('addPage')}</Button> : null}>
       {rules.length ? (
         <Table<ErrorPageRule> rowKey="id" size="small" pagination={false} columns={ruleColumns} dataSource={rules}
@@ -605,8 +605,11 @@ export default function AdvancedSiteTab(props: AdvancedSiteTabProps) {
     : null
   const layout = (parts: HTTPPolicyParts | null, fallback: ReactNode) => <>
     {parts ? <>
-      <SettingSection id="site-advanced-upload" title={t('groupUpload')} help={t('groupUploadHelp')}>{parts.upload}</SettingSection>
-      <SettingSection id="site-advanced-access" title={t('groupAccess')} help={t('groupAccessHelp')}>{parts.referer}{parts.cors}</SettingSection>
+      {/* 分区只有一个两键选择时，与标题、说明同一行 */}
+      <SettingSection id="site-advanced-upload" title={t('groupUpload')} help={t('groupUploadHelp')} className="site-setting-section-inline">{parts.upload}</SettingSection>
+      <SettingSection id="site-advanced-access" title={t('groupAccess')} help={t('groupAccessHelp')}>
+        <div className="site-setting-card-grid">{parts.referer}{parts.cors}</div>
+      </SettingSection>
     </> : fallback}
     <SettingSection id="site-advanced-performance" title={t('groupPerformance')} help={t('groupPerformanceHelp')}>
       <div className="site-setting-group-grid">
@@ -616,11 +619,13 @@ export default function AdvancedSiteTab(props: AdvancedSiteTabProps) {
     </SettingSection>
     {errorPages || parts ? (
       <SettingSection title={t('groupPages')} help={t('groupPagesHelp')}>
-        {errorPages}{parts?.redirects}{parts?.rewrites}
+        <div className="site-setting-card-grid">{errorPages}{parts?.redirects}{parts?.rewrites}</div>
       </SettingSection>
     ) : null}
     {parts ? <>
-      <SettingSection title={t('groupHeaders')} help={t('groupHeadersHelp')}>{parts.requestHeaders}{parts.responseHeaders}{parts.actions}</SettingSection>
+      <SettingSection title={t('groupHeaders')} help={t('groupHeadersHelp')}>
+        <div className="site-setting-card-grid">{parts.requestHeaders}{parts.responseHeaders}{parts.actions}</div>
+      </SettingSection>
     </> : null}
     {props.edgeOptions ? (
       <SettingSection title={t('groupOther')} help={t('groupOtherHelp')}>
@@ -629,10 +634,12 @@ export default function AdvancedSiteTab(props: AdvancedSiteTabProps) {
     ) : null}
     <div className="site-setting-section-more">
       <SettingSection title={t('groupMore')} help={t('groupMoreHelp')}>
+        {/* 关闭时只有标题+开关的卡片两列并排；开启或有列表的卡片（is-wide）占整行 */}
+        <div className="site-setting-card-grid">
         {accessCards(moreAccessParts)}
         {/* hidden without access (通用规则), instead of a full-size 403 */}
         {props.siteScopeId && (platformAdmin || props.permissions.includes('site_capture.read')) ? (
-          <div id="site-capture-heading">
+          <div id="site-capture-heading" className="site-setting-card-span">
             <SiteCapturePolicyPanel siteId={props.siteId} scopeId={props.siteScopeId} accessToken={props.accessToken}
               ownerKey={`${props.scopeKind}:${props.scopeId}:${props.userId}`} sessionEpoch={props.sessionEpoch}
               permissions={props.permissions} canManage={props.canManage} lockedForTenant={props.lockedForTenant} />
@@ -646,6 +653,7 @@ export default function AdvancedSiteTab(props: AdvancedSiteTabProps) {
           <SiteTrafficLimitCard siteId={props.siteId} accessToken={props.accessToken}
             canManage={props.canManage && !props.lockedForTenant && (props.permissions.includes('sites.manage') || platformAdmin)} />
         ) : null}
+        </div>
       </SettingSection>
     </div>
   </>

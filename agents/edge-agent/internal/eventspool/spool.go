@@ -89,6 +89,7 @@ type Spool struct {
 	eventIDs        map[string]eventIdentity
 	tenantBytes     map[string]int64
 	metas           []segmentMeta
+	segmentCache    map[string]cachedSegment
 	nextSequence    uint64
 	segmentBytes    int64
 	peakBytes       int64

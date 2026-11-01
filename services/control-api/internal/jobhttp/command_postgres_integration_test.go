@@ -1058,6 +1058,7 @@ func openJobCommandRoleFixture(t *testing.T) *jobCommandRoleFixture {
 	if databaseURL == "" {
 		t.Fatal("TEST_DATABASE_URL is required; command integration evidence must not be skipped")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "jobcommand_test")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

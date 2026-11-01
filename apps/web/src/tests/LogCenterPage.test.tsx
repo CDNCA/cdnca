@@ -154,6 +154,30 @@ describe('LogCenterPage', () => {
     expect(alert).toHaveTextContent('日志服务暂不可用，请稍后重试')
     expect(alert).toHaveTextContent('req-10')
   })
+
+  // control-log-ui：看过的页 30 秒内回去不再请求；下一页读取期间保留上一页的行、禁用「下一页」（不拿旧游标再翻）。
+  it('reuses a visited page and keeps the previous rows while the next page loads', async () => {
+    signIn('platform')
+    let release: () => void = () => undefined
+    const list = vi.spyOn(auditLogsApi, 'list').mockImplementation(async (_token, filters) => {
+      if (!filters.cursor) return { items: [item], next_cursor: 'c2' }
+      await new Promise<void>((resolve) => { release = resolve })
+      return { items: [{ ...item, id: '01920000-0000-7000-8000-000000000002', summary: '第二页' }], next_cursor: 'c3' }
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<LogCenterPage />)
+    expect(await screen.findByText(item.summary)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '下一页' }))
+    await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toMatchObject({ cursor: 'c2' }))
+    expect(screen.getByText(item.summary)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled()
+    release()
+    expect(await screen.findByText('第二页')).toBeInTheDocument()
+    const calls = list.mock.calls.length
+    await user.click(screen.getByRole('button', { name: '上一页' }))
+    expect(await screen.findByText(item.summary)).toBeInTheDocument()
+    expect(list).toHaveBeenCalledTimes(calls)
+  })
 })
 
 describe('auditLogQuery', () => {

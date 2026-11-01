@@ -13,8 +13,8 @@ import (
 const (
 	AlgorithmHMACSHA256 = "hmac-sha256"
 	SchemaVersion       = "cdnca.edge.urlauth/v1"
-	LegacyTypeA         = "cdnfly_type_a_md5"
-	LegacyTypeB         = "cdnfly_type_b_md5"
+	LegacyTypeA         = "legacy_type_a_md5"
+	LegacyTypeB         = "legacy_type_b_md5"
 	PermissionRead      = "url_auth_policies.read"
 	PermissionManage    = "url_auth_policies.manage"
 	CredentialSession   = "session"

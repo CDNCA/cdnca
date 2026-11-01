@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App, ConfigProvider } from 'antd'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -61,4 +61,33 @@ it('tells the user how long the account is locked from Retry-After', async () =>
   await user.type(screen.getByLabelText('密码'), 'secret-password')
   await user.click(screen.getByRole('button', { name: '登录' }))
   expect(await screen.findByText('登录失败次数过多，请 25 分钟后再试，或换一个网络登录。')).toBeInTheDocument()
+})
+
+it('shows the CAPTCHA hint as its own alert above the CAPTCHA row, outside the password field', async () => {
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(json({ error: { code: 'login_captcha_required' } }, 401))
+    .mockResolvedValueOnce(captcha(captchaA))
+  const user = setup()
+  await user.type(screen.getByLabelText('用户名、手机或邮箱'), 'jason')
+  await user.type(screen.getByLabelText('密码'), 'secret-password')
+  await user.click(screen.getByRole('button', { name: '登录' }))
+  const hint = (await screen.findByText('登录失败次数较多，请输入图形验证码。')).closest('.ant-alert')
+  expect(hint).not.toBeNull()
+  expect(hint?.closest('.ant-form-item')).toBeNull()
+  const captchaInput = screen.getByLabelText('图形验证码')
+  expect(hint!.compareDocumentPosition(captchaInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+it('does not show the password rule while typing before the first submit, and does after it', async () => {
+  vi.spyOn(globalThis, 'fetch')
+  const user = setup()
+  await user.type(screen.getByLabelText('密码'), 'x')
+  await user.clear(screen.getByLabelText('密码'))
+  await new Promise(resolve => setTimeout(resolve, 50))
+  expect(screen.queryByText('请输入密码')).toBeNull()
+  await user.click(screen.getByRole('button', { name: '登录' }))
+  expect(await screen.findByText('请输入密码')).toBeInTheDocument()
+  // After the first submit, fixing the field clears the message right away.
+  await user.type(screen.getByLabelText('密码'), 'secret-password')
+  await waitFor(() => expect(screen.queryByText('请输入密码')).toBeNull())
 })

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -154,6 +156,17 @@ func (migrator PushMigrator) migrate(ctx context.Context, target MigrationTarget
 	if ctx.Err() != nil {
 		return "", ErrMigrationStopped
 	}
+	gatewayHost := migrationGatewayHost(layout, target)
+	if gatewayHost != "" {
+		// Before the freeze: online nodes learn the new address now and
+		// follow it once this host stops (no DNS needed for IP Gateways).
+		log("announce: nodes learn the new Gateway address " + gatewayHost)
+		announced, announceErr := AnnounceGateway(ctx, migrator.Backuper.Host, AnnounceRequest{Host: gatewayHost, Wait: 2 * time.Minute}, time.Now)
+		if announceErr != nil {
+			return "", stopped(fmt.Errorf("新 Gateway 地址下发失败：%w", announceErr))
+		}
+		log(fmt.Sprintf("announce: %d/%d online nodes reconnected and learned %s", announced.Reconnected, announced.OnlineNodes, announced.Address))
+	}
 	log("phase: " + PhaseBackup)
 	backuper := migrator.Backuper
 	backuper.Progress = log
@@ -193,8 +206,12 @@ func (migrator PushMigrator) migrate(ctx context.Context, target MigrationTarget
 	}
 	log("phase: " + PhaseRestore)
 	log("target: restoring")
-	_, err = remote.Run(ctx, quote(staging+"/control-api")+" native-backup restore --bundle "+quote(remoteBundle)+
-		" --signer "+quote(backuper.Keys.Fingerprint())+" --identity "+quote(staging+"/identity"), log)
+	restoreCommand := quote(staging+"/control-api") + " native-backup restore --bundle " + quote(remoteBundle) +
+		" --signer " + quote(backuper.Keys.Fingerprint()) + " --identity " + quote(staging+"/identity")
+	if gatewayHost != "" {
+		restoreCommand += " --gateway-host " + quote(gatewayHost)
+	}
+	_, err = remote.Run(ctx, restoreCommand, log)
 	if err != nil && ctx.Err() != nil {
 		// Stopped mid-restore: the target may have started its services.
 		// Keep this host frozen; only a rollback with the new-master check
@@ -444,6 +461,28 @@ func profileValue(profile, key string) string {
 		if value, ok := strings.CutPrefix(line, key+"="); ok {
 			return value
 		}
+	}
+	return ""
+}
+
+// migrationGatewayHost is the address nodes will dial on the new host: the
+// explicit target.GatewayHost, else target.Host when this host publishes its
+// Gateway by IP and the target is reached by IP. Empty: no Gateway move
+// (a domain Gateway follows the DNS switch).
+func migrationGatewayHost(layout Layout, target MigrationTarget) string {
+	if target.GatewayHost != "" {
+		return strings.ToLower(target.GatewayHost)
+	}
+	environment, err := ReadEnvironmentFile(layout.Path(gatewayEnvFile))
+	if err != nil {
+		return ""
+	}
+	current, _, err := net.SplitHostPort(environment[gatewayPublicKey])
+	if err != nil || net.ParseIP(current) == nil {
+		return ""
+	}
+	if ip := net.ParseIP(target.Host); ip != nil && ip.String() != current {
+		return ip.String()
 	}
 	return ""
 }

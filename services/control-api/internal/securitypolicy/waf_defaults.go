@@ -66,12 +66,40 @@ type DefaultWAFPolicy struct {
 	Enabled     bool         `json:"enabled"`
 	Rules       []Rule       `json:"rules"`
 	WAFSettings *WAFSettings `json:"waf_settings,omitempty"`
+	// Official: the system defaults were never changed from
+	// the old all-off installation, so the official defaults (every module
+	// blocking) were used.
+	Official bool `json:"official,omitempty"`
+}
+
+// untouchedWAFDefaults is the security default an installation made before
+// autodefense-ux2 still has when no administrator changed it: WAF off and
+// every module off. Any change (one module, the switch) is the
+// administrator's choice and is used as is.
+func untouchedWAFDefaults(defaults systemconfig.DefaultSecuritySettings) bool {
+	if defaults.WAFEnabled {
+		return false
+	}
+	for _, module := range systemWAFModuleSets {
+		if systemWAFModuleMode(defaults.WAFModules, module.name) != "off" {
+			return false
+		}
+	}
+	return true
 }
 
 // BuildDefaultWAFPolicy derives the draft from the system defaults and the
-// synced catalog (pure, for tests and the service).
+// synced catalog (pure, for tests and the service). Untouched defaults take
+// the official modules: those of the synced
+// catalog block; a module the catalog lacks is left out instead of failing.
 func BuildDefaultWAFPolicy(defaults systemconfig.DefaultSecuritySettings, index map[string]rulecatalog.Item) (DefaultWAFPolicy, error) {
-	result := DefaultWAFPolicy{Enabled: defaults.WAFEnabled, Rules: []Rule{}}
+	official := untouchedWAFDefaults(defaults)
+	if official {
+		defaults.WAFEnabled = true
+		defaults.WAFModules = systemconfig.DefaultWAFModules{SQLI: "on", XSS: "on", Upload: "on", FI: "on", CMDI: "on",
+			Java: "on", JDeser: "on", PHP: "on", PHPDeser: "on", SSTI: "on"}
+	}
+	result := DefaultWAFPolicy{Enabled: defaults.WAFEnabled, Rules: []Rule{}, Official: official}
 	for _, module := range systemWAFModuleSets {
 		action := ""
 		switch systemWAFModuleMode(defaults.WAFModules, module.name) {
@@ -83,6 +111,9 @@ func BuildDefaultWAFPolicy(defaults systemconfig.DefaultSecuritySettings, index 
 			continue
 		}
 		if _, ok := index[module.key]; !ok {
+			if official {
+				continue
+			}
 			return DefaultWAFPolicy{}, fmt.Errorf("%w: %s", ErrCatalogUnsupported, module.key)
 		}
 		rules, err := ExpandWAFRuleSets(index, []string{module.key}, action)

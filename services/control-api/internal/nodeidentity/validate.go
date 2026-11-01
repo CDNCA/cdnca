@@ -27,7 +27,7 @@ import (
 const (
 	maxCSRBytes          = 64 << 10
 	maxCapabilitiesBytes = 64 << 10
-	maxCapabilities      = 64
+	maxCapabilities      = agentv1.MaxCapabilities
 )
 
 var identityLabelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]*$`)

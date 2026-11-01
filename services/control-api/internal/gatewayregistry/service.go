@@ -30,7 +30,12 @@ type Config struct {
 	// spiffe://cdn-platform/gateway/control) as nodes reach it; published
 	// after the online standalone Gateways (zero value: not published).
 	LocalGateway Entrypoint
-	Now          func() time.Time
+	// NodeDefaultsFile is the published node-install-defaults
+	// (/var/lib/cdnca-control/downloads/node-install-defaults); empty: not
+	// maintained (tests, gateway-only hosts). SyncNodeDefaults rewrites its
+	// gateway lines after every change of the published endpoint list.
+	NodeDefaultsFile string
+	Now              func() time.Time
 }
 
 type Service struct {
@@ -185,7 +190,7 @@ func (s *Service) IssueToken(ctx context.Context, actor Actor, id uuid.UUID) (Cr
 // ControlInternal refuses it.
 func (s *Service) SetDisabled(ctx context.Context, actor Actor, id uuid.UUID, disabled bool) error {
 	now := s.config.Now().UTC()
-	return pgx.BeginFunc(ctx, s.config.Pool, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, s.config.Pool, func(tx pgx.Tx) error {
 		var status string
 		var readyAt *time.Time
 		err := tx.QueryRow(ctx, `SELECT status,ready_at FROM agent_gateways WHERE id=$1 FOR UPDATE`, id).Scan(&status, &readyAt)
@@ -212,13 +217,17 @@ func (s *Service) SetDisabled(ctx context.Context, actor Actor, id uuid.UUID, di
 		}
 		return s.appendAudit(ctx, tx, actor, action, id, map[string]any{"status": next})
 	})
+	if err == nil {
+		s.syncNodeDefaultsAfterChange(ctx)
+	}
+	return err
 }
 
 // Delete revokes every certificate of the Gateway and drops its token; the
 // row stays (status deleted) so the revocation stays decidable.
 func (s *Service) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 	now := s.config.Now().UTC()
-	return pgx.BeginFunc(ctx, s.config.Pool, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, s.config.Pool, func(tx pgx.Tx) error {
 		var status string
 		err := tx.QueryRow(ctx, `SELECT status FROM agent_gateways WHERE id=$1 FOR UPDATE`, id).Scan(&status)
 		if errors.Is(err, pgx.ErrNoRows) || status == StatusDeleted {
@@ -238,6 +247,10 @@ func (s *Service) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 		}
 		return s.appendAudit(ctx, tx, actor, actionDelete, id, map[string]any{"previous_status": status})
 	})
+	if err == nil {
+		s.syncNodeDefaultsAfterChange(ctx)
+	}
+	return err
 }
 
 func validPort(port int) bool { return port == 443 || (port >= 1024 && port <= 65535) }
@@ -402,6 +415,7 @@ func (s *Service) MarkReady(ctx context.Context, id uuid.UUID, version string) e
 	if tag.RowsAffected() != 1 {
 		return ErrGatewayUnauthorized
 	}
+	s.syncNodeDefaultsAfterChange(ctx)
 	return nil
 }
 

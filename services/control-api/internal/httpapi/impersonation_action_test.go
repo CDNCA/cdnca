@@ -17,6 +17,10 @@ func TestImpersonationAPIKeyReadIsNotSensitive(t *testing.T) {
 		{"GET", "/v1/account/api-keys/compatibility", false},
 		{"POST", "/v1/account/api-keys", true},
 		{"POST", "/v1/account/api-keys/k1/rotate", true},
+		// one-click authorization issues a key; status and revoke are not secret-producing.
+		{"POST", "/v1/plugin-ui/io.cdnca.cf-optimize/identity", true},
+		{"GET", "/v1/plugin-ui/io.cdnca.cf-optimize/identity", false},
+		{"DELETE", "/v1/plugin-ui/io.cdnca.cf-optimize/identity", false},
 	} {
 		action := impersonationRequestAction(httptest.NewRequest(c.method, c.path, nil))
 		if got := impersonation.SensitiveAction(action); got != c.sensitive {

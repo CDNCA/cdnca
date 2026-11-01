@@ -29,6 +29,7 @@ func TestHostMetricsFormalSchema(t *testing.T) {
 	// Migration from scratch takes minutes on a loaded machine.
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	defer cancel()
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "host_metrics")
 	admin, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)

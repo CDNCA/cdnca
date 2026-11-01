@@ -90,6 +90,24 @@ var mainlandProvinces = []string{
 	"内蒙古", "广西", "西藏", "宁夏", "新疆",
 }
 
+// Province maps a free-text mainland place ("广东", "中国广东省", "广东电信")
+// to its short province name; ok=false for anything else (HK/MO/TW, abroad,
+// unknown). Smart scheduling (internal/smartsched) keys latency by it.
+func Province(raw string) (string, bool) {
+	value := strings.TrimPrefix(strings.TrimSpace(raw), "中国")
+	for _, name := range []string{"香港", "澳门", "台湾"} {
+		if strings.Contains(value, name) {
+			return "", false
+		}
+	}
+	for _, province := range mainlandProvinces {
+		if strings.HasPrefix(value, province) {
+			return province, true
+		}
+	}
+	return "", false
+}
+
 var isoAlpha2 = regexp.MustCompile(`^[a-z]{2}$`)
 
 // Region maps a free-text region to a lowercase ISO 3166 alpha-2 code.

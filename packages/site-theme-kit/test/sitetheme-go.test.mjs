@@ -47,6 +47,16 @@ describe('libs/sitetheme 复核', { skip: !hasGo && 'go not installed' }, () => 
     assert.deepEqual(results.map((r) => r.applies_to), [['user', 'site'], ['user'], ['site'], ['user', 'site'], ['user', 'site']])
   })
 
+  test('官方主题 official.site-xmf 按官方发布者（-official）通过，按第三方被拒', async () => {
+    const { buildPackage } = await import(join(repo, 'apps/control-site/themes/xmf/tools/pack.mjs'))
+    const path = join(temp, 'official.site-xmf.json')
+    writeFileSync(path, JSON.stringify(buildPackage(join(repo, 'apps/control-site/themes/xmf'))))
+    const [official] = libCheck(['-official', path])
+    assert.ok(official.ok, `${official.code} ${official.field}`)
+    assert.deepEqual(official.applies_to, ['site'])
+    assert.deepEqual(libCheck([path]).map((r) => [r.ok, r.code]), [[false, 'site_theme.id']])
+  })
+
   test('违规样本：本地预检与库给出相同错误码', () => {
     const base = buildContent(join(repo, 'examples/site-themes/shield-blue')).content
     const file = (name, text) => ({ path: name, sha256: '', data_base64: Buffer.from(text).toString('base64') })

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -961,7 +962,8 @@ func TestChannelTemplateAndSubscriptionControlPostgreSQL(t *testing.T) {
 			ExpectedRevision: 0, SMSEnabled: true, EmailEnabled: false, RequestID: "subscription-enable",
 		},
 	)
-	if err != nil || committedSubscriptionReplay != updated {
+	// EmailBound/PhoneBound are pointers: compare the values, not the addresses.
+	if err != nil || !reflect.DeepEqual(committedSubscriptionReplay, updated) {
 		t.Fatalf("committed subscription replay = %+v, %v, want %+v", committedSubscriptionReplay, err, updated)
 	}
 	if _, err := store.UpdateSubscription(
@@ -1533,6 +1535,7 @@ func notificationControlPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "notification_control")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

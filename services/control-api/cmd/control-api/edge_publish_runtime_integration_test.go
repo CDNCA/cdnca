@@ -718,6 +718,7 @@ func edgePublishProductionPGPool(
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "edge_publish_production")
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	adminConfig, err := pgxpool.ParseConfig(databaseURL)

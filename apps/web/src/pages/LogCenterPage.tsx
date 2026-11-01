@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, App, Button, Descriptions, Drawer, Empty, Input, Result, Select, Space, Spin, Table, Tabs, Tag, Typography, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -81,11 +82,14 @@ export default function LogCenterPage() {
     excludeCategory: tab === 'operation' && !operationCategory ? 'auth' : undefined,
     cursor: cursors.at(-1), limit: 50, lang,
   }), [applied, tab, operationCategory, cursors, lang])
+  // control-log-ui：条件变了按新数据读；同一条件下翻页、切 tab 回来 30 秒内用缓存。
+  const [generation, renew] = useLogListGeneration([applied, operationCategory, lang])
 
   const page = useQuery({
-    queryKey: ['audit-logs', filters],
+    queryKey: ['audit-logs', generation, filters],
     queryFn: () => auditLogsApi.list(accessToken ?? '', filters),
     enabled: Boolean(accessToken && canRead && !external && !panel),
+    ...logListQueryOptions,
   })
 
   // TEL-UX-EXPORT-OWNER：离开页面即取消；响应迟到时身份已变就丢弃，不下载也不提示。
@@ -104,6 +108,7 @@ export default function LogCenterPage() {
     setAppliedDraft({ draft: base, range: nextRange })
     setApplied({ ...base, since: window?.[0].toISOString(), until: window?.[1].toISOString() })
     setCursors([])
+    renew()
   }
   const reset = () => { setDraft({}); setRange({ preset: 'custom', range: null }); setAppliedDraft({ draft: {}, range: { preset: 'custom', range: null } }); setApplied({}); setCursors([]) }
   const download = async () => {
@@ -213,7 +218,7 @@ export default function LogCenterPage() {
           <span>{page.data ? t('pager.count', { count: page.data.items.length }) : null}</span>
           <Space>
             <Button disabled={cursors.length === 0} onClick={() => setCursors(cursors.slice(0, -1))}>{t('pager.previous')}</Button>
-            <Button disabled={!page.data?.next_cursor} onClick={() => page.data?.next_cursor && setCursors([...cursors, page.data.next_cursor])}>{t('pager.next')}</Button>
+            <Button disabled={!page.data?.next_cursor || page.isPlaceholderData} onClick={() => page.data?.next_cursor && setCursors([...cursors, page.data.next_cursor])}>{t('pager.next')}</Button>
           </Space>
         </div>
       </div>

@@ -7,13 +7,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/google/uuid"
@@ -23,41 +21,7 @@ import (
 
 func openExpiryTestDatabase(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-		return pool
-	}
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is required")
-	}
-	admin, err := pgxpool.New(t.Context(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "certificate_expiry_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err := admin.Exec(t.Context(), "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		cleanup, cancel := databasetest.CleanupContext()
-		defer cancel()
-		_, _ = admin.Exec(cleanup, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(t.Context(), pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 type expiryTenant struct{ scopeID, userID uuid.UUID }

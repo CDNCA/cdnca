@@ -3,6 +3,7 @@ package edgedeployment
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,11 @@ type CertificatePublicationReceipt struct {
 	Succeeded            int
 	Failed               int
 	Cancelled            int
+	// FailedNodeID and FailureMessage are, for a failed receipt, the first
+	// failed node (by ID) and its own failure text (DeploymentErrorMessage);
+	// empty when no node reported one.
+	FailedNodeID   uuid.UUID
+	FailureMessage string
 }
 
 type CertificatePublisherAuthorizer interface {
@@ -190,7 +196,29 @@ func (store *CertificatePublisherStore) ResolveCertificatePublicationReceipt(
 			return ErrRevisionConflict
 		}
 		receipt, err = certificatePublicationReceiptFromSnapshot(snapshot)
-		return err
+		if err != nil || receipt.State != CertificatePublicationReceiptFailed {
+			return err
+		}
+		// demo-fill 11-01: the node's reason (which certstore stage failed)
+		// goes with the failure instead of one generic code.
+		var payload []byte
+		err = tx.QueryRow(ctx, `SELECT latest.node_id,event.payload
+			FROM (SELECT DISTINCT ON (deployment.id) deployment.id,deployment.node_id,deployment.attempt,deployment.state
+				FROM node_deployments deployment WHERE deployment.rollout_id=$1
+				ORDER BY deployment.id,deployment.attempt DESC) latest
+			JOIN LATERAL (SELECT payload FROM deployment_status_events
+				WHERE deployment_id=latest.id AND attempt=latest.attempt
+				ORDER BY transition_sequence DESC LIMIT 1) event ON true
+			WHERE latest.state IN ('failed','rollback_failed')
+			ORDER BY latest.node_id LIMIT 1`, request.RolloutID).Scan(&receipt.FailedNodeID, &payload)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		receipt.FailureMessage = DeploymentErrorMessage(payload)
+		return nil
 	})
 	if err != nil {
 		return CertificatePublicationReceipt{}, stableSecretOperationError(err)

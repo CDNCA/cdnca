@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
+	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/firewallactioncontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/firewallcontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
@@ -32,7 +33,12 @@ func (allowFirewallAuthorizer) Authorize(context.Context, pgx.Tx, firewallcontro
 // create's request, as a published save leaves it.
 func settledAutomaticSite(t *testing.T, pool *pgxpool.Pool, identity automaticIntegrationIdentity, domain string) uuid.UUID {
 	t.Helper()
-	trust := installAutomaticSiteEntitlement(t, pool)
+	return settledAutomaticSiteWithTrust(t, pool, identity, installAutomaticSiteEntitlement(t, pool), domain)
+}
+
+// settledAutomaticSiteWithTrust 同 settledAutomaticSite，但复用已安装的权益信任库（keyset LKG 单例只能装一次）。
+func settledAutomaticSiteWithTrust(t *testing.T, pool *pgxpool.Pool, identity automaticIntegrationIdentity, trust *entitlementguard.TrustStore, domain string) uuid.UUID {
+	t.Helper()
 	service := site.NewService(site.NewStoreWithClock(pool, func() time.Time { return automaticIntegrationNow }, trust))
 	insertPolicy(t, pool, identity, 1, edgeautopublish.ModeAutomatic)
 	created, err := service.Create(t.Context(), site.Actor{UserID: identity.tenantUser, ScopeID: identity.tenantScope, ScopeKind: "tenant"},

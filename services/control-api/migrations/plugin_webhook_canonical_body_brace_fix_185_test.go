@@ -56,6 +56,7 @@ func TestPluginWebhookCanonicalBodyBraceFix185RuntimeUpDown(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "plugin_webhook_brace_185")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

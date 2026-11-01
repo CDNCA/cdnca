@@ -457,8 +457,12 @@ describe('SiteBlockEventLogPage', () => {
     await waitFor(() => expect(requests.some((url) => url.pathname === '/v1/analytics/logs/block-events')).toBe(true))
     expect(requests.some((url) => url.pathname === '/v1/analytics/market-security')).toBe(false)
 
-    await user.click(screen.getByText('市场供给'))
+    // 来源是与其它日志页一致的页签，不是 Segmented。
+    expect(within(source).getByRole('tab', { name: '本地节点' })).toHaveAttribute('aria-selected', 'true')
+    expect(source.querySelector('.ant-segmented')).toBeNull()
+    await user.click(within(source).getByRole('tab', { name: '市场供给' }))
     expect(await screen.findByText('市场供给 · 0a1b2c3d')).toBeInTheDocument()
+    expect(within(source).getByRole('tab', { name: '市场供给' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('shop.example.test')).toBeInTheDocument()
     expect(screen.getByText('crs-942100')).toBeInTheDocument()
     expect(screen.getByText('拦截')).toBeInTheDocument()
@@ -467,6 +471,9 @@ describe('SiteBlockEventLogPage', () => {
     expect(first[0].searchParams.has('tenant_id')).toBe(false)
     // fix-rangepicker2：开始/结束时间改用共享 TimeRangeFilter（默认今天，最长 31 天，不可清空，点「查询」才生效）。
     const range = within(screen.getByTestId('market-security-panel')).getByRole('group', { name: '时间范围' })
+    // 时间范围带与输入框同款的上方标签，整栏底边对齐。
+    expect(range.closest('.analytics-filter-field')?.querySelector(':scope > span')?.textContent).toBe('时间范围')
+    expect(range.closest('.market-security-filter-bar')).not.toBeNull()
     expect(within(range).getByRole('radio', { name: '今天' })).toBeChecked()
     expect(within(range).queryByRole('radio', { name: '近30天' })).toBeInTheDocument()
     expect(screen.queryByLabelText('开始时间')).not.toBeInTheDocument()
@@ -491,7 +498,7 @@ describe('SiteBlockEventLogPage', () => {
     })
 
     // Back to local nodes.
-    await user.click(screen.getByText('本地节点'))
+    await user.click(within(source).getByRole('tab', { name: '本地节点' }))
     expect(screen.queryByTestId('market-security-panel')).not.toBeInTheDocument()
   })
 })

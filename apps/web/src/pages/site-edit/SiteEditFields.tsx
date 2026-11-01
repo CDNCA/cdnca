@@ -20,11 +20,14 @@ export function SettingSection({
   tip,
   help,
   id,
+  className,
   children,
 }: {
   title: string
   // anchor for the 本页摘要 jump (site-parity4)
   id?: string
+  // layout modifier (e.g. title and one control on a line)
+  className?: string
   // long explanation, behind the (?) next to the title
   tip?: string
   // one short line under the title
@@ -32,7 +35,7 @@ export function SettingSection({
   children: React.ReactNode
 }) {
   return (
-    <section className="site-setting-section" id={id}>
+    <section className={className ? `site-setting-section ${className}` : 'site-setting-section'} id={id}>
       {tip ? <div className="site-setting-title-line"><h2>{title}</h2><HelpTip tip={tip} /></div> : <h2>{title}</h2>}
       {help ? <p className="site-setting-section-help">{help}</p> : null}
       {children}
@@ -48,23 +51,30 @@ export function SettingGroup({
   help,
   status,
   extra,
+  className,
+  titleId,
   children,
 }: {
-  title: string
+  title: React.ReactNode
   tip?: string
   help?: React.ReactNode
-  status?: string
+  status?: React.ReactNode
   // right side of the title line (a switch or an add button, competitor layout)
   extra?: React.ReactNode
+  // e.g. "is-wide" (spans the whole row of a card grid)
+  className?: string
+  // a stable heading id (本页摘要 jump target); default a generated one
+  titleId?: string
   children?: React.ReactNode
 }) {
-  const id = useId()
+  const generated = useId()
+  const id = titleId ?? generated
   return (
-    <section className="site-setting-group" aria-labelledby={id}>
+    <section className={className ? `site-setting-group ${className}` : 'site-setting-group'} aria-labelledby={id}>
       <div className="site-setting-group-head">
         <h3 id={id} className="site-setting-subtitle">{title}</h3>
         {tip ? <HelpTip tip={tip} /> : null}
-        {status ? <Tag className="site-setting-group-status">{status}</Tag> : null}
+        {typeof status === 'string' ? <Tag className="site-setting-group-status">{status}</Tag> : status}
         {extra ? <div className="site-setting-group-extra">{extra}</div> : null}
       </div>
       {help ? <p className="site-setting-section-help">{help}</p> : null}

@@ -1,18 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CdncaProvider } from '@cdnca/ui'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 
 import { firewallActionApi } from '../api/firewallAction'
+import { sitesApi } from '../api/sites'
 import { useSessionStore } from '../auth/session'
 import FirewallActionPoliciesPage from '../pages/FirewallActionPoliciesPage'
 
 vi.mock('../api/firewallAction', async () => {
   const actual = await vi.importActual<typeof import('../api/firewallAction')>('../api/firewallAction')
-  return { ...actual, firewallActionApi: { ...actual.firewallActionApi, get: vi.fn(), put: vi.fn(), recover: vi.fn() } }
+  return { ...actual, firewallActionApi: { ...actual.firewallActionApi, get: vi.fn(), put: vi.fn(), recover: vi.fn(), inherit: vi.fn(), getDefault: vi.fn(), putDefault: vi.fn() } }
 })
+
+vi.mock('../api/sites', () => ({ sitesApi: { list: vi.fn(), detail: vi.fn() } }))
+vi.mock('../api/users', () => ({ usersApi: { list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }) } }))
 
 const policy = {
   id: '33333333-3333-4333-8333-333333333333', tenant_scope_id: '11111111-1111-4111-8111-111111111111',
@@ -20,13 +24,20 @@ const policy = {
   engage_threshold: 100, recover_threshold: 20, recovery_windows: 3, block_networks: ['198.51.100.0/24'], trusted_proxies: ['192.0.2.0/24'],
   trusted_crawlers: [{ name: 'search', networks: ['203.0.113.0/24'], user_agent_prefixes: ['SearchBot/'] }],
   return_page: { status: 429, content_type: 'text/plain; charset=utf-8' as const, body: 'Request limited' },
-  revision: 4, active_revision: 3, lkg_revision: 3, deployment_state: 'failed' as const, host_escalation: 'owned' as const, document_sha256: 'a'.repeat(64),
-  created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:00:00Z',
+  revision: 4, active_revision: 3, lkg_revision: 3, deployment_state: 'failed' as const, enabled: true, host_escalation: 'owned' as const, document_sha256: 'a'.repeat(64),
+  created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:00:00Z', inherited: false, source: 'site' as const, delivered: true,
 }
 
-function renderPage() {
+const inheritedTenant = { ...policy, revision: 5, active_revision: 0, lkg_revision: 0, deployment_state: 'inherited' as const, inherited: true,
+  source: 'tenant_default' as const, engage_threshold: 300 }
+
+const systemDefault = { tenant_scope_id: policy.tenant_scope_id, source: 'system_default' as const, revision: 0, normal_action: 'return_page' as const,
+  escalated_action: 'nftables' as const, engage_threshold: 100, recover_threshold: 20, recovery_windows: 3, block_networks: ['198.51.100.0/24'],
+  trusted_proxies: [], trusted_crawlers: [], return_page: policy.return_page, inheriting_site_count: 12, updated_at: null }
+
+function renderPage(entry = `/config/firewall-actions?site_id=${policy.site_id}`) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<CdncaProvider><MemoryRouter initialEntries={[`/config/firewall-actions?site_id=${policy.site_id}`]}><QueryClientProvider client={client}><FirewallActionPoliciesPage /></QueryClientProvider></MemoryRouter></CdncaProvider>)
+  return render(<CdncaProvider><MemoryRouter initialEntries={[entry]}><QueryClientProvider client={client}><FirewallActionPoliciesPage /></QueryClientProvider></MemoryRouter></CdncaProvider>)
 }
 
 describe('FirewallActionPoliciesPage', () => {
@@ -38,6 +49,28 @@ describe('FirewallActionPoliciesPage', () => {
       permissions: ['firewall.read', 'firewall.manage'],
     } })
     vi.mocked(firewallActionApi.get).mockResolvedValue(policy)
+    vi.mocked(firewallActionApi.getDefault).mockResolvedValue(systemDefault)
+    vi.mocked(sitesApi.detail).mockResolvedValue({ id: policy.site_id, scope_id: policy.tenant_scope_id, basic: { domains: ['shop.example.test'] } } as never)
+    vi.mocked(sitesApi.list).mockResolvedValue({ items: [{ id: policy.site_id, display_id: 'S100', domain: 'shop.example.test',
+      owner: { id: '55555555-5555-4555-8555-555555555555', display_name: 'Alice' } }] as never, total: 1, page: 1, limit: 20 })
+  })
+
+  // the admin page asked for raw tenant-scope and site UUIDs;
+  // it now lists sites and loads the picked site's policy under its owner scope.
+  it('lets a platform admin pick a site instead of typing scope and site UUIDs', async () => {
+    useSessionStore.setState({ principal: { ...useSessionStore.getState().principal!, scope_kind: 'platform',
+      scope_id: '66666666-6666-4666-8666-666666666666', tenant_id: null, permissions: ['platform.admin'] } })
+    const user = userEvent.setup()
+    renderPage('/config/firewall-action')
+    expect(screen.queryByLabelText('目标租户作用域')).not.toBeInTheDocument()
+    expect(await screen.findByText('shop.example.test')).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '配置 shop.example.test 的动作策略' }))
+    expect(await screen.findByText('候选策略下发失败，当前稳定版本继续生效')).toBeInTheDocument()
+    expect(firewallActionApi.get).toHaveBeenCalledWith('token', policy.tenant_scope_id, policy.site_id)
+    expect(screen.getByText('网站：shop.example.test')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '返回网站列表' }))
+    expect(await screen.findByRole('button', { name: '配置 shop.example.test 的动作策略' })).toBeInTheDocument()
   })
 
   it('renders failed candidate separately from active LKG in Chinese', async () => {
@@ -79,6 +112,76 @@ describe('FirewallActionPoliciesPage', () => {
     await screen.findByText('候选策略下发失败，当前稳定版本继续生效')
     expect(screen.getByText('高负载动作')).toBeInTheDocument()
     expect(screen.getByText('nftables 自动拦截')).toBeInTheDocument()
+  })
+
+  // firewall-action-review: fields use the site edit pages' horizontal row
+  // (label column + control), not a label stacked above the control.
+  it('lays out each field as a label column beside its control', async () => {
+    renderPage()
+    await screen.findByText('候选策略下发失败，当前稳定版本继续生效')
+    for (const label of ['常态动作', '触发阈值', '内核拦截网段', '状态码']) {
+      const row = screen.getByText(label, { selector: 'label' }).closest('.site-form-row')
+      expect(row).not.toBeNull()
+      expect(row!.querySelector('.site-form-row-control')).not.toBeNull()
+    }
+  })
+
+  // 网站列表上方是本租户的默认设置。
+  it('edits the tenant default above the site list and says how many sites inherit it', async () => {
+    vi.mocked(firewallActionApi.putDefault).mockResolvedValue({ ...systemDefault, source: 'tenant_default', revision: 1, engage_threshold: 250,
+      updated_at: '2026-10-31T00:00:00Z' })
+    const user = userEvent.setup()
+    renderPage('/config/firewall-action')
+    const card = await screen.findByRole('region', { name: '默认设置' })
+    expect(await within(card).findByText('继承系统默认')).toBeInTheDocument()
+    expect(within(card).getByText(/没有单独设置的网站（12 个）使用系统内置默认/)).toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: '编辑默认设置' }))
+    await user.clear(within(card).getByLabelText('触发阈值'))
+    await user.type(within(card).getByLabelText('触发阈值'), '250')
+    await user.click(within(card).getByRole('button', { name: '保存默认设置' }))
+    expect(firewallActionApi.putDefault).toHaveBeenCalledWith('token', expect.objectContaining({ scopeId: policy.tenant_scope_id, expectedRevision: 0,
+      policy: expect.objectContaining({ engage_threshold: 250 }) }))
+    expect(await within(card).findByText('继承默认设置')).toBeInTheDocument()
+  })
+
+  // 平台管理员不带 target_scope_id 打开时先选用户，带上后显示该用户的默认设置。
+  it('lets a platform admin pick a tenant to see its default settings', async () => {
+    useSessionStore.setState({ principal: { ...useSessionStore.getState().principal!, scope_kind: 'platform',
+      scope_id: '66666666-6666-4666-8666-666666666666', tenant_id: null, permissions: ['platform.admin'] } })
+    const first = renderPage('/config/firewall-action')
+    expect(await screen.findByRole('combobox', { name: '默认设置所属用户' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '默认设置' })).not.toBeInTheDocument()
+    expect(firewallActionApi.getDefault).not.toHaveBeenCalled()
+    first.unmount()
+    renderPage(`/config/firewall-action?target_scope_id=${policy.tenant_scope_id}`)
+    const card = await screen.findByRole('region', { name: '默认设置' })
+    expect(await within(card).findByText('继承系统默认')).toBeInTheDocument()
+    expect(firewallActionApi.getDefault).toHaveBeenCalledWith('token', policy.tenant_scope_id)
+  })
+
+  it('shows an inheriting site as such, saves its own policy at its revision, and restores inheritance', async () => {
+    vi.mocked(firewallActionApi.get).mockResolvedValue(inheritedTenant)
+    vi.mocked(firewallActionApi.put).mockResolvedValue({ ...policy, revision: 6, deployment_state: 'pending' })
+    vi.mocked(firewallActionApi.inherit).mockResolvedValue({ ...inheritedTenant, revision: 7 })
+    const user = userEvent.setup()
+    renderPage()
+    expect(await screen.findByText('本站正在使用默认设置')).toBeInTheDocument()
+    expect(screen.getByText('继承默认设置')).toBeInTheDocument()
+    expect(screen.getByLabelText('触发阈值')).toHaveValue('300')
+    expect(screen.queryByRole('button', { name: '恢复继承默认' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '恢复最近稳定版本' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '保存策略' }))
+    expect(firewallActionApi.put).toHaveBeenCalledWith('token', expect.objectContaining({ expectedRevision: 5 }))
+    expect(await screen.findByText('本站自定义')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '恢复继承默认' }))
+    expect(firewallActionApi.inherit).toHaveBeenCalledWith('token', expect.objectContaining({ expectedRevision: 6 }))
+    expect(await screen.findByText('本站正在使用默认设置')).toBeInTheDocument()
+  })
+
+  it('says a disabled own policy is not applied', async () => {
+    vi.mocked(firewallActionApi.get).mockResolvedValue({ ...policy, enabled: false, delivered: false })
+    renderPage()
+    expect(await screen.findByText(/本站动作策略已停用，节点不执行/)).toBeInTheDocument()
   })
 
   it('does not render a request failure as an empty policy', async () => {

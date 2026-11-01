@@ -19,6 +19,7 @@ import (
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -197,6 +198,14 @@ func TestDeploymentStatusPostgresJetStreamLifecycle(t *testing.T) {
 	projectFixtureStatus(t, store, validator, prefix, failed, failedStatus)
 	assertDeploymentState(t, pool, failed.deploymentID, "failed", 2)
 	assertNodeConfig(t, pool, failed.nodeID, failed.previousConfigID, uuid.Nil)
+	// the failure is audited with the node's code and text.
+	var failureAudits int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE action=$1 AND resource_id=$2
+		AND result='failure' AND reason_code='ERROR_CODE_UNAVAILABLE' AND payload->>'node_id'=$3
+		AND payload->>'error_message'='operation failed'`, DeploymentFailedAuditAction,
+		failed.deploymentID.String(), failed.nodeID.String()).Scan(&failureAudits); err != nil || failureAudits != 1 {
+		t.Fatalf("deployment failure audits = %d, %v", failureAudits, err)
+	}
 
 	outOfOrder := seedDeployment(t, pool, "apply", uuid.Nil, uuid.Nil)
 	projectFixtureState(t, store, validator, prefix, outOfOrder, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_DELIVERED, 10)
@@ -333,6 +342,7 @@ func TestDeploymentStatusPostgresJetStreamLifecycle(t *testing.T) {
 
 func openStatusTestDatabase(t *testing.T, databaseURL string) (*pgxpool.Pool, *pgxpool.Pool, string) {
 	t.Helper()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "edge_status")
 	adminPool, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

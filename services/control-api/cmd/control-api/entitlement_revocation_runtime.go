@@ -30,6 +30,9 @@ const (
 	// installationLeaseRenewTimeout bounds the lease renewal an expired or
 	// lifted-revoked lock triggers (installationban.Runtime.RenewLease).
 	installationLeaseRenewTimeout = 20 * time.Second
+
+	// entitlementRevocationQuickLimit: see Run.
+	entitlementRevocationQuickLimit = 3
 )
 
 type entitlementRevocationKeysetRefresher interface {
@@ -38,6 +41,12 @@ type entitlementRevocationKeysetRefresher interface {
 
 type entitlementRevocationSyncer interface {
 	SyncOnce(context.Context) (entitlementguard.RevocationSnapshot, error)
+}
+
+// entitlementRevocationLongPoller is implemented by syncers that can wait for
+// a change at the license service.
+type entitlementRevocationLongPoller interface {
+	LongPollOnce(context.Context) (entitlementguard.RevocationSnapshot, error)
 }
 
 // LastKnownGood accepts a list past its 15-minute window: a license service
@@ -234,8 +243,34 @@ func (runtime *entitlementRevocationRuntime) Run(ctx context.Context) (runErr er
 			runtime.setTerminalError(runErr)
 		}
 	}()
+	// Long poll: the license service answers as soon as the
+	// state changes, else after 50 s; each answer runs one round below with
+	// no wait. A failed long poll (or a syncer without one) falls back to the
+	// 60 s poll; the long poll resumes after the next successful round.
+	// entitlementRevocationQuickLimit unchanged answers under a second in a
+	// row also fall back: a server that does not hold would otherwise be
+	// polled in a tight loop.
+	longPoller, _ := runtime.syncer.(entitlementRevocationLongPoller)
+	longPoll, quick := false, 0
+	var revision uint64
 	for {
-		if err := runtime.wait(ctx, entitlementRevocationPollInterval); err != nil {
+		var syncErr error
+		if longPoll {
+			started := time.Now()
+			var snapshot entitlementguard.RevocationSnapshot
+			snapshot, syncErr = longPoller.LongPollOnce(ctx)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if syncErr == nil && snapshot.Revision == revision && time.Since(started) < time.Second {
+				quick++
+			} else {
+				quick = 0
+			}
+			if syncErr == nil {
+				revision = snapshot.Revision
+			}
+		} else if err := runtime.wait(ctx, entitlementRevocationPollInterval); err != nil {
 			return err
 		}
 		if err := runtime.keysets.Refresh(ctx); err != nil {
@@ -244,7 +279,20 @@ func (runtime *entitlementRevocationRuntime) Run(ctx context.Context) (runErr er
 			}
 			runtime.logger.Warn("entitlement keyset refresh deferred", "error", err)
 		}
-		if _, err := runtime.syncer.SyncOnce(ctx); err != nil {
+		// A set the long poll could not verify may be signed by a key the
+		// refresh above just learned: retry it at once.
+		if !longPoll || isEntitlementRevocationDeferredError(syncErr) {
+			var snapshot entitlementguard.RevocationSnapshot
+			if snapshot, syncErr = runtime.syncer.SyncOnce(ctx); syncErr == nil {
+				revision = snapshot.Revision
+			}
+		}
+		longPoll = longPoller != nil && syncErr == nil
+		if quick >= entitlementRevocationQuickLimit {
+			runtime.logger.Warn("entitlement revocation long poll answered without waiting; polling every minute")
+			longPoll, quick = false, 0
+		}
+		if err := syncErr; err != nil {
 			switch {
 			case isEntitlementRevocationRemoteError(err):
 				runtime.logger.Warn("entitlement revocation synchronization deferred", "error", err)

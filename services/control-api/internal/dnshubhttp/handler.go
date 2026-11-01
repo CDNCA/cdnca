@@ -49,6 +49,11 @@ var Patterns = []string{
 
 type AuthenticateSessionFunc func(context.Context, string) (identity.AuthenticatedSession, error)
 
+// AuthenticateAPIKeyFunc authenticates `CdncaKey <key_id>.<secret>`: the
+// principal's Permissions are the key scopes intersected with the owner's
+// live RBAC (apikey.Service.AuthenticateWithKeyID); keyID is api_keys.id.
+type AuthenticateAPIKeyFunc func(context.Context, string) (principal identity.Principal, keyID uuid.UUID, err error)
+
 // Service is the hub (dnsproviderremotesource.Hub).
 type Service interface {
 	ListDomains(context.Context, dnsproviderremotesource.HubActor, dnsproviderremotesource.HubDomainQuery) (dnsproviderremotesource.HubDomainPage, error)
@@ -60,14 +65,16 @@ type Service interface {
 type Handler struct {
 	hub          Service
 	authenticate AuthenticateSessionFunc
-	mux          *http.ServeMux
+	// apiKey: nil keeps the routes session-only (CdncaKey answers 401).
+	apiKey AuthenticateAPIKeyFunc
+	mux    *http.ServeMux
 }
 
-func NewHandler(hub Service, authenticate AuthenticateSessionFunc) (*Handler, error) {
+func NewHandler(hub Service, authenticate AuthenticateSessionFunc, apiKey AuthenticateAPIKeyFunc) (*Handler, error) {
 	if hub == nil || authenticate == nil {
 		return nil, errors.New("DNS hub handler dependencies are required")
 	}
-	handler := &Handler{hub: hub, authenticate: authenticate, mux: http.NewServeMux()}
+	handler := &Handler{hub: hub, authenticate: authenticate, apiKey: apiKey, mux: http.NewServeMux()}
 	routes := map[string]http.HandlerFunc{
 		"GET /v1/dns/hub/domains":                                              handler.listDomains,
 		"POST /v1/dns/hub/domains/refresh":                                     handler.refresh,
@@ -89,10 +96,14 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	handler.mux.ServeHTTP(response, request)
 }
 
-// session authenticates the bearer token of a tenant session; the hub checks
-// membership and permission in its own transaction.
+// session authenticates a tenant session (Bearer) or a tenant API key
+// (CdncaKey); the hub checks membership and permission (and, for a key, its
+// scopes) in its own transaction.
 func (handler *Handler) session(response http.ResponseWriter, request *http.Request) (dnsproviderremotesource.HubActor, bool) {
 	values := request.Header.Values("Authorization")
+	if len(values) == 1 && handler.apiKey != nil && strings.HasPrefix(values[0], "CdncaKey ") {
+		return handler.apiKeyActor(response, request, values[0][len("CdncaKey "):])
+	}
 	if len(values) != 1 || !strings.HasPrefix(values[0], "Bearer ") || values[0][7:] == "" ||
 		strings.TrimSpace(values[0][7:]) != values[0][7:] {
 		writeError(response, request, http.StatusUnauthorized, "unauthorized", "authentication is required", nil)
@@ -109,6 +120,25 @@ func (handler *Handler) session(response http.ResponseWriter, request *http.Requ
 	}
 	return dnsproviderremotesource.HubActor{UserID: session.Principal.UserID, ScopeID: session.Principal.ScopeID,
 		ScopeKind: session.Principal.ScopeKind, RequestID: requestID(request)}, true
+}
+
+func (handler *Handler) apiKeyActor(response http.ResponseWriter, request *http.Request, raw string) (dnsproviderremotesource.HubActor, bool) {
+	if raw == "" || strings.TrimSpace(raw) != raw {
+		writeError(response, request, http.StatusUnauthorized, "unauthorized", "authentication is required", nil)
+		return dnsproviderremotesource.HubActor{}, false
+	}
+	principal, keyID, err := handler.apiKey(request.Context(), raw)
+	if err != nil || principal.UserID == uuid.Nil || principal.ScopeID == uuid.Nil || keyID == uuid.Nil {
+		writeError(response, request, http.StatusUnauthorized, "unauthorized", "authentication is required", nil)
+		return dnsproviderremotesource.HubActor{}, false
+	}
+	if principal.ScopeKind != "tenant" {
+		writeError(response, request, http.StatusForbidden, "permission_denied", "permission is required", nil)
+		return dnsproviderremotesource.HubActor{}, false
+	}
+	return dnsproviderremotesource.HubActor{UserID: principal.UserID, ScopeID: principal.ScopeID,
+		ScopeKind: principal.ScopeKind, RequestID: requestID(request), APIKeyID: keyID,
+		APIKeyScopes: append([]string(nil), principal.Permissions...)}, true
 }
 
 func (handler *Handler) listDomains(response http.ResponseWriter, request *http.Request) {

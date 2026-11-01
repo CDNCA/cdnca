@@ -137,6 +137,31 @@ func TestExportNaturalWorkerCompletesAndDownloadsOnceWithPostgres17(t *testing.T
 		created.ID).Scan(&consumed, &downloads); err != nil || consumed != 1 || downloads != 1 {
 		t.Fatalf("consumed grants=%d downloads=%d err=%v, want 1/1", consumed, downloads, err)
 	}
+	// 申请记录显示申请人、下载次数、最近下载人与时间。
+	if job.RequestedBy.ID != fixture.actor.ActorID || job.DownloadCount != 0 || job.LastDownloadedAt != nil || job.LastDownloadedBy != nil {
+		t.Fatalf("export before download = %#v / %#v, want requester and no download", job.RequestedBy, job.LastDownloadedBy)
+	}
+	records, err := manager.List(t.Context(), fixture.actor, AudienceTenant, "")
+	if err != nil || len(records) != 1 {
+		t.Fatalf("List() = %#v, %v", records, err)
+	}
+	record := records[0]
+	if record.RequestedBy.ID != fixture.actor.ActorID || !strings.HasPrefix(record.RequestedBy.Username, "export-worker-") ||
+		record.DownloadCount != 1 || record.LastDownloadedAt == nil || record.LastDownloadedBy == nil ||
+		record.LastDownloadedBy.ID != fixture.actor.ActorID || record.LastDownloadedBy.Username != record.RequestedBy.Username {
+		t.Fatalf("record after download = %#v by=%#v", record, record.LastDownloadedBy)
+	}
+	// 过期后不可下载：记录 downloadable=false，签发下载授权被拒。
+	expired, err := NewExportManager(fixture.pool, exportWorkerStore(now), func() time.Time { return now.Add(exportArtifactTTL + time.Minute) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if late, err := expired.Get(t.Context(), fixture.actor, AudienceTenant, "", created.ID); err != nil || late.Downloadable {
+		t.Fatalf("expired Get() = %#v, %v; want not downloadable", late, err)
+	}
+	if _, err := expired.Grant(ctx, fixture.actor, AudienceTenant, "", created.ID); err == nil {
+		t.Fatal("Grant() after artifact expiry succeeded")
+	}
 }
 
 // 每个任务用自己的请求编号：同一轮 worker 先后处理两条任务，不能把第一条

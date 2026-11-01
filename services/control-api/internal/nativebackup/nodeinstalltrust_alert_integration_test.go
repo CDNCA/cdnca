@@ -28,6 +28,7 @@ func TestNodeInstallTrustAlertsOnPostgres(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	t.Cleanup(cancel)
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "node_install_trust")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

@@ -364,7 +364,7 @@ describe('ControlUpgradesPage', () => {
     expect(screen.queryByRole('button', { name: '重装与恢复现有节点' })).not.toBeInTheDocument()
     await user.click(await within(section).findByRole('button', { name: '复制安装命令' }))
     await waitFor(() => expect(clipboard).toHaveBeenCalledOnce())
-    expect(clipboard.mock.calls[0][0]).toMatch(/^\(f=\$\(mktemp\) .*curl --proto '=https' --proto-redir '=https' -fsSL -o "\$f" '[^']+\/downloads\/install-node\.sh'; .*; printf '%s\\n' 'nrk1\.[0-9a-f]{32}\.K{43}' \| bash "\$f" --control-plane '[^']+' --registration-key-stdin\)$/)
+    expect(clipboard.mock.calls[0][0]).toMatch(/^\(f=\$\(mktemp\) .*curl --proto '=https' --proto-redir '=https' -fsSL -o "\$f" '[^']+\/downloads\/install-node\.sh'; .*; printf '%s\\n' 'nrk1\.[0-9a-f]{32}\.K{43}' \| bash "\$f" --control-plane '[^']+' --registration-key-stdin --lang zh\)$/)
     expect(fetchSpy.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
   })
 

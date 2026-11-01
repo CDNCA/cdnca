@@ -35,9 +35,17 @@ var (
 
 type PublicationOutcome string
 
+// PublicationNoopNeverPublished completes an unpublication with nothing to
+// remove: no earlier publication of the site reached a node (migration 612).
+const PublicationNoopNeverPublished = "never_published"
+
 type PublicationResult struct {
-	Outcome             PublicationOutcome
-	FailureCode         string
+	Outcome     PublicationOutcome
+	FailureCode string
+	// NoopReason is set on an Ack that created no rollout (an unpublication
+	// of a site whose certificate never reached a node); the publication
+	// and rollout fields are then empty.
+	NoopReason          string
 	PublicationID       uuid.UUID
 	PublicationRevision int64
 	ConfigVersionID     uuid.UUID
@@ -258,11 +266,16 @@ func validCertificatePublicationCommandV1(command CertificatePublicationCommandV
 func validPublicationResult(result PublicationResult) bool {
 	switch result.Outcome {
 	case PublicationAck:
+		if result.NoopReason != "" {
+			return result.NoopReason == PublicationNoopNeverPublished && result.FailureCode == "" &&
+				result.PublicationID == uuid.Nil && result.PublicationRevision == 0 &&
+				result.ConfigVersionID == uuid.Nil && result.RolloutID == uuid.Nil && result.RolloutRevision == 0
+		}
 		return result.FailureCode == "" && result.PublicationID != uuid.Nil &&
 			result.PublicationRevision > 0 && result.ConfigVersionID != uuid.Nil &&
 			result.RolloutID != uuid.Nil && result.RolloutRevision > 0
 	case PublicationRetry, PublicationPermanent:
-		return validPublicationFailureCode(result.FailureCode) && result.PublicationID == uuid.Nil &&
+		return validPublicationFailureCode(result.FailureCode) && result.NoopReason == "" && result.PublicationID == uuid.Nil &&
 			result.PublicationRevision == 0 && result.ConfigVersionID == uuid.Nil &&
 			result.RolloutID == uuid.Nil && result.RolloutRevision == 0
 	default:

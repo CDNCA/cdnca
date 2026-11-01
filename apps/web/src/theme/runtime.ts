@@ -74,8 +74,19 @@ const builtInBrand: Record<ThemeBrandSlot, string> = {
   app_icon: '/dashboard/app-icon-180.png',
 }
 
-/** The bundled cdnca default for a brand slot (assets/brand/cdnca, scripts/brand/export.sh). */
-export function builtInBrandAsset(slot: ThemeBrandSlot): string {
+// the bundled login ad has its slogan drawn into the image,
+// so English and Traditional Chinese get their own export.
+const builtInLoginAd: Record<string, string> = {
+  'en-US': '/dashboard/ad-en.jpeg',
+  'zh-TW': '/dashboard/ad-zh-TW.jpeg',
+}
+
+/**
+ * The bundled cdnca default for a brand slot (assets/brand/cdnca,
+ * scripts/brand/export.sh), in locale's language where the image has text.
+ */
+export function builtInBrandAsset(slot: ThemeBrandSlot, locale?: string): string {
+  if (slot === 'login_ad' && locale) return builtInLoginAd[locale] ?? (locale.startsWith('en') ? builtInLoginAd['en-US'] : builtInBrand.login_ad)
   return builtInBrand[slot]
 }
 
@@ -86,8 +97,9 @@ export function builtInBrandAsset(slot: ThemeBrandSlot): string {
  * uploaded (current.brand_assets) are requested, with ?v=<revision> so a new
  * upload busts the cache; a slot never uploaded costs no 404. A tenant's own
  * theme passes no uploads: a white-label tenant never shows the platform's logo.
+ * locale only picks the built-in file; uploads and theme images are used as is.
  */
-export function brandCandidates(slot: ThemeBrandSlot, document: ThemeDocument | null, uploaded: ThemeBrandAssets = {}): string[] {
+export function brandCandidates(slot: ThemeBrandSlot, document: ThemeDocument | null, uploaded: ThemeBrandAssets = {}, locale?: string): string[] {
   const result: string[] = []
   const add = (value: string | undefined) => {
     if (value && !result.includes(value)) result.push(value)
@@ -99,6 +111,6 @@ export function brandCandidates(slot: ThemeBrandSlot, document: ThemeDocument | 
     add(document?.brand[current]?.url)
     current = brandFallbacks[current]
   }
-  add(builtInBrand[slot])
+  add(builtInBrandAsset(slot, locale))
   return result
 }

@@ -504,6 +504,7 @@ func analyticsLogsIsolatedTestPool(t *testing.T) *pgxpool.Pool {
 	}
 	setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer setupCancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "analytics_logs_test")
 	adminPool, err := pgxpool.New(setupCtx, databaseURL)
 	if err != nil {
 		t.Fatalf("open analytics logs test administration pool: %v", err)

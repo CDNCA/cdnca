@@ -33,6 +33,16 @@ func TestTenantOwnerSeedMatchesMigrationHead(t *testing.T) {
 		VALUES($1,$2,$3,'legacy',true)`, legacy.owner, legacy.scope, identity.UserRoleOwner); err != nil {
 		t.Fatal(err)
 	}
+	// 存量 owner 由 SeedTenantSystemRoles 建，迁移 603 前就持有 dns.manage；603 只给持有
+	// dns.manage 的存量系统角色回填 dns.records.manage，所以先迁到 602 补上当时已有的显式清单。
+	if err := databasetest.MigrateThrough(ctx, pool, "up", 602); err != nil {
+		t.Fatalf("migrate legacy tenant to 602: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO role_permissions(role_id,permission_name)
+		SELECT $1,name FROM permissions WHERE name=ANY($2::text[]) ON CONFLICT DO NOTHING`,
+		legacy.owner, identity.TenantOwnerPermissions); err != nil {
+		t.Fatal(err)
+	}
 	if err := database.Migrate(ctx, pool, "up"); err != nil {
 		t.Fatalf("migrate legacy tenant to head: %v", err)
 	}

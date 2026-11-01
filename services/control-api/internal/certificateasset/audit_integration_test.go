@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/netip"
+	"reflect"
 	"testing"
 	"time"
 
@@ -168,6 +169,28 @@ func TestPublicationIntentOutcomeWritesAuditEvent(t *testing.T) {
 	store := newPublicationStore(t, pool, &testEnvelopeCipher{}, certificateTestClock)
 	pki := newCertificateFixture(t, leafOptions{domains: []string{"www.example.com"}})
 	createBoundPublicationAsset(t, store, tenant, pki, tenant.siteOne)
+	// each list row carries its sync state and first failure code.
+	listSync := func() *AssetSync {
+		t.Helper()
+		page, err := store.ListPage(context.Background(), tenant.actor, ListRequest{TenantScopeID: tenant.actor.ScopeID, Page: 1, Limit: 10})
+		if err != nil || len(page.Items) != 1 {
+			t.Fatalf("list = %+v, %v", page, err)
+		}
+		sync := page.Items[0].Sync
+		// the detail and the binding row carry the same state.
+		asset, _, err := store.Get(context.Background(), tenant.actor, tenant.actor.ScopeID, page.Items[0].ID)
+		if err != nil || !reflect.DeepEqual(asset.Sync, sync) {
+			t.Fatalf("detail sync = %+v, %v; list %+v", asset.Sync, err, sync)
+		}
+		bindings, err := store.ListBindings(context.Background(), tenant.actor, tenant.actor.ScopeID, page.Items[0].ID)
+		if err != nil || len(bindings) != 1 || bindings[0].SiteID != tenant.siteOne || !reflect.DeepEqual(bindings[0].Sync, sync) {
+			t.Fatalf("binding sync = %+v, %v; list %+v", bindings, err, sync)
+		}
+		return sync
+	}
+	if sync := listSync(); sync == nil || sync.State != "pending" || sync.FailureCode != "" {
+		t.Fatalf("bound asset sync = %+v", sync)
+	}
 	config := DefaultPublicationIntentStoreConfig()
 	config.MaxAttempts, config.RetryBase, config.RetryMaximum = 2, 10*time.Millisecond, 10*time.Millisecond
 	config.Jitter = func(time.Duration) time.Duration { return 0 }
@@ -211,5 +234,8 @@ func TestPublicationIntentOutcomeWritesAuditEvent(t *testing.T) {
 		failed.resourceID != tenant.siteOne.String() || failed.payload["reason_code"] != "actor_unauthenticated" ||
 		failed.payload["requested_by_user_id"] != tenant.actor.UserID.String() || failed.payload["worker_id"] != "audit-worker" {
 		t.Fatalf("publication failure audit = %+v", failed)
+	}
+	if sync := listSync(); sync == nil || sync.State != "failed" || sync.FailureCode != "actor_unauthenticated" {
+		t.Fatalf("failed asset sync = %+v", sync)
 	}
 }

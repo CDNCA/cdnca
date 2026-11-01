@@ -71,6 +71,17 @@ describe('Certificate publication status', () => {
     expect(certificateBindingPublicationState(binding, receipt)).toBe(state === 'permanent_failed' ? 'failed' : 'pending')
   })
 
+  // 迁移 612：证书从未下发到节点时，解绑无 rollout 直接完成。
+  it('treats a never-published unpublication without a rollout as complete', () => {
+    const noop = { current: { ...current, operation: 'unpublish', noop_reason: 'never_published', publication_id: undefined,
+      publication_revision: undefined, config_version_id: undefined, rollout_id: undefined, rollout_revision: undefined }, history: publication.history }
+    expect(parseCertificatePublication(noop)).toBe(true)
+    expect(certificateBindingPublicationState({ ...binding, bound: false }, noop)).toBe('complete')
+    expect(parseCertificatePublication({ ...noop, current: { ...noop.current, operation: 'publish' } })).toBe(false)
+    expect(parseCertificatePublication({ ...noop, current: { ...noop.current, rollout_id: current.rollout_id } })).toBe(false)
+    expect(parseCertificatePublication({ ...noop, current: { ...noop.current, noop_reason: 'other' } })).toBe(false)
+  })
+
   it('matches unpublish receipts only to the same unbound revision', () => {
     const receipt = { ...publication, current: { ...current, operation: 'unpublish' } }
     expect(certificateBindingPublicationState({ ...binding, bound: false }, receipt, rollout)).toBe('complete')

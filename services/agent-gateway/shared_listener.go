@@ -107,7 +107,7 @@ func NewTunnelRouter(config TunnelRouterConfig) (*TunnelRouter, error) {
 		config:    config,
 		verifier:  &tunnelTokenVerifier{audience: config.Audience, nodeCAs: config.NodeCAs, nonces: config.Nonces, now: config.Now},
 		httpTLS:   outerTLS(config),
-		upgrader:  websocket.Upgrader{ReadBufferSize: 32 << 10, WriteBufferSize: 32 << 10, CheckOrigin: func(*http.Request) bool { return true }},
+		upgrader:  tunnelUpgrader,
 		httpConns: newChanListener(&net.TCPAddr{IP: net.IPv4zero}, nil),
 		tunnels:   map[SharedListenerKind]chan net.Conn{SharedListenerEnrollment: make(chan net.Conn), SharedListenerAgent: make(chan net.Conn)},
 		done:      make(chan struct{}),

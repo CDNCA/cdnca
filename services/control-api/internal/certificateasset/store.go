@@ -938,14 +938,11 @@ func (s *Store) delete(ctx context.Context, actor Actor, request DeleteRequest, 
 		if asset.Revision != request.ExpectedRevision {
 			return ErrRevisionConflict
 		}
+		// Bound to a live site (migration 613: a soft-deleted site's binding
+		// no longer counts; 73 11-01 refused to delete a deleted site's
+		// certificate with no way to unbind it).
 		var referenced bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (
-			SELECT 1 FROM (
-				SELECT DISTINCT ON (site_id) site_id,action,asset_id
-				FROM certificate_site_binding_facts
-				WHERE tenant_scope_id=$1 ORDER BY site_id,sequence DESC
-			) binding WHERE binding.action='bind' AND binding.asset_id=$2
-		) OR EXISTS (
+		if err := tx.QueryRow(ctx, `SELECT certificate_asset_bound_551($1,$2) OR EXISTS (
 			SELECT 1
 			FROM certificate_asset_versions AS version
 			JOIN certificate_orders AS certificate_order
@@ -1068,6 +1065,14 @@ func (s *Store) Get(ctx context.Context, actor Actor, tenantScopeID, assetID uui
 	if asset.DeletedAt != nil {
 		return Asset{}, nil, ErrNotFound
 	}
+	// the detail carries the same sync state as its list row.
+	var syncState, syncFailure *string
+	if err := s.pool.QueryRow(ctx, `SELECT sync_state.state,sync_state.failure_code
+		FROM (SELECT $1::uuid AS id, $2::uuid AS tenant_scope_id) asset`+listSyncLateral,
+		assetID, tenantScopeID).Scan(&syncState, &syncFailure); err != nil {
+		return Asset{}, nil, fmt.Errorf("load certificate asset sync: %w", err)
+	}
+	asset.Sync = assetSync(syncState, syncFailure)
 	rows, err := s.pool.Query(ctx, `SELECT id FROM certificate_asset_versions
 		WHERE tenant_scope_id=$1 AND asset_id=$2 ORDER BY version`, tenantScopeID, assetID)
 	if err != nil {
@@ -1191,7 +1196,9 @@ func (s *Store) ListPage(ctx context.Context, actor Actor, request ListRequest) 
 	where += " AND " + statusFilter
 	offset := (int64(request.Page) - 1) * int64(request.Limit)
 	arguments = append(arguments, request.Limit, offset)
-	query := `SELECT asset.id,asset.display_id::text,asset.tenant_scope_id,asset.name,asset.remark,asset.source,asset.auto_renew,asset.disabled,asset.revision,
+	// The sync state is computed for the page's rows only.
+	query := `SELECT page.*,sync_state.state,sync_state.failure_code FROM (
+		SELECT asset.id,asset.display_id::text,asset.tenant_scope_id,asset.name,asset.remark,asset.source,asset.auto_renew,asset.disabled,asset.revision,
 		asset.created_by_user_id,creator.display_id::text,asset.updated_by_user_id,updater.display_id::text,
 		asset.created_at,asset.updated_at,asset.deleted_at,
 		CASE WHEN owner.id IS NULL THEN NULL ELSE jsonb_build_object('id',owner.id,
@@ -1205,7 +1212,9 @@ func (s *Store) ListPage(ctx context.Context, actor Actor, request ListRequest) 
 		JOIN users updater ON updater.id=asset.updated_by_user_id
 		LEFT JOIN users owner ON owner.id=asset.owner_user_id
 		WHERE ` + where +
-		fmt.Sprintf(" ORDER BY asset.created_at DESC,asset.id DESC LIMIT $%d OFFSET $%d", len(arguments)-1, len(arguments))
+		fmt.Sprintf(" ORDER BY asset.created_at DESC,asset.id DESC LIMIT $%d OFFSET $%d", len(arguments)-1, len(arguments)) +
+		`) page CROSS JOIN LATERAL (SELECT page.id AS id, page.tenant_scope_id AS tenant_scope_id) asset` + listSyncLateral +
+		` ORDER BY page.created_at DESC,page.id DESC`
 	rows, err := s.pool.Query(ctx, query, arguments...)
 	if err != nil {
 		return ListResult{}, fmt.Errorf("list certificate assets: %w", err)
@@ -1214,12 +1223,14 @@ func (s *Store) ListPage(ctx context.Context, actor Actor, request ListRequest) 
 	result := make([]Asset, 0)
 	for rows.Next() {
 		var asset Asset
+		var syncState, syncFailure *string
 		if err := rows.Scan(&asset.ID, &asset.DisplayID, &asset.TenantScopeID, &asset.Name, &asset.Remark, &asset.Source,
 			&asset.AutoRenew, &asset.Disabled, &asset.Revision, &asset.CreatedBy, &asset.CreatedByDisplayID, &asset.UpdatedBy,
 			&asset.UpdatedByDisplayID, &asset.CreatedAt,
-			&asset.UpdatedAt, &asset.DeletedAt, &asset.Owner, &asset.OwnerStatus, &asset.Tenant); err != nil {
+			&asset.UpdatedAt, &asset.DeletedAt, &asset.Owner, &asset.OwnerStatus, &asset.Tenant, &syncState, &syncFailure); err != nil {
 			return ListResult{}, err
 		}
+		asset.Sync = assetSync(syncState, syncFailure)
 		result = append(result, asset)
 	}
 	if err := rows.Err(); err != nil {
@@ -1282,13 +1293,21 @@ func (s *Store) ListBindings(ctx context.Context, actor Actor, tenantScopeID, as
 	if err := authorizeActor(ctx, s.pool, actor, tenantScopeID, false); err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT site_id,sequence,action,asset_id,version_id,is_default,
-		changed_by_user_id,changed_at FROM (
+	// a bound row carries its publication's sync state, by the
+	// rule of the list's sync filter (currentBindingPublications).
+	rows, err := s.pool.Query(ctx, `SELECT row_binding.site_id,row_binding.sequence,row_binding.action,row_binding.asset_id,
+		row_binding.version_id,row_binding.is_default,row_binding.changed_by_user_id,row_binding.changed_at,
+		CASE WHEN publication.site_id IS NULL THEN NULL WHEN publication.state='permanent_failed' THEN 'failed'
+			WHEN COALESCE(publication.state='succeeded' AND publication.applied,false) THEN 'complete' ELSE 'pending' END,
+		CASE WHEN publication.state='permanent_failed' THEN publication.failure_code END
+		FROM (
 			SELECT DISTINCT ON (site_id) site_id,sequence,action,asset_id,version_id,is_default,
 				changed_by_user_id,changed_at
 			FROM certificate_site_binding_facts WHERE tenant_scope_id=$1
 			ORDER BY site_id,sequence DESC
-		) current_binding WHERE asset_id=$2 ORDER BY site_id`, tenantScopeID, assetID)
+		) row_binding CROSS JOIN (SELECT $1::uuid AS tenant_scope_id,$2::uuid AS id) asset
+		LEFT JOIN LATERAL (`+currentBindingPublications+` AND current_binding.site_id=row_binding.site_id) publication ON true
+		WHERE row_binding.asset_id=$2 ORDER BY row_binding.site_id`, tenantScopeID, assetID)
 	if err != nil {
 		return nil, fmt.Errorf("list certificate asset bindings: %w", err)
 	}
@@ -1296,12 +1315,14 @@ func (s *Store) ListBindings(ctx context.Context, actor Actor, tenantScopeID, as
 	result := make([]Binding, 0)
 	for rows.Next() {
 		var action string
+		var syncState, syncFailure *string
 		binding := Binding{TenantScopeID: tenantScopeID}
 		if err := rows.Scan(&binding.SiteID, &binding.Revision, &action, &binding.AssetID,
-			&binding.VersionID, &binding.Default, &binding.ChangedBy, &binding.ChangedAt); err != nil {
+			&binding.VersionID, &binding.Default, &binding.ChangedBy, &binding.ChangedAt, &syncState, &syncFailure); err != nil {
 			return nil, err
 		}
 		binding.Bound = action == "bind"
+		binding.Sync = assetSync(syncState, syncFailure)
 		result = append(result, binding)
 	}
 	return result, rows.Err()

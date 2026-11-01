@@ -76,8 +76,13 @@ func TestCertificateAssetListAdvancedFiltersCoverEveryPage(t *testing.T) {
 		t.Fatalf("exact domains = %#v", exact)
 	}
 	// Unfiltered, the matches are on page 3 (28 assets, 10 per page).
-	if all := list(ListFilters{}, 3); all.Total != 28 || len(all.Items) != 8 {
+	all := list(ListFilters{}, 3)
+	if all.Total != 28 || len(all.Items) != 8 {
 		t.Fatalf("unfiltered page 3 = total %d items %d", all.Total, len(all.Items))
+	}
+	// page 3 keeps the newest-first order; an unbound asset has no sync state.
+	if all.Items[7].ID != within89.Asset.ID || all.Items[0].Sync != nil {
+		t.Fatalf("page 3 order/sync = %+v", all.Items)
 	}
 	if uploaded := list(ListFilters{Source: SourceACME}, 1); uploaded.Total != 0 {
 		t.Fatalf("acme source total = %d", uploaded.Total)

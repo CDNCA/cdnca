@@ -352,16 +352,10 @@
   }
 }
 
-/* TEL-UX-SUMMARY-SCOPE：汇总条各项分开排列，范围说明单独一行在前，免得与指标连成一串。 */
+/* TEL-UX-SUMMARY-SCOPE：汇总条各项分开排列，免得指标连成一串。 */
 .analytics-analysis-page .analytics-summary-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 20px;
   padding-block: 4px 8px;
-}
-
-.analytics-analysis-page .analytics-summary-strip > .analytics-summary-scope {
-  flex-basis: 100%;
-  color: var(--cdnca-color-text-secondary);
-  font-size: 12px;
 }

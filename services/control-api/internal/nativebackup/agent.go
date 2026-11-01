@@ -123,12 +123,19 @@ type MigrationTarget struct {
 	// Env is the target environment (fix-btenv): auto (default, detect the
 	// BaoTa panel), bt (coexist with BaoTa) or plain (dedicated host).
 	Env string `json:"env,omitempty"`
+	// GatewayHost is how nodes reach the new host's Gateway.
+	// Empty: when this host's Gateway is published by IP, Host when it is an
+	// IP; otherwise nodes are expected to follow a DNS switch.
+	GatewayHost string `json:"gateway_host,omitempty"`
 }
 
 func (target MigrationTarget) Validate() error {
 	if !hostPattern.MatchString(target.Host) || target.Port < 1 || target.Port > 65535 || !usernamePattern.MatchString(target.User) ||
 		!hostKeyPattern.MatchString(target.HostKeySHA256) || (target.Password == "") == (target.PrivateKey == "") {
 		return errors.New("migration target needs host, port, user, pinned host key and exactly one of password or private key")
+	}
+	if target.GatewayHost != "" && !ValidGatewayHost(target.GatewayHost) {
+		return errors.New("migration target gateway_host must be a lower-case DNS name or an IP address")
 	}
 	switch target.Env {
 	case "", "auto", "bt", "plain":

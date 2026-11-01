@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Button, Form, Input, InputNumber, Radio, Space, Table, Tag } from 'antd'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Button, Checkbox, Form, Input, InputNumber, Radio, Space, Table, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/auth'
 import { nodeSSHInstallApi, parseHosts, type SSHInstallJob } from '../api/nodeSSHInstall'
@@ -13,6 +13,7 @@ interface FormValues {
   auth: 'password' | 'private_key'
   password?: string
   private_key?: string
+  restrict_ssh?: boolean
 }
 
 // A succeeded job with one of these codes: installed and connected but not
@@ -29,11 +30,13 @@ const stateColors: Record<string, string> = {
 // operator confirms its host key fingerprint) and runs the same install
 // command the "copy command" tab shows. Secrets are sent once and never
 // shown again.
-export default function NodeSSHInstall({ getAccessToken, errorText }: {
+export default function NodeSSHInstall({ getAccessToken, errorText, single = false }: {
   getAccessToken: () => string | null
   errorText: (error: ApiError) => string
+  // single: one server per submit (the SSH tab's single install card).
+  single?: boolean
 }) {
-  const { t } = useTranslation('nodeSSHInstall')
+  const { t, i18n } = useTranslation('nodeSSHInstall')
   const [form] = Form.useForm<FormValues>()
   const [jobs, setJobs] = useState<SSHInstallJob[]>([])
   const [busy, setBusy] = useState(false)
@@ -88,7 +91,7 @@ export default function NodeSSHInstall({ getAccessToken, errorText }: {
     const accessToken = getAccessToken()
     if (!accessToken) return
     const hosts = parseHosts(values.hosts)
-    if (hosts.length === 0 || hosts.length > 100) {
+    if (hosts.length === 0 || hosts.length > 100 || (single && hosts.length !== 1)) {
       setError(t('validation.hosts'))
       return
     }
@@ -96,7 +99,8 @@ export default function NodeSSHInstall({ getAccessToken, errorText }: {
     setError(null)
     try {
       const created = await nodeSSHInstallApi.create(accessToken, {
-        hosts, port: values.port, username: values.username.trim(),
+        hosts, port: values.port, username: values.username.trim(), restrict_ssh: values.restrict_ssh === true,
+        language: i18n.resolvedLanguage ?? 'zh-CN',
         ...(values.auth === 'password' ? { password: values.password } : { private_key: values.private_key }),
       })
       if (!active.current) return
@@ -132,10 +136,14 @@ export default function NodeSSHInstall({ getAccessToken, errorText }: {
     {error ? <FeedbackWhen title={error} onClose={() => setError(null)} /> : null}
     <Form form={form} layout="vertical" onFinish={(values) => void submit(values)} requiredMark={false}
       initialValues={{ port: 22, username: 'root', auth: 'password' }}>
-      <Form.Item name="hosts" label={t('fields.hosts')} extra={t('help.hosts')}
-        rules={[{ required: true, whitespace: true, message: t('validation.hosts') }]}>
-        <Input.TextArea aria-label={t('fields.hosts')} rows={4} placeholder={t('placeholders.hosts')} />
-      </Form.Item>
+      {single
+        ? <Form.Item name="hosts" label={t('fields.host')} rules={[{ required: true, whitespace: true, message: t('validation.host') }]}>
+          <Input aria-label={t('fields.host')} autoComplete="off" spellCheck={false} placeholder={t('placeholders.host')} />
+        </Form.Item>
+        : <Form.Item name="hosts" label={t('fields.hosts')} extra={t('help.hosts')}
+          rules={[{ required: true, whitespace: true, message: t('validation.hosts') }]}>
+          <Input.TextArea aria-label={t('fields.hosts')} rows={4} placeholder={t('placeholders.hosts')} />
+        </Form.Item>}
       <Space wrap align="start">
         <Form.Item name="port" label={t('fields.port')} rules={[{ required: true, type: 'integer', min: 1, max: 65535, message: t('validation.port') }]}>
           <InputNumber aria-label={t('fields.port')} min={1} max={65535} precision={0} />
@@ -156,13 +164,31 @@ export default function NodeSSHInstall({ getAccessToken, errorText }: {
         : <Form.Item name="private_key" label={t('fields.privateKey')} extra={t('help.privateKey')} rules={[{ required: true, message: t('validation.secret') }]}>
           <Input.TextArea aria-label={t('fields.privateKey')} rows={4} autoComplete="off" spellCheck={false} />
         </Form.Item>}
+      <Form.Item name="restrict_ssh" valuePropName="checked" extra={t('help.restrictSSH')}>
+        <Checkbox>{t('fields.restrictSSH')}</Checkbox>
+      </Form.Item>
       <Button type="primary" htmlType="submit" loading={busy}>{t('actions.start')}</Button>
     </Form>
     {refreshError ? <FeedbackWhen type="warning" title={t('errors.refreshFailed', { reason: refreshError })} /> : null}
     {jobs.length > 0 ? <>
       <p className="node-install-description">{t('help.hostKey')}</p>
       {refreshedAt ? <p className="node-install-description">{t('help.refreshedAt', { time: refreshedAt.toLocaleTimeString() })}</p> : null}
-      <Table<SSHInstallJob> rowKey="id" size="small" pagination={false} dataSource={jobs} columns={[
+      <SSHInstallJobsTable jobs={jobs} acting={acting} onAct={(job, action) => void act(job, action)} />
+    </> : null}
+  </div>
+}
+
+// SSHInstallJobsTable lists install jobs with their host key and progress;
+// extraAction adds a per-row action (batch retry).
+export function SSHInstallJobsTable({ jobs, acting, onAct, extraAction }: {
+  jobs: SSHInstallJob[]
+  acting: string[]
+  onAct: (job: SSHInstallJob, action: 'confirm' | 'cancel') => void
+  extraAction?: (job: SSHInstallJob) => ReactNode
+}) {
+  const { t } = useTranslation('nodeSSHInstall')
+  return <div className="node-ssh-jobs">
+    <Table<SSHInstallJob> rowKey="id" size="small" pagination={false} dataSource={jobs} columns={[
         { title: t('columns.host'), render: (_, job) => `${job.host}:${job.port}` },
         { title: t('columns.state'), render: (_, job) => notServing(job)
           ? <Tag color={job.failure_code === 'installed_pending_ticket' || job.failure_code === 'installed_pending_initialization' ? 'warning' : 'error'}>{t(`states.${job.failure_code}`)}</Tag>
@@ -173,11 +199,11 @@ export default function NodeSSHInstall({ getAccessToken, errorText }: {
           : (job.progress.at(-1) ?? '').replace(/^\[cdnca-edge\] /, '') },
         { title: t('columns.actions'), render: (_, job) => <Space>
           {job.state === 'awaiting_host_key'
-            ? <Button size="small" type="primary" loading={acting.includes(job.id)} onClick={() => void act(job, 'confirm')}>{t('actions.confirm')}</Button> : null}
+            ? <Button size="small" type="primary" loading={acting.includes(job.id)} onClick={() => onAct(job, 'confirm')}>{t('actions.confirm')}</Button> : null}
           {['awaiting_host_key', 'pending', 'running'].includes(job.state)
-            ? <Button size="small" danger disabled={acting.includes(job.id)} onClick={() => void act(job, 'cancel')}>{t('actions.cancel')}</Button> : null}
+            ? <Button size="small" danger disabled={acting.includes(job.id)} onClick={() => onAct(job, 'cancel')}>{t('actions.cancel')}</Button> : null}
+          {extraAction?.(job)}
         </Space> },
       ]} />
-    </> : null}
   </div>
 }

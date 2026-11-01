@@ -164,6 +164,7 @@ func anonymousNotificationPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "observability_notification")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

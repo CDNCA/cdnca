@@ -207,8 +207,9 @@ paths:
       tags: [Certificate assets]
       operationId: downloadCertificateAsset
       summary: Download the current certificate version with its private key
-      description: >-
-        下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the
+      description: "Download certificate. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the latest activated version. Requires certificates.manage; a tenant downloads only its own certificates. Audited as certificate.asset.download in the same transaction before the key is returned. A revoked current version returns 409 certificate_asset_download_unavailable."
+      x-description-zh: >-
+        fix-certops 下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the
         latest activated version. Requires certificates.manage; a tenant downloads only its own certificates.
         Audited as certificate.asset.download in the same transaction before the key is returned.
         A revoked current version returns 409 certificate_asset_download_unavailable.
@@ -604,6 +605,19 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         deleted_at: {type: string, format: date-time}
+        sync:
+          $ref: '#/components/schemas/CertificateAssetSync'
+          description: On list rows and the detail. Publication of the asset's current site bindings, as the sync filter decides it; absent for an asset bound to no site.
+    CertificateAssetSync:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: {type: string, enum: [complete, pending, failed]}
+        failure_code:
+          type: string
+          pattern: '^[a-z][a-z0-9._-]{0,127}$'
+          description: 'When failed: the first permanent failure code of the bindings'' publications by site, <code>[.<node ID>] (for example target_node_not_carried.<uuid>).'
     CertificateAssetTenant:
       type: object
       additionalProperties: false
@@ -715,6 +729,9 @@ components:
         bound: {type: boolean}
         changed_by: {$ref: '#/components/schemas/CanonicalUUID'}
         changed_at: {type: string, format: date-time}
+        sync:
+          $ref: '#/components/schemas/CertificateAssetSync'
+          description: On the binding list only, for a current bound row. Publication of this binding, by the rule of the asset sync state; failure_code is this site's permanent failure code.
     CertificateAssetBindingList:
       type: object
       additionalProperties: false

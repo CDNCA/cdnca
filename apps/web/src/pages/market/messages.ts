@@ -10,11 +10,13 @@ const zhCN = {
     free: '免费', paid: '收费', one_time: '{{price}} 买断', month: '{{price}} / 月', year: '{{price}} / 年', none: '暂未开售',
     promo: '限免至 {{until}}，到期后 {{then}}',
     trial: '可试用 {{days}} 天',
+    edition: { community: '按本主控的社区版价格', commercial: '按本主控的商业版价格' },
   },
   state: {
     purchase: '购买', get: '获取', distributing: '使用权已取得，正在同步', enable: '去启用', enabled: '已启用', activating: '授权生效中',
     revoked: '授权失效', revokedHint: '这个插件的授权已结束或已改绑到其他主控，本主控不能再启用它。续费或在授权端改绑回来后恢复。',
     activatingHint: '已购买。授权端正在为本主控重签授权，通常一分钟内生效。',
+    installed: '已安装，可使用', goManage: '去管理',
     enableHint: '已到达本主控。到对应页面启用：', enableTenant: '已到达本主控。由租户管理员在“插件市场”确认权限后启用。',
     pendingConfirm: '已购买，待你确认',
     distributingHint: '平台正在验证并分发到本主控；需要确认权限时，由对应管理员确认后才会出现在本机。到达后这里会显示“去启用”。',
@@ -23,6 +25,16 @@ const zhCN = {
     goMine: '去我的插件确认',
   },
   card: { details: '详情', latest: '最新 {{version}}' },
+  owned: {
+    title: '本主控已拥有的插件', hint: '已购或已领取、授权绑定到本主控的插件。功能类插件由授权自动启用，到对应页面配置；主题和规则包需要主控管理员在下方确认安装。',
+    name: '插件', kind: '类型', status: '状态', actions: '操作', configure: '去配置', noPage: '无独立配置页', confirmBelow: '在下方安装记录里确认', confirmByAdmin: '等待主控管理员确认安装',
+    states: {
+      enabled: '已启用', activating: '授权生效中', installed: '已安装', enable: '已安装，待启用', distributing: '正在同步到本主控',
+      pendingConfirm: '待确认安装', revoked: '授权失效',
+    },
+    emptyTitle: '本主控还没有插件', emptyDescription: '在“浏览”里获取或购买插件后会显示在这里。',
+    platformTitle: '主题与规则包安装记录',
+  },
   detail: {
     publisher: '发布者', namespace: '命名空间', kind: '类型', version: '版本', permissions: '权限', noPermissions: '没有声明权限',
     highRisk: '高风险权限', versions: '版本历史', plans: '价格', menus: '页面与菜单', origin: '页面来源',
@@ -65,11 +77,13 @@ const enUS: Messages = {
     free: 'Free', paid: 'Paid', one_time: '{{price}} one-time', month: '{{price}} / month', year: '{{price}} / year', none: 'Not on sale',
     promo: 'Free until {{until}}, then {{then}}',
     trial: '{{days}}-day trial',
+    edition: { community: 'Community edition price of this controller', commercial: 'Commercial edition price of this controller' },
   },
   state: {
     purchase: 'Buy', get: 'Get', distributing: 'Licence held, syncing', enable: 'Enable', enabled: 'Enabled', activating: 'Activating',
     revoked: 'License lost', revokedHint: 'The license ended or was moved to another controller, so this controller can no longer enable it. Renew or move it back in the license portal to restore it.',
     activatingHint: 'Purchased. The license service is re-signing this controller\'s license; it usually takes under a minute.',
+    installed: 'Installed, ready to use', goManage: 'Manage',
     enableHint: 'On this controller. Enable it on:', enableTenant: 'On this controller. A tenant administrator approves its permissions in Plugin marketplace to enable it.',
     pendingConfirm: 'Purchased, awaiting your confirmation',
     distributingHint: 'The platform is verifying it and delivering it to this controller; where permissions need approval, it appears here once the right administrator approves them. Enable shows up here when it arrives.',
@@ -78,6 +92,16 @@ const enUS: Messages = {
     goMine: 'Confirm in My plugins',
   },
   card: { details: 'Details', latest: 'Latest {{version}}' },
+  owned: {
+    title: 'Plugins this controller owns', hint: 'Plugins bought or claimed with a licence bound to this controller. Feature plugins are switched on by the licence and configured on their pages; themes and rule packs need the controller administrator to confirm installation below.',
+    name: 'Plugin', kind: 'Type', status: 'Status', actions: 'Actions', configure: 'Configure', noPage: 'No settings page', confirmBelow: 'Confirm it in the installations below', confirmByAdmin: 'Waiting for the controller administrator to confirm',
+    states: {
+      enabled: 'Enabled', activating: 'Activating', installed: 'Installed', enable: 'Installed, not enabled', distributing: 'Syncing to this controller',
+      pendingConfirm: 'Awaiting installation confirmation', revoked: 'License lost',
+    },
+    emptyTitle: 'This controller has no plugins yet', emptyDescription: 'Plugins you get or buy in Browse appear here.',
+    platformTitle: 'Theme and rule pack installations',
+  },
   detail: {
     publisher: 'Publisher', namespace: 'Namespace', kind: 'Type', version: 'Version', permissions: 'Permissions', noPermissions: 'No permissions declared',
     highRisk: 'High-risk permission', versions: 'Version history', plans: 'Pricing', menus: 'Pages and menus', origin: 'Page origin',

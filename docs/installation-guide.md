@@ -48,6 +48,8 @@
 
 Gateway 的注册端口和 mTLS 通道端口：不传 `--gateway-ports <注册>,<通道>` 时，安装器在 20000–29999 中随机选两个本机空闲端口，安装结束时打印，并写入 `/etc/cdnca-control/gateway.env`。防火墙和 CDN 回源按这两个实际端口配置。需要固定端口时显式传入，例如 `--gateway-ports 21443,21444`。
 
+用 IP 安装（`--master-host <IP>`）后要改用域名或换域名时，不需要重装：在主控上执行 `control-api control-host bind --domain <域名>`（系统设置 → 系统 →「管理端地址 / 绑定域名」给出命令），见 [docs/runbooks/control-host-bind-domain.md](runbooks/control-host-bind-domain.md)。
+
 ### 1.3 安装流程
 
 1. 预检系统要求、公网端口与已有安装

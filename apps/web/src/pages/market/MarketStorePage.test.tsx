@@ -6,7 +6,7 @@ import { changeLocale } from '../../i18n'
 import { authResponse, principal } from '../../test/fixtures'
 import { renderWithProviders } from '../../test/render'
 import MarketStorePage from './MarketStorePage'
-import { enablePath, headlinePlan, publisherOf, storeState } from './marketModel'
+import { configPath, enablePath, headlinePlan, ownedRows, publisherOf, storeState } from './marketModel'
 import { marketStoreMessages } from './messages'
 
 function json(body: unknown, status = 200): Response {
@@ -65,7 +65,7 @@ describe('market model', () => {
     // F1：许可已取得但本主控还没有安装记录——正在同步，不提前“去启用”，也不再给“下载”。
     expect(storeState(third as never, [license('bob.theme')] as never, [], [])).toBe('distributing')
     expect(storeState(third as never, [license('bob.theme')] as never, lib(false), [])).toBe('enable')
-    expect(storeState(third as never, [license('bob.theme')] as never, lib(true), [])).toBe('enabled')
+    expect(storeState(third as never, [license('bob.theme')] as never, lib(true), [])).toBe('installed')
     expect(storeState(third as never, [], lib(false, false, true), [])).toBe('revoked')
     expect(storeState(official as never, [license('io.cdnca.waf-pro')] as never, [], [])).toBe('activating')
     expect(storeState(official as never, [license('io.cdnca.waf-pro')] as never, [], ['module.waf-pro'])).toBe('enabled')
@@ -73,6 +73,18 @@ describe('market model', () => {
     expect(enablePath({ kind: 'theme', applies_to: ['user'] })).toBeNull()
     expect(enablePath({ kind: 'theme', applies_to: ['admin', 'user'] })).toBeNull()
     expect(enablePath({ kind: 'rule_pack' })).toBe('/site/rule-packs')
+  })
+
+  // 安装≠功能生效。平台主题/规则包的“已启用”只代表安装可用，不能冒充槽位已应用。
+  // 官方功能码由租约授予才算“已启用”（见上面 storeState 断言）；插件安装启用不等于主题槽已应用。
+  it('shows an installed theme as ready to use, never as in use, with no theme management link', async () => {
+    vi.stubGlobal('fetch', routes({ licenses: [license('bob.theme')],
+      library: [{ plugin_id: 'bob.theme', installed: true, enabled: true, withdrawn: false }] }))
+    renderWithProviders(<MarketStorePage />)
+    const themeCard = await card('bob.theme')
+    expect(await within(themeCard).findByText('已安装，可使用')).toBeInTheDocument()
+    expect(within(themeCard).queryByText('已启用')).toBeNull()
+    expect(within(themeCard).queryByRole('link', { name: '去主题管理' })).toBeNull()
   })
 
   it('keeps zh-CN, en-US and pseudo locales structurally complete', () => {
@@ -250,6 +262,23 @@ describe('MarketStorePage', () => {
     expect(within(drawer).getAllByText('2.1.0').length).toBeGreaterThan(0)
   })
 
+  // store-pricing (user 10-31): the market prices buyer reads for this controller's edition (market 068); the card and
+  // the detail show that price only — a community controller sees its monthly price, never the commercial 限免.
+  it('shows the price of this controller edition and names the edition in the detail', async () => {
+    const community = { ...paidPlan, kind: 'subscription', interval: 'month', price_minor: 1990, edition: 'community' }
+    vi.stubGlobal('fetch', routes({ licenses: [], library: [] }, {
+      '/v1/admin/market/plugins?': () => json({ items: [{ ...official, price_plans: [community] }], next_cursor: null }),
+      [`/v1/admin/market/plugins/${official.id}`]: () => json({ plugin: official, versions: [], price_plans: [community] }),
+    }))
+    renderWithProviders(<MarketStorePage />)
+    const o = await card('io.cdnca.waf-pro')
+    expect(within(o).getByText('19.90 CNY / 月')).toBeInTheDocument()
+    expect(within(o).queryByText(/限免/)).toBeNull()
+    fireEvent.click(within(o).getByRole('button', { name: official.title }))
+    const drawer = await screen.findByRole('dialog')
+    expect(await within(drawer).findByText('按本主控的社区版价格')).toBeInTheDocument()
+  })
+
   it('lets a browse-only administrator look but not buy', async () => {
     const admin = principal({ scope_kind: 'platform', tenant_id: null, roles: ['custom'], permissions: ['marketplace.browse'] })
     useSessionStore.getState().setSession({ ...authResponse(admin), access_token: 'store-token' }, admin)
@@ -369,5 +398,90 @@ describe('market runtime off (W3)', () => {
     mounted = true
     fireEvent.click(screen.getByRole('button', { name: '重新检测' }))
     expect(await screen.findByRole('tab', { name: '浏览' })).toBeInTheDocument()
+  })
+})
+
+// 已购显示中文名；我的插件列出本主控已拥有的全部插件（官方模块也算），可配置的给入口。
+describe('我的插件与已购名称', () => {
+  const autodefense = { ...official, id: '44444444-4444-4444-8444-444444444444', plugin_id: 'io.cdnca.autodefense', kind: 'module',
+    title: '智能自动防御', feature_code: 'module.autodefense', price_plans: [freePlan] }
+  const migrate = { ...autodefense, id: '55555555-5555-4555-8555-555555555555', plugin_id: 'io.cdnca.migrate-import', title: '迁移导入',
+    feature_code: 'module.migrate.import' }
+  const catalogRoutes = (state: { licenses: unknown[]; library: unknown[]; modules?: string[] }) => routes(state, {
+    '/v1/admin/market/plugins?': () => json({ items: [official, certified, third, autodefense, migrate], next_cursor: null }),
+    '/v1/plugin-ui/pages': () => json({ items: [] }),
+    // fetchGrantedModules 读 response.json()，通用 json() 夹具只有 text()。
+    '/v1/modules': () => ({ ok: true, status: 200, json: async () => ({ status: 'valid', lease_serial: 1, modules: state.modules ?? [] }) }) as unknown as Response,
+  })
+
+  it('derives owned rows and the configure page from the feature code, the ui page or the kind', () => {
+    // 社区版没有自动防御、迁移导入与攻击升级页面；有页面的官方功能码（CRS 档位）落到对应页。
+    expect(configPath({ ...autodefense, feature_code: 'pack.crs' } as never, [])).toBe('/site/waf-rule')
+    expect(configPath(certified as never, [{ plugin_id: 'acme.reports', page_id: 'r', mount: 'menu', role: 'admin' }])).toBe('/plugin-ui/acme.reports/r')
+    expect(configPath(third as never, [])).toBeNull()
+    expect(configPath({ ...autodefense, feature_code: 'module.unknown' } as never, [])).toBeNull()
+    const catalog = new Map([autodefense, third].map((p) => [p.plugin_id, p as never]))
+    const rows = ownedRows([license('io.cdnca.autodefense'), license('bob.theme'), { ...license('gone.x'), status: 'expired' }] as never,
+      [{ plugin_id: 'old.y', installed: true, enabled: false, withdrawn: true }], ['module.autodefense'], catalog, () => '/x')
+    expect(rows.map((r) => [r.pluginID, r.state, r.path])).toEqual([
+      ['io.cdnca.autodefense', 'enabled', '/x'], ['bob.theme', 'pendingConfirm', null], ['old.y', 'revoked', null]])
+  })
+
+  it('lists official modules this controller owns under 我的插件 with their names and a configure link', async () => {
+    const admin = principal({ scope_kind: 'platform', tenant_id: null, roles: ['custom'],
+      permissions: ['marketplace.purchase', 'platform.admin', 'plugin_installations.platform.read'] })
+    useSessionStore.getState().setSession({ ...authResponse(admin), access_token: 'store-token' }, admin)
+    vi.stubGlobal('fetch', catalogRoutes({ licenses: [license('io.cdnca.autodefense'), license('io.cdnca.migrate-import')], library: [],
+      modules: ['module.autodefense', 'module.migrate.import'] }))
+    renderWithProviders(<MarketStorePage />)
+    fireEvent.click(await screen.findByRole('tab', { name: '我的插件' }))
+    const owned = (await screen.findByRole('heading', { name: '本主控已拥有的插件' })).closest('section')!
+    const row = (await within(owned).findByText('智能自动防御')).closest('tr')!
+    expect(within(row).getByText('io.cdnca.autodefense')).toBeInTheDocument()
+    expect(await within(row).findByText('已启用')).toBeInTheDocument()
+    // 社区版没有自动防御与迁移导入页面，已拥有但不给去配置入口。
+    expect(within(row).queryByRole('link', { name: '去配置' })).toBeNull()
+    expect(within(within(owned).getByText('迁移导入').closest('tr')!).queryByRole('link', { name: '去配置' })).toBeNull()
+    expect(within(owned).queryByText('本主控还没有插件')).toBeNull()
+    // 主题与规则包的安装确认仍在，作为其中一节。
+    expect(screen.getByRole('heading', { name: '主题与规则包安装记录' })).toBeInTheDocument()
+  })
+
+  it('shows 我的插件 to a buyer without platform install rights and says plainly when nothing is owned', async () => {
+    vi.stubGlobal('fetch', catalogRoutes({ licenses: [], library: [] }))
+    renderWithProviders(<MarketStorePage />)
+    fireEvent.click(await screen.findByRole('tab', { name: '我的插件' }))
+    expect(await screen.findByText('本主控还没有插件')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '主题与规则包安装记录' })).toBeNull()
+  })
+
+  it('names purchased plugins from the catalog and keeps the ID as secondary text', async () => {
+    vi.stubGlobal('fetch', catalogRoutes({ licenses: [license('io.cdnca.autodefense'), license('vanished.plugin')], library: [] }))
+    renderWithProviders(<MarketStorePage />)
+    fireEvent.click(await screen.findByRole('tab', { name: '已购' }))
+    const row = (await screen.findByText('智能自动防御')).closest('tr')!
+    expect(within(row).getByText('io.cdnca.autodefense')).toBeInTheDocument()
+    // 目录里已没有的插件回退为 plugin_id，只显示一次。
+    expect(screen.getAllByText('vanished.plugin')).toHaveLength(1)
+  })
+
+  // 名称只按已购/已装的插件 ID 批量取（不再读 200 条目录），英文界面显示英文名，没有则回退中文。
+  it('looks names up by the owned plugin ids and shows the English name in en-US', async () => {
+    await changeLocale('en-US')
+    const fetchMock = routes({ licenses: [license('io.cdnca.autodefense'), license('io.cdnca.migrate-import')], library: [] }, {
+      '/v1/admin/market/plugins?plugin_ids=': () => json({ items: [{ ...autodefense, title_en: 'Smart Auto Defense' }, migrate], next_cursor: null }),
+      '/v1/admin/market/plugins?': () => json({ items: [], next_cursor: null }),
+      '/v1/plugin-ui/pages': () => json({ items: [] }),
+      '/v1/modules': () => ({ ok: true, status: 200, json: async () => ({ status: 'valid', lease_serial: 1, modules: [] }) }) as unknown as Response,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<MarketStorePage />)
+    fireEvent.click(await screen.findByRole('tab', { name: 'Purchased' }))
+    expect(await screen.findByText('Smart Auto Defense')).toBeInTheDocument()
+    // 没有英文名的回退中文。
+    expect(screen.getByText('迁移导入')).toBeInTheDocument()
+    const sent = fetchMock.mock.calls.map(([path]) => String(path)).filter((path) => path.includes('plugin_ids='))
+    expect(sent).toContain('/v1/admin/market/plugins?plugin_ids=io.cdnca.autodefense%2Cio.cdnca.migrate-import')
+    expect(fetchMock.mock.calls.some(([path]) => String(path).includes('limit=200'))).toBe(false)
   })
 })

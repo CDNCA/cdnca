@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -978,5 +979,29 @@ func writeProcessFixture(t *testing.T, pidFile string, identity processIdentity)
 	writePIDFixture(t, pidFile, identity.PID)
 	if err := os.WriteFile(pidFile+".identity", []byte(formatProcessRecord(identity)), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// node-e2e 10-31：78/85（Ubuntu 24.04，nobody 组名为 nogroup）上四层预检
+// getgrnam("nobody") failed；原生节点须与动态路由同样以 -g 传 user 指令。
+func TestOpenRestyGlobalsPrecedeRuntimeDirectives(t *testing.T) {
+	root := t.TempDir()
+	argsFile := filepath.Join(root, "args")
+	binary := filepath.Join(root, "openresty")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+argsFile+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	controller, candidate := testPortPrecheck(t, Config{}, nil)
+	controller.binary = binary
+	controller.ConfigureGlobals("user cdnca-runtime cdnca-runtime;")
+	if err := controller.Precheck(context.Background(), candidate); err != nil {
+		t.Fatalf("Precheck() error = %v", err)
+	}
+	content, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "-g\nuser cdnca-runtime cdnca-runtime; pid ") {
+		t.Fatalf("precheck arguments lack the user directive:\n%s", content)
 	}
 }

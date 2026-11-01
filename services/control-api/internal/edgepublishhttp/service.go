@@ -230,7 +230,8 @@ func (s *Service) ListPublications(
 	if failure := page.AutomaticFailure; failure != nil {
 		switch failure.Reason {
 		case edgepublish.AutomaticFailureNoTargetNodes, edgepublish.AutomaticFailureNodeCapability,
-			edgepublish.AutomaticFailureNodeArtifactsSyncing, edgepublish.AutomaticFailureNodeScopeConflict:
+			edgepublish.AutomaticFailureNodeArtifactsSyncing, edgepublish.AutomaticFailureNodeScopeConflict,
+			edgepublish.AutomaticFailureSiteConfigInvalid:
 		default:
 			return PublicationPageView{}, ErrInvalidResponse
 		}
@@ -734,6 +735,9 @@ func deploymentView(item edgedeployment.DeploymentSnapshot, audience string, pro
 		ID: item.ID, Attempt: item.Attempt, MaxAttempts: item.MaxAttempts, State: item.State,
 		ErrorCode: item.ErrorCode, CreatedAt: formatTime(item.CreatedAt), UpdatedAt: formatTime(item.UpdatedAt),
 		CanRetry: item.CanRetry, Superseded: item.Superseded, Frozen: item.Frozen,
+	}
+	if !item.Superseded && !item.Frozen {
+		result.ErrorMessage = item.ErrorMessage
 	}
 	if len(progressive) != 0 && progressive[0] {
 		if item.Cohort < 0 || item.Cohort > 10000 {

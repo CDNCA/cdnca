@@ -18,6 +18,7 @@ import (
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -247,6 +248,7 @@ func TestPostgresJetStreamPublisherLifecycle(t *testing.T) {
 
 func newIntegrationFixture(t *testing.T, databaseURL string) *integrationFixture {
 	t.Helper()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "edge_outbox")
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {

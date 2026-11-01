@@ -30,10 +30,14 @@ import (
 )
 
 type Config struct {
-	HTTPAddr                           string
-	DatabaseURL                        string
-	AccessSecret                       string
-	APIKeyPepper                       []byte
+	HTTPAddr     string
+	DatabaseURL  string
+	AccessSecret string
+	APIKeyPepper []byte
+	// NodeSSHControllerCIDRs: the controller's egress addresses nodes see
+	// SSH from (CDNCA_NODE_SSH_CONTROLLER_CIDRS, comma separated). Empty:
+	// "only the controller may SSH" cannot be turned on.
+	NodeSSHControllerCIDRs             []string
 	APIKeyPepperKeyring                apikeycredential.PepperKeyring
 	APIKeyTrustedProxyCIDRs            []string
 	APIKeyMaxProxyHops                 int
@@ -414,6 +418,11 @@ func Load() (Config, error) {
 	}
 	if len(cfg.AccessSecret) < 32 {
 		return Config{}, errors.New("ACCESS_TOKEN_SECRET must contain at least 32 bytes")
+	}
+	for _, value := range strings.Split(os.Getenv("CDNCA_NODE_SSH_CONTROLLER_CIDRS"), ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			cfg.NodeSSHControllerCIDRs = append(cfg.NodeSSHControllerCIDRs, value)
+		}
 	}
 	apiKeyPepperVersion := os.Getenv("API_KEY_PEPPER_VERSION")
 	encodedAPIKeyPepper := os.Getenv("API_KEY_PEPPER_BASE64")

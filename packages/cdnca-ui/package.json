@@ -12,7 +12,9 @@
     "./installer-command": "./src/installerCommand.ts",
     "./password-policy": "./src/passwordPolicy.ts",
     "./offer-terms": "./src/offerTerms.ts",
-    "./market-reasons": "./src/marketReasons.ts"
+    "./market-reasons": "./src/marketReasons.ts",
+    "./stale-chunk-reload": "./src/staleChunkReload.ts",
+    "./prefetch": "./src/prefetch.ts"
   },
   "peerDependencies": {
     "antd": "5.29.3",

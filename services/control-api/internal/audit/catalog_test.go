@@ -106,6 +106,7 @@ var catalogOnlyActions = map[string]bool{
 	"rule.intel.rollout.rollback":  true, // license-service licensing.RuleIntelRolloutRollbackAction
 	"rule.intel.rule.withdraw":     true, // license-service licensing.RuleIntelRuleWithdrawAction
 	"rule.intel.rule.restore":      true, // license-service licensing.RuleIntelRuleRestoreAction
+	"system.geo_db.update":         true, // market-service cmd/market-service auditGeoDB (market_audit_events)
 }
 
 // dynamicActionSites lists, per "<file>:<function>", every action an Action

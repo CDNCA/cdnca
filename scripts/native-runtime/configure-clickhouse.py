@@ -100,6 +100,8 @@ ROLLUPS = {
     "security_event_query_payload_mv_v1": "security_event_query_payload_state_v1",
     "security_event_evidence_mv_v1": "security_event_evidence_state_v1",
     "security_event_count_mv_v1": "security_event_count_state_v1",
+    "access_event_version_digest_mv_v1": "access_event_version_digest_v1",
+    "security_event_version_digest_mv_v1": "security_event_version_digest_v1",
 }
 RETENTION_TTL_TABLES = [
     "access_events", "access_event_latest_state_v1", "access_event_query_index_state_v1",
@@ -306,6 +308,8 @@ def native_clickhouse_grants(database, execute):
         execute(f"GRANT INSERT ON {database}.{target} TO {rollup_user}")
         execute(f"ALTER TABLE {database}.{view} MODIFY SQL SECURITY DEFINER DEFINER = {rollup_user}")
     execute(f"GRANT SELECT ON {database}.* TO {query_user}")
+    # analyticslog/replica_health.go reads system.replicas as the query identity.
+    execute(f"GRANT SELECT ON system.replicas TO {query_user}")
     execute(f"GRANT SELECT ON system.columns TO {ingest_user}")
     for table in ["access_events", "security_events", "connections_ingest_receipts_v1", "l4_session_facts_v1", "l4_session_logs_v1",
                   "autodefense_verdicts_v1", "node_security_events_v1", "cc_rule_stats_v1", "subscription_minutes_v1",

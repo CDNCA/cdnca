@@ -63,16 +63,55 @@ if(
     fromUnixTimestamp64Milli({snapshot_ms:Int64}, 'UTC'),
 	    now64(3, 'UTC') - INTERVAL 1 MILLISECOND
 ) AS snapshot_at,
+-- the page reads only the segment [segment_from, to) of the
+-- window chosen by the client (querySegmentedPage); when it yields row_limit
+-- rows they are the window's newest, every event outside it being older.
+fromUnixTimestamp64Milli({segment_from_ms:Int64}, 'UTC') AS segment_from,
+-- Ambiguous events (two payloads at one ingested_at) anywhere in the window
+-- stay candidates whatever the segment, so they still sort first. The client
+-- finds them in migration 030's digest table (one streaming FINAL pass, the
+-- scalar count skips the index scan when there are none); keys are
+-- cityHash64(event_id), and an event that merely shares a key is resolved
+-- from the merged states like any candidate. conflict_scan 0 skips both on a
+-- later segment once the first one proved the window has none.
+conflict_keys AS
+(
+	SELECT DISTINCT event_key
+	FROM access_event_version_digest_v1 FINAL
+	PREWHERE {conflict_scan:UInt8} = 1
+		AND metric_version = 1
+		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
+		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
+	WHERE ingested_at <= snapshot_at AND version_digest_min != version_digest_max
+),
+conflict_event_ids AS
+(
+	SELECT event_id
+	FROM access_event_query_index_state_v1
+	PREWHERE {conflict_scan:UInt8} = 1
+		AND metric_version = 1
+		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
+		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
+		AND (SELECT count() FROM conflict_keys) > 0
+		AND cityHash64(event_id) IN (SELECT event_key FROM conflict_keys)
+	WHERE ingested_at <= snapshot_at
+	GROUP BY event_id
+),
 candidate_event_ids AS
 (
 	SELECT event_id
 	FROM access_event_query_index_state_v1
 	PREWHERE metric_version = 1
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
-		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND occurred_at >= segment_from
 		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
+		AND ({has_cursor:UInt8} = 0 OR occurred_at <= fromUnixTimestamp64Milli({cursor_occurred_at_ms:Int64}, 'UTC'))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
+	UNION DISTINCT
+	SELECT event_id FROM conflict_event_ids
 ),
 ` + hostEventIDsHead + "access_event_query_payload_state_v1" + hostEventIDsTail + `selected_rows AS
 (
@@ -90,12 +129,17 @@ candidate_event_ids AS
 		FROM access_event_query_index_state_v1
 		PREWHERE metric_version = 1
 			AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
+			-- Only the window's candidates, filtered before the state columns
+			-- are read (an INNER JOIN after the scan read the scope's whole
+			-- retention per page, log-read-perf). All versions of a candidate
+			-- are still merged.
+			AND event_id IN (SELECT event_id FROM candidate_event_ids)
 		WHERE ingested_at <= snapshot_at
 	) AS access
-	INNER JOIN candidate_event_ids USING (event_id)
 	GROUP BY access.event_id
 	HAVING durable_version_count > 1 OR
 		(tupleElement(latest_filter, 1) >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND tupleElement(latest_filter, 1) >= segment_from
 		AND tupleElement(latest_filter, 1) < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
 		AND ({has_host:UInt8} = 0 OR event_id IN (SELECT event_id FROM host_event_ids))
 		AND ({has_site:UInt8} = 0 OR tupleElement(latest_filter, 2) = toUUID({site_id:String}))
@@ -197,16 +241,55 @@ if(
     fromUnixTimestamp64Milli({snapshot_ms:Int64}, 'UTC'),
 	    now64(3, 'UTC') - INTERVAL 1 MILLISECOND
 ) AS snapshot_at,
+-- the page reads only the segment [segment_from, to) of the
+-- window chosen by the client (querySegmentedPage); when it yields row_limit
+-- rows they are the window's newest, every event outside it being older.
+fromUnixTimestamp64Milli({segment_from_ms:Int64}, 'UTC') AS segment_from,
+-- Ambiguous events (two payloads at one ingested_at) anywhere in the window
+-- stay candidates whatever the segment, so they still sort first. The client
+-- finds them in migration 030's digest table (one streaming FINAL pass, the
+-- scalar count skips the index scan when there are none); keys are
+-- cityHash64(event_id), and an event that merely shares a key is resolved
+-- from the merged states like any candidate. conflict_scan 0 skips both on a
+-- later segment once the first one proved the window has none.
+conflict_keys AS
+(
+	SELECT DISTINCT event_key
+	FROM security_event_version_digest_v1 FINAL
+	PREWHERE {conflict_scan:UInt8} = 1
+		AND metric_version = 1
+		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
+		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
+	WHERE ingested_at <= snapshot_at AND version_digest_min != version_digest_max
+),
+conflict_event_ids AS
+(
+	SELECT event_id
+	FROM security_event_query_index_state_v1
+	PREWHERE {conflict_scan:UInt8} = 1
+		AND metric_version = 1
+		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
+		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
+		AND (SELECT count() FROM conflict_keys) > 0
+		AND cityHash64(event_id) IN (SELECT event_key FROM conflict_keys)
+	WHERE ingested_at <= snapshot_at
+	GROUP BY event_id
+),
 candidate_event_ids AS
 (
 	SELECT event_id
 	FROM security_event_query_index_state_v1
 	PREWHERE metric_version = 1
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
-		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND occurred_at >= segment_from
 		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
+		AND ({has_cursor:UInt8} = 0 OR occurred_at <= fromUnixTimestamp64Milli({cursor_occurred_at_ms:Int64}, 'UTC'))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
+	UNION DISTINCT
+	SELECT event_id FROM conflict_event_ids
 ),
 ` + hostEventIDsHead + "security_event_query_payload_state_v1" + hostEventIDsTail + `selected_rows AS
 (
@@ -224,12 +307,17 @@ candidate_event_ids AS
 		FROM security_event_query_index_state_v1
 		PREWHERE metric_version = 1
 			AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
+			-- Only the window's candidates, filtered before the state columns
+			-- are read (an INNER JOIN after the scan read the scope's whole
+			-- retention per page, log-read-perf). All versions of a candidate
+			-- are still merged.
+			AND event_id IN (SELECT event_id FROM candidate_event_ids)
 		WHERE ingested_at <= snapshot_at
 	) AS security
-	INNER JOIN candidate_event_ids USING (event_id)
 	GROUP BY security.event_id
 	HAVING durable_version_count > 1 OR
 		(tupleElement(latest_filter, 1) >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+		AND tupleElement(latest_filter, 1) >= segment_from
 		AND tupleElement(latest_filter, 1) < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
 		AND tupleElement(latest_filter, 9) IN ('block', 'challenge', 'log', 'temporary_ban')
 		AND ({has_action:UInt8} = 0 OR tupleElement(latest_filter, 9) = {action:String})
@@ -633,7 +721,8 @@ func (client *Client) ListAccess(
 	if err != nil {
 		return AccessPage{}, err
 	}
-	rows, err := queryRows[accessRow](client, ctx, accessPageSQL, parameters, int(limit)+1)
+	rows, err := querySegmentedPage(client, ctx, accessPageSQL, parameters, filter, limit,
+		func(row accessRow) (int64, bool) { return row.SnapshotMS, row.VersionCount > 1 })
 	if err != nil {
 		return AccessPage{}, err
 	}
@@ -707,7 +796,8 @@ func (client *Client) ListBlockEvents(
 	if err != nil {
 		return BlockEventPage{}, err
 	}
-	rows, err := queryRows[blockEventRow](client, ctx, blockEventPageSQL, parameters, int(limit)+1)
+	rows, err := querySegmentedPage(client, ctx, blockEventPageSQL, parameters, filter, limit,
+		func(row blockEventRow) (int64, bool) { return row.SnapshotMS, row.VersionCount > 1 })
 	if err != nil {
 		return BlockEventPage{}, err
 	}
@@ -766,6 +856,57 @@ func (client *Client) ListBlockEvents(
 		}
 	}
 	return page, nil
+}
+
+// pageSegmentSpans are the lookbacks, from the page top (the cursor or
+// filter.To), of the segments a log page tries before the whole window
+//. A segment that yields more than limit rows holds the
+// window's newest ones: every event outside it is strictly older.
+var pageSegmentSpans = []time.Duration{time.Hour, 6 * time.Hour, 36 * time.Hour, 216 * time.Hour}
+
+// querySegmentedPage runs a page query on growing segments of the window until
+// one yields limit+1 rows, lists a conflicting event, or is the whole window;
+// the result equals the whole-window query at the same snapshot. Conflicting
+// events of the whole window always sort first, so a first attempt without one
+// proves the window has none at its snapshot: later attempts pin that
+// snapshot and skip the conflict scan. All attempts share one query timeout.
+func querySegmentedPage[T any](client *Client, ctx context.Context, query string, parameters url.Values,
+	filter Filter, limit uint16, observed func(T) (snapshotMS int64, conflict bool)) ([]T, error) {
+	ctx, cancel := context.WithTimeout(ctx, client.queryTimeout)
+	defer cancel()
+	top := filter.To
+	if parameters.Get("param_has_cursor") == "1" {
+		cursorMS, err := strconv.ParseInt(parameters.Get("param_cursor_occurred_at_ms"), 10, 64)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		top = time.UnixMilli(min(cursorMS+1, filter.To.UnixMilli())).UTC()
+	}
+	parameters.Set("param_conflict_scan", "1")
+	for _, span := range append(slices.Clone(pageSegmentSpans), 0) {
+		from := filter.From
+		if span > 0 && top.Add(-span).After(filter.From) {
+			from = top.Add(-span)
+		}
+		parameters.Set("param_segment_from_ms", strconv.FormatInt(from.UnixMilli(), 10))
+		rows, err := queryRows[T](client, ctx, query, parameters, int(limit)+1)
+		if err != nil || len(rows) > int(limit) || !from.After(filter.From) {
+			return rows, err
+		}
+		for _, row := range rows {
+			if _, conflict := observed(row); conflict {
+				return rows, nil
+			}
+		}
+		if len(rows) > 0 {
+			if snapshotMS, _ := observed(rows[0]); snapshotMS > 0 {
+				parameters.Set("param_has_snapshot", "1")
+				parameters.Set("param_snapshot_ms", strconv.FormatInt(snapshotMS, 10))
+				parameters.Set("param_conflict_scan", "0")
+			}
+		}
+	}
+	return nil, ErrInvalidResponse
 }
 
 func (client *Client) pageParameters(

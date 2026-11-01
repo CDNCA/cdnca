@@ -62,7 +62,9 @@ var Catalog = []Rule{
 		return method == http.MethodPost && path == "/v1/admin/cache-operations" && jsonField(body, "target_type") == "whole_site"
 	}},
 	{Name: RuleFirewallPolicy, Default: true, TargetPath: "/config/firewall-action", match: func(method, path string, _ []byte) bool {
-		return method == http.MethodPut && (path == "/v1/firewall/policy" || path == "/v1/firewall-actions/policy") ||
+		return method == http.MethodPut && (path == "/v1/firewall/policy" || path == "/v1/firewall-actions/policy" || path == "/v1/firewall-actions/default") ||
+			method == http.MethodPatch && path == "/v1/firewall-actions/policy" ||
+			method == http.MethodDelete && path == "/v1/firewall-actions/policy" ||
 			method == http.MethodPost && (path == "/v1/firewall/policy/recover" || path == "/v1/firewall-actions/policy/recover")
 	}},
 	{Name: RuleControlUpgrade, Default: true, TargetPath: "/sys/op", match: func(method, path string, _ []byte) bool {
@@ -130,12 +132,12 @@ func matchRule(enabled []string, method, path string, body []byte) (Rule, bool) 
 // write methods on the paths some catalog entry names can be held.
 func candidate(method, path string) bool {
 	switch method {
-	case http.MethodPost, http.MethodPut, http.MethodDelete:
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 	default:
 		return false
 	}
 	switch path {
-	case "/v1/sites/batch-action", "/v1/admin/cache-operations", "/v1/firewall/policy", "/v1/firewall-actions/policy",
+	case "/v1/sites/batch-action", "/v1/admin/cache-operations", "/v1/firewall/policy", "/v1/firewall-actions/policy", "/v1/firewall-actions/default",
 		"/v1/firewall/policy/recover", "/v1/firewall-actions/policy/recover", "/v1/admin/control-upgrade-plan/issue",
 		"/v1/nodes/batch-admin-state":
 		return true

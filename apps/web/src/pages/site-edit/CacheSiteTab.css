@@ -101,26 +101,13 @@
   border-bottom: 1px solid var(--cdnca-color-border-light, #f0f0f0);
 }
 
-.cache-policy-form-grid {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 16px;
-}
-
-.cache-policy-form-grid > h3 {
-  grid-column: 1 / -1;
-}
-
-.cache-policy-rule label,
-.cache-policy-form-grid label {
+.cache-policy-rule label {
   display: grid;
   min-width: 0;
   gap: 4px;
 }
 
-.cache-policy-rule label > span,
-.cache-policy-form-grid label > span {
+.cache-policy-rule label > span {
   overflow-wrap: anywhere;
   color: var(--cdnca-color-text-secondary);
   font-size: 12px;
@@ -128,9 +115,7 @@
 }
 
 .cache-policy-rule .ant-input-number,
-.cache-policy-form-grid .ant-input-number,
-.cache-policy-rule .ant-select,
-.cache-policy-form-grid .ant-select {
+.cache-policy-rule .ant-select {
   width: 100%;
   min-width: 0;
 }
@@ -276,13 +261,8 @@
   }
 
   .cache-policy-rule,
-  .cache-policy-form-grid,
   .cache-policy-comparison {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .cache-policy-form-grid > h3 {
-    grid-column: auto;
   }
 
   .cache-policy-comparison-panel dl > div {
@@ -311,16 +291,6 @@
   .cache-policy-history-col-request-id {
     display: none;
   }
-}
-
-/* 响应头显示缓存状态 (CacheStatusHeaderSwitch), above the cache policy */
-.cache-status-header-row {
-  margin: 16px 20px 0;
-}
-
-/* A Switch in a grid label stretches to the cell width (justify-items: stretch). */
-.cache-policy-form-grid label.cache-policy-switch > .ant-switch {
-  justify-self: start;
 }
 
 /* Layout — "缓存规则 N 条" title line with 新增规则 /
@@ -379,10 +349,6 @@
   min-width: 0;
   flex-wrap: wrap;
   gap: 8px 22px;
-}
-
-.cache-policy-section .cache-status-header-row {
-  margin-bottom: 12px;
 }
 
 /* 新增缓存规则 dialog (tp-b3c-be) */
@@ -514,27 +480,164 @@
   }
 }
 
-/* Fields with a size and its unit, or a tags select, are a
-   div (one label cannot hold two controls); same layout as the labels. */
-.cache-policy-form-grid .cache-policy-field {
+/* setting rows — label and a one-line brief on the left, the
+   control on the right; the full explanation folds under「了解更多」. Two
+   columns from 1000px (each row ≥ 480px), one column below. */
+.cache-setting-list {
   display: grid;
   min-width: 0;
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(min(480px, 100%), 1fr));
+  column-gap: 40px;
+  margin-top: 4px;
 }
 
-.cache-policy-form-grid .cache-policy-field > span {
+.cache-setting-list[hidden] {
+  display: none;
+}
+
+.cache-setting-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.cache-setting-row[data-wide] {
+  grid-column: 1 / -1;
+}
+
+.cache-setting-text {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.cache-setting-label {
+  overflow-wrap: anywhere;
+  color: var(--cdnca-color-title);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.cache-setting-brief {
+  max-width: 60ch;
+  margin: 0;
   overflow-wrap: anywhere;
   color: var(--cdnca-color-text-secondary);
   font-size: 12px;
   line-height: 18px;
 }
 
-.cache-policy-form-grid .cache-policy-field .ant-space-compact {
-  display: flex;
-  min-width: 0;
+.cache-setting-more {
+  max-width: 72ch;
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.cache-policy-form-grid .cache-policy-field .ant-space-compact > .ant-select {
-  flex: 0 0 80px;
+.cache-setting-more > summary {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  gap: 2px;
+  color: var(--cdnca-color-primary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.cache-setting-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.cache-setting-more > summary:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: 2px;
+}
+
+.cache-setting-more > summary > svg {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cache-setting-more[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.cache-setting-more > p {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  color: var(--cdnca-color-text-secondary);
+  background: var(--cdnca-color-table-header);
+  border-radius: 4px;
+}
+
+.cache-setting-control {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+/* fixed widths: a select 220px, a number 112px + its 80px unit, the header tags 360px */
+.cache-setting-control > .cache-setting-select {
+  width: 220px;
+}
+
+.cache-setting-control > .cache-setting-wide-input,
+.cache-setting-control > .cache-setting-tags {
+  width: 360px;
+}
+
+.cache-setting-control > .ant-space-compact > .ant-input-number {
+  width: 112px;
+}
+
+.cache-setting-control > .ant-space-compact > .ant-select {
   width: 80px;
+}
+
+/* 清空全部缓存: a red title bar and a red outline, but a white card — it should
+   not outshine the settings above it. */
+.cache-policy-flush-section .cache-policy-section-heading p {
+  max-width: 72ch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cache-setting-more > summary > svg {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .cache-setting-row:not([data-toggle]) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .cache-setting-row:not([data-toggle]) > .cache-setting-control {
+    justify-content: flex-start;
+  }
+
+  .cache-setting-row:not([data-toggle]) > .cache-setting-control > .cache-setting-select,
+  .cache-setting-row:not([data-toggle]) > .cache-setting-control > .cache-setting-wide-input,
+  .cache-setting-row:not([data-toggle]) > .cache-setting-control > .cache-setting-tags {
+    width: 100%;
+  }
+
+  .cache-setting-row:not([data-toggle]) > .cache-setting-control > .ant-space-compact > .ant-input-number {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .cache-setting-row:not([data-toggle]) > .cache-setting-control > .ant-space-compact {
+    width: 100%;
+  }
 }

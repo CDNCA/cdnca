@@ -68,6 +68,7 @@ import RegionManagementPanel from './NodeRegionManagement'
 import { NodeRegionSelect, useRegionCatalogNames } from './NodeRegionSelect'
 import NodeInstallCommand from './NodeInstallCommand'
 import NodeSSHInstall from './NodeSSHInstall'
+import NodeSSHPanel from './NodeSSHPanel'
 import { NodeBatchMonitorConfigModal, NodeMonitorConfigModal, NodeMonitorLogModal } from './NodeListMonitorModals'
 import { NodeGatewayPortBatchModal } from './NodeGatewayPortBatchModal'
 import { themeColor } from '../theme/themeColor'
@@ -137,7 +138,7 @@ interface BatchAttempt {
 }
 
 type RetryAttempt = CreateAttempt | UpdateAttempt | BatchAttempt
-type NodeListTab = 'list' | 'pending' | 'failed' | 'regions'
+type NodeListTab = 'list' | 'pending' | 'failed' | 'regions' | 'ssh'
 type NodeOwner = readonly ['platform', string, null, string, number]
 type NodePermission = 'read' | 'manage'
 
@@ -1356,6 +1357,7 @@ export default function NodeListPage() {
       owner={owner}
       ownerKey={ownerKey}
       canManage={nodeCanManage(principal)}
+      canTerminal={principal.scope_kind === 'platform' && principal.permissions.includes('platform.admin')}
       canViewLineGroups={principal.permissions.includes('node_scheduling.read')}
     />
   )
@@ -1637,11 +1639,13 @@ function NodeListContent({
   owner,
   ownerKey,
   canManage,
+  canTerminal,
   canViewLineGroups,
 }: {
   owner: NodeOwner
   ownerKey: string
   canManage: boolean
+  canTerminal: boolean
   canViewLineGroups: boolean
 }) {
   const { t, i18n } = useTranslation('nodes')
@@ -1734,7 +1738,7 @@ function NodeListContent({
       if (!token) throw staleNodeRead
       return nodeSchedulingApi.list(token, { kind: 'platform', targetScopeId: targetScopeID })
     },
-    enabled: canViewLineGroups && nodeTab !== 'regions',
+    enabled: canViewLineGroups && nodeTab !== 'regions' && nodeTab !== 'ssh',
     retry: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
@@ -1773,7 +1777,7 @@ function NodeListContent({
         throw error
       }
     },
-    enabled: !terminalForbidden && nodeTab !== 'regions',
+    enabled: !terminalForbidden && nodeTab !== 'regions' && nodeTab !== 'ssh',
     retry: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
@@ -2663,7 +2667,7 @@ function NodeListContent({
           setPresence(undefined)
           setRegion('')
           resetPagination()
-          if (next === 'list' || next === 'regions') setStatus(undefined)
+          if (next === 'list' || next === 'regions' || next === 'ssh') setStatus(undefined)
           if (next === 'pending') setStatus('pending')
           if (next === 'failed') setStatus('disabled')
         }}
@@ -2672,6 +2676,7 @@ function NodeListContent({
           { key: 'pending', label: t('tabs.pending') },
           { key: 'failed', label: t('tabs.syncFailed') },
           { key: 'regions', label: t('tabs.regions') },
+          ...(canManage || canTerminal ? [{ key: 'ssh', label: t('tabs.ssh') }] : []),
         ]}
       />
       <div className="node-toolbar">
@@ -2864,10 +2869,11 @@ function NodeListContent({
         (retryAttempt ? <OutcomeUnknown title={t('errors.outcomeUnknown')} detail={t('errors.retryDescription')} action={<Button size="small" loading={retryPending} disabled={!canManage} onClick={retry}>{t('actions.retrySameRequest')}</Button>} className="node-alert" /> : <FeedbackWhen title={errorMessage(writeError!, t)} onClose={() => setWriteError(null)} />)
       ) : null}
 
-      {nodeTab !== 'regions' && query.isError ? (
+      {nodeTab !== 'regions' && nodeTab !== 'ssh' && query.isError ? (
         <FeedbackWhen title={t('errors.listFailed')} detail={queryError ? errorMessage(queryError, t) : t('errors.requestFailed')} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} />
       ) : null}
-      {nodeTab === 'regions' ? <RegionManagementPanel /> : (
+      {nodeTab === 'ssh' ? <NodeSSHPanel canManage={canManage} canTerminal={canTerminal} errorText={(error) => errorMessage(error, t)}
+        getAccessToken={currentSessionAccess} /> : nodeTab === 'regions' ? <RegionManagementPanel /> : (
       <div
         className={`node-table-scroll node-table-scroll--${nodeTab}`}
         data-testid="node-table-scroll"
@@ -2903,7 +2909,7 @@ function NodeListContent({
           />
       </div>
       )}
-      {nodeTab === 'regions' ? null : (
+      {nodeTab === 'regions' || nodeTab === 'ssh' ? null : (
       <div className="node-pagination">
         <span className="node-total">{t('pagination.total', { count: query.data?.items.length ?? 0 })}</span>
         <Tooltip title={t('actions.previousPage')}>

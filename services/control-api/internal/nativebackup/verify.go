@@ -110,7 +110,8 @@ func (verifier Verifier) Verify(ctx context.Context, manifest Manifest, since ti
 		host = split
 	}
 	if net.ParseIP(strings.Trim(host, "[]")) != nil {
-		report.Warnings = append(report.Warnings, "Gateway 地址是 IP（"+host+"）：节点不会随 DNS 切换，需在每个节点改主控地址或让新主控沿用旧 IP")
+		report.Warnings = append(report.Warnings, "Gateway 地址是 IP（"+host+"）：迁移时在线的节点已学到本机地址并会自动切换；"+
+			"仍未重连的节点在节点上执行 edge-agent set-gateway --address "+facts.GatewayEndpoint+" && systemctl restart cdnca-edge-agent")
 	} else if host != "" && verifier.Lookup != nil && verifier.Local != nil {
 		resolved, _ := verifier.Lookup(ctx, host)
 		local, _ := verifier.Local()

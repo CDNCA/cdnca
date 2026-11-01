@@ -297,21 +297,9 @@ func (s *PublicationService) ResolveCertificateUnpublishSource(
 	}
 	var source certificateUnpublishSource
 	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `SELECT latest.rollout_id,latest.rollout_revision
-			FROM certificate_publication_intents intent
-			JOIN LATERAL (
-				SELECT state,rollout_id,rollout_revision
-				FROM certificate_publication_intent_state_facts state
-				WHERE state.tenant_scope_id=intent.tenant_scope_id AND state.site_id=intent.site_id
-				  AND state.binding_revision=intent.binding_revision
-				ORDER BY sequence DESC LIMIT 1
-			) latest ON true
-			WHERE intent.tenant_scope_id=$1 AND intent.site_id=$2 AND intent.operation='publish'
-			  AND intent.binding_revision<$3 AND latest.state='succeeded'
-			ORDER BY intent.binding_revision DESC LIMIT 1`, command.TenantScopeID, command.SiteID,
-			command.BindingRevision).Scan(&source.RolloutID, &source.Revision); errors.Is(err, pgx.ErrNoRows) {
-			return edgedeployment.ErrNotFound
-		} else if err != nil {
+		var err error
+		source, err = resolveUnpublishSourceTx(ctx, tx, command)
+		if err != nil {
 			return err
 		}
 		rows, err := tx.Query(ctx, `SELECT node_id FROM node_deployments
@@ -342,6 +330,126 @@ func (s *PublicationService) ResolveCertificateUnpublishSource(
 		return certificateUnpublishSource{}, err
 	}
 	return source, nil
+}
+
+// resolveUnpublishSourceTx finds the rollout that put the site's certificate
+// on the nodes, walking the site's earlier intents newest first. The intent
+// queue claims a revision only after every earlier one is terminal, so these
+// facts are final: a non-terminal earlier intent is an inconsistency, not a
+// race (ErrUnavailable, retried).
+//
+//   - a succeeded publication is the source, at the revision it settled at
+//     (a retry of this unpublication repeats the same request: its first
+//     attempt advanced the source rollout);
+//   - a succeeded unpublication already removed the site: nothing older is
+//     on the nodes;
+//   - a failed publication some nodes activated (partial) left the
+//     certificate on them: its rollout is the source when no succeeded
+//     publication is newer.
+//
+// Nothing found is errCertificateNeverPublished: the unpublication has
+// nothing to remove (demo-fill 11-01: it retried "edge deployment not found"
+// to permanent_failed).
+func resolveUnpublishSourceTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	command certificateasset.CertificatePublicationCommandV1,
+) (certificateUnpublishSource, error) {
+	rows, err := tx.Query(ctx, `SELECT intent.binding_revision,intent.operation,latest.state,
+			latest.rollout_id,latest.rollout_revision
+		FROM certificate_publication_intents intent
+		JOIN LATERAL (
+			SELECT state,rollout_id,rollout_revision
+			FROM certificate_publication_intent_state_facts state
+			WHERE state.tenant_scope_id=intent.tenant_scope_id AND state.site_id=intent.site_id
+			  AND state.binding_revision=intent.binding_revision
+			ORDER BY sequence DESC LIMIT 1
+		) latest ON true
+		WHERE intent.tenant_scope_id=$1 AND intent.site_id=$2 AND intent.binding_revision<$3
+		ORDER BY intent.binding_revision DESC`, command.TenantScopeID, command.SiteID, command.BindingRevision)
+	if err != nil {
+		return certificateUnpublishSource{}, err
+	}
+	type earlierIntent struct {
+		revision        int64
+		operation       string
+		state           string
+		rolloutID       uuid.NullUUID
+		rolloutRevision *int64
+	}
+	intents, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (earlierIntent, error) {
+		var intent earlierIntent
+		err := row.Scan(&intent.revision, &intent.operation, &intent.state, &intent.rolloutID, &intent.rolloutRevision)
+		return intent, err
+	})
+	if err != nil {
+		return certificateUnpublishSource{}, err
+	}
+	var failedPublications []int64
+	for _, intent := range intents {
+		switch {
+		case intent.state == "succeeded" && intent.operation == "publish":
+			if !intent.rolloutID.Valid || intent.rolloutRevision == nil {
+				return certificateUnpublishSource{}, edgedeployment.ErrUnavailable
+			}
+			return certificateUnpublishSource{RolloutID: intent.rolloutID.UUID, Revision: *intent.rolloutRevision}, nil
+		case intent.state == "succeeded" && intent.operation == "unpublish":
+			return partialPublicationSource(ctx, tx, command, failedPublications)
+		case intent.state == "permanent_failed" && intent.operation == "publish":
+			failedPublications = append(failedPublications, intent.revision)
+		case intent.state == "permanent_failed":
+			// a failed unpublication removed nothing: keep looking
+		default:
+			return certificateUnpublishSource{}, edgedeployment.ErrUnavailable
+		}
+	}
+	return partialPublicationSource(ctx, tx, command, failedPublications)
+}
+
+// partialPublicationSource is the newest failed publication with a node that
+// activated it, else errCertificateNeverPublished. Its expected revision is
+// the rollout's revision before this unpublication advanced it (the retry of
+// an attempt that created its rollout sends the same request).
+func partialPublicationSource(
+	ctx context.Context,
+	tx pgx.Tx,
+	command certificateasset.CertificatePublicationCommandV1,
+	failedRevisions []int64,
+) (certificateUnpublishSource, error) {
+	ownKey := certificatePublicationRolloutKey(command.TenantScopeID, command.SiteID, command.BindingRevision)
+	for _, revision := range failedRevisions {
+		var source certificateUnpublishSource
+		var replayed bool
+		err := tx.QueryRow(ctx, `SELECT rollout.id,rollout.revision,EXISTS (
+				SELECT 1 FROM rollouts own WHERE own.configuration_scope_id=rollout.configuration_scope_id
+				  AND own.idempotency_key=$3)
+			FROM rollouts rollout
+			WHERE rollout.configuration_scope_id=$1 AND rollout.idempotency_key=$2 AND EXISTS (
+				SELECT 1 FROM (SELECT DISTINCT ON (deployment.id) deployment.state FROM node_deployments deployment
+					WHERE deployment.rollout_id=rollout.id ORDER BY deployment.id,deployment.attempt DESC) latest
+				WHERE latest.state='healthy')`,
+			command.TenantScopeID, certificatePublicationRolloutKey(command.TenantScopeID, command.SiteID, revision),
+			ownKey).Scan(&source.RolloutID, &source.Revision, &replayed)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return certificateUnpublishSource{}, err
+		}
+		if replayed {
+			source.Revision--
+		}
+		return source, nil
+	}
+	return certificateUnpublishSource{}, errCertificateNeverPublished
+}
+
+// certificatePublicationRolloutKey is the rollout idempotency key the
+// publisher adapter gives the intent of a binding revision
+// (PublisherAdapter.publicationRequest).
+func certificatePublicationRolloutKey(tenantScopeID, siteID uuid.UUID, bindingRevision int64) string {
+	intentKey := fmt.Sprintf("certificate.publication/%s/%s/%d", tenantScopeID, siteID, bindingRevision)
+	return "certpub." + uuid.NewSHA1(tenantScopeID, []byte(intentKey)).String()
 }
 
 func (s *PublicationService) loadPublicationSnapshot(

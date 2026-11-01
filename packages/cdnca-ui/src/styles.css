@@ -892,14 +892,16 @@ html[data-cdnca-look="tech"] .cdnca-modal-footer .ant-btn {
   cursor: pointer;
 }
 
-/* The custom box is as high as the quick buttons (32px) on every toolbar. Many page toolbars set
-   `.ant-input { height: 32px }`, which also hits the box's inner input and grows the wrapper to 43px. */
+/* The custom box is as high as the quick buttons beside it (32px) on every toolbar. Many page toolbars set
+   `.ant-input { height / min-height: 32px }`, which also hits the box's inner input: the input then overflows
+   the wrapper and its text sits at the bottom left (ui-input-height). The inner input keeps its own line box. */
 .cdnca-time-range .cdnca-time-range-input {
   height: 32px;
 }
 
 .cdnca-time-range .cdnca-time-range-input input.ant-input {
   height: auto !important;
+  min-height: 0 !important;
 }
 
 /* compact：「自定义」按钮本身打开弹层，弹层顶部显示正在编辑的时间范围 */
@@ -1434,6 +1436,15 @@ html[data-cdnca-look="tech"] .cdnca-modal-footer .ant-btn {
   font-weight: 500;
   white-space: nowrap;
 }
+/* The price a live promo turns into, next to the badge (showThen): body color for 4.5:1 contrast. */
+.cdnca-price-badge-then {
+  margin-left: 6px;
+  color: var(--cdnca-color-text-emphasis);
+  font-size: 12px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.cdnca-price-badge-then:is(.i-theme-dark *) { color: var(--cdnca-color-text-dark); }
 .cdnca-price-badge-price:is(.i-theme-dark *) { color: var(--cdnca-color-text-dark); }
 .cdnca-promo-preview {
   display: grid;
@@ -1457,6 +1468,14 @@ html[data-cdnca-look="tech"] .cdnca-modal-footer .ant-btn {
 /* 「ID 或名称」联想，下拉每项 名称（ID），次行灰字（节点 IP、证书域名等）。 */
 .cdnca-id-or-name {
   min-width: 0;
+}
+
+/* Same height as the toolbar's Select / Button (32px), with or without addonBefore:
+   page toolbars' `.ant-input { height / min-height: 32px }` also hits the input inside the clear-icon
+   wrapper and grew the field to 43px; the inner input keeps its own line box so the wrapper stays 32px. */
+.cdnca-id-or-name .ant-input-affix-wrapper > input.ant-input {
+  height: auto !important;
+  min-height: 0 !important;
 }
 
 .cdnca-id-or-name-option {

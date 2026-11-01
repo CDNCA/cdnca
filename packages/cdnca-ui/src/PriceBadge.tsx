@@ -49,16 +49,19 @@ const texts = {
   'zh-CN': {
     free: '免费', promo: (n: number, unit: 'day' | 'hour') => `限免 ${n} ${unit === 'day' ? '天' : '小时'}`,
     promoTitle: (price: string) => `限时免费，到期后 ${price}`,
+    then: (price: string) => `之后 ${price}`,
     once: '一次性', month: '/月', year: '/年',
   },
   'zh-TW': {
     free: '免費', promo: (n: number, unit: 'day' | 'hour') => `限免 ${n} ${unit === 'day' ? '天' : '小時'}`,
     promoTitle: (price: string) => `限時免費，到期後 ${price}`,
+    then: (price: string) => `之後 ${price}`,
     once: '一次性', month: '/月', year: '/年',
   },
   'en-US': {
     free: 'Free', promo: (n: number, unit: 'day' | 'hour') => `Free for ${n} ${unit === 'day' ? (n === 1 ? 'day' : 'days') : (n === 1 ? 'hour' : 'hours')}`,
     promoTitle: (price: string) => `Free for a limited time, then ${price}`,
+    then: (price: string) => `then ${price}`,
     once: ' once', month: '/month', year: '/year',
   },
 }
@@ -86,10 +89,11 @@ const clock = (
 
 /**
  * Free / 限免 badge, or the price once nothing is free. paid renders the price as plain text
- * (className cdnca-price-badge-price) unless showPrice is false.
+ * (className cdnca-price-badge-price) unless showPrice is false. showThen writes the price a live promo
+ * turns into next to the badge ("限免 3 天 之后 ¥9.90/月", store-pricing 10-31) instead of only in its title.
  */
-export function PriceBadge({ plan, now, showPrice = true, className }: {
-  plan: PriceBadgePlan; now?: number; showPrice?: boolean; className?: string
+export function PriceBadge({ plan, now, showPrice = true, showThen = false, className }: {
+  plan: PriceBadgePlan; now?: number; showPrice?: boolean; showThen?: boolean; className?: string
 }): ReactNode {
   const t = useTexts()
   const state = priceBadgeState(plan, now)
@@ -99,11 +103,14 @@ export function PriceBadge({ plan, now, showPrice = true, className }: {
   }
   if (state.kind === 'promo') {
     const then = formatPlanPrice(state.then, t)
-    return (
+    const badge = (
       <span className={cls('is-promo')} data-price-badge="promo" title={t.promoTitle(then)} aria-label={t.promoTitle(then).replace(/^[^，,]+/, t.promo(state.amount, state.unit))}>
         {clock}{t.promo(state.amount, state.unit)}
       </span>
     )
+    if (!showThen) return badge
+    // The badge's aria-label already names the later price: the visible text is not read twice.
+    return <>{badge}<span className="cdnca-price-badge-then" data-price-then="" aria-hidden="true">{t.then(then)}</span></>
   }
   if (!showPrice) return null
   return <span className={['cdnca-price-badge-price', className].filter(Boolean).join(' ')} data-price-badge="paid">{formatPlanPrice(state.price, t)}</span>

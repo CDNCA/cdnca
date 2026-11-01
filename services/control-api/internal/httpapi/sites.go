@@ -289,7 +289,7 @@ type siteListResponse struct {
 }
 
 func (s *Server) handleCreateSite(w http.ResponseWriter, r *http.Request) {
-	principal, ok := s.requireSitePermission(w, r, "sites.manage")
+	principal, ok := s.requireSiteSessionPermission(w, r, "sites.manage")
 	if !ok {
 		return
 	}
@@ -480,7 +480,7 @@ func (s *Server) handleUpdateSite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteSite(w http.ResponseWriter, r *http.Request) {
-	principal, ok := s.requireSitePermission(w, r, "sites.manage")
+	principal, ok := s.requireSiteSessionPermission(w, r, "sites.manage")
 	if !ok {
 		return
 	}
@@ -512,7 +512,7 @@ func (s *Server) handleDeleteSite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBatchSiteAction(w http.ResponseWriter, r *http.Request) {
-	principal, ok := s.requireSitePermission(w, r, "sites.manage")
+	principal, ok := s.requireSiteSessionPermission(w, r, "sites.manage")
 	if !ok {
 		return
 	}
@@ -627,6 +627,26 @@ func (s *Server) handleUnlockSite(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) requireSitePermission(w http.ResponseWriter, r *http.Request, permission string) (identity.Principal, bool) {
 	principal, err := s.authenticatedPrincipal(r)
+	if err == nil {
+		err = identity.Authorize(principal, permission)
+	}
+	if err != nil {
+		s.writeError(w, r, err)
+		return identity.Principal{}, false
+	}
+	return principal, true
+}
+
+// requireSiteSessionPermission is requireSitePermission for the site writes
+// plugin API keys may not make (create, delete, batch actions; plugapi-S1):
+// a valid API key answers 403 api_key_not_allowed, so the refusal is stable
+// whatever scopes the key holds.
+func (s *Server) requireSiteSessionPermission(w http.ResponseWriter, r *http.Request, permission string) (identity.Principal, bool) {
+	principal, apiKeyID, _, err := s.authenticatedPrincipalWithAPIKey(r)
+	if err == nil && apiKeyID != uuid.Nil {
+		s.writeAPIError(w, r, http.StatusForbidden, "api_key_not_allowed", "this operation needs a signed-in session")
+		return identity.Principal{}, false
+	}
 	if err == nil {
 		err = identity.Authorize(principal, permission)
 	}

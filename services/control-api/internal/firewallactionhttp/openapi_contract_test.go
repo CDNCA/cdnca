@@ -15,6 +15,8 @@ func TestFirewallActionOpenAPIContract(t *testing.T) {
 		"/v1/firewall-actions/policy:", "/v1/firewall-actions/policy/recover:", "firewall.read", "firewall.manage",
 		"Idempotency-Key", "If-Match", "ETag", "normal_action", "escalated_action", "nftables", "disconnect", "return_page",
 		"engage_threshold", "recover_threshold", "recovery_windows", "trusted_proxies", "trusted_crawlers", "lkg_revision",
+		"/v1/firewall-actions/default:", "inheritFirewallActionPolicy", "inherited", "tenant_default", "system_default",
+		"inheriting_site_count", "delivered",
 	} {
 		if !strings.Contains(string(content), fragment) {
 			t.Errorf("OpenAPI missing %q", fragment)

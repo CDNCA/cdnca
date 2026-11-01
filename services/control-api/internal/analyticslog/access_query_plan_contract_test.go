@@ -32,7 +32,7 @@ func TestAccessQueryUsesPrecomputedStateOnly(t *testing.T) {
 		"uniqExactMerge(ingested_at_state)",
 		"argMaxMerge(latest_filter_state) AS latest_filter",
 		"argMaxMerge(latest_payload_state) AS latest",
-		"INNER JOIN candidate_event_ids USING (event_id)",
+		"AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
 		"event_id IN (SELECT event_id FROM selected_rows)",
 		"{has_cursor:UInt8} = 0",
 		"event_id < {cursor_event_id:String}",
@@ -87,8 +87,13 @@ func TestAccessConflictStatePreservesReplacementSemantics(t *testing.T) {
 }
 
 func TestAccessQueryUsesOneCandidateJoinAndOneEventAggregate(t *testing.T) {
-	if got := strings.Count(accessPageSQL, "INNER JOIN candidate_event_ids USING (event_id)"); got != 1 {
-		t.Fatalf("candidate CTE join count=%d, want 1", got)
+	// candidates restrict the state scan in PREWHERE; a join
+	// after the scan read the scope's whole retention per page.
+	if got := strings.Count(accessPageSQL, "AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at"); got != 1 {
+		t.Fatalf("candidate pre-filter count=%d, want 1", got)
+	}
+	if strings.Contains(accessPageSQL, "INNER JOIN candidate_event_ids") {
+		t.Fatal("candidate join re-reads the merged state after the scan")
 	}
 	if strings.Contains(accessPageSQL, "conflict_counts AS") {
 		t.Fatal("access query still materializes the candidate-bound conflict aggregate separately")

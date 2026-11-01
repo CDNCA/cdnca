@@ -21,6 +21,12 @@ type apiKeyFieldsRequest struct {
 	ExpiresAt   *string  `json:"expires_at"`
 }
 
+// createSelfAPIKeyRequest: 自助创建另可选绑定本租户一个已启用的插件安装（插件身份，迁移 604）；修改不接受此字段。
+type createSelfAPIKeyRequest struct {
+	apiKeyFieldsRequest
+	PluginInstallationAuthorizationID *uuid.UUID `json:"plugin_installation_authorization_id,omitempty"`
+}
+
 type adminCreateAPIKeyRequest struct {
 	Name              string   `json:"name"`
 	Scopes            []string `json:"scopes"`
@@ -84,7 +90,7 @@ func (s *Server) handleCreateSelfAPIKey(w http.ResponseWriter, r *http.Request) 
 	if !ok || !s.requireCollectionIfMatch(w, r) {
 		return
 	}
-	var body apiKeyFieldsRequest
+	var body createSelfAPIKeyRequest
 	if err := decodeJSON(w, r, &body); err != nil {
 		s.writeAPIError(w, r, http.StatusBadRequest, "invalid_request", "request body is invalid")
 		return
@@ -102,6 +108,7 @@ func (s *Server) handleCreateSelfAPIKey(w http.ResponseWriter, r *http.Request) 
 	result, err := s.apiKeys.CreateSelf(r.Context(), principal, apikey.CreateInput{
 		Name: body.Name, Scopes: body.Scopes, IPAllowlist: allowlist, ExpiresAt: expiresAt,
 		IdempotencyKey: key, RequestID: requestID(r.Context()),
+		PluginInstallationAuthorizationID: body.PluginInstallationAuthorizationID,
 	})
 	if err != nil {
 		s.writeError(w, r, err)

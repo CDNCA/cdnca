@@ -36,14 +36,18 @@ const (
 	TargetMarketLicense = "market-license"
 	TargetMarketMember  = "market-member"
 	TargetMarketAdmin   = "market-admin"
+	// TargetMarketService is the market /service/v1 listener (license-service
+	// payment results, LICENSE_MARKET_SERVICE_URL).
+	TargetMarketService = "market-service"
 
 	ModeTunnel = "tunnel"
 	ModeDirect = "direct"
 )
 
-// ParseMode reads a <组件>_MTLS_TRANSPORT value; empty means tunnel.
+// ParseMode reads a <组件>_MTLS_TRANSPORT value (surrounding space ignored);
+// empty means tunnel.
 func ParseMode(value string) (string, error) {
-	switch value {
+	switch strings.TrimSpace(value) {
 	case "", ModeTunnel:
 		return ModeTunnel, nil
 	case ModeDirect:
@@ -72,8 +76,8 @@ type Client struct {
 }
 
 // NewClient derives the tunnel for originURL (https://host[:port]); the
-// entrance is host:443 unless tunnelURL (https://host[:port], no path)
-// overrides it.
+// entrance is host:443 unless tunnelURL (https://host[:port], no path,
+// surrounding space ignored) overrides it.
 func NewClient(originURL, tunnelURL, target string) (*Client, error) {
 	origin, err := url.Parse(originURL)
 	if err != nil || origin.Scheme != "https" || origin.Hostname() == "" {
@@ -88,7 +92,7 @@ func NewClient(originURL, tunnelURL, target string) (*Client, error) {
 	}
 	client := &Client{Host: origin.Hostname(), Target: target, Origin: net.JoinHostPort(origin.Hostname(), originPort),
 		Entrance: net.JoinHostPort(origin.Hostname(), "443")}
-	if tunnelURL != "" {
+	if tunnelURL = strings.TrimSpace(tunnelURL); tunnelURL != "" {
 		entrance, err := url.Parse(tunnelURL)
 		if err != nil || entrance.Scheme != "https" || entrance.Hostname() == "" || entrance.User != nil ||
 			strings.TrimRight(entrance.Path, "/") != "" || entrance.RawQuery != "" || entrance.Fragment != "" {
@@ -136,7 +140,7 @@ func (c *Client) DialContext(ctx context.Context, _ string, address string) (net
 	dialer := websocket.Dialer{
 		TLSClientConfig:  &tls.Config{MinVersion: tls.VersionTLS12, ServerName: c.Host, RootCAs: roots, NextProtos: []string{"http/1.1"}},
 		HandshakeTimeout: timeout,
-		ReadBufferSize:   32 << 10, WriteBufferSize: 32 << 10,
+		WriteBufferSize:  32 << 10, WriteBufferPool: writeBuffers,
 		Subprotocols: []string{Subprotocol},
 		NetDialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			var d net.Dialer

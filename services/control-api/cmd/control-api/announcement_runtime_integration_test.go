@@ -15,6 +15,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/announcement"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/httpapi"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
@@ -517,6 +518,7 @@ func openAnnouncementRuntimeDatabase(t *testing.T, minimumVersion int) *pgxpool.
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "announcement_runtime")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

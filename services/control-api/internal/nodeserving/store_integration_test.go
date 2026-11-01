@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/cdnca/cdnca/libs/edgeconfig/artifactset"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cdnca/cdnca/libs/edgeconfig/artifactset"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
@@ -40,6 +41,7 @@ func newServingHarness(t *testing.T) *servingHarness {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	t.Cleanup(cancel)
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "node_serving")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -405,9 +407,13 @@ func TestAutoDisableEnforcesTrafficBandwidthAndWindowsThroughServingHolds(t *tes
 	}
 	harness.autoDisable(nodeA, map[string]any{"traffic_enabled": true, "traffic_total_gb": 1, "traffic_from_day": day,
 		"traffic_from_time": anchor.Format("15:04:05"), "traffic_types": []string{"outbound"}, "excluded_interfaces": "docker0"})
+	// On days 29-31 the day is clamped to 28, so the period started days
+	// ago: the pre-period sample goes before the real start (Period).
+	start, _ := AutoDisableSettings{TrafficFromDay: day, TrafficFromTime: anchor.Format("15:04:05")}.Period(now, chinaStandardTime)
+	before := max(3*time.Hour, now.Sub(start)+time.Hour)
 
 	// Before the period: never counted. In the period: baseline, then 1.2 GiB out on eth0.
-	harness.telemetry(nodeA, 3*time.Hour, nic("eth0", 0, 0))
+	harness.telemetry(nodeA, before, nic("eth0", 0, 0))
 	harness.telemetry(nodeA, 30*time.Minute, nic("eth0", 1<<30, 0), nic("docker0", 0, 0))
 	harness.telemetry(nodeA, 20*time.Minute, nic("eth0", 1<<30+(1<<29), 0), nic("docker0", 8<<30, 0))
 	run()

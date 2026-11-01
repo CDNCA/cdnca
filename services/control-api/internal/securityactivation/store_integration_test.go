@@ -10,15 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"regexp"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
@@ -1672,45 +1668,5 @@ func (fixture *activationFixture) markCandidateHealthy(t *testing.T, candidateID
 
 func isolatedActivationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "security_activation_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^security_activation_test_[a-f0-9]{32}$`).MatchString(schema) {
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatalf("migrate activation schema: %v", err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		cleanup, cancel := databasetest.CleanupContext()
-		defer cancel()
-		if _, err := admin.Exec(cleanup, "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop schema: %v", err)
-		}
-		admin.Close()
-	})
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }

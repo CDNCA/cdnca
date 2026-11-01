@@ -93,6 +93,7 @@ func permanentFailure(err error) string {
 	var challenge *edgepublish.ChallengePolicyUnavailableError
 	var packs *edgepublish.RulePackUnavailableError
 	var conflict *edgepublish.CrossScopeConflictError
+	var invalid *edgepublish.SiteConfigInvalidError
 	switch {
 	case errors.Is(err, ErrPermissionDenied) || errors.Is(err, edgepublish.ErrPermissionDenied):
 		return FailureRBACRevoked
@@ -104,6 +105,8 @@ func permanentFailure(err error) string {
 		return FailureNodeCapability
 	case errors.As(err, &conflict):
 		return FailureNodeScopeConflict
+	case errors.As(err, &invalid):
+		return FailureSiteConfigInvalid
 	default:
 		return ""
 	}

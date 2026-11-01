@@ -21,13 +21,14 @@ func TestDeploymentWarningsFromTheTerminalStatus(t *testing.T) {
 			{Name: "edge_post_activation_maintenance", Succeeded: false, Summary: "generation 9 active, post-activation retain failed"},
 			{Name: "edge_ddos_protection", Succeeded: false, Summary: "DDoS protection unavailable (nft_missing)"},
 			{Name: "edge_site_certificates", Succeeded: false},
+			{Name: "edge_l4_streams", Succeeded: false, Summary: "1 L4 forwards degraded (origin unreachable or unresolved): stream s L4_STATIC_ADDRESS_UNREACHABLE"},
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	warnings := edgedeployment.DeploymentWarnings(payload)
-	if !slices.Equal(warnings, []string{edgedeployment.WarningDDoSProtection, edgedeployment.WarningPostActivationMaintenance}) {
+	if !slices.Equal(warnings, []string{edgedeployment.WarningDDoSProtection, edgedeployment.WarningL4StreamDegraded, edgedeployment.WarningPostActivationMaintenance}) {
 		t.Fatalf("warnings %v", warnings)
 	}
 	healthy, _ := proto.Marshal(&agentv1.DeploymentStatus{Checks: []*agentv1.CheckResult{{Name: "edge_ddos_protection", Succeeded: true}}})

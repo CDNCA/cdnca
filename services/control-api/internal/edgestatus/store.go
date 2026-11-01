@@ -186,6 +186,11 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 				return fmt.Errorf("mark frozen deployment refusal: %w", err)
 			}
 		}
+		if event, ok := deploymentFailureAudit(deployment, envelope, state, domain, receivedAt); ok {
+			if err := s.auditor.Append(ctx, tx, event); err != nil {
+				return fmt.Errorf("audit deployment failure: %w", err)
+			}
+		}
 		if err := edgedeployment.AdvanceRolloutAfterStatusTx(ctx, tx, deployment.rolloutID, receivedAt); err != nil {
 			return err
 		}

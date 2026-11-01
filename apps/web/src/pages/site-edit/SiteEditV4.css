@@ -480,9 +480,9 @@
   outline: none;
 }
 
-/* 清空全部缓存: high-impact, its own red card */
+/* 清空全部缓存: high-impact, so a red outline and title bar; a white card so it
+   does not outshine the settings above (site-cache-ui) */
 .site-edit-v4 .cache-policy-flush-section {
-  background: var(--cdnca-color-error-bg);
   border-color: var(--cdnca-color-error);
 }
 
@@ -719,6 +719,114 @@
   border-radius: 6px;
 }
 
+/* ---- site-advanced-ui----
+   卡片网格：只有标题+开关（或一句空状态）的卡片两列并排；开启后有表单、
+   或带列表的卡片加 .is-wide 占整行。窄屏单列。 */
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid > .site-instant-contents > .site-setting-group,
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid > .site-setting-parts > .site-setting-group,
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid > .site-setting-group,
+.site-edit-v4 .site-advanced-tab .site-setting-card-span > .site-setting-group {
+  margin-top: 0;
+}
+
+/* SiteAccessPanel 的外层与 HTTP 策略的 instant 包装都不占盒子，卡片直接进网格 */
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid > .site-setting-parts {
+  display: contents;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid .is-wide,
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid .site-setting-card-span,
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid > .site-setting-parts > :not(.site-setting-group),
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid > :not(.site-setting-group, .site-instant-contents, .site-setting-parts) {
+  grid-column: 1 / -1;
+}
+
+/* 卡片里的空状态在两列卡片中改为一行左对齐说明，不再是 54px 高的虚线框 */
+.site-edit-v4 .site-advanced-tab .site-setting-card-grid .site-setting-group:not(.is-wide) > .site-setting-empty {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  text-align: start;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* 短字段（数字、单选、短下拉）多列并排；标签与控件同一行，长文本仍整行 */
+.site-edit-v4 .site-advanced-tab .site-setting-inline-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 0 24px;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-inline-fields > .site-form-row {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-inline-fields .site-form-row-control > .ant-input-number,
+.site-edit-v4 .site-advanced-tab .site-setting-inline-fields .site-form-row-control > .ant-select {
+  width: min(200px, 100%);
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-group h4.site-setting-subtitle {
+  margin: 16px 0 0;
+}
+
+/* 上传大小限制：标题、说明与两键选择同一行 */
+.site-edit-v4 .site-advanced-tab .site-setting-section-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-section-inline > h2,
+.site-edit-v4 .site-advanced-tab .site-setting-section-inline > h2 + .site-setting-section-help {
+  grid-column: 1;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-section-inline > h2 + .site-setting-section-help {
+  margin-bottom: 0;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-section-inline > .site-instant-contents > .site-form-row:first-child {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin-top: 0;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-section-inline > .site-instant-contents > .site-form-row:not(:first-child) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 960px) {
+  .site-edit-v4 .site-advanced-tab .site-setting-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .site-edit-v4 .site-advanced-tab .site-setting-section-inline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-edit-v4 .site-advanced-tab .site-setting-section-inline > .site-instant-contents > .site-form-row:first-child {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 12px;
+  }
+
+  .site-edit-v4 .site-advanced-tab .site-setting-inline-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---- 整页利用横向空间 ---- */
 /* 回源设置: protocol and Host cards keep the full row; the four small
    sections (超时 / 连接复用 / 回源鉴权 / 其它) pair up two per row. */
@@ -786,12 +894,6 @@
   .site-edit-v4 .site-https-tab > .site-setting-section > .site-setting-row:last-child {
     grid-column: 1 / -1;
   }
-}
-
-/* 缓存设置: the field grids fill the row (2 columns at 1280/1440, 4 at 1920) */
-.site-edit-v4 .cache-policy-section .cache-policy-form-grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
-  gap: 12px 24px;
 }
 
 @media (max-width: 960px) {
@@ -998,4 +1100,21 @@
   margin: 0;
   padding: 0;
   font-size: 12px;
+}
+
+/* 卡片标题下一行的单选（L2 配置） */
+.site-edit-v4 .site-advanced-tab .site-setting-group > .site-setting-group-choice {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* 压缩三态：标题行放不下时整组换到标题下一行，不在按钮之间折行 */
+.site-edit-v4 .site-advanced-tab .site-setting-group-grid .site-setting-group-head {
+  flex-wrap: wrap;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-group-extra > .ant-radio-group {
+  display: inline-flex;
+  white-space: nowrap;
 }

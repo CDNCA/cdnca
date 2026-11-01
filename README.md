@@ -152,7 +152,7 @@ The Community Edition does not connect to the license service: a community licen
 
 ## Installation (control plane to first site)
 
-You need two x86_64 Linux servers (Ubuntu 24.04 official; Ubuntu 22.04, Debian 12/13 and Rocky/AlmaLinux/RHEL 9/10 compatible): one for the control plane and one for a node. Run everything as root. Click a screenshot to see it full size. Terminal screenshots follow the installer's real progress format with sample timings; the installers print their progress and prompts in Chinese.
+You need two x86_64 Linux servers (Ubuntu 24.04 official; Ubuntu 22.04, Debian 12/13 and Rocky/AlmaLinux/RHEL 9/10 compatible): one for the control plane and one for a node. Run everything as root. Click a screenshot to see it full size. Terminal screenshots follow the installer's real output with sample timings and addresses. The installers speak English or Chinese: they follow `--lang en|zh`, then the system locale.
 
 ### Step 1: Install the control plane
 
@@ -163,10 +163,10 @@ curl -fsSLO https://www.cdnca.com/downloads/ce/install-control.sh
 ```
 
 ```bash
-bash install-control.sh --release-server https://www.cdnca.com/downloads/ce
+bash install-control.sh --release-server https://www.cdnca.com/downloads/ce --lang en
 ```
 
-The installer runs 12 steps and asks for the console's public domain or IP, the HTTPS port (default 443), a certificate contact email, and the first administrator's username and password (not echoed). At the end it prints the console URL and the two node channel (Gateway) ports. **Open those two ports and 443 in your firewall / security group.**
+The installer runs 12 steps and asks for the console's public domain or IP, the HTTPS port (default 443), a certificate contact email, and the first administrator's username and password (not echoed). At the end it prints an installation summary (also saved to `/root/cdnca-install-summary.txt`, root only) with the console URL and the ports to open: **443 and the two node channel (Gateway) ports.** `install-control.sh check` re-verifies the installation at any time.
 
 <a href="docs/images/readme/en/install-1-control.png"><img src="docs/images/readme/en/install-1-control.png" width="720" alt="Control plane installation progress"></a>
 
@@ -184,7 +184,7 @@ Go to **Nodes → Node list**, click **Install node**, and copy the command in t
 
 ### Step 4: Run it on the node server
 
-Paste and run the command as root on the node server. The installer runs 8 steps and finishes once it has a session with the control plane Gateway. The agent starts OpenResty after the control plane sends the first configuration.
+Paste and run the command as root on the node server. The installer runs 8 steps, finishes once it has a session with the control plane Gateway, and prints a summary with the next steps. The agent starts OpenResty after the control plane sends the first configuration.
 
 <a href="docs/images/readme/en/install-4-node.png"><img src="docs/images/readme/en/install-4-node.png" width="720" alt="Node installation progress"></a>
 

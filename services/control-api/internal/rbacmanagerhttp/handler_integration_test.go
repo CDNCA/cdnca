@@ -996,7 +996,7 @@ func TestHTTPRealMFAInterleavedStepUpTransactionsDoNotDeadlock(t *testing.T) {
 		if _, err := mfaService.ConsumeStepUp(t.Context(), mfa.Actor{UserID: fixture.tenantAActor.UserID,
 			ScopeID: fixture.tenantAScope, SessionID: fixture.tenantAActor.SessionID}, mfa.ConsumeStepUpRequest{
 			Token: directProof.Token, TenantID: fixture.tenantAID, Audience: "custom-rbac",
-			Action: "identity.custom_role.publish",
+			Action:  "identity.custom_role.publish",
 			Context: mfa.RequestContext{RequestID: "interleave-direct", TraceID: "interleave-direct-trace"},
 		}); err != nil {
 			errs <- fmt.Errorf("direct consume: %w", err)
@@ -1708,6 +1708,7 @@ func isolatedHTTPPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "custom_rbac_http_test")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

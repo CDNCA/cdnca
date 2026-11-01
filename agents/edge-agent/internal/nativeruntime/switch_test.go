@@ -40,7 +40,7 @@ func (f *fixture) buildPackage(t *testing.T, path, version, openresty string, me
 	t.Helper()
 	files := map[string][]byte{
 		NginxPath: []byte("nginx-" + openresty), "runtime/openresty/bin/openresty": []byte("nginx-" + openresty),
-		LoaderPath: []byte("ld-musl"), AgentPath: []byte("agent-" + version),
+		LoaderPath: []byte("ld-musl"), AgentPath: []byte("agent-" + version), LuaJITPath: []byte("luajit"),
 		SecurityRoot + "/cdnca_waf.lua": []byte("waf"), SecurityRoot + "/cc.lua": []byte("cc"),
 		SecurityRoot + "/cc_adaptive.lua":               []byte("adaptive"),
 		"lua/share/cdnca/dynroute/cdnca_site_admin.lua": []byte("admin"),
@@ -63,7 +63,7 @@ func (f *fixture) buildPackage(t *testing.T, path, version, openresty string, me
 	var inventory []map[string]any
 	for _, name := range names {
 		mode := "0444"
-		if name == NginxPath || name == "runtime/openresty/bin/openresty" || name == LoaderPath || name == AgentPath {
+		if name == NginxPath || name == "runtime/openresty/bin/openresty" || name == LoaderPath || name == AgentPath || name == LuaJITPath {
 			mode = "0555"
 		}
 		inventory = append(inventory, map[string]any{"path": name, "size": len(files[name]), "mode": mode, "sha256": sha(files[name])})

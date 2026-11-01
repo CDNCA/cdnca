@@ -43,9 +43,12 @@ exit 0
   assert.ok(source.includes(begin + library), `${installer} must embed scripts/lib/package-automation.sh verbatim`)
   const parse = block(source, 'parse_args')
   assert.ok(parse, 'parse_args')
+  // 主控 parse_args 末尾校验 --real-ip-header（origin_auth_check_header），一并抽取真实函数。
+  const originAuth = ['origin_auth_valid_header', 'origin_auth_check_header'].map((name) => block(source, name)).filter(Boolean)
   const script = [
     'set -Eeuo pipefail', 'TEMP_DIR=$(mktemp -d)', progress,
     'log() { printf "LOG %s\\n" "$*"; }', 'fail() { printf "FAIL %s\\n" "$*"; exit 1; }', 'usage() { :; }',
+    'REAL_IP_HEADER=X-Forwarded-For', ...originAuth,
     library.replaceAll('/run/systemd/system', runDir), parse,
     'parse_args "$@"', 'quiesce_package_automation',
     'echo "PAUSED ${PAUSED_APT_TIMERS[*]:-}"',

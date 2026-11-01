@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/google/uuid"
@@ -26,6 +27,9 @@ var Patterns = []string{
 	"GET /v1/admin/nodes/ssh-installs/{id}",
 	"POST /v1/admin/nodes/ssh-installs/{id}/confirm-host-key",
 	"POST /v1/admin/nodes/ssh-installs/{id}/cancel",
+	"GET /v1/admin/nodes/ssh-access/controller-egress",
+	"GET /v1/nodes/{id}/ssh-access",
+	"PUT /v1/nodes/{id}/ssh-access",
 }
 
 type AuthenticateSessionFunc func(context.Context, string) (identity.AuthenticatedSession, error)
@@ -46,6 +50,7 @@ func NewHandler(service *Service, authenticate AuthenticateSessionFunc) (*Handle
 	routes := map[string]func(http.ResponseWriter, *http.Request, Actor){
 		Patterns[0]: handler.list, Patterns[1]: handler.create, Patterns[2]: handler.get,
 		Patterns[3]: handler.confirm, Patterns[4]: handler.cancel,
+		Patterns[5]: handler.controllerEgress, Patterns[6]: handler.getAccess, Patterns[7]: handler.putAccess,
 	}
 	for pattern, route := range routes {
 		route := route
@@ -90,39 +95,97 @@ func (handler *Handler) actor(response http.ResponseWriter, request *http.Reques
 	return Actor{UserID: session.Principal.UserID, ScopeID: session.Principal.ScopeID, RequestID: requestID, IP: ip}, true
 }
 
+// createBody is either hosts (one shared login: username + password or
+// private_key) or targets (batch install: each host with its own login).
 type createBody struct {
-	Hosts      []string `json:"hosts"`
-	Port       int      `json:"port"`
-	Names      []string `json:"names"`
-	Username   string   `json:"username"`
-	Password   string   `json:"password"`
-	PrivateKey string   `json:"private_key"`
+	Hosts       []string     `json:"hosts"`
+	Port        int          `json:"port"`
+	Names       []string     `json:"names"`
+	Username    string       `json:"username"`
+	Password    string       `json:"password"`
+	PrivateKey  string       `json:"private_key"`
+	Targets     []targetBody `json:"targets"`
+	BatchID     string       `json:"batch_id"`
+	RestrictSSH bool         `json:"restrict_ssh"`
+	// Language is the console UI language (i18n code such as "zh-CN" or
+	// "en"); the install command then carries --lang zh / --lang en.
+	Language string `json:"language"`
+}
+
+type targetBody struct {
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	Name       string `json:"name"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	PrivateKey string `json:"private_key"`
+}
+
+// createRequest maps the body; ok is false for a malformed one.
+func (body createBody) createRequest() (CreateRequest, bool) {
+	request := CreateRequest{RestrictSSH: body.RestrictSSH}
+	switch code := strings.ToLower(body.Language); {
+	case code == "":
+	case code == "zh" || strings.HasPrefix(code, "zh-") || strings.HasPrefix(code, "zh_"):
+		request.Language = "zh"
+	case code == "en" || strings.HasPrefix(code, "en-") || strings.HasPrefix(code, "en_"):
+		request.Language = "en"
+	default:
+		return CreateRequest{}, false
+	}
+	if body.BatchID != "" {
+		parsed, err := uuid.Parse(body.BatchID)
+		if err != nil || parsed == uuid.Nil {
+			return CreateRequest{}, false
+		}
+		request.BatchID = parsed
+	}
+	if len(body.Targets) > 0 {
+		// Per-host logins only: mixing in the shared form is ambiguous.
+		if len(body.Hosts) > 0 || len(body.Names) > 0 || body.Port != 0 || body.Username != "" || body.Password != "" ||
+			body.PrivateKey != "" || len(body.Targets) > MaxBatch {
+			return CreateRequest{}, false
+		}
+		for _, target := range body.Targets {
+			request.Targets = append(request.Targets, Target{Host: target.Host, Port: target.Port, Name: target.Name,
+				Credential: &Credential{Username: target.Username, Password: target.Password, PrivateKey: target.PrivateKey}})
+		}
+		return request, true
+	}
+	if len(body.Names) > 0 && len(body.Names) != len(body.Hosts) {
+		return CreateRequest{}, false
+	}
+	request.Credential = Credential{Username: body.Username, Password: body.Password, PrivateKey: body.PrivateKey}
+	for index, host := range body.Hosts {
+		target := Target{Host: host, Port: body.Port}
+		if len(body.Names) > 0 {
+			target.Name = body.Names[index]
+		}
+		request.Targets = append(request.Targets, target)
+	}
+	return request, true
 }
 
 func (handler *Handler) create(response http.ResponseWriter, request *http.Request, actor Actor) {
 	var body createBody
-	decoder := json.NewDecoder(io.LimitReader(request.Body, 256<<10))
+	decoder := json.NewDecoder(io.LimitReader(request.Body, 512<<10))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil || len(body.Names) > 0 && len(body.Names) != len(body.Hosts) {
+	if err := decoder.Decode(&body); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	defer clear([]byte(body.Password))
+	create, ok := body.createRequest()
+	if !ok {
+		writeError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
 	controlPlane, ok := consoleOrigin(request)
 	if !ok {
 		writeError(response, http.StatusBadRequest, "control_plane_origin_required")
 		return
 	}
-	targets := make([]Target, len(body.Hosts))
-	for index, host := range body.Hosts {
-		targets[index] = Target{Host: host, Port: body.Port}
-		if len(body.Names) > 0 {
-			targets[index].Name = body.Names[index]
-		}
-	}
-	jobs, err := handler.service.Create(request.Context(), actor, CreateRequest{Targets: targets,
-		Credential:   Credential{Username: body.Username, Password: body.Password, PrivateKey: body.PrivateKey},
-		ControlPlane: controlPlane})
+	create.ControlPlane = controlPlane
+	jobs, err := handler.service.Create(request.Context(), actor, create)
 	if err != nil {
 		writeServiceError(response, err)
 		return
@@ -219,6 +282,59 @@ func (handler *Handler) cancel(response http.ResponseWriter, request *http.Reque
 	writeJSON(response, http.StatusOK, job)
 }
 
+func (handler *Handler) controllerEgress(response http.ResponseWriter, _ *http.Request, _ Actor) {
+	cidrs := handler.service.ControllerEgress()
+	writeJSON(response, http.StatusOK, map[string]any{"controller_cidrs": cidrs, "configured": len(cidrs) > 0,
+		"rollback_seconds": int(AccessRollbackWindow / time.Second)})
+}
+
+func (handler *Handler) nodeID(response http.ResponseWriter, request *http.Request) (uuid.UUID, bool) {
+	id, err := uuid.Parse(request.PathValue("id"))
+	if err != nil {
+		writeError(response, http.StatusNotFound, "not_found")
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+func (handler *Handler) getAccess(response http.ResponseWriter, request *http.Request, actor Actor) {
+	nodeID, ok := handler.nodeID(response, request)
+	if !ok {
+		return
+	}
+	access, err := handler.service.GetAccess(request.Context(), actor, nodeID)
+	if err != nil {
+		writeServiceError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, access)
+}
+
+func (handler *Handler) putAccess(response http.ResponseWriter, request *http.Request, actor Actor) {
+	nodeID, ok := handler.nodeID(response, request)
+	if !ok {
+		return
+	}
+	var body struct {
+		Enabled    bool     `json:"enabled"`
+		SSHPort    int      `json:"ssh_port"`
+		AllowCIDRs []string `json:"allow_cidrs"`
+	}
+	decoder := json.NewDecoder(io.LimitReader(request.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	access, err := handler.service.SetAccess(request.Context(), actor, nodeID,
+		AccessChange{Enabled: body.Enabled, SSHPort: body.SSHPort, AllowCIDRs: body.AllowCIDRs})
+	if err != nil {
+		writeServiceError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, access)
+}
+
 func writeServiceError(response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidInput):
@@ -231,6 +347,8 @@ func writeServiceError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ssh_install_in_progress")
 	case errors.Is(err, ErrPermission):
 		writeError(response, http.StatusForbidden, "permission_denied")
+	case errors.Is(err, ErrControllerEgressUnknown):
+		writeError(response, http.StatusConflict, "controller_egress_unknown")
 	default:
 		writeError(response, http.StatusServiceUnavailable, "unavailable")
 	}

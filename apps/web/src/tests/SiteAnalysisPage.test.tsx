@@ -326,7 +326,8 @@ describe('SiteAnalysisPage', () => {
 
     expect(await screen.findByText('first.example')).toBeInTheDocument()
     expect(screen.getByText('未知')).toBeInTheDocument()
-    expect(screen.getByText('采集进度暂不可用')).toBeInTheDocument()
+    // 排行接口不返回采集水位：不显示写死的「采集进度暂不可用」。
+    expect(screen.queryByText('采集进度暂不可用')).not.toBeInTheDocument()
     // #48②：有下一页时不是精确总数，写明总数未统计；末页是已加载的确切条数。
     expect(screen.getByText(/^已加载 \d+ 条，还有更多，总数未统计$/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '下一页' }))
@@ -601,8 +602,10 @@ describe('SiteAnalysisPage', () => {
     await screen.findByText('first.example')
     expect(screen.getByRole('tab', { name: 'Popular URLs' })).toBeInTheDocument()
     expect(screen.getAllByText('Outbound traffic')).not.toHaveLength(0)
-    expect(screen.getByText(/Ranking snapshot/)).toBeInTheDocument()
-    expect(screen.getByText('Ingest progress is unavailable')).toBeInTheDocument()
+    // analytics-meta-del：结果区上方的时间范围/排行快照说明已删除。
+    expect(screen.queryByText(/Local time range/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Ranking snapshot/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Ingest progress is unavailable')).not.toBeInTheDocument()
   })
   // fix-rangecompact：快捷项统一为今天/近7天/近30天/自定义，原 30 分钟用例改为近 7 天（仍按分钟对齐）。
   it('requests the summary for the 7-day preset as a minute-aligned window (ui-click F4)', async () => {
@@ -713,18 +716,24 @@ describe('SiteAnalysisPage', () => {
     expect(landed!.state).toEqual({ drillFrom: 'analysis' })
   })
 
-  // TEL-UX-SUMMARY-SCOPE：汇总接口不支持域名/端口，排行按域名筛了，汇总要写明它统计的是全部站点。
-  it('labels the range summary scope when the ranking is narrowed by domain (TEL-UX-SUMMARY-SCOPE)', async () => {
+  // analytics-meta-del：删掉结果区上方的本地时间范围、排行快照、汇总范围三行；
+  // 汇总条指标行保留，汇总仍不带域名参数。
+  it('hides the local window, snapshot and summary scope lines but keeps the summary metrics (analytics-meta-del)', async () => {
     authenticate('tenant')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(rankResponse(input)))
     const user = userEvent.setup()
     renderWithProviders(<SiteAnalysisPage />)
     const strip = await screen.findByRole('group', { name: '范围汇总' })
-    expect(within(strip).getByText('汇总范围：所选时间内全部站点')).toBeInTheDocument()
+    await screen.findByText('first.example')
+    expect(within(strip).getByText(/^缓存命中率：/)).toBeInTheDocument()
+    expect(screen.queryByText(/本地时间范围/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/排行快照/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/汇总范围/)).not.toBeInTheDocument()
+    const rankBefore = rankCalls(fetchSpy).length
     await user.type(screen.getByPlaceholderText('输入域名，多个空格分隔'), 'a.example')
     await user.click(screen.getByRole('button', { name: '刷新' }))
-    await waitFor(() => expect(within(screen.getByRole('group', { name: '范围汇总' }))
-      .getByText('汇总范围：所选时间内全部站点（汇总不按域名、端口筛选，下方排行已按所选条件筛选）')).toBeInTheDocument())
+    await waitFor(() => expect(rankCalls(fetchSpy).length).toBeGreaterThan(rankBefore))
+    expect(screen.queryByText(/汇总范围/)).not.toBeInTheDocument()
     const summaryURL = new URL(String(fetchSpy.mock.calls.filter(([input]) => isSummary(input)).at(-1)![0]), 'http://cdnca.test')
     expect(summaryURL.searchParams.has('domain')).toBe(false)
   })

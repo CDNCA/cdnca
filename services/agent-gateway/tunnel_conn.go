@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -75,6 +76,13 @@ func (c *wsConn) SetWriteDeadline(t time.Time) error {
 	defer c.wmu.Unlock()
 	return c.ws.SetWriteDeadline(t)
 }
+
+// tunnelUpgrader keeps an idle tunnel small: ReadBufferSize 0
+// reuses the HTTP server's 4 KiB read buffer instead of a private 32 KiB
+// one, and write buffers come from a pool, held only while a message is
+// written, instead of 32 KiB for the tunnel's lifetime.
+var tunnelUpgrader = websocket.Upgrader{WriteBufferSize: 32 << 10, WriteBufferPool: &sync.Pool{},
+	CheckOrigin: func(*http.Request) bool { return true }}
 
 // chanListener hands connections to grpc.Server.Serve or http.Server.Serve.
 // Close (called by grpc.Server.Stop) runs onClose once; fail makes Accept

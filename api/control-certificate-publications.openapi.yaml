@@ -169,6 +169,13 @@ components:
         config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
         rollout_id: {$ref: '#/components/schemas/CanonicalUUID'}
         rollout_revision: {$ref: '#/components/schemas/PositiveRevision'}
+        noop_reason:
+          type: string
+          enum: [never_published]
+          description: >-
+            Present on a succeeded unpublication that created no rollout: the
+            site's certificate never reached a node, so there was nothing to
+            remove. The publication and rollout fields are then absent.
     PublicationStatusEvent:
       type: object
       additionalProperties: false

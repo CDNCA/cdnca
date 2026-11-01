@@ -119,7 +119,9 @@ func Dial(ctx context.Context, config DialConfig) (net.Conn, error) {
 	dialer := websocket.Dialer{
 		TLSClientConfig:  &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host, RootCAs: config.Roots, NextProtos: []string{"http/1.1"}},
 		HandshakeTimeout: config.Timeout,
-		ReadBufferSize:   32 << 10, WriteBufferSize: 32 << 10,
+		// Write buffer lent per message, gorilla's 4 KiB read buffer
+		//: the tunnel is idle between heartbeats.
+		WriteBufferSize: 32 << 10, WriteBufferPool: writeBuffers,
 		NetDialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, network, config.Address)
@@ -143,6 +145,8 @@ func portOf(address string) string {
 	}
 	return port
 }
+
+var writeBuffers = &sync.Pool{}
 
 type conn struct {
 	ws     *websocket.Conn

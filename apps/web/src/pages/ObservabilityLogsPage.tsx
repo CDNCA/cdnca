@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, Input, Radio, Result, Select, Space, Table, Tag, type TableColumnsType } from 'antd'
 import { useFeedback, FeedbackWhen, TimeRangeFilter } from '@cdnca/ui'
 import { Download, RefreshCw } from 'lucide-react'
@@ -84,7 +85,9 @@ function ObservabilityLogsContent({ accessToken, audience, language, selfScopeID
     actorUserId: viewMode === 'login' && actorUserIDReady ? actorUserID || undefined : undefined,
     from: localInstant(from), to: localInstant(to), targetScopeId: audience === 'platform' && scopeReady ? targetScopeID : undefined,
     limit: 50, cursor }
-  const query = useQuery({ queryKey:['observability-logs', audience, filters], queryFn:()=>observabilityLogsApi.list(accessToken, filters), enabled:scopeReady, retry:false })
+  // control-log-ui：条件变了按新数据读；同一条件下翻页 30 秒内用缓存。
+  const [generation] = useLogListGeneration({ ...filters, cursor: undefined })
+  const query = useQuery({ queryKey:['observability-logs', audience, generation, filters], queryFn:()=>observabilityLogsApi.list(accessToken, filters), enabled:scopeReady, ...logListQueryOptions, retry:false })
   // A18：游标失效时保留筛选、清游标重查第一页（第一页无游标，不会循环）。
   const cursorExpired = query.isError && query.error instanceof ApiError && query.error.code === 'observability_logs_cursor_expired'
   useEffect(() => {
@@ -164,11 +167,11 @@ function ObservabilityLogsContent({ accessToken, audience, language, selfScopeID
     {audience==='platform'&&!scopeReady?<Alert type={targetScopeID?'error':'info'} showIcon message={text(targetScopeID?'targetScopeInvalid':'targetScopeRequired')} />:null}
     {query.isError?<FeedbackWhen title={query.error instanceof ApiError&&query.error.code==='permission_denied'?text('failed'):text('failed')} />:null}
     <div className="identity-table-scroll" aria-busy={scopeReady && actorUserIDReady && (query.isPending || query.isFetching)} data-testid="observability-log-table">
-      <Table<ObservabilityLogFact> rowKey="event_id" size="small" loading={scopeReady&&query.isPending} columns={columns} dataSource={query.data?.items??[]} pagination={false} locale={{emptyText:query.isError?text('failed'):text('empty')}} scroll={{x:1120}} />
+      <Table<ObservabilityLogFact> rowKey="event_id" size="small" loading={scopeReady&&(query.isPending||query.isPlaceholderData)} columns={columns} dataSource={query.data?.items??[]} pagination={false} locale={{emptyText:query.isError?text('failed'):text('empty')}} scroll={{x:1120}} />
     </div>
     <Space className="identity-pagination">
       <Button disabled={cursorStack.length===0} onClick={()=>setCursorStack((value)=>value.slice(0,-1))}>{text('previous')}</Button>
-      <Button disabled={!query.data?.next_cursor} onClick={()=>query.data?.next_cursor&&setCursorStack((value)=>[...value,query.data!.next_cursor!])}>{text('next')}</Button>
+      <Button disabled={!query.data?.next_cursor||query.isPlaceholderData} onClick={()=>query.data?.next_cursor&&setCursorStack((value)=>[...value,query.data!.next_cursor!])}>{text('next')}</Button>
     </Space>
   </section>
 }

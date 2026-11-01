@@ -1024,6 +1024,7 @@ func newIAM069Fixture(t *testing.T) (*fixture069, func()) {
 	if pool := databasetest.ClonedMigratedPool(t, func(config *pgxpool.Config) { config.MaxConns = 12 }); pool != nil {
 		return seedIAM069Fixture(t, pool, pool.Close)
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "iamlock069")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

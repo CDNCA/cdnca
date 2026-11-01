@@ -524,7 +524,8 @@ func newAnalyticsLogAuthorizationFixture(t *testing.T) *analyticsLogAuthorizatio
 	fixture := &analyticsLogAuthorizationFixture{
 		pool: pool, clock: &analyticsLogClock{now: baseNow}, tenantA: uuid.New(), tenantB: uuid.New(),
 		tenantScope: uuid.New(), tenantUser: uuid.New(), tenantRole: uuid.New(), platformRole: uuid.New(),
-		queryWindow:       queryValues(baseNow.Add(-time.Hour), baseNow.Add(time.Minute)),
+		// 窗口不超过首个分页段（1 小时，log-read-perf 分段分页）：每个列表请求恰好一次 ClickHouse 查询。
+		queryWindow:       queryValues(baseNow.Add(-59*time.Minute), baseNow.Add(time.Minute)),
 		clickHouseTenants: make(chan string, 16),
 	}
 	tenantBScope, platformScope, platformUser := uuid.New(), uuid.New(), uuid.New()
@@ -831,6 +832,7 @@ func isolatedAnalyticsLogPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "analyticslog_rbac")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

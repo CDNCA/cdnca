@@ -275,7 +275,8 @@ paths:
   /v1/dns/platform-config:
     get:
       operationId: getPlatformDNSConfig
-      summary: Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)
+      summary: "Read the installation-wide DNS configuration (Node management > DNS settings, platform administrator)"
+      x-summary-zh: Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)
       responses:
         '200':
           description: Provider, non-secret identifiers, TTL, IP weight, tenant sync summary and the last DNS write failure.
@@ -316,7 +317,8 @@ paths:
   /v1/dns/platform-config/connection-test:
     post:
       operationId: testPlatformDNSConnection
-      summary: 连接测试 - verify DNS credentials and the CNAME domains they host (read-only)
+      summary: "Connection test - verify DNS credentials and the CNAME domains they host (read-only)"
+      x-summary-zh: 连接测试 - verify DNS credentials and the CNAME domains they host (read-only)
       description: >-
         Verifies the entered credentials (or, without credentials, the saved ones of provider_type) with the
         same provider check as a save, then lists the account's domains once per CNAME domain. Nothing is saved
@@ -372,8 +374,10 @@ paths:
   /v1/dns/platform-config/{kind}:
     post:
       operationId: startPlatformDNSOperation
-      summary: Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs
-      description: >-
+      summary: "Start record repair (repair) or remove non-CDN records (cleanup) as background jobs"
+      x-summary-zh: Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs
+      description: "repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner); cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the result lines shown under System > Background jobs."
+      x-description-zh: >-
         repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner);
         cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per
         A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the
@@ -410,7 +414,8 @@ paths:
   /v1/dns/platform-zones:
     get:
       operationId: listPlatformDNSZones
-      summary: List the CNAME domains (CNAME域名)
+      summary: "List the CNAME domains"
+      x-summary-zh: List the CNAME domains (CNAME域名)
       parameters:
         - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
@@ -1049,7 +1054,7 @@ components:
         id: {type: string, format: uuid}
         scope_id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 128, x-maxUtf8Bytes: 128}
-        remark: {type: string, maxLength: 256, description: 备注 (DNS API list and form); empty when none}
+        remark: {type: string, maxLength: 256, description: "Remark (DNS API list and form); empty when none", x-description-zh: 备注 (DNS API list and form); empty when none}
         provider_type: {$ref: '#/components/schemas/ProviderType'}
         credentials_configured: {type: boolean, const: true}
         status: {type: string, enum: [unverified, verified, disabled]}
@@ -1109,7 +1114,7 @@ components:
       properties:
         name: {type: string, minLength: 1, maxLength: 253}
         remark: {type: string, maxLength: 255}
-        random_allocation: {type: boolean, description: '参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.'}
+        random_allocation: {type: boolean, description: "Random allocation. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.", x-description-zh: '参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.'}
     PlatformDNSZone:
       type: object
       required: [id, display_id, name, remark, in_use, random_allocation, version, created_at, updated_at]
@@ -1119,7 +1124,7 @@ components:
         name: {type: string}
         remark: {type: string}
         in_use: {type: boolean, description: Some tenant still has CNAME hostnames allocated under this domain.}
-        random_allocation: {type: boolean, description: 参与随机分配 (see PlatformDNSZoneInput).}
+        random_allocation: {type: boolean, description: "Random allocation (see PlatformDNSZoneInput).", x-description-zh: 参与随机分配 (see PlatformDNSZoneInput).}
         version: {type: integer, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -1173,7 +1178,7 @@ components:
           required: [name, provider_type, credentials]
           properties:
             name: {type: string, minLength: 1, maxLength: 128}
-            remark: {type: string, maxLength: 256, description: 备注; trimmed, no control characters}
+            remark: {type: string, maxLength: 256, description: "Remark; trimmed, no control characters", x-description-zh: 备注; trimmed, no control characters}
           oneOf:
             - title: Cloudflare provider
               properties:
@@ -1214,7 +1219,7 @@ components:
       properties:
         expected_version: {type: integer, format: int64, minimum: 1}
         name: {type: string, minLength: 1, maxLength: 128}
-        remark: {type: string, maxLength: 256, description: 备注; omitted keeps the stored remark}
+        remark: {type: string, maxLength: 256, description: "Remark; omitted keeps the stored remark", x-description-zh: 备注; omitted keeps the stored remark}
         status:
           type: string
           enum: [unverified, disabled]

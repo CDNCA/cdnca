@@ -291,6 +291,7 @@ func TestBuildCacheControlRuntimeClosePreservesCallerOwnedResources(t *testing.T
 
 func openCacheControlCompositionDatabase(t *testing.T, databaseURL string) *pgxpool.Pool {
 	t.Helper()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "cache_control_composition")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

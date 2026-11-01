@@ -97,6 +97,7 @@ func headMigratedNotificationPool(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "notification_head")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

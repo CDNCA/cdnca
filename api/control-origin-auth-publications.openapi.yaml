@@ -13,7 +13,8 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications:
     post:
       operationId: publishOriginAuthEdgeConfiguration
-      summary: 发布租户作用域的源站鉴权配置
+      summary: "Publish the tenant scope's origin authentication configuration"
+      x-summary-zh: 发布租户作用域的源站鉴权配置
       description: >-
         Requires a platform session with edge_publications.manage and origin_auth.manage.
         If-Match is the exact latest source revision. The server locks each target node and
@@ -37,7 +38,8 @@ paths:
               $ref: '#/components/schemas/PublishRequest'
       responses:
         '201':
-          description: 创建成功，或返回完全相同请求的持久化结果
+          description: "Created, or the persisted result of the exact same request"
+          x-description-zh: 创建成功，或返回完全相同请求的持久化结果
           headers:
             X-Request-ID: {$ref: '#/components/headers/RequestID'}
             ETag: {$ref: '#/components/headers/ManifestETag'}
@@ -59,7 +61,8 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications/{publication_id}:
     get:
       operationId: getOriginAuthEdgePublication
-      summary: 读取一个不可变源站鉴权发布结果
+      summary: "Read one immutable origin authentication publication"
+      x-summary-zh: 读取一个不可变源站鉴权发布结果
       description: >-
         Requires edge_publications.read and origin_auth.read. The session and both grants
         are checked again in the read transaction. The result is reconstructed only from
@@ -72,7 +75,8 @@ paths:
         - $ref: '#/components/parameters/ReadRequestID'
       responses:
         '200':
-          description: 不可变发布结果
+          description: "Immutable publication result"
+          x-description-zh: 不可变发布结果
           headers:
             X-Request-ID: {$ref: '#/components/headers/RequestID'}
             ETag: {$ref: '#/components/headers/ManifestETag'}
@@ -107,7 +111,8 @@ components:
       name: If-Match
       in: header
       required: true
-      description: 当前源配置 revision 的强 ETag，例如 "7"。
+      description: "Strong ETag of the current source configuration revision, e.g. \"7\"."
+      x-description-zh: 当前源配置 revision 的强 ETag，例如 "7"。
       schema:
         type: string
         pattern: '^"[1-9][0-9]*"$'
@@ -248,31 +253,40 @@ components:
             retry: {$ref: '#/components/schemas/RetryBinding'}
   responses:
     BadRequest:
-      description: 请求格式或参数无效
+      description: "The request format or parameters are invalid"
+      x-description-zh: 请求格式或参数无效
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Unauthorized:
-      description: 会话无效或已撤销
+      description: "The session is invalid or revoked"
+      x-description-zh: 会话无效或已撤销
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Forbidden:
-      description: 作用域或权限拒绝
+      description: "Denied by scope or permission"
+      x-description-zh: 作用域或权限拒绝
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     NotFound:
-      description: 源配置或发布记录不存在
+      description: "The source configuration or publication does not exist"
+      x-description-zh: 源配置或发布记录不存在
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     MethodNotAllowed:
-      description: 方法不受支持
+      description: "Method not supported"
+      x-description-zh: 方法不受支持
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Conflict:
-      description: 幂等键已绑定不同请求
+      description: "The idempotency key is bound to a different request"
+      x-description-zh: 幂等键已绑定不同请求
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     PreconditionFailed:
-      description: If-Match 不等于最新源配置 revision
+      description: "If-Match is not the latest source configuration revision"
+      x-description-zh: If-Match 不等于最新源配置 revision
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     UnprocessableEntity:
-      description: 目标节点、接收密钥或源配置当前不可发布
+      description: "The target nodes, receiving keys or source configuration cannot be published now"
+      x-description-zh: 目标节点、接收密钥或源配置当前不可发布
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     InvalidUpstreamResponse:
-      description: 持久化事实未通过严格身份校验
+      description: "Persisted facts failed the strict identity check"
+      x-description-zh: 持久化事实未通过严格身份校验
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     OutcomeUnknown:
       description: >-
@@ -281,5 +295,6 @@ components:
         Retry-After: {schema: {type: string}}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Unavailable:
-      description: 服务暂不可用
+      description: "Service temporarily unavailable"
+      x-description-zh: 服务暂不可用
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

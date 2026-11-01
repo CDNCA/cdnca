@@ -1020,3 +1020,8 @@
   padding: 4px 7px;
   line-height: 22.4px;
 }
+
+/* 管理端地址/绑定域名卡片的命令行与要求列表 */
+.control-host-bind-command { margin: 4px 0 12px; overflow-wrap: anywhere; }
+.control-host-bind-command code { white-space: pre-wrap; word-break: break-all; }
+.control-host-bind-requirements { margin: 6px 0 12px; padding-left: 20px; font-size: 14px; line-height: 1.7; }

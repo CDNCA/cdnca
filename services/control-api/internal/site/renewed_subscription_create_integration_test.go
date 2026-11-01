@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
 	"github.com/cdnca/cdnca/services/control-api/internal/packageperiod"
 	"github.com/cdnca/cdnca/services/control-api/internal/packagesubscription"
@@ -25,6 +26,7 @@ func TestCreateSiteUnderRenewedSubscription(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "renewed_sub")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

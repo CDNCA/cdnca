@@ -1,4 +1,5 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { responseETag } from './etag'
 
 export type OriginAuthProvider = 's3' | 'oss' | 'cos'
 export type OriginAuthAlgorithm = 'aws4-hmac-sha256' | 'oss4-hmac-sha256' | 'cos-hmac-sha1'
@@ -309,7 +310,7 @@ async function parseEdgeResponse(
     (publicationID !== undefined && value.publication_id !== publicationID) ||
     (sourceRevision !== undefined && value.source_revision !== sourceRevision)) throw edgeInvalidResponse()
   const expectedLocation = `${edgeCollectionPath(scopeID)}/${value.publication_id}`
-  if (response.headers.get('ETag') !== `"sha256-${value.artifact_manifest_sha256}"` ||
+  if (responseETag(response) !== `"sha256-${value.artifact_manifest_sha256}"` ||
     (requireLocation && response.headers.get('Location') !== expectedLocation)) throw edgeInvalidResponse()
   return Object.freeze({ ...value })
 }

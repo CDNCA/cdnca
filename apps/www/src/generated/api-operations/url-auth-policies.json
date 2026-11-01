@@ -349,7 +349,7 @@
       },
       {
        "name": "migration_marker",
-       "type": "string: cdnfly_type_a_md5 / cdnfly_type_b_md5",
+       "type": "string: legacy_type_a_md5 / legacy_type_b_md5",
        "description": "Read-only import provenance. It never selects the executable edge algorithm."
       },
       {

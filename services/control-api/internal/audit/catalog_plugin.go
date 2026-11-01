@@ -8,6 +8,8 @@ func init() {
 		e("plugin_installation.disable", CategoryPlugin, "暂停插件 {resource}", "paused plugin {resource}"),
 		e("plugin_installation.resume", CategoryPlugin, "恢复使用插件 {resource}", "resumed plugin {resource}"),
 		e("plugin_installation.uninstall", CategoryPlugin, "卸载插件 {resource}", "uninstalled plugin {resource}"),
+		// plugapi-S2: writes of a plugin identity (API key bound to an installation) over the per-installation limit.
+		e("plugin.api.rate_limited", CategoryPlugin, "插件安装 {resource} 的写请求超过每 {window_seconds} 秒 {limit} 次的频率限制，已拒绝（{method} {path}）", "write requests of plugin installation {resource} exceeded {limit} per {window_seconds} seconds and were refused ({method} {path})").f("method", "path", "limit", "window_seconds"),
 		e("plugin.artifact.download_request", CategoryPlugin, "请求下载制品 {resource}", "requested downloading artifact {resource}").f("version", "kind"),
 		e("plugin.artifact.download", CategoryPlugin, "制品 {resource} 已下载到主控", "artifact {resource} was downloaded to the control plane").f("version"),
 		e("plugin.artifact.build", CategoryPlugin, "主控本地构建了制品 {resource}{changes}", "the control plane built artifact {resource}{changes}").f("version", "source_release"),
@@ -19,6 +21,7 @@ func init() {
 		e("plugin.ui_page.enable", CategoryPlugin, "插件 {resource} 的页面已挂载（来源 {origin}）{changes}", "mounted the pages of plugin {resource} (origin {origin}){changes}").f("version", "origin"),
 		e("plugin.ui_page.withdraw", CategoryPlugin, "插件 {resource} 授权已失效，页面已撤下（来源 {origin}）{changes}", "plugin {resource} is no longer authorized; its pages (origin {origin}) were removed{changes}").f("version", "origin"),
 		e("plugin.ui_page.reject", CategoryPlugin, "拒绝挂载插件 {resource} 的页面：来源 {origin} 已被其他插件使用", "refused to mount the pages of plugin {resource}: origin {origin} is used by another plugin").f("version", "origin"),
+		// one-click plugin identity issued to / revoked from a ui_page plugin backend.
 		e("plugin.ui_page.proxy", CategoryPlugin, "在插件 {resource} 的页面「{page_id}」中调用插件后端 {method} {path}", "called the backend of plugin {resource} from page {page_id}: {method} {path}").f("page_id", "method", "path"),
 		// PA-22 third-party DNS / SMS / ICP provider plugins: installation contract, then enable.
 		e("plugin.provider.materialize", CategoryPlugin, "插件 {resource} 的服务商声明已下载（{kinds}），等待契约测试{changes}", "the provider declaration of plugin {resource} ({kinds}) was downloaded and awaits its contract test{changes}").f("version", "kinds"),

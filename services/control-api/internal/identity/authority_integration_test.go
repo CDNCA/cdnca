@@ -6,16 +6,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -810,38 +808,5 @@ func assertIdentityGlobalExclusiveWaiter(t *testing.T, pool *pgxpool.Pool) {
 
 func newIdentityAuthorityPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	admin, err := pgxpool.New(t.Context(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "identity_stage2a_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(t.Context(), "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(t.Context(), pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }

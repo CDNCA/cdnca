@@ -16,6 +16,7 @@ import {
 } from '../api/originAuthCredentials'
 import { useSessionStore } from '../auth/session'
 import { DataState } from '../components/DataState'
+import { isFeatureDisabled } from '../i18n/apiError'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/originAuthCredentials'
 import { OutcomeUnknown } from '@cdnca/ui'
@@ -68,6 +69,7 @@ function isForbidden(error: unknown): boolean {
 
 function errorKey(error: unknown): string {
   if (!(error instanceof ApiError)) return 'errors.requestFailed'
+  if (isFeatureDisabled(error)) return 'errors:feature_disabled'
   if (isForbidden(error)) return 'errors.forbiddenTitle'
   if (error.status === 404 || error.code === 'origin_auth_not_found') return 'errors.notFound'
   if (error.status === 412 || error.code === 'origin_auth_revision_conflict') return 'errors.revisionConflict'

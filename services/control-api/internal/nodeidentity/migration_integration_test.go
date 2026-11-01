@@ -4,15 +4,10 @@ package nodeidentity
 
 import (
 	"context"
-	"os"
-	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -44,52 +39,10 @@ func TestNodeIdentityMigrationRoundTrip(t *testing.T) {
 
 func openIdentityTestDatabase(t *testing.T, migrate bool) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := admin.Ping(ctx); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	schema := "node_identity_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^node_identity_test_[a-f0-9]{32}$`).MatchString(schema) {
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop identity schema: %v", err)
-		}
-		admin.Close()
-	})
 	if migrate {
-		if err := database.Migrate(ctx, pool, "up"); err != nil {
-			t.Fatal(err)
-		}
+		return databasetest.MigratedPool(t, nil)
 	}
-	return pool
+	return databasetest.FreshSchemaPool(t, "node_identity_test", nil, nil)
 }
 
 func identityMigrationVersion(t *testing.T, pool *pgxpool.Pool) int64 {

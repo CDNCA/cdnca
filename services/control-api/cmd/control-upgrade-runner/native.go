@@ -67,6 +67,7 @@ func runNativeStandalone(ctx context.Context, installationID string, trust *enti
 		GatewayHealthURL: requiredEnv("CDNCA_NATIVE_UPGRADE_GATEWAY_HEALTH_URL"),
 		WebIndexURL:      requiredEnv("CDNCA_NATIVE_UPGRADE_WEB_INDEX_URL"),
 		WebCAFile:        requiredEnv("CDNCA_NATIVE_UPGRADE_WEB_CA_FILE"),
+		WebIndexAddress:  requiredEnv("CDNCA_NATIVE_UPGRADE_WEB_INDEX_ADDRESS"),
 		MaintenanceFile:  requiredEnv("CDNCA_NATIVE_UPGRADE_MAINTENANCE_FILE"),
 		PollInterval:     time.Second, StepTimeout: step, HealthTimeout: health,
 		DatabaseToolsDirectory: requiredEnv("CDNCA_NATIVE_UPGRADE_DATABASE_TOOLS_DIR"), DatabaseTimeout: database,

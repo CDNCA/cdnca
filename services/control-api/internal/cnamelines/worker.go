@@ -182,13 +182,27 @@ func (worker *Worker) site(ctx context.Context, item site) (bool, error) {
 	if err := rows.Err(); err != nil {
 		return false, err
 	}
+	sets := Plan(endpoints)
+	// Smart scheduling (migration 609): lines with a fresh latency/fallback
+	// selection take the selected addresses with equal weights; province
+	// lines we wrote earlier and no longer select are retired. Without an
+	// enabled schedule smart is empty and nothing below changes.
+	smart, err := worker.smartLines(ctx, item, endpoints)
+	if err != nil {
+		return false, err
+	}
+	tracked := make([]string, 0, len(existing))
+	for scope := range existing {
+		tracked = append(tracked, scope)
+	}
+	sets, equal := WithSmart(sets, smart, tracked)
 	changed := false
-	for scope, set := range Plan(endpoints) {
+	for scope, set := range sets {
 		row, tracked := existing[scope]
-		if !Supported(item.ProviderType, scope) {
+		if !lineSupported(item.ProviderType, scope) {
 			continue
 		}
-		if containsScope(scheduled, scope) {
+		if containsScope(scheduled, scope) || isProvinceScope(scope) && containsScope(scheduled, provinceCarrier(scope)) {
 			// Handed over to the aggregated edge: forget our record of it.
 			if tracked {
 				if _, err := worker.pool.Exec(ctx, `DELETE FROM cname_carrier_line_records WHERE site_id=$1 AND line_scope=$2`,
@@ -198,7 +212,10 @@ func (worker *Worker) site(ctx context.Context, item site) (bool, error) {
 			}
 			continue
 		}
-		weights := LineWeights(endpoints, scope, settings.Weights)
+		weights := map[string]uint32{}
+		if !equal[scope] {
+			weights = LineWeights(endpoints, scope, settings.Weights)
+		}
 		digest := set.Digest(settings.TTL, weights)
 		// Nothing wanted and nothing of ours on the line: never touch it.
 		if set.Empty() && !tracked {
@@ -256,7 +273,7 @@ func (worker *Worker) endpoints(ctx context.Context, item site) ([]Endpoint, err
 
 func (worker *Worker) publish(ctx context.Context, item site, scope string, set Set, ttl uint32, weights map[string]uint32,
 	digest string) error {
-	line, _ := DNSLine(scope)
+	line, _ := lineFor(scope)
 	err := worker.publisher.PublishAddresses(ctx, dnsproviderremotesource.AddressPublication{TenantID: item.TenantID,
 		SiteID: item.SiteID, ZoneID: item.ZoneID, Owner: item.Owner, Line: line, A: set.A, AAAA: set.AAAA,
 		Weights: weights, TTL: ttl})

@@ -26,17 +26,43 @@ func TestPageQueriesUseWindowCandidatesBeforeLatestVersionResolution(t *testing.
 			candidate := test.query[candidateStart:resolutionStart]
 			for _, clause := range []string{
 				"FROM " + test.candidateSource,
-				"occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')",
+				// the candidates come from the segment the
+				// client chose ([segment_from, to) within the window) plus the
+				// whole window's ambiguous events, which must still sort first.
+				"occurred_at >= segment_from",
 				"occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')",
 				"ingested_at <= snapshot_at",
+				"SELECT event_id FROM conflict_event_ids",
 			} {
 				if !strings.Contains(candidate, clause) {
 					t.Fatalf("candidate scan is missing %q", clause)
 				}
 			}
+			conflictStart := strings.Index(test.query, "conflict_keys AS")
+			if conflictStart < 0 || conflictStart > candidateStart {
+				t.Fatal("conflict scan is missing before the candidates")
+			}
+			conflict := test.query[conflictStart:candidateStart]
+			for _, clause := range []string{
+				"FROM " + test.name + "_event_version_digest_v1 FINAL",
+				"version_digest_min != version_digest_max",
+				"occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')",
+				"occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')",
+				"ingested_at <= snapshot_at",
+			} {
+				if strings.Count(conflict, clause) < 1 {
+					t.Fatalf("conflict scan is missing %q", clause)
+				}
+			}
 			latestScan := test.query[resolutionStart:payloadStart]
-			if !strings.Contains(latestScan, "INNER JOIN candidate_event_ids USING (event_id)") ||
-				strings.Contains(latestScan, "event_id IN (SELECT event_id FROM candidate_event_ids)") {
+			// log-read-perf (accepted 10-30): the state rows are pre-filtered
+			// to the candidates in PREWHERE instead of an INNER JOIN after the
+			// scan, which read the scope's whole retention per page. Measured
+			// on 10M access rows (2 cores, 4 GiB): 1h p50 132→32ms, 24h
+			// 5787→1712ms (4.24→1.11 GiB read), 7d OOM→11.4s; keeping the join
+			// next to the IN made 7d slower (13.7→43.1s). Page output with a
+			// fixed snapshot is byte-identical.
+			if !strings.Contains(latestScan, "AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at") {
 				t.Fatal("latest-version scan is not restricted to candidate event IDs")
 			}
 			if !strings.Contains(latestScan, "FROM "+test.candidateSource) ||
@@ -45,6 +71,7 @@ func TestPageQueriesUseWindowCandidatesBeforeLatestVersionResolution(t *testing.
 			}
 			for _, clause := range []string{
 				"tupleElement(latest_filter, 1) >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')",
+				"tupleElement(latest_filter, 1) >= segment_from",
 				"tupleElement(latest_filter, 1) < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')",
 			} {
 				if !strings.Contains(latestScan, clause) {
@@ -84,7 +111,7 @@ func TestPageQueriesTreatOnlyDistinctEqualIngestedPayloadsAsAmbiguous(t *testing
 				"argMaxMerge(latest_payload_state) AS latest",
 				"uniqExactMerge(version_pair_state)",
 				"> uniqExactMerge(ingested_at_state)",
-				"INNER JOIN candidate_event_ids USING (event_id)",
+				"AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
 				"toUInt64(ifNull(durable_version_count, 1)) AS latest_version_count",
 				"HAVING durable_version_count > 1 OR",
 				"event_id IN (SELECT event_id FROM selected_rows)",

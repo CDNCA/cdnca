@@ -14,6 +14,7 @@ import (
 	"github.com/cdnca/cdnca/libs/edgeconfig"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/certificateasset"
+	"github.com/cdnca/cdnca/services/control-api/internal/firewallactioncontrol"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -387,6 +388,20 @@ func reloadFirewallActionFacts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID
 	refs []siteRuntimeV2PolicyRef) ([]firewallActionFact, error) {
 	facts := make([]firewallActionFact, 0, len(refs))
 	for _, ref := range refs {
+		if ref.PolicyID == firewallactioncontrol.InheritedPolicyID(scopeID, ref.SiteID) {
+			// An inherited delivery: recomposed from the tenant default revision.
+			var stored []byte
+			if err := tx.QueryRow(ctx, `SELECT document_bytes FROM firewall_action_tenant_default_revisions
+				WHERE tenant_scope_id=$1 AND revision=$2`, scopeID, ref.Revision).Scan(&stored); err != nil {
+				return nil, fmt.Errorf("%w: reload firewall action tenant default revision", ErrPersistence)
+			}
+			fact, err := inheritedFirewallActionFact(scopeID, ref.SiteID, ref.Revision, stored)
+			if err != nil || hex.EncodeToString(fact.digest[:]) != ref.SHA256 {
+				return nil, fmt.Errorf("%w: reload inherited firewall action", ErrPersistence)
+			}
+			facts = append(facts, fact)
+			continue
+		}
 		fact := firewallActionFact{siteID: ref.SiteID, policyID: ref.PolicyID, revision: ref.Revision}
 		var digest []byte
 		if err := tx.QueryRow(ctx, `SELECT document_bytes,document_sha256 FROM firewall_action_policy_revisions

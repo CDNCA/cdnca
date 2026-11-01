@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -829,6 +830,79 @@ func TestNativeWebCAFileRejectsUnsafeOrInvalidFiles(t *testing.T) {
 				t.Fatalf("err = %v", err)
 			}
 		})
+	}
+}
+
+// 10-30 73: the console index URL is the public control domain; behind a CDN it
+// resolved to the CDN, which injected a beacon script before </body>, so the
+// index digest never matched (console_index_mismatch) and the runner stayed
+// unready. The check must reach the local control-web while keeping the URL
+// host for SNI, Host and certificate verification.
+func TestNativeWebIndexCheckBypassesCDNThatRewritesTheConsole(t *testing.T) {
+	fixture := newNativeFixture(t)
+	index := fixture.contents[fixture.old.Digest]["static/web/index.html"]
+	var localHosts []string
+	var hostsMu sync.Mutex
+	local := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hostsMu.Lock()
+		localHosts = append(localHosts, r.Host+" "+r.TLS.ServerName)
+		hostsMu.Unlock()
+		_, _ = w.Write(index)
+	}))
+	t.Cleanup(local.Close)
+	cdn := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(bytes.Replace(index, []byte("</html>"), []byte(`<script src="/beacon.min.js"></script></html>`), 1))
+	}))
+	t.Cleanup(cdn.Close)
+	_, localPort, _ := net.SplitHostPort(local.Listener.Addr().String())
+	config, store, trust := fixture.runner.executor.config, fixture.runner.runner.store, fixture.runner.runner.trust
+	if err := fixture.runner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// The shared client stands in for public DNS: the control domain (the test
+	// certificate's example.com) resolves to the CDN; it also trusts that certificate.
+	resolver := local.Client().Transport.(*http.Transport).Clone()
+	config.HTTPClient = &http.Client{Transport: resolver}
+	config.WebIndexURL = "https://example.com:" + localPort + "/dashboard/"
+	resolver.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		target := address
+		if address == "example.com:"+localPort {
+			target = cdn.Listener.Addr().String()
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, target)
+	}
+	runner, err := newNativeStandaloneRunner(config, trust, store, fixture.runner.runner.now, uint32(os.Getuid()), fixture.commands, fixture.commands.inspect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runner.Close()
+	if err := runner.executor.checkHTTP(t.Context(), fixture.manifests[fixture.old.Digest]); err != nil {
+		t.Fatalf("console index must be read from the local control-web, not the CDN: %v", err)
+	}
+	hostsMu.Lock()
+	defer hostsMu.Unlock()
+	if len(localHosts) != 1 || localHosts[0] != "example.com:"+localPort+" example.com" {
+		t.Fatalf("Host/SNI must stay the control domain: %q", localHosts)
+	}
+}
+
+func TestNativeWebIndexAddressAcceptsOnlyLoopback(t *testing.T) {
+	for _, test := range []struct{ url, explicit, want string }{
+		{"https://cdnca.com/dashboard/", "", "127.0.0.1:443"},
+		{"https://cdnca.com:8443/dashboard/", "", "127.0.0.1:8443"},
+		{"https://203.0.113.7/dashboard/", "", "127.0.0.1:443"},
+		{"https://cdnca.com/dashboard/", "127.0.0.1:18443", "127.0.0.1:18443"},
+		{"https://cdnca.com/dashboard/", "[::1]:443", "[::1]:443"},
+		{"https://cdnca.com/dashboard/", "203.0.113.7:443", ""},
+		{"https://cdnca.com/dashboard/", "localhost:443", ""},
+		{"https://cdnca.com/dashboard/", "127.0.0.1:0", ""},
+		{"https://cdnca.com/dashboard/", "127.0.0.1:0443", ""},
+		{"https://cdnca.com/dashboard/", "127.0.0.1", ""},
+	} {
+		got, err := nativeWebIndexAddress(test.url, test.explicit)
+		if got != test.want || (err == nil) != (test.want != "") {
+			t.Fatalf("%s %q = %q %v, want %q", test.url, test.explicit, got, err, test.want)
+		}
 	}
 }
 

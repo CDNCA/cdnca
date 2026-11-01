@@ -408,6 +408,7 @@ func isolatedEntitlementPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "entitlement_guard_test")
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("open test administration pool: %v", err)

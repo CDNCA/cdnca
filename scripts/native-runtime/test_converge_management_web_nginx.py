@@ -23,15 +23,19 @@ LEGACY = (HERE / 'testdata/management-web-nginx-631c658a.conf').read_bytes()
 INSTALLER = (HERE.parent / 'install-control.sh').read_text()
 
 
-def render_current(port='443'):
+def render_current(port='443', brotli=False):
     writer = re.search(r'(?ms)^write_nginx_config\(\) \{.*?^\}\n\n(?=setup_web\(\))', INSTALLER)[0]
     with tempfile.TemporaryDirectory() as directory:
         target = Path(directory) / 'nginx.conf'
+        # The module path the installer checks is pinned; whether it exists is the fixture's choice.
+        available = 'true' if brotli else 'false'
+        # The writer block runs up to setup_web, so the stub follows it.
         subprocess.run(['bash', '-c', 'set -Eeuo pipefail; mkdir() { :; }; chmod() { :; }; nginx() { :; }\n' + writer +
-                        '\nwrite_nginx_config'], check=True, timeout=30, env={**os.environ,
+                        f'\ncontrol_brotli_static_available() {{ {available}; }}\nNGINX_BROTLI_STATIC_MODULE={C.BROTLI_MODULE}\n' +
+                        'write_nginx_config'], check=True, timeout=30, env={**os.environ,
                         'NGINX_CONF': str(target), 'NGINX_RUNTIME_DIR': '/var/lib/cdnca-control/nginx-runtime', 'MASTER_PORT': port,
                         'WEB_ROOT': '/data/cdnca-native-root/cdnca/current/static/web', 'NATIVE_ROOT': '/data/cdnca-native-root/cdnca', 'DATA_DIR': '/var/lib/cdnca-control',
-                        'DOWNLOAD_DIR': '/var/lib/cdnca-control/downloads',
+                        'DOWNLOAD_DIR': '/var/lib/cdnca-control/downloads', 'INSTALL_ENV': '', 'WEB_LISTEN': port, 'WEB_REAL_IP': '',
                         'PUBLIC_CERT_PATH': '/etc/cdnca-control/keys/pki/public-cert.pem',
                         'PUBLIC_KEY_PATH': '/etc/cdnca-control/keys/pki/public-key.pem'})
         return target.read_bytes()
@@ -48,6 +52,23 @@ class ConvergeTests(unittest.TestCase):
         """The configuration a host had before the page bundle sandbox."""
         self.assertEqual(converged.count(C.SITE_THEME_ROOT.encode()), 1)
         return converged.replace(C.SITE_THEME_ROOT.encode(), C.SITE_ROOT.encode())
+
+    def test_bound_domain_block_follows_the_converged_installer_server(self):
+        # control-api control-host bind adds a marked copy of the server for the domain.
+        def bind(text):
+            bound, _ = C.split_bind(text)
+            return C.render_bind(bound, ('console.example.com', '/etc/cdnca-control/keys/pki/bind-public-cert.pem',
+                                         '/etc/cdnca-control/keys/pki/bind-public-key.pem'))
+        current = render_current()
+        bound_current = bind(current.decode()).encode()
+        self.assertEqual(C.converge(bound_current)[0], bound_current)
+        self.assertEqual(bound_current.count(b'server_name console.example.com;'), 1)
+        self.assertEqual(bound_current.count(b'listen 443 ssl http2;'), 2)
+        legacy_bound = bind(LEGACY.decode()).encode()
+        self.assertEqual(C.converge(legacy_bound)[0], bound_current)
+        self.assertEqual(C.split_bind(bound_current.decode())[0].encode(), current)
+        with self.assertRaises(ValueError):
+            C.converge(bound_current.replace(b'server_name console.example.com;', b'server_name a; server_name b;'))
 
     def test_public_website_root_and_asset_cache_are_added_once(self):
         converged, _ = C.converge(LEGACY)
@@ -134,6 +155,73 @@ class ConvergeTests(unittest.TestCase):
         earlier = converged.replace(entry, b'')
         self.assertNotIn(b'location = /dashboard {', earlier)
         self.assertEqual(C.converge(earlier), (converged, 443))
+
+    def test_log_read_json_gzip_is_added_once_and_matches_the_installer(self):
+        block = C.API_GZIP.encode()
+        self.assertNotIn(b'application/json', LEGACY)
+        converged, _ = C.converge(LEGACY)
+        self.assertEqual(converged.count(block), 1)
+        self.assertEqual(converged.count(b'application/json'), 1)
+        self.assertEqual(render_current().count(block), 1)
+        # A host converged before this step gets exactly the sub-location.
+        earlier = converged.replace(block, C.API_GZIP_ANCHOR.encode())
+        self.assertEqual(C.converge(earlier), (converged, 443))
+        # JSON compression added by hand anywhere else is refused.
+        with self.assertRaises(ValueError):
+            C.converge(earlier.replace(b'image/svg+xml text/plain;', b'image/svg+xml text/plain application/json;'))
+
+    def test_website_content_json_gzip_upgrades_a_logs_only_host(self):
+        converged, _ = C.converge(LEGACY)
+        self.assertIn(b'|control-site/content)$ {', converged)
+        # A host converged by api-gzip alone (log reads only) gets the content route too.
+        logs_only = converged.replace(C.API_GZIP.encode(), C.API_GZIP_LOGS.encode())
+        self.assertNotEqual(logs_only, converged)
+        self.assertEqual(C.converge(logs_only), (converged, 443))
+        # A hand-edited sub-location is drift.
+        with self.assertRaises(ValueError):
+            C.converge(converged.replace(b'|control-site/content)$ {', b'|control-site/content|sites)$ {'))
+
+    def test_favicon_fallback_and_billing_bridge_downloads_are_added_once(self):
+        converged, _ = C.converge(LEGACY)
+        current = render_current()
+        for block in (C.FAVICON_ERROR, C.FAVICON_FALLBACK + C.FAVICON_FALLBACK_ANCHOR,
+                      C.NODE_INSTALLER + C.BILLING_BRIDGE + C.NODE_INSTALLER_ANCHOR):
+            self.assertEqual(converged.count(block.encode()), 1, block)
+            self.assertEqual(current.count(block.encode()), 1, block)
+        self.assertNotIn(C.FAVICON_ERROR_OLD.encode(), converged)
+        # A host converged before these steps gets exactly them.
+        earlier = (converged.replace(C.FAVICON_ERROR.encode(), C.FAVICON_ERROR_OLD.encode())
+                   .replace(C.FAVICON_FALLBACK.encode(), b'').replace(C.BILLING_BRIDGE.encode(), b'')
+                   .replace(C.HTTP_END.encode(), C.HTTP_END_OLD.encode()))
+        self.assertEqual(C.converge(earlier), (converged, 443))
+        for bad in (converged.replace(C.FAVICON_FALLBACK.encode(), b''),
+                    earlier.replace(C.NODE_INSTALLER_ANCHOR.encode(), b'        location ^~ /downloads/billing-bridge/ { root /srv; }\n' +
+                                    C.NODE_INSTALLER_ANCHOR.encode()),
+                    converged.replace(b'default_type application/zip;', b'default_type text/html;'),
+                    converged[:-3] + b'\n}\n# local\n'):
+            with self.subTest(bad=bad[-60:]), self.assertRaises(ValueError):
+                C.converge(bad)
+
+    def test_brotli_static_only_where_the_module_is_installed(self):
+        plain, _ = C.converge(LEGACY)
+        self.assertNotIn(b'brotli', plain)
+        brotli, _ = C.converge(LEGACY, brotli=True)
+        # Byte for byte the installer's rendering on a host with the module.
+        self.assertEqual(brotli, render_current(brotli=True))
+        self.assertTrue(brotli.startswith(C.BROTLI_LOAD.encode()))
+        self.assertEqual(brotli.count((C.STATIC_ASSETS + C.BROTLI_STATIC).encode()), 1)
+        self.assertEqual(brotli.count(b'brotli'), 2)
+        # Idempotent; a host converged without the module gets it once installed.
+        self.assertEqual(C.converge(brotli, brotli=True), (brotli, 443))
+        self.assertEqual(C.converge(plain, brotli=True), (brotli, 443))
+        # brotli configured but the module gone (nginx -t would fail), or by hand: refused.
+        for bad, available in ((brotli, False), (plain.replace(C.STATIC_ASSETS.encode(), (C.STATIC_ASSETS + C.BROTLI_STATIC).encode()), True),
+                               (b'load_module /x.so;\n' + plain, True)):
+            with self.subTest(bad=bad[:40]), self.assertRaises(ValueError):
+                C.converge(bad, brotli=available)
+        # A BaoTa host's own nginx cannot load the distribution module.
+        baota = plain.replace(C.HTTP_END.encode(), b'\n    }\n' + C.BAOTA_DOWNLOAD.encode() + b'\n    server { }\n}\n')
+        self.assertEqual(C.converge(baota, brotli=True), (baota, 443))
 
     def test_dashboard_entry_added_by_hand_is_already_converged(self):
         converged, _ = C.converge(LEGACY)
@@ -234,7 +322,7 @@ class ApplyTests(unittest.TestCase):
 
     def call(self, function):
         return function(config=self.config, runtime=self.root, lock=self.lock, nginx=Path('/fixture/nginx'),
-                        run=self.run_command, check=lambda port, h2: self.healthy(port, h2), wait=0)
+                        run=self.run_command, check=lambda port, h2: self.healthy(port, h2), wait=0, brotli=False)
 
     def backups(self):
         return sorted(self.root.glob('nginx.conf.pre-converge-*'))

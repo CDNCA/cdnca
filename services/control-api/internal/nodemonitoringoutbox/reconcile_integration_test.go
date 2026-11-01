@@ -30,6 +30,7 @@ func TestNodeMonitoringBackfillUsesCurrentActiveRevision(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "node_monitoring_backfill")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

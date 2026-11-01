@@ -85,6 +85,12 @@ func CompileV2(config ConfigV2, addressSets map[string][]netip.Addr) (CompiledCo
 			// Explicit addresses already passed the static endpoint contract in
 			// normalizeConfigV2. DNS rebinding filters apply only to host answers.
 			addresses = []netip.Addr{netip.MustParseAddr(listener.Endpoint.Address)}
+		} else if len(addresses) == 0 {
+			// a host with no address set (unresolvable, or a stale
+			// LKG) renders a placeholder upstream; only that forward refuses
+			// connections, the release and the other forwards stand.
+			resolved[listener.StreamID] = nil
+			continue
 		} else {
 			addresses, err = normalizeResolvedAddresses(addresses, false)
 		}
@@ -255,6 +261,9 @@ func renderV2(config ConfigV2, addressSets map[string][]netip.Addr, digest strin
 			for index, address := range addressSets[listener.StreamID] {
 				fmt.Fprintf(&output, "        server %s%s;\n", nginxAddress(address.String(), listener.Endpoint.Port),
 					originServerParameters(listener.Endpoint, index))
+			}
+			if len(addressSets[listener.StreamID]) == 0 {
+				fmt.Fprintf(&output, "        server %s down;\n", unavailableUpstreamServer)
 			}
 		}
 		output.WriteString("    }\n\n")
@@ -445,6 +454,10 @@ func nginxListenAddress(address string, port, portEnd int) string {
 // sorted address set is unchanged; retries walk the rest
 // (proxy_next_upstream_tries). The placeholder server is never connected to:
 // the balancer sets every peer.
+// unavailableUpstreamServer is the never-connected "down" server of a
+// forward without an address set (nginx needs one server per upstream).
+const unavailableUpstreamServer = "0.0.0.1:1"
+
 func writeFollowPortBalancer(output *strings.Builder, addresses []netip.Addr, balance string) {
 	peers := make([]string, 0, len(addresses))
 	for _, address := range addresses {
@@ -459,6 +472,11 @@ func writeFollowPortBalancer(output *strings.Builder, addresses []netip.Addr, ba
 		first = "ngx.crc32_long(ngx.var.remote_addr)"
 	}
 	output.WriteString("        server 0.0.0.1:1;\n")
+	if len(addresses) == 0 {
+		// no address set: refuse this forward's connections
+		output.WriteString("        balancer_by_lua_block { ngx.log(ngx.ERR, \"l4_follow_port no origin address\") return ngx.exit(ngx.ERROR) }\n")
+		return
+	}
 	fmt.Fprintf(output, "        balancer_by_lua_block { local balancer = require(\"ngx.balancer\"); local peers = {%s}; "+
 		"local port = tonumber(ngx.var.server_port) or tonumber(ngx.var.proxy_protocol_server_port); "+
 		"if not port then ngx.log(ngx.ERR, \"l4_follow_port no client port\") return ngx.exit(ngx.ERROR) end; "+

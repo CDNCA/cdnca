@@ -282,8 +282,10 @@
 .control-backup-security .control-backup-signer h4 { margin-top: 0; }
 .control-backup-security .control-backup-signer code { word-break: break-all; white-space: normal; }
 .control-backup-security .control-backup-signer p { margin: 6px 0 0; font-size: 12px; line-height: 1.6; }
-.control-backup-security .control-backup-recovery { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--cdnca-color-border-divider, #f0f1f2); }
-.control-backup-security .control-backup-recovery p { margin: 0 0 8px; color: var(--cdnca-color-text-secondary, #808695); font-size: 12px; line-height: 1.6; }
+.control-backup-security .control-backup-recovery { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--cdnca-color-border-divider, #f0f1f2); }
+.control-backup-security .control-backup-recovery > .ant-alert, .control-backup-security .control-backup-recovery > .ant-input-affix-wrapper { align-self: stretch; }
+.control-backup-security .control-backup-recovery h4 { margin: 0; }
+.control-backup-security .control-backup-recovery p { margin: 0; color: var(--cdnca-color-text-secondary, #808695); font-size: 12px; line-height: 1.6; }
 .control-backup-main > .control-backup-migration { margin-top: 0; }
 .control-backup-migration .ant-form { max-width: 760px; }
 .control-backup-card > .maintenance-gateway-address { margin: 0; padding: 0; border: 0; }

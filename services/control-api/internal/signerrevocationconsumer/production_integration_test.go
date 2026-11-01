@@ -395,6 +395,7 @@ func productionIntegrationPool(t *testing.T, migrate bool, maxConnections int32)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "signer_revocation_consumer")
 	adminConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatal(err)

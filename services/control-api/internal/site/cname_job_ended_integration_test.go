@@ -9,6 +9,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/jobstate"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
 	"github.com/cdnca/cdnca/services/control-api/internal/packageperiod"
@@ -28,6 +29,7 @@ func TestCNAMEJobEndedFailsSite(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "cname_ended")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

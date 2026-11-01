@@ -33,16 +33,18 @@ const nativeBackupUsage = `usage: control-api native-backup <command>
   create [--reason manual|scheduled|migration] [--hold] [--recipient AGE_RECIPIENT]... [--output DIR]
   list
   verify --bundle DIR [--signer SHA256:...] [--identity FILE | --recovery-kit FILE]
-  restore --bundle DIR (--signer SHA256:... --identity FILE | --recovery-kit FILE) [--compensate]
+  restore --bundle DIR (--signer SHA256:... --identity FILE | --recovery-kit FILE) [--compensate] [--gateway-host HOST]
   unfreeze                      end a freeze/migration hold and restart the writers (rollback)
   status                        freeze state, signer fingerprint, recipient, recent runs
   fingerprint                   print this host's backup signer fingerprint
-  export-recovery-kit --output FILE   (passphrase read from the terminal or stdin)
+  export-recovery-kit --output FILE [--passphrase]   no passphrase by default: the file is the credential;
+                                --passphrase adds one (read from the terminal or stdin)
   new-identity --file FILE      one-time receive identity for a migration target; prints the recipient
   verify-migration --bundle DIR [--wait-nodes DURATION]
   migrate-to --host HOST [--port 22] [--user root] --host-key SHA256:... (--password-stdin | --private-key FILE)
   host-key --host HOST [--port 22]
   fetch --target NAME --backup-id ID [--signer SHA256:...]
+  announce-gateway --host HOST [--wait 2m]         before a migration: publish the new host as a node Gateway entry point
   clean-target --bundle DIR --signer SHA256:...   on a migration target: stop the restored services and remove the restore
   frozen-console                serve migration status, stop and rollback while this host is held (systemd unit)
   agent                         run queued jobs, the schedule and retention (systemd unit)
@@ -95,6 +97,8 @@ func runNativeBackup(args []string) error {
 		return nativeBackupVerifyMigration(ctx, host, args)
 	case "migrate-to":
 		return nativeBackupMigrateTo(ctx, host, args)
+	case "announce-gateway":
+		return nativeBackupAnnounceGateway(ctx, host, args)
 	case "host-key":
 		flags := flag.NewFlagSet("host-key", flag.ContinueOnError)
 		target := flags.String("host", "", "SSH host")
@@ -218,9 +222,15 @@ func openIdentity(identityFile, recoveryKit, signer string) (age.Identity, strin
 		if err != nil {
 			return nil, "", err
 		}
-		passphrase, err := readPassphrase("恢复口令: ")
+		parsed, err := nativebackup.ParseRecoveryKit(encoded)
 		if err != nil {
 			return nil, "", err
+		}
+		passphrase := ""
+		if parsed.NeedsPassphrase() {
+			if passphrase, err = readPassphrase("恢复口令 / Recovery passphrase: "); err != nil {
+				return nil, "", err
+			}
 		}
 		identity, kit, err := nativebackup.OpenRecoveryKit(encoded, passphrase)
 		if err != nil {
@@ -282,6 +292,7 @@ func nativeBackupRestore(ctx context.Context, host *nativebackup.Host, args []st
 	identityFile := flags.String("identity", "", "age identity file")
 	kit := flags.String("recovery-kit", "", "recovery kit file")
 	compensate := flags.Bool("compensate", false, "first remove an unfinished restore of the same bundle")
+	gatewayHost := flags.String("gateway-host", "", "move the co-located Gateway to this host (this machine's IP or name; nodes that dial by IP follow)")
 	if err := flags.Parse(args); err != nil || *bundle == "" {
 		return errors.New(nativeBackupUsage)
 	}
@@ -295,7 +306,8 @@ func nativeBackupRestore(ctx context.Context, host *nativebackup.Host, args []st
 	}
 	restorer := nativebackup.Restorer{Host: host, Components: nativebackup.Components(), Now: time.Now,
 		Progress: func(line string) { fmt.Fprintln(os.Stderr, line) }}
-	result, err := restorer.Run(ctx, nativebackup.RestoreRequest{Bundle: opened, Identity: identity, Compensate: *compensate})
+	result, err := restorer.Run(ctx, nativebackup.RestoreRequest{Bundle: opened, Identity: identity, Compensate: *compensate,
+		GatewayHost: strings.ToLower(strings.TrimSpace(*gatewayHost))})
 	if err != nil {
 		return err
 	}
@@ -347,17 +359,23 @@ func readPassphrase(prompt string) (string, error) {
 func nativeBackupExportKit(host *nativebackup.Host, args []string) error {
 	flags := flag.NewFlagSet("export-recovery-kit", flag.ContinueOnError)
 	output := flags.String("output", "", "file to create (owner-only)")
+	withPassphrase := flags.Bool("passphrase", false, "also seal the kit with a passphrase (read from the terminal or stdin)")
 	if err := flags.Parse(args); err != nil || *output == "" {
-		return errors.New("usage: control-api native-backup export-recovery-kit --output FILE")
+		return errors.New("usage: control-api native-backup export-recovery-kit --output FILE [--passphrase]")
 	}
 	keys, err := nativebackup.LoadOrCreateKeys(host.Layout)
 	if err != nil {
 		return err
 	}
 	facts, _ := nativebackup.NativeFacts(context.Background(), host)
-	passphrase, err := readPassphrase("恢复口令（至少 12 个字符）: ")
-	if err != nil {
-		return err
+	passphrase := ""
+	if *withPassphrase {
+		if passphrase, err = readPassphrase("恢复口令（12–1024 个字符）/ Passphrase (12–1024 characters): "); err != nil {
+			return err
+		}
+		if passphrase == "" {
+			return nativebackup.ErrWeakPassphrase
+		}
 	}
 	kit, err := nativebackup.ExportRecoveryKit(keys, facts.InstallationID, passphrase, time.Now())
 	if err != nil {
@@ -369,7 +387,14 @@ func nativeBackupExportKit(host *nativebackup.Host, args []string) error {
 		return err
 	}
 	_, writeErr := file.Write(append(encoded, '\n'))
-	return errors.Join(writeErr, file.Close())
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		return err
+	}
+	if !kit.NeedsPassphrase() {
+		fmt.Fprintln(os.Stderr, "注意：这个文件就是恢复凭据，任何拿到它的人都能解开备份，请离线妥善保管。")
+		fmt.Fprintln(os.Stderr, "Note: this file is the recovery credential; anyone holding it can decrypt the backups. Keep it offline and safe.")
+	}
+	return nil
 }
 
 func nativeBackupVerifyMigration(ctx context.Context, host *nativebackup.Host, args []string) error {
@@ -604,4 +629,21 @@ func nativeBackupFrozenConsole(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+// nativeBackupAnnounceGateway publishes the new host as a node entry point and
+// restarts the local Gateway so online nodes learn it before a migration
+//.
+func nativeBackupAnnounceGateway(ctx context.Context, host *nativebackup.Host, args []string) error {
+	flags := flag.NewFlagSet("announce-gateway", flag.ContinueOnError)
+	target := flags.String("host", "", "the new control plane host (IP or name) as nodes reach it")
+	wait := flags.Duration("wait", 2*time.Minute, "wait for online nodes to reconnect")
+	if err := flags.Parse(args); err != nil || *target == "" || *wait < 0 {
+		return errors.New("usage: control-api native-backup announce-gateway --host HOST [--wait 2m]")
+	}
+	result, err := nativebackup.AnnounceGateway(ctx, host, nativebackup.AnnounceRequest{Host: *target, Wait: *wait}, time.Now)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(result)
 }

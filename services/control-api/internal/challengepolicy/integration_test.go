@@ -933,6 +933,7 @@ func openChallengeTestPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "challenge_policy_test")
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("open test administration pool: %v", err)

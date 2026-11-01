@@ -248,6 +248,17 @@ function authorization(init?: RequestInit): string {
   return (init?.headers as Record<string, string> | undefined)?.Authorization ?? ''
 }
 
+// The last site-list read. at(-1) alone is unstable: once the list succeeds the
+// page also fetches /v1/site-publications?limit=1 (SiteAutomaticFailureNotice),
+// which can land after the list request and is never followed by another one.
+function lastSitesCall(fetchSpy: { mock: { calls: unknown[][] } }): [unknown, RequestInit | undefined] | undefined {
+  const calls = fetchSpy.mock.calls as [unknown, RequestInit | undefined][]
+  for (let index = calls.length - 1; index >= 0; index--) {
+    if (new URL(String(calls[index][0]), 'https://control.example').pathname === '/v1/sites') return calls[index]
+  }
+  return undefined
+}
+
 function columnNames(): string[] {
   return screen.getAllByRole('columnheader').map((header) => header.textContent?.trim() ?? '')
 }
@@ -1102,7 +1113,7 @@ describe('SiteListPage', () => {
     await user.type(screen.getByLabelText('快速搜索内容'), 'example.com')
     await user.click(screen.getByRole('button', { name: '查询' }))
     await waitFor(() => {
-      expect(String(fetchSpy.mock.calls.at(-1)?.[0])).toContain('domain=example.com')
+      expect(String(lastSitesCall(fetchSpy)?.[0])).toContain('domain=example.com')
     })
 
     await user.click(screen.getByRole('button', { name: /^高级筛选/ }))
@@ -1112,13 +1123,13 @@ describe('SiteListPage', () => {
     await user.click(await screen.findByText('已锁定'))
     await user.click(within(advanced).getByRole('button', { name: '应用' }))
     await waitFor(() => {
-      expect(String(fetchSpy.mock.calls.at(-1)?.[0])).toContain('http_port=8080')
-      expect(String(fetchSpy.mock.calls.at(-1)?.[0])).toContain('status=locked')
+      expect(String(lastSitesCall(fetchSpy)?.[0])).toContain('http_port=8080')
+      expect(String(lastSitesCall(fetchSpy)?.[0])).toContain('status=locked')
     })
 
     await user.click(screen.getByTitle('2'))
     await waitFor(() => {
-      expect(String(fetchSpy.mock.calls.at(-1)?.[0])).toContain('page=2')
+      expect(String(lastSitesCall(fetchSpy)?.[0])).toContain('page=2')
     })
     expect(fetchSpy.mock.calls.every(([url]) => String(url).startsWith('/v1/sites?'))).toBe(true)
   })
@@ -1165,7 +1176,7 @@ describe('SiteListPage', () => {
   it('quick search stays in the row, the rest fold into 高级筛选 with count, tags and clear', async () => {
     authenticate('admin')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(response([site], 25)))
-    const lastQuery = () => new URL(String(fetchSpy.mock.calls.at(-1)?.[0]), 'https://control.example').searchParams
+    const lastQuery = () => new URL(String(lastSitesCall(fetchSpy)?.[0]), 'https://control.example').searchParams
     const user = userEvent.setup({ delay: null })
     renderWithProviders(<SiteListPage />, ['/site/list'])
     await screen.findByText(site.domain)
@@ -1257,12 +1268,20 @@ describe('SiteListPage', () => {
       expect(popup).not.toBeNull()
       await user.click(within(popup as HTMLElement).getByText(label))
     }
-    await user.type(screen.getByLabelText('快速搜索内容'), value)
+    // Paste, not type: typing a 36-character UUID re-renders the whole page per
+    // character and passed the 30 s timeout on a loaded machine.
+    await user.click(screen.getByLabelText('快速搜索内容'))
+    await user.paste(value)
     await user.click(screen.getByRole('button', { name: '查询' }))
 
+    // Not the last /v1/sites call: site_ids suggestions (IdOrNameInput, 300 ms)
+    // also read /v1/sites (domain=) and may land after the list request.
     await waitFor(() => {
-      const requestURL = new URL(String(fetchSpy.mock.calls.at(-1)?.[0]), 'https://control.example')
-      expect(requestURL.searchParams.get(key)).toBe(value)
+      const values = fetchSpy.mock.calls
+        .map(([input]) => new URL(String(input), 'https://control.example'))
+        .filter((url) => url.pathname === '/v1/sites')
+        .map((url) => url.searchParams.get(key))
+      expect(values).toContain(value)
     })
   })
 
@@ -1948,7 +1967,7 @@ describe('SiteListPage', () => {
     await screen.findByText(site.domain)
 
     await user.click(screen.getByRole('button', { name: '更多' }))
-    const link = await screen.findByRole('menuitem', { name: 'DNS 解析检查' })
+    const link = await screen.findByRole('menuitem', { name: '修复域名解析' })
     expect(link).toBeEnabled()
   })
 
@@ -1983,6 +2002,38 @@ describe('SiteListPage', () => {
     await waitFor(() => expect(fetchSpy.mock.calls.some(([url, init]) =>
       String(url) === `/v1/sites/${site.id}/auto-dns/sync` && init?.method === 'POST')).toBe(true))
     expect(await screen.findByText('已提交 1 个网站的同步解析')).toBeInTheDocument()
+  })
+
+  // 73 实测平台管理员点「解析检测」只弹“解析检测暂不可用”。平台管理员打开同一张全站列表，
+  // 可按网站原账号同步解析；不显示租户专用的详细检测与 DNS 账号选择。
+  it('opens the DNS check list for a platform admin instead of refusing it', async () => {
+    authenticate('admin', ['sites.read', 'sites.manage', 'dns.read', 'dns.manage'])
+    const failing = { ...site, domains: [site.domain], cname: 'abc.cdn.example.net',
+      auto_dns: { provider_id: 'p-1', provider_name: '用户的 Cloudflare', state: 'failed', failure_code: 'dns_record_conflict',
+        attempts: 1, results: [{ domain: site.domain, code: 'dns_record_conflict' }], updated_at: '2026-10-25T00:00:00Z' } }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.endsWith('/auto-dns/sync') && init?.method === 'POST') {
+        return jsonResponse({ ...failing.auto_dns, state: 'pending', failure_code: null }, 202)
+      }
+      return response([failing as SiteListItem])
+    })
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<><LocationProbe /><SiteListPage /></>, ['/site/list'])
+    await screen.findByText(site.domain)
+
+    await user.click(screen.getByRole('button', { name: '解析检测' }))
+
+    expect(screen.queryByText('解析检测暂不可用')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/site/list')
+    expect(await screen.findByText('用户的 Cloudflare')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '详细检测' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'DNS API' })).not.toBeInTheDocument()
+    expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/v1/dns/providers'))).toBe(false)
+    await user.click(screen.getAllByRole('checkbox').at(-1)!)
+    await user.click(screen.getByRole('button', { name: '同步解析' }))
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([url, init]) =>
+      String(url) === `/v1/sites/${site.id}/auto-dns/sync` && init?.method === 'POST')).toBe(true))
   })
 
   it('opens the platform website defaults from the site subnavigation (ui-click F7)', async () => {
@@ -3063,10 +3114,13 @@ describe('SiteListPage', () => {
 
     await screen.findByText(site.domain)
     const quickDraft = screen.getByLabelText('快速搜索内容')
+    // Keep the draft unapplied: live filters apply after 400 ms, which on a slow
+    // run reset the page and dropped the pager; an open IME composition holds it.
+    fireEvent.compositionStart(quickDraft)
     await user.type(quickDraft, 'draft.example.com')
     await user.click(screen.getByRole('checkbox', { name: site.domain }))
     await user.click(screen.getByTitle('2'))
-    await waitFor(() => expect(String(fetchSpy.mock.calls.at(-1)?.[0])).toContain('page=2'))
+    await waitFor(() => expect(String(lastSitesCall(fetchSpy)?.[0])).toContain('page=2'))
     const listKey = ['sites', session.owner, session.role, 2, 10, {}] as const
     const readsBeforeRefresh = fetchSpy.mock.calls.length
 
@@ -3084,7 +3138,7 @@ describe('SiteListPage', () => {
     await act(async () => {
       await queryClient.refetchQueries({ queryKey: listKey, type: 'active' })
     })
-    expect(authorization(fetchSpy.mock.calls.at(-1)?.[1])).toBe('Bearer site-refresh-token-b')
+    expect(authorization(lastSitesCall(fetchSpy)?.[1])).toBe('Bearer site-refresh-token-b')
     expect(JSON.stringify(queryClient.getQueryCache().getAll().map((query) => query.queryKey)))
       .not.toMatch(/site-refresh-token-[ab]/)
   })
@@ -3149,7 +3203,7 @@ describe('SiteListPage', () => {
     expect(queryClient.getQueryData(listKeyB)).toEqual({
       items: [siteB], total: 1, page: 1, limit: 10,
     })
-    expect(authorization(fetchSpy.mock.calls.at(-1)?.[1])).toBe('Bearer site-new-session-b')
+    expect(authorization(lastSitesCall(fetchSpy)?.[1])).toBe('Bearer site-new-session-b')
   })
 
   it.each([

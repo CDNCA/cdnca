@@ -20,6 +20,7 @@ import { MarketAgreementFooter, useMarketAgreements } from '../market/MarketAgre
 import { AdvisoryList } from './AdvisoryList'
 import { activePlans, formatMinor, highRiskPermission, safeLink, saleRevision, terminalOrderStates } from './pluginStoreModel'
 import { useAdvisories } from './useAdvisories'
+import { pluginDescription, pluginName, pluginSummary, pluginTitle, usePluginCatalog } from './usePluginCatalog'
 
 import './PluginMarketPage.css'
 import { useFeedback, FeedbackWhen } from '@cdnca/ui'
@@ -170,14 +171,14 @@ function PluginDetail({ plugin, onClose }: { plugin: MarketPlugin | null; onClos
   const plans = activePlans(detail?.price_plans ?? [])
   return (
     <Drawer className="plugin-market-drawer" width="min(760px, 100vw)" open={!!plugin} onClose={() => { setTracked(null); onClose() }}
-      title={info ? `${info.title} · ${info.plugin_id}` : ''} destroyOnHidden>
+      title={info ? `${pluginTitle(info, i18n.resolvedLanguage)} · ${info.plugin_id}` : ''} destroyOnHidden>
       {query.error ? <LoadError error={query.error} /> : null}
       {tracked ? <OrderTracker order={tracked.order} checkout={tracked.checkout} onDone={() => setTracked(null)} /> : null}
       {info ? <Space direction="vertical" style={{ width: '100%' }} size="middle">
         {info.risk_class === 'privileged' ? <Alert type="warning" showIcon message={t('detail.privilegedHint')} /> : null}
         <Descriptions bordered size="small" column={1}>
           <Descriptions.Item label={t('detail.summary')}>
-            <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{info.description_md || info.summary || '—'}</Typography.Paragraph>
+            <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{pluginDescription(info, i18n.resolvedLanguage) || pluginSummary(info, i18n.resolvedLanguage) || '—'}</Typography.Paragraph>
           </Descriptions.Item>
           <Descriptions.Item label={t('card.developer')}>{info.namespace}</Descriptions.Item>
           <Descriptions.Item label={t('filters.kind')}>{t(`kinds.${info.kind}`, { defaultValue: info.kind })}</Descriptions.Item>
@@ -221,7 +222,7 @@ function PluginDetail({ plugin, onClose }: { plugin: MarketPlugin | null; onClos
 }
 
 function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
-  const { t } = useTranslation('pluginStore')
+  const { t, i18n } = useTranslation('pluginStore')
   const token = useToken()
   const [draft, setDraft] = useState<PluginFilters>({})
   const [filters, setFilters] = useState<PluginFilters>({})
@@ -253,9 +254,9 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
         locale={{ emptyText: <Empty /> }} renderItem={(plugin) => (
           <List.Item>
             <Badge dot={pendingAdvisories.has(plugin.plugin_id)} offset={[-6, 6]}>
-              <Card hoverable size="small" title={plugin.title} onClick={() => setSelected(plugin)}
+              <Card hoverable size="small" title={pluginTitle(plugin, i18n.resolvedLanguage)} onClick={() => setSelected(plugin)}
                 extra={<Tag>{t(`kinds.${plugin.kind}`, { defaultValue: plugin.kind })}</Tag>}>
-                <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }}>{plugin.summary || plugin.plugin_id}</Typography.Paragraph>
+                <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }}>{pluginSummary(plugin, i18n.resolvedLanguage) || plugin.plugin_id}</Typography.Paragraph>
                 <Space size={4} wrap>
                   <Typography.Text>{t('card.developer')}：{plugin.namespace}</Typography.Text>
                   {plugin.latest_version ? <Tag>{t('card.latest', { version: plugin.latest_version })}</Tag> : null}
@@ -287,6 +288,7 @@ export function LicensesTab() {
   const fail = useFail()
   const canAct = marketAccess(useSessionStore((state) => state.principal)).purchase
   const query = useQuery({ queryKey: ['pluginStore', 'licenses'], queryFn: () => marketApi.licenses(token), enabled: !!token })
+  const catalog = usePluginCatalog(token, (query.data?.items ?? []).map((l) => l.plugin_id))
   const [tracked, setTracked] = useState<{ order: MarketOrder; checkout: string | null } | null>(null)
   const [disputing, setDisputing] = useState<MarketLicense | null>(null)
   const [reason, setReason] = useState<(typeof disputeReasons)[number]>('not_working')
@@ -363,12 +365,17 @@ export function LicensesTab() {
       <Table<MarketLicense> rowKey="id" size="small" loading={query.isLoading} dataSource={query.data?.items ?? []} pagination={{ pageSize: 20 }}
         locale={{ emptyText: t('licenses.empty') }} scroll={{ x: 960 }}
         columns={[
-          { title: t('licenses.plugin'), dataIndex: 'plugin_id' },
+          // 名称取浏览页同一份市场目录（title）；目录不再列出时回退为 plugin_id，ID 只作次要文字。
+          { title: t('licenses.plugin'), dataIndex: 'plugin_id', render: (v: string) => <Space direction="vertical" size={0}>
+            <strong>{pluginName(catalog, v, i18n.resolvedLanguage)}</strong>
+            {pluginName(catalog, v, i18n.resolvedLanguage) !== v ? <Typography.Text type="secondary" className="plugin-market-id">{v}</Typography.Text> : null}
+          </Space> },
           { title: t('licenses.kind'), dataIndex: 'kind', render: (v: string, l) => <Space direction="vertical" size={0}>
             <span>{t(`licenses.kinds.${v}`, { defaultValue: v })}</span>
             {l.claim_pricing ? <Typography.Text type="secondary" data-claim={l.claim_pricing}>{t(`licenses.claims.${l.claim_pricing}`)}</Typography.Text> : null}
             {l.promo_first_charge_at && l.current_period_end === l.promo_first_charge_at
-              ? <Typography.Text type="warning">{t('licenses.promoCharge', { at: formatDateTime(l.promo_first_charge_at, i18n.resolvedLanguage ?? 'zh-CN') })}</Typography.Text> : null}
+              ? <Typography.Text type="warning">{t('licenses.promoCharge', { at: formatDateTime(l.promo_first_charge_at, i18n.resolvedLanguage ?? 'zh-CN'),
+                price: l.price_minor && l.currency ? formatMinor(l.price_minor, l.currency) : '' }).trim()}</Typography.Text> : null}
           </Space> },
           { title: t('licenses.status'), dataIndex: 'status', render: (v: string) =>
             <Tag color={v === 'active' || v === 'trialing' ? 'green' : v === 'past_due' ? 'orange' : 'default'}>{t(`licenses.states.${v}`, { defaultValue: v })}</Tag> },

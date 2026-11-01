@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, Input, InputNumber, Popconfirm, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { RefreshCw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -74,10 +75,12 @@ function SessionLogPanel({ audience, ownerKey }: { audience: L4RealtimeAudience;
   const [applied, setApplied] = useState<L4SessionLogFilters>({ range: '1h', limit: 50 })
   const [cursors, setCursors] = useState<string[]>([])
   const cursor = cursors[cursors.length - 1]
+  // control-log-ui：条件变了按新数据读；同一条件下翻页 30 秒内用缓存。
+  const [generation] = useLogListGeneration(applied)
   const query = useQuery({
-    queryKey: ['l4-session-logs', ownerKey, applied, cursor],
+    queryKey: ['l4-session-logs', ownerKey, generation, applied, cursor],
     queryFn: ({ signal }) => l4SessionLogsApi.readSessionLogs(sessionToken(ownerKey), audience, { ...applied, ...(cursor ? { cursor } : {}) }, signal),
-    retry: false, refetchOnWindowFocus: false,
+    retry: false, refetchOnWindowFocus: false, ...logListQueryOptions,
   })
   const language = i18n.resolvedLanguage ?? 'zh-CN'
   const [labels, setLabels] = useState<Record<string, string | undefined>>({})
@@ -157,13 +160,13 @@ function SessionLogPanel({ audience, ownerKey }: { audience: L4RealtimeAudience;
     <p className="l4-session-muted density-note">{t('sessionLog.help')}</p>
     {validation ? <Alert type="error" showIcon message={validation} /> : null}
     {query.error ? <FeedbackWhen title={t(errorKey(query.error))} /> : null}
-    <Table<L4SessionLogRow> columns={columns} dataSource={query.data?.rows ?? []} rowKey="event_id" loading={query.isPending} pagination={false}
+    <Table<L4SessionLogRow> columns={columns} dataSource={query.data?.rows ?? []} rowKey="event_id" loading={query.isPending || query.isPlaceholderData} pagination={false}
       locale={{ emptyText: t('sessionLog.empty') }} scroll={{ x: 1090 }} size="small" />
     <div className="l4-session-pager">
       {/* 会话日志在 ClickHouse，不做精确计数（tp-b7b）：已翻过的条数，还有下一页时显示 N+ */}
       {query.data ? <span>{t(query.data.next_cursor ? 'pager.totalMore' : 'pager.total', { count: cursors.length * (applied.limit ?? 50) + query.data.rows.length })}</span> : null}
       <Button disabled={cursors.length === 0} onClick={() => setCursors(cursors.slice(0, -1))}>{t('actions.previous')}</Button>
-      <Button disabled={!query.data?.next_cursor} onClick={() => query.data?.next_cursor && setCursors([...cursors, query.data.next_cursor])}>{t('actions.next')}</Button>
+      <Button disabled={!query.data?.next_cursor || query.isPlaceholderData} onClick={() => query.data?.next_cursor && setCursors([...cursors, query.data.next_cursor])}>{t('actions.next')}</Button>
     </div>
   </div>
 }

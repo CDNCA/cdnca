@@ -88,6 +88,9 @@ func NewMTLSDialer(config MTLSDialerConfig) (Dialer, error) {
 	}
 	options := []grpc.DialOption{
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		// the long-lived Connect stream is idle between heartbeats;
+		// return the 32 KiB write buffer after each flush.
+		grpc.WithSharedWriteBuffer(true),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(config.MaximumReceiveBytes),
 			grpc.MaxCallSendMsgSize(config.MaximumSendBytes),

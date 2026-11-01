@@ -42,7 +42,6 @@ export function LoginCaptchaField({ resetKey, disabled, onChange }: LoginCaptcha
 
   return (
     <div className="login-captcha">
-      <div className="login-notice">{t('captchaHint')}</div>
       <Space.Compact block>
         <Input
           value={answer}
@@ -53,7 +52,7 @@ export function LoginCaptchaField({ resetKey, disabled, onChange }: LoginCaptcha
           maxLength={8}
           disabled={disabled || !challenge}
         />
-        {challenge ? <img src={challenge.image} alt={t('captchaImage')} width={120} height={40} style={{ height: 32, width: 'auto' }} /> : null}
+        {challenge ? <img src={challenge.image} alt={t('captchaImage')} width={120} height={40} /> : null}
         <Button aria-label={t('captchaRefresh')} title={t('captchaRefresh')} disabled={disabled}
           icon={<RefreshCw size={14} aria-hidden="true" />} onClick={() => setRefresh(value => value + 1)} />
       </Space.Compact>

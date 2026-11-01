@@ -19,6 +19,10 @@ type API interface {
 	Put(context.Context, firewallactioncontrol.PutRequest) (firewallactioncontrol.WriteResult, error)
 	Get(context.Context, firewallactioncontrol.ReadRequest) (firewallactioncontrol.Policy, error)
 	Recover(context.Context, firewallactioncontrol.RecoverRequest) (firewallactioncontrol.WriteResult, error)
+	SetEnabled(context.Context, firewallactioncontrol.SetEnabledRequest) (firewallactioncontrol.WriteResult, error)
+	Inherit(context.Context, firewallactioncontrol.InheritRequest) (firewallactioncontrol.WriteResult, error)
+	GetDefault(context.Context, firewallactioncontrol.DefaultReadRequest) (firewallactioncontrol.DefaultPolicy, error)
+	PutDefault(context.Context, firewallactioncontrol.DefaultPutRequest) (firewallactioncontrol.DefaultWriteResult, error)
 }
 
 type Authenticator func(*http.Request) (firewallactioncontrol.Actor, error)
@@ -41,6 +45,10 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	actor, err := handler.authenticate(request)
 	if err != nil {
 		writeError(response, err)
+		return
+	}
+	if request.URL.Path == "/v1/firewall-actions/default" {
+		handler.serveDefault(response, request, actor)
 		return
 	}
 	targetScopeID, siteID, err := parseTarget(request)
@@ -81,6 +89,52 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 			response.Header().Set("Idempotent-Replay", "true")
 		}
 		writeJSON(response, http.StatusOK, result.Policy)
+	case request.URL.Path == "/v1/firewall-actions/policy" && request.Method == http.MethodPatch:
+		// migration 608: {"enabled":bool} switches the policy on or off; the revision stays.
+		expected, err := parseETag(request.Header.Get("If-Match"), false)
+		if err != nil {
+			writeError(response, firewallactioncontrol.ErrInvalidInput)
+			return
+		}
+		var body struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err := decodeBody(response, request, &body); err != nil || body.Enabled == nil {
+			writeError(response, firewallactioncontrol.ErrInvalidInput)
+			return
+		}
+		result, err := handler.api.SetEnabled(request.Context(), firewallactioncontrol.SetEnabledRequest{
+			Actor: actor, TargetScopeID: targetScopeID, SiteID: siteID, ExpectedRevision: expected,
+			IdempotencyKey: request.Header.Get("Idempotency-Key"), RequestID: request.Header.Get("X-Request-ID"), Enabled: *body.Enabled,
+		})
+		if err != nil {
+			writeError(response, err)
+			return
+		}
+		response.Header().Set("ETag", quoteRevision(result.Policy.Revision))
+		if result.Replayed {
+			response.Header().Set("Idempotent-Replay", "true")
+		}
+		writeJSON(response, http.StatusOK, result.Policy)
+	case request.URL.Path == "/v1/firewall-actions/policy" && request.Method == http.MethodDelete:
+		expected, err := parseETag(request.Header.Get("If-Match"), false)
+		if err != nil || !emptyOrObjectBody(response, request) {
+			writeError(response, firewallactioncontrol.ErrInvalidInput)
+			return
+		}
+		result, err := handler.api.Inherit(request.Context(), firewallactioncontrol.InheritRequest{
+			Actor: actor, TargetScopeID: targetScopeID, SiteID: siteID, ExpectedRevision: expected,
+			IdempotencyKey: request.Header.Get("Idempotency-Key"), RequestID: request.Header.Get("X-Request-ID"),
+		})
+		if err != nil {
+			writeError(response, err)
+			return
+		}
+		response.Header().Set("ETag", quoteRevision(result.Policy.Revision))
+		if result.Replayed {
+			response.Header().Set("Idempotent-Replay", "true")
+		}
+		writeJSON(response, http.StatusOK, result.Policy)
 	case request.URL.Path == "/v1/firewall-actions/policy/recover" && request.Method == http.MethodPost:
 		expected, err := parseETag(request.Header.Get("If-Match"), false)
 		if err != nil {
@@ -108,6 +162,70 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	default:
 		writeJSON(response, http.StatusNotFound, map[string]string{"code": "not_found"})
 	}
+}
+
+func (handler *Handler) serveDefault(response http.ResponseWriter, request *http.Request, actor firewallactioncontrol.Actor) {
+	query := request.URL.Query()
+	if len(query) != 1 || len(query["target_scope_id"]) != 1 {
+		writeError(response, firewallactioncontrol.ErrInvalidInput)
+		return
+	}
+	targetScopeID, err := strictUUID(query.Get("target_scope_id"))
+	if err != nil {
+		writeError(response, err)
+		return
+	}
+	switch request.Method {
+	case http.MethodGet:
+		policy, err := handler.api.GetDefault(request.Context(), firewallactioncontrol.DefaultReadRequest{Actor: actor, TargetScopeID: targetScopeID})
+		if err != nil {
+			writeError(response, err)
+			return
+		}
+		response.Header().Set("ETag", quoteRevision(policy.Revision))
+		writeJSON(response, http.StatusOK, policy)
+	case http.MethodPut:
+		expected, err := parseETag(request.Header.Get("If-Match"), true)
+		if err != nil {
+			writeError(response, firewallactioncontrol.ErrInvalidInput)
+			return
+		}
+		var input firewallactioncontrol.PolicyInput
+		if err := decodeBody(response, request, &input); err != nil {
+			writeError(response, firewallactioncontrol.ErrInvalidInput)
+			return
+		}
+		result, err := handler.api.PutDefault(request.Context(), firewallactioncontrol.DefaultPutRequest{
+			Actor: actor, TargetScopeID: targetScopeID, ExpectedRevision: expected,
+			IdempotencyKey: request.Header.Get("Idempotency-Key"), RequestID: request.Header.Get("X-Request-ID"), Policy: input,
+		})
+		if err != nil {
+			writeError(response, err)
+			return
+		}
+		response.Header().Set("ETag", quoteRevision(result.Policy.Revision))
+		if result.Replayed {
+			response.Header().Set("Idempotent-Replay", "true")
+		}
+		writeJSON(response, http.StatusOK, result.Policy)
+	default:
+		writeJSON(response, http.StatusNotFound, map[string]string{"code": "not_found"})
+	}
+}
+
+// emptyOrObjectBody accepts a DELETE without a body or with {}.
+func emptyOrObjectBody(response http.ResponseWriter, request *http.Request) bool {
+	request.Body = http.MaxBytesReader(response, request.Body, 64<<10)
+	raw, err := io.ReadAll(request.Body)
+	if err != nil {
+		return false
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return true
+	}
+	request.Body = io.NopCloser(bytes.NewReader(raw))
+	var body struct{}
+	return decodeBody(response, request, &body) == nil
 }
 
 func parseTarget(request *http.Request) (uuid.UUID, uuid.UUID, error) {

@@ -69,10 +69,11 @@ export async function main(argv) {
         const manifest = values.content ? undefined : JSON.parse(readFileSync(join(dir, 'plugin.manifest.json'), 'utf8'))
         const findings = checkContent(raw, { pluginID: manifest?.metadata?.id })
         if (findings.ok) {
-          console.log(`预检通过（${raw.length} 字节）`)
+          // 中英双语：英文开发文档引用这行输出
+          console.log(`预检通过（${raw.length} 字节）/ check passed (${raw.length} bytes)`)
           return 0
         }
-        console.error(`预检发现 ${findings.items.length} 个问题：`)
+        console.error(`预检发现 ${findings.items.length} 个问题 / check found ${findings.items.length} problem(s)：`)
         printFindings(findings.items)
         return 1
       }

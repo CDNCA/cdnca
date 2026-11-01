@@ -20,6 +20,8 @@ describe('PriceTag 限免', () => {
     const promo = { kind: 'free', price_minor: 0, promo_then_kind: 'subscription', promo_then_interval: 'month', promo_then_price_minor: 990 }
     const second = renderWithProviders(<PriceTag plugin={plugin({ ...promo, promo_until: hours(72.5) })} />)
     expect(screen.getByText('限免 4 天')).toBeInTheDocument()
+    // the card says what it costs once the promo ends, not only that it is free for now.
+    expect(screen.getByText('之后 ¥9.90/月')).toBeInTheDocument()
     second.unmount()
     const third = renderWithProviders(<PriceTag plugin={plugin({ ...promo, promo_until: hours(5.2) })} />)
     expect(screen.getByText('限免 6 小时')).toBeInTheDocument()

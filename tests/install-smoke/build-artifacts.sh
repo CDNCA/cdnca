@@ -41,6 +41,10 @@ cmp -s "$NM/pnpm-lock.yaml" "$ROOT/pnpm-lock.yaml" || die "$NM/pnpm-lock.yaml �
 for f in "$NATS_DIR/nats-server-2.12.15-cdnca.1" "$NATS_DIR/NATS-LICENSE" "$OPENRESTY_ARCHIVE" "$STD/wafcomp-mal.jsonl.gz" "$STD/wafcomp-legit.jsonl.gz"; do
   [ -s "$f" ] || die "缺输入 $f"
 done
+# rule-intel-g3 的 crs-corpus.json 取 CRS 源码包（deploy/rule-intel-gate/install.sh 同路径同摘要，不自动下载）。
+CRS_TAR=${MODSECURITY_CACHE:-$HOME/.cache/cdnca-modsecurity}/src/coreruleset-4.30.0-src.tar.gz
+printf '%s  %s\n' a4bb3688ef6205b64471a9ccbf0d7b024eb8edf39b97c6f6c0006e7a948f8550 "$CRS_TAR" | shasum -a 256 -c - >/dev/null 2>&1 ||
+  die "缺输入 $CRS_TAR 或摘要不符（coreruleset v4.30.0 源码包，见 edge/openresty/modsecurity/sources.lock.json note；MODSECURITY_CACHE）"
 file -b "$G3_MODSEC/modules/ngx_http_modsecurity_module.so" | grep -q x86-64 || die "$G3_MODSEC 不是 amd64 ModSecurity 扩展"
 
 # ---- 一次性测试密钥：发布签名（Ed25519 PEM）
@@ -87,7 +91,7 @@ PY
 fi
 # 载荷含 edge/openresty 的 Lua：该子树变了就重建（只看 h3probe 会复用旧 Lua，验收报 payload Lua differs）
 RB_TREE=$(git -C "$ROOT" rev-parse "$COMMIT:edge/openresty")
-if ! skip runtime && { [ ! -x "$RB/runtime/bin/h3probe" ] || [ "$(cat "$RB.tree" 2>/dev/null)" != "$RB_TREE" ]; }; then
+if ! skip runtime && { [ ! -x "$RB/runtime/bin/h3probe" ] || [ ! -x "$RB/runtime/openresty/luajit/bin/luajit" ] || [ "$(cat "$RB.tree" 2>/dev/null)" != "$RB_TREE" ]; }; then
   rm -rf "$RB"
   step runtime-payload docker buildx build --platform linux/amd64 -f "$DOCKERFILE" \
     --target native-payload --output "type=local,dest=$RB" "$ROOT"

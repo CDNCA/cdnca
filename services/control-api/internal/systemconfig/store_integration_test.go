@@ -1077,6 +1077,7 @@ func isolatedSystemConfigPoolAtVersion(t *testing.T, maximum int64) *pgxpool.Poo
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "system_config_test")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

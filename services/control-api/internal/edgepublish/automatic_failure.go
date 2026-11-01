@@ -19,6 +19,9 @@ const (
 	// tenant's configuration this one cannot share (CrossScopeConflictError);
 	// the next source revision publishes again (B15).
 	AutomaticFailureNodeScopeConflict = "node_scope_conflict"
+	// AutomaticFailureSiteConfigInvalid: a stored site the publication cannot
+	// compile (SiteConfigInvalidError); the site's next save publishes again.
+	AutomaticFailureSiteConfigInvalid = "site_config_invalid"
 )
 
 // artifactSyncDefaultDelivery is the time one node artifact delivery is
@@ -27,7 +30,7 @@ const artifactSyncDefaultDelivery = time.Minute
 
 // LatestAutomaticFailureTx is the scope's latest automatic request when it
 // failed for no_target_nodes, node_capability_unavailable,
-// node_artifacts_syncing or node_scope_conflict and no later publication of the scope exists. For
+// node_artifacts_syncing, node_scope_conflict or site_config_invalid and no later publication of the scope exists. For
 // node_artifacts_syncing it also reads how far the refused nodes' node
 // artifact sets have arrived.
 func LatestAutomaticFailureTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (*AutomaticPublicationFailure, error) {
@@ -37,7 +40,7 @@ func LatestAutomaticFailureTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID)
 		JOIN LATERAL (SELECT state,terminal_code,occurred_at FROM edge_automatic_publication_request_state_facts
 		  WHERE request_id=request_row.id ORDER BY sequence DESC LIMIT 1) state ON true
 		WHERE request_row.target_scope_id=$1
-		  AND state.state='failed' AND state.terminal_code IN ('no_target_nodes','node_capability_unavailable','node_artifacts_syncing','node_scope_conflict')
+		  AND state.state='failed' AND state.terminal_code IN ('no_target_nodes','node_capability_unavailable','node_artifacts_syncing','node_scope_conflict','site_config_invalid')
 		  AND request_row.id=(SELECT latest.id FROM edge_automatic_publication_requests latest
 		    WHERE latest.target_scope_id=$1 ORDER BY latest.source_revision DESC,latest.created_at DESC,latest.id DESC LIMIT 1)
 		  AND NOT EXISTS(SELECT 1 FROM edge_config_publications publication

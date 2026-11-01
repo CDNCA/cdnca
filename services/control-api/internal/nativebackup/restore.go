@@ -39,6 +39,10 @@ type RestoreRequest struct {
 	Identity age.Identity
 	// Compensate removes a previous partial restore of the same bundle.
 	Compensate bool
+	// GatewayHost, when set, moves the co-located Gateway to this host (the
+	// new machine's IP or name) before the services start:
+	// nodes that dial the Gateway by IP then reach this host.
+	GatewayHost string
 }
 
 type RestoreResult struct {
@@ -47,6 +51,8 @@ type RestoreResult struct {
 	StartedAt time.Time `json:"started_at"`
 	EndedAt   time.Time `json:"ended_at"`
 	Started   []string  `json:"started_units"`
+	// Gateway is the Gateway host move (nil: not requested).
+	Gateway *GatewayHostResult `json:"gateway,omitempty"`
 }
 
 const restoreIntentSchema = "cdnca.control-native-restore.intent/v1"
@@ -132,6 +138,9 @@ func (restorer Restorer) Run(ctx context.Context, request RestoreRequest) (Resto
 	} else if intent != nil {
 		return RestoreResult{}, fmt.Errorf("restore_already_completed:%s", intent.BackupID)
 	}
+	if request.GatewayHost != "" && !ValidGatewayHost(request.GatewayHost) {
+		return RestoreResult{}, fmt.Errorf("invalid --gateway-host %q (a lower-case DNS name or an IP address)", request.GatewayHost)
+	}
 	restorer.progress("verify: decrypting every component of %s", manifest.BackupID)
 	if err := request.Bundle.VerifyAll(request.Identity); err != nil {
 		return RestoreResult{}, err
@@ -197,6 +206,17 @@ func (restorer Restorer) Run(ctx context.Context, request RestoreRequest) (Resto
 	if err := RetargetPorts(ctx, restorer.Host.Layout, restorer.progress); err != nil {
 		return fail(err)
 	}
+	var gatewayMove *GatewayHostResult
+	if request.GatewayHost != "" {
+		moved, err := RetargetGatewayHost(restorer.Host.Layout, request.GatewayHost, restorer.Now())
+		if err != nil {
+			return fail(fmt.Errorf("move the Gateway to %s: %w", request.GatewayHost, err))
+		}
+		if moved.Changed {
+			restorer.progress("gateway: %s -> %s (certificate SAN %s)", moved.Previous, moved.Current, strings.Join(moved.SAN, ","))
+		}
+		gatewayMove = &moved
+	}
 	if _, err := run(ctx, restorer.Host.Exec, trust); err != nil {
 		return fail(err)
 	}
@@ -240,7 +260,7 @@ func (restorer Restorer) Run(ctx context.Context, request RestoreRequest) (Resto
 	// Data is in place even if a service does not start; never compensate
 	// here, the operator inspects the journal and retries the unit.
 	return RestoreResult{BackupID: manifest.BackupID, Version: manifest.Control.Version, StartedAt: started,
-		EndedAt: restorer.Now().UTC(), Started: units}, startErr
+		EndedAt: restorer.Now().UTC(), Started: units, Gateway: gatewayMove}, startErr
 }
 
 // gatewayAccessFirewallUnit is archived only on hosts with standalone Gateway

@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { brandCandidates } from '../theme/runtime'
+import { brandCandidates, builtInBrandAsset } from '../theme/runtime'
 
 const web = resolve(__dirname, '../..')
 const apps = resolve(web, '..')
@@ -36,6 +36,27 @@ describe('cdnca default brand', () => {
     for (const [slot, file] of Object.entries(builtIn)) {
       expect(brandCandidates(slot as keyof typeof builtIn, null).at(-1)).toBe(file)
       expect(existsSync(publicFile(file))).toBe(true)
+    }
+  })
+
+  // 内置登录广告图的文案画在位图里，英文/繁体用各自导出的图；上传或主题图不按语言替换。
+  it('the built-in login ad follows the language, a custom one does not', () => {
+    expect(brandCandidates('login_ad', null, {}, 'en-US')).toEqual(['/dashboard/ad-en.jpeg'])
+    expect(brandCandidates('login_ad', null, {}, 'zh-TW')).toEqual(['/dashboard/ad-zh-TW.jpeg'])
+    expect(brandCandidates('login_ad', null, {}, 'zh-CN')).toEqual(['/dashboard/ad.jpeg'])
+    expect(builtInBrandAsset('login_ad', 'en')).toBe('/dashboard/ad-en.jpeg')
+    expect(builtInBrandAsset('login_ad')).toBe('/dashboard/ad.jpeg')
+    expect(builtInBrandAsset('logo', 'en-US')).toBe('/dashboard/logo.png')
+    expect(brandCandidates('login_ad', null, { login_ad: 3 }, 'en-US')).toEqual(['/v1/brand-assets/login_ad?v=3', '/dashboard/ad-en.jpeg'])
+    // login_background 回落到 login_ad 的上传，但内置图仍是自己的背景图（无文字）。
+    expect(brandCandidates('login_background', null, {}, 'en-US')).toEqual(['/dashboard/login-background.jpeg'])
+    for (const file of ['/dashboard/ad-en.jpeg', '/dashboard/ad-zh-TW.jpeg']) expect(existsSync(publicFile(file))).toBe(true)
+  })
+
+  it('the login ad image shows the upload first in any language', () => {
+    const custom = { login_ad: 5 }
+    for (const locale of ['zh-CN', 'zh-TW', 'en-US']) {
+      expect(brandCandidates('login_ad', null, custom, locale)[0]).toBe('/v1/brand-assets/login_ad?v=5')
     }
   })
 

@@ -529,8 +529,21 @@
   width: 78px;
 }
 
+/* 默认设置页签说明与「新增设置/删除」同一行，左说明右按钮，窄屏换行。 */
+.stream-defaults-toolbar {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  row-gap: 8px;
+}
+
+.stream-defaults-toolbar .stream-toolbar-actions {
+  margin-left: auto;
+}
+
 .stream-panel-description {
-  margin: 0 0 16px;
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
   color: var(--cdnca-color-text-secondary);
   font-size: 14px;
   line-height: 21px;

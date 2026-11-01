@@ -743,6 +743,7 @@ func isolatedBindingSchema(t *testing.T, migrate bool) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "security_binding_test")
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

@@ -175,6 +175,63 @@ func TestProjectionClientUsesOneDynamicCredentialSnapshotPerResolve(t *testing.T
 	}
 }
 
+// with dynamic credentials every Resolve used to build a new
+// http.Client, so each projection paid a fresh TCP + tunnel + mTLS handshake.
+// The connection is reused while the credential is unchanged and rebuilt
+// once the certificate rotates.
+func TestProjectionClientReusesConnectionUntilCredentialRotates(t *testing.T) {
+	fixture := newProjectionFixture(t)
+	defer fixture.close()
+	master := RuntimeCredential{CertificateID: fixture.certificateID,
+		PrivateKey:     append(ed25519.PrivateKey(nil), fixture.clientPrivate...),
+		TLSCertificate: cloneTestTLSCertificate(fixture.clientTLS.Certificates[0]),
+		RootCAs:        fixture.clientTLS.RootCAs.Clone()}
+	source := &recordingRuntimeCredentialSource{credential: master}
+	var dials sync.Mutex
+	dialCount := 0
+	config := fixture.config()
+	config.TLSConfig = nil
+	config.Credentials = source
+	config.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		dials.Lock()
+		dialCount++
+		dials.Unlock()
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}
+	client, err := NewProjectionClient(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(index int) {
+		t.Helper()
+		if _, err := client.Resolve(t.Context(), fixture.request(fmt.Sprintf("reuse-projection-%d", index))); err != nil {
+			t.Fatalf("Resolve(%d) error = %v", index, err)
+		}
+	}
+	for index := 1; index <= 3; index++ {
+		resolve(index)
+	}
+	dials.Lock()
+	afterSame := dialCount
+	dials.Unlock()
+	if afterSame != 1 {
+		t.Fatalf("3 resolves with one credential dialed %d connections, want 1", afterSame)
+	}
+	// Rotation: a different leaf (same key and identity, new serial bytes are
+	// not needed; a changed DER is what the client keys on).
+	rotated := cloneTestTLSCertificate(master.TLSCertificate)
+	rotated.Certificate = append(rotated.Certificate, rotated.Certificate[0])
+	source.mu.Lock()
+	source.credential.TLSCertificate = rotated
+	source.mu.Unlock()
+	resolve(4)
+	dials.Lock()
+	defer dials.Unlock()
+	if dialCount != 2 {
+		t.Fatalf("resolve after rotation dialed %d connections in total, want 2", dialCount)
+	}
+}
+
 func TestProjectionClientRejectsAmbiguousStaticAndDynamicCredentials(t *testing.T) {
 	fixture := newProjectionFixture(t)
 	defer fixture.close()

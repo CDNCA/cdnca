@@ -37,3 +37,19 @@ func TestDeleteFailsClosedForLiveCertificateOrderReference(t *testing.T) {
 		t.Fatal("live order reference fence must precede certificate asset tombstone")
 	}
 }
+
+// Migration 613: the delete judges "bound" by certificate_asset_bound_551,
+// which excludes soft-deleted sites (one rule with the disable check and the
+// protect_certificate_asset trigger), not its own copy of the query.
+func TestDeleteJudgesBindingByLiveSiteRule613(t *testing.T) {
+	source, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	deleteSource := text[strings.Index(text, "func (s *Store) delete("):strings.Index(text, "func (s *Store) Get(")]
+	if !strings.Contains(deleteSource, "certificate_asset_bound_551($1,$2)") ||
+		strings.Contains(deleteSource, "FROM certificate_site_binding_facts") {
+		t.Fatal("certificate asset delete must use certificate_asset_bound_551 for the binding reference")
+	}
+}

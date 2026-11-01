@@ -86,6 +86,8 @@ func TestFirewallActionFactSelectionUsesPendingCandidateOtherwiseDurableLKG(t *t
 	for _, fragment := range []string{
 		"CASE WHEN head.deployment_state='pending' THEN head.revision ELSE head.lkg_revision END",
 		"head.deployment_state='pending' OR head.lkg_revision>0",
+		// migration 608: a disabled policy is not delivered.
+		"AND head.enabled",
 	} {
 		if !strings.Contains(loadFirewallActionFactsSQL, fragment) {
 			t.Fatalf("fact selection query missing %q", fragment)
@@ -127,4 +129,36 @@ func firewallActionControlPolicy(t *testing.T, scopeID, siteID, policyID uuid.UU
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func TestFirewallActionInheritedSitesDeliverTenantDefault(t *testing.T) {
+	for _, fragment := range []string{"AND NOT head.inherited"} {
+		if !strings.Contains(loadFirewallActionFactsSQL, fragment) {
+			t.Fatalf("own fact query missing %q", fragment)
+		}
+	}
+	if !strings.Contains(loadOwnFirewallActionSitesSQL, "AND NOT inherited") ||
+		!strings.Contains(loadInheritedFirewallActionDefaultSQL, "firewall_action_tenant_defaults") {
+		t.Fatal("inherited selection queries drifted")
+	}
+	document := firewallActionSiteRuntimeDocument(t)
+	scopeID := uuid.MustParse(document.ConfigurationScopeID)
+	siteID := uuid.MustParse(document.Sites[0].ID)
+	stored, _ := json.Marshal(firewallactioncontrol.SystemDefaultPolicy())
+	fact, err := inheritedFirewallActionFact(scopeID, siteID, 3, stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := compileFirewallActionArtifacts(scopeID, &document, []firewallActionFact{fact})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := document.Sites[0].FirewallAction
+	if len(artifacts) != 1 || binding == nil || binding.PolicyID != firewallactioncontrol.InheritedPolicyID(scopeID, siteID).String() ||
+		binding.PolicyRevision != 3 {
+		t.Fatalf("inherited binding = %+v artifacts=%d", binding, len(artifacts))
+	}
+	if _, err := inheritedFirewallActionFact(scopeID, siteID, 3, []byte(`{"bad":1}`)); !errors.Is(err, ErrPersistence) {
+		t.Fatalf("bad stored default error = %v", err)
+	}
 }

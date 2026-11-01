@@ -255,6 +255,12 @@ func (p *dnsPodProvider) requestWithOptions(
 			if path == "/Record.Info" {
 				return dnsPodEnvelope{}, failure(CodeRecordNotFound, false)
 			}
+		case "26":
+			// 记录线路错误: the line is outside the account's plan (province
+			// lines are 企业版/尊享版 only); callers fall back to the line above.
+			if path == "/Record.Create" || path == "/Record.Modify" {
+				return dnsPodEnvelope{}, failure(CodeLineNotInPlan, false)
+			}
 		case "13":
 			// 当前域名未添加解析: the account does not host this domain.
 			return dnsPodEnvelope{}, failure(CodeZoneNotHosted, false)

@@ -60,7 +60,7 @@ test('fresh dependency and source verification precede identity writes and the c
 test('fresh startup cannot reach Control before its real analytics generation bootstrap', () => {
   const main = native_install_test_block('main').replace('[ "$EUID" -eq 0 ]', 'true')
   const steps = main.split('\n').map((line) => line.trim()).filter((line) => /^[a-z_]+$/.test(line))
-  const stubs = [...new Set(['parse_args', 'valid_url', 'require_commands', ...steps])]
+  const stubs = [...new Set(['parse_args', 'valid_url', 'require_commands', 'install_lang_init', 'install_lang_prompt', ...steps])]
     .map((name) => `${name}() { :; }`)
   const result = spawnSync('bash', ['-c', ['set -Eeuo pipefail', 'fail() { exit 1; }; log() { :; }', ...stubs,
     'bootstrap_analytics_history() { initialized=true; }', 'setup_service() { [[ "$initialized" == true ]]; }',
@@ -74,7 +74,7 @@ test('fresh startup cannot reach Control before its real analytics generation bo
 test('an analytics bootstrap failure aborts before any service starts', () => {
   const main = native_install_test_block('main').replace('[ "$EUID" -eq 0 ]', 'true')
   const steps = main.split('\n').map((line) => line.trim()).filter((line) => /^[a-z_]+$/.test(line))
-  const stubs = [...new Set(['parse_args', 'valid_url', 'require_commands', ...steps])]
+  const stubs = [...new Set(['parse_args', 'valid_url', 'require_commands', 'install_lang_init', 'install_lang_prompt', ...steps])]
     .map((name) => `${name}() { :; }`)
   const result = spawnSync('bash', ['-c', ['set -Eeuo pipefail', 'fail() { exit 1; }; log() { :; }', ...stubs,
     'bootstrap_analytics_history() { return 1; }', 'setup_service() { printf unexpected-start; }',
@@ -225,7 +225,7 @@ test('dependency/readiness failure never writes the community installation recor
     'publish_upgrade_trust']
   for (const failed of [...expected, '']) {
     for (const step of expected) assert.ok(steps.includes(step), step)
-    const stubs = [...new Set(['parse_args', 'valid_url', 'require_commands', ...steps])]
+    const stubs = [...new Set(['parse_args', 'valid_url', 'require_commands', 'install_lang_init', 'install_lang_prompt', ...steps])]
       .map((name) => `${name}() { printf '%s\\n' '${name}'; [[ '${failed}' != '${name}' ]]; }`)
     // gateway_mode_requested must report "not gateway" (non-zero) to reach the fresh-install path (GW-10).
     const result = spawnSync('bash', ['-c', ['set -Eeuo pipefail', 'fail() { exit 1; }; log() { :; }', ...stubs,

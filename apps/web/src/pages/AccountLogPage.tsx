@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, Input, Result, Select, Table, Tabs, Tag, type TableColumnsType } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -109,6 +110,8 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
       range: timePreset === 'custom' && range && range[1].valueOf() > Date.now() + 60_000 ? 'rangeFuture' as const : undefined,
     }
   }
+  // control-log-ui：条件变了按新数据读；同一条件下翻页、切 tab 回来 30 秒内用缓存。
+  const [generation, renew] = useLogListGeneration([applied, pageSize])
   const submit = (advanced?: Advanced) => {
     if (advanced) { setVerb(advanced.verb); setCategory(advanced.category); setObject(advanced.object); setChange(advanced.change) }
     const errors = validate()
@@ -119,6 +122,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
     setAppliedSignature(next)
     setApplied(draft(advanced))
     setCursors([])
+    renew()
   }
   const draftErrors = validate()
   // 输入停下 400ms 后仍不合法：就地标错，不发请求；改对后自动查询。
@@ -132,7 +136,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
   useFilterUrl({ ip: applied.sourceIp })
   const onEnter = { onPressEnter: () => submit() }
   const filters: ObservabilityLogFilters = { ...applied, limit: pageSize, cursor }
-  const query = useQuery({ queryKey: ['account-logs', filters], queryFn: () => observabilityLogsApi.list(accessToken, filters), retry: false })
+  const query = useQuery({ queryKey: ['account-logs', generation, filters], queryFn: () => observabilityLogsApi.list(accessToken, filters), retry: false, ...logListQueryOptions })
   const cursorExpired = query.isError && query.error instanceof ApiError && query.error.code === 'observability_logs_cursor_expired'
   useEffect(() => {
     if (!cursorExpired || cursors.length === 0) return
@@ -237,7 +241,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
     />
     {loadError ? <Alert className="account-log-error" type="error" showIcon role="alert" message={loadError} /> : null}
     <div className="account-log-table" aria-busy={query.isFetching}>
-      <Table<ObservabilityLogFact> rowKey="event_id" columns={columns} dataSource={query.data?.items ?? []} loading={query.isPending}
+      <Table<ObservabilityLogFact> rowKey="event_id" columns={columns} dataSource={query.data?.items ?? []} loading={query.isPending || query.isPlaceholderData}
         pagination={false} scroll={{ x: tab === 'operation' ? 980 : 910 }} locale={{ emptyText: loadError ?? text('empty') }} />
     </div>
     <nav className="account-log-pager" aria-label={text('pagination')}>
@@ -245,7 +249,7 @@ function AccountLogTable({ tab, accessToken, language }: { tab: LogTab; accessTo
       <Button aria-label={text('previous')} icon={<ChevronLeft size={14} aria-hidden />} disabled={cursors.length === 0}
         onClick={() => setCursors((value) => value.slice(0, -1))} />
       <span className="account-log-page-number" aria-current="page">{pageNumber}</span>
-      <Button aria-label={text('next')} icon={<ChevronRight size={14} aria-hidden />} disabled={!query.data?.next_cursor}
+      <Button aria-label={text('next')} icon={<ChevronRight size={14} aria-hidden />} disabled={!query.data?.next_cursor || query.isPlaceholderData}
         onClick={() => { const next = query.data?.next_cursor; if (next) setCursors((value) => [...value, next]) }} />
       <Select aria-label={text('pageSize')} value={pageSize} onChange={(value) => { setPageSize(value); setCursors([]) }} style={{ width: 100 }}
         options={pageSizes.map((value) => ({ value, label: language.startsWith('en') ? `${value} / page` : `${value} 条/页` }))} />

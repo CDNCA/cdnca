@@ -2,6 +2,7 @@ package edgeautopublish
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -53,7 +54,7 @@ func (resolver *CertificateTargetResolver) ResolveCertificateTarget(
 			return err
 		}
 		if !found || policy.Mode != ModeAutomatic {
-			return ErrInvalidInput
+			return rejectCertificateTarget(CertificateTargetPolicyNotAutomatic, uuid.Nil, false)
 		}
 		var databaseNow time.Time
 		if err := tx.QueryRow(ctx, `SELECT transaction_timestamp()`).Scan(&databaseNow); err != nil {
@@ -67,7 +68,7 @@ func (resolver *CertificateTargetResolver) ResolveCertificateTarget(
 			}
 			resolved, resolveErr := resolver.snapshots.ResolveTarget(ctx, tx, command.TenantScopeID, reference)
 			if resolveErr != nil || resolved.Reference != reference {
-				return ErrInvalidInput
+				return rejectCertificateTarget(CertificateTargetSnapshotUnresolved, uuid.Nil, true)
 			}
 			nodeIDs = slices.Clone(resolved.NodeIDs)
 		} else if len(nodeIDs) == 0 {
@@ -88,7 +89,7 @@ func (resolver *CertificateTargetResolver) ResolveCertificateTarget(
 			Deadline:                     databaseNow.Add(policy.DeadlineWindow),
 		}
 		if !validCertificateTargetPolicy(result, databaseNow) {
-			return ErrInvalidInput
+			return rejectCertificateTarget(CertificateTargetPolicyInvalid, uuid.Nil, false)
 		}
 		return nil
 	})
@@ -145,11 +146,12 @@ func validateCertificatePublicationNodes(
 	now time.Time,
 ) error {
 	if len(nodeIDs) == 0 {
-		return ErrInvalidInput
+		return rejectCertificateTarget(CertificateTargetNoNodes, uuid.Nil, false)
 	}
 	rows, err := tx.Query(ctx, `SELECT node.id
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS target(node_id,ordinality)
-		JOIN nodes node ON node.id=target.node_id AND node.scope_id=$1 AND node.admin_state='active'
+		JOIN nodes node ON node.id=target.node_id AND node.admin_state='active'
+		 AND tenant_carries_node_287($1,node.id)
 		JOIN node_presence presence ON presence.node_id=node.id AND presence.status='online'
 		ORDER BY target.ordinality FOR SHARE OF node,presence`, scopeID, nodeIDs)
 	if err != nil {
@@ -164,7 +166,10 @@ func validateCertificatePublicationNodes(
 		}
 		if seen >= len(nodeIDs) || nodeID != nodeIDs[seen] {
 			rows.Close()
-			return ErrInvalidInput
+			if seen >= len(nodeIDs) {
+				return ErrInvalidInput
+			}
+			return diagnoseCertificatePublicationNode(ctx, tx, scopeID, nodeIDs[seen])
 		}
 		seen++
 	}
@@ -174,18 +179,49 @@ func validateCertificatePublicationNodes(
 		return err
 	}
 	if seen != len(nodeIDs) {
-		return ErrInvalidInput
+		return diagnoseCertificatePublicationNode(ctx, tx, scopeID, nodeIDs[seen])
 	}
 	capabilities, err := edgepublish.LoadNodePublicationCapabilities(ctx, tx, nodeIDs, now)
+	if errors.Is(err, edgepublish.ErrTargetIneligible) {
+		// node identity certificate or issued capabilities not usable now
+		// (for example mid-rotation): retried with backoff
+		return rejectCertificateTarget(CertificateTargetNodeIdentity, uuid.Nil, true)
+	}
 	if err != nil {
 		return err
 	}
 	for _, nodeID := range nodeIDs {
 		if !supportsCertificatePublication(capabilities[nodeID].Features) {
-			return ErrInvalidInput
+			return rejectCertificateTarget(CertificateTargetNodeCapabilityAbsent, nodeID, false)
 		}
 	}
 	return nil
+}
+
+// diagnoseCertificatePublicationNode names the first condition nodeID fails
+// in validateCertificatePublicationNodes (read in the same transaction).
+func diagnoseCertificatePublicationNode(ctx context.Context, tx pgx.Tx, scopeID, nodeID uuid.UUID) error {
+	var exists, active, carried, online bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM nodes WHERE id=$2),
+		EXISTS(SELECT 1 FROM nodes WHERE id=$2 AND admin_state='active'),
+		tenant_carries_node_287($1,$2),
+		EXISTS(SELECT 1 FROM node_presence WHERE node_id=$2 AND status='online')`,
+		scopeID, nodeID).Scan(&exists, &active, &carried, &online)
+	switch {
+	case err != nil:
+		return err
+	case !exists:
+		return rejectCertificateTarget(CertificateTargetNodeMissing, nodeID, false)
+	case !active:
+		return rejectCertificateTarget(CertificateTargetNodeInactive, nodeID, false)
+	case !carried:
+		return rejectCertificateTarget(CertificateTargetNodeNotCarried, nodeID, false)
+	case !online:
+		return rejectCertificateTarget(CertificateTargetNodeOffline, nodeID, true)
+	default:
+		// duplicate or reordered target: a policy defect
+		return rejectCertificateTarget(CertificateTargetPolicyInvalid, nodeID, false)
+	}
 }
 
 func supportsCertificatePublication(features []*agentv1.Capability) bool {

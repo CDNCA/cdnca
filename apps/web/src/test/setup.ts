@@ -54,3 +54,9 @@ afterEach(async () => {
   vi.restoreAllMocks()
   await changeLocale('zh-CN')
 })
+
+// console-perf 把错误/结果未知对话框主体改为首次打开时懒加载；测试里同步断言对话框内的重试按钮，先加载好。
+// 动态导入：静态 import 会被提升到上面的 ResizeObserver mock 之前，antd 带出的
+// resize-observer-polyfill 就导出真实实现，观察 SVG 时调 jsdom 没有的 getBBox 抛未捕获异常。
+const { preloadFeedbackDialog } = await import('@cdnca/ui')
+await preloadFeedbackDialog()

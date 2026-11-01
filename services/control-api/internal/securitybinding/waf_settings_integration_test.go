@@ -93,8 +93,8 @@ func TestWAFSettingsAndActionsPersistAndPublish(t *testing.T) {
 }
 
 // ge-waf logic 1 / 2: the system default WAF draft reads the active platform
-// defaults (a fresh installation: the project bootstrap, every module off,
-// auto block off) and the synced catalog.
+// defaults (a fresh installation: the project bootstrap, autodefense-ux2 every
+// official module blocking, auto block off) and the synced catalog.
 func TestCatalogDefaultWAFReadsPlatformDefaults(t *testing.T) {
 	fixture := newBindingFixture(t)
 	seedCatalog(t, fixture.pool)
@@ -104,7 +104,7 @@ func TestCatalogDefaultWAFReadsPlatformDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Default == nil || result.Default.Enabled || result.Default.WAFSettings != nil || len(result.Rules) != 0 {
+	if result.Default == nil || !result.Default.Enabled || result.Default.WAFSettings != nil || len(result.Rules) == 0 {
 		t.Fatalf("bootstrap default WAF = %+v", result.Default)
 	}
 }

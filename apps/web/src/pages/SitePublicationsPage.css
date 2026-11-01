@@ -106,6 +106,25 @@
   overflow-wrap: anywhere;
 }
 
+/* deployment error code with the node's failure text under it. */
+.site-deployment-error {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.site-deployment-error small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 @media (max-width: 720px) {
   .site-publications-heading {
     flex-direction: column;

@@ -11,7 +11,8 @@ paths:
   /v1/nodes/monitoring/latest:
     get:
       operationId: getLatestNodeMonitoring
-      summary: 批量读取节点本机 TCP 探测事实与当前生效策略
+      summary: "Batch read nodes' local TCP probe facts and the policy in force"
+      x-summary-zh: 批量读取节点本机 TCP 探测事实与当前生效策略
       description: >-
         Requires a platform principal with nodes.read in the current scope. One
         read-only repeatable database snapshot covers membership, head/active
@@ -48,7 +49,8 @@ paths:
             items: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
       responses:
         '200':
-          description: 当前生效配置与实际探测事实；缺失数据保持 null。
+          description: "The configuration in force and the actual probe facts; missing data stays null."
+          x-description-zh: 当前生效配置与实际探测事实；缺失数据保持 null。
           content:
             application/json:
               schema: {$ref: '#/components/schemas/NodeMonitoringLatest'}

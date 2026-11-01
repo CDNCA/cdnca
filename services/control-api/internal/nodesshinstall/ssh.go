@@ -92,21 +92,24 @@ func (dialer *Dialer) FetchHostKey(ctx context.Context, host string, port int) (
 	return "", err
 }
 
-// Run logs in with the pinned host key and runs command, writing stdin (may
-// be empty) to it. Every output line is passed to line (stdout and stderr).
-// It returns the exit error, if any.
-func (dialer *Dialer) Run(ctx context.Context, host string, port int, credential Credential, pinned, command string,
-	stdin []byte, line func(string)) error {
+// login opens an authenticated SSH client whose host key must equal pinned.
+// With deadline the TCP connection carries it (installs); without, the
+// connection has no deadline (interactive terminals manage their own).
+func (dialer *Dialer) login(ctx context.Context, host string, port int, credential Credential, pinned string,
+	deadline bool) (*ssh.Client, error) {
 	auth, err := authMethods(credential)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	connection, address, err := dialer.connect(ctx, host, port)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = connection.SetDeadline(deadline)
+	if until, ok := ctx.Deadline(); ok && deadline {
+		_ = connection.SetDeadline(until)
+	} else {
+		// The handshake still has to finish in time.
+		_ = connection.SetDeadline(time.Now().Add(dialer.timeout))
 	}
 	config := &ssh.ClientConfig{User: credential.Username, Auth: auth, Timeout: dialer.timeout,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
@@ -118,9 +121,79 @@ func (dialer *Dialer) Run(ctx context.Context, host string, port int, credential
 	conn, channels, requests, err := ssh.NewClientConn(connection, address, config)
 	if err != nil {
 		_ = connection.Close()
+		return nil, err
+	}
+	if !deadline {
+		_ = connection.SetDeadline(time.Time{})
+	}
+	return ssh.NewClient(conn, channels, requests), nil
+}
+
+// Shell is an interactive login shell on a pty (the console SSH terminal).
+type Shell struct {
+	client  *ssh.Client
+	session *ssh.Session
+	Stdin   io.WriteCloser
+}
+
+// OpenShell logs in with the pinned host key and starts a login shell on an
+// xterm pty of cols x rows. The shell's stdout and stderr are both copied to
+// output (from two goroutines: output must be safe for concurrent writes).
+func (dialer *Dialer) OpenShell(ctx context.Context, host string, port int, credential Credential, pinned string,
+	cols, rows int, output io.Writer) (*Shell, error) {
+	client, err := dialer.login(ctx, host, port, credential, pinned, false)
+	if err != nil {
+		return nil, err
+	}
+	shell, err := startShell(client, cols, rows, output)
+	if err != nil {
+		_ = client.Close()
+		return nil, err
+	}
+	return shell, nil
+}
+
+func startShell(client *ssh.Client, cols, rows int, output io.Writer) (*Shell, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	session.Stdout, session.Stderr = output, output
+	modes := ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 14400, ssh.TTY_OP_OSPEED: 14400}
+	if err := session.RequestPty("xterm-256color", rows, cols, modes); err != nil {
+		return nil, err
+	}
+	if err := session.Shell(); err != nil {
+		return nil, err
+	}
+	return &Shell{client: client, session: session, Stdin: stdin}, nil
+}
+
+// Resize changes the pty size.
+func (shell *Shell) Resize(cols, rows int) error { return shell.session.WindowChange(rows, cols) }
+
+// Wait returns when the remote shell exits.
+func (shell *Shell) Wait() error { return shell.session.Wait() }
+
+// Close ends the session and the connection.
+func (shell *Shell) Close() error {
+	_ = shell.session.Close()
+	return shell.client.Close()
+}
+
+// Run logs in with the pinned host key and runs command, writing stdin (may
+// be empty) to it. Every output line is passed to line (stdout and stderr).
+// It returns the exit error, if any.
+func (dialer *Dialer) Run(ctx context.Context, host string, port int, credential Credential, pinned, command string,
+	stdin []byte, line func(string)) error {
+	client, err := dialer.login(ctx, host, port, credential, pinned, true)
+	if err != nil {
 		return err
 	}
-	client := ssh.NewClient(conn, channels, requests)
 	defer client.Close()
 	session, err := client.NewSession()
 	if err != nil {
@@ -195,7 +268,10 @@ func authMethods(credential Credential) ([]ssh.AuthMethod, error) {
 		})}, nil
 }
 
-var registrationKeyPattern = regexp.MustCompile(`^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$`)
+var (
+	registrationKeyPattern = regexp.MustCompile(`^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$`)
+	controlCADigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+)
 
 // InstallCommand is the console's install plus the node identity the
 // controller already knows. No secret is on the command line (remote ps):
@@ -206,10 +282,24 @@ var registrationKeyPattern = regexp.MustCompile(`^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9
 // pipes the key with the printf builtin into the installer's
 // --registration-key-stdin; "sudo -n" reuses the cached sudo ticket. Every
 // argument is single-quoted.
-func InstallCommand(controlPlane, registrationKey, host, name string, root bool, sudoPassword bool) (string, error) {
+//
+// controlCASHA256 is
+// the console's published digest of /downloads/gateway-ca.pem (the
+// installer-generated self-signed root): that root is fetched once without
+// verification, used only when its SHA-256 matches, then pins the script
+// download (system trust as fallback) and is handed to the installer, the
+// same rule as the copied console command (packages/cdnca-ui installerCommand).
+//
+// language (migration 610) is the operator's UI language when the job was
+// created: "zh" / "en" append --lang zh / --lang en (a stock Ubuntu has
+// LANG=C.UTF-8 and no terminal, so the installer would otherwise pick
+// English); "" (older jobs) appends nothing.
+func InstallCommand(controlPlane, registrationKey, host, name string, root bool, sudoPassword bool,
+	controlCASHA256, language string) (string, error) {
 	parsed, err := url.Parse(controlPlane)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" ||
-		parsed.User != nil || parsed.Fragment != "" || !registrationKeyPattern.MatchString(registrationKey) {
+		parsed.User != nil || parsed.Fragment != "" || !registrationKeyPattern.MatchString(registrationKey) ||
+		(controlCASHA256 != "" && !controlCADigestPattern.MatchString(controlCASHA256)) || !ValidLanguage(language) {
 		return "", ErrInvalidInput
 	}
 	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
@@ -227,10 +317,28 @@ func InstallCommand(controlPlane, registrationKey, host, name string, root bool,
 			prefix = "sudo -S -p '' -v && "
 		}
 	}
+	script := quote(controlPlane + "/downloads/install-node.sh")
+	download := `curl --proto '=https' -fsSL -o "$d/install-node.sh" ` + script
+	trust := ""
+	if controlCASHA256 != "" {
+		trust = `a="$d/control-plane-ca.pem"; curl --proto '=https' --proto-redir '=https' -k -fsSL --max-filesize 65536 -o "$a" ` +
+			quote(controlPlane+"/downloads/gateway-ca.pem") + ` && [ "$(sha256sum "$a" | cut -d ' ' -f 1)" = ` + quote(controlCASHA256) +
+			` ] || { echo '[cdnca-edge] error: cannot download the management root CA or its fingerprint does not match' >&2; exit 1; }; `
+		download = `{ curl --proto '=https' --proto-redir '=https' --cacert "$a" -fsSL -o "$d/install-node.sh" ` + script + ` || ` + download + `; }`
+		arguments = append(arguments, "--control-plane-ca-file", `"$a"`, "--control-plane-ca-sha256", quote(controlCASHA256))
+	}
+	if language != "" {
+		arguments = append(arguments, "--lang", language)
+	}
 	return fmt.Sprintf(`set -o pipefail; umask 077; d=$(mktemp -d) || exit 1; trap 'rm -rf -- "$d"' EXIT; `+
-		`IFS= read -r k || exit 1; curl --proto '=https' -fsSL -o "$d/install-node.sh" %s && %s`+
+		`IFS= read -r k || exit 1; %s%s && %s`+
 		`printf '%%s\n' "$k" | %s "$d/install-node.sh" %s`,
-		quote(controlPlane+"/downloads/install-node.sh"), prefix, runner, strings.Join(arguments, " ")), nil
+		trust, download, prefix, runner, strings.Join(arguments, " ")), nil
+}
+
+// ValidLanguage is a job language: "" (none), "zh" or "en".
+func ValidLanguage(language string) bool {
+	return language == "" || language == "zh" || language == "en"
 }
 
 // InstallInput is the session stdin for InstallCommand: the registration

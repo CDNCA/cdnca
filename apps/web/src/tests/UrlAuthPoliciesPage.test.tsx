@@ -848,7 +848,7 @@ describe('UrlAuthPoliciesPage', () => {
     await changeLocale('en-US')
     authenticate(['url_auth_policies.read'])
     vi.spyOn(urlAuthPoliciesApi, 'list').mockResolvedValue({
-      items: [{ ...policy, migration_marker: 'cdnfly_type_a_md5' }], total: 1, page: 1, limit: 20,
+      items: [{ ...policy, migration_marker: 'legacy_type_a_md5' }], total: 1, page: 1, limit: 20,
     })
     renderWithProviders(<UrlAuthPoliciesPage />, ['/site/url-auth'])
 

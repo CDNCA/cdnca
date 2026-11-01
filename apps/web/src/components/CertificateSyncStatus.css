@@ -1,0 +1,19 @@
+.certificate-sync-status {
+  display: inline-grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.certificate-sync-status .certificate-sync-reason {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}

@@ -251,7 +251,8 @@ func TestOpenAPIPlatformOwnScopeDeleteContract(t *testing.T) {
 	contract := string(contents)
 	for _, fragment := range []string{
 		"operationId: deleteNodeLineGroup",
-		"summary: 软删除线路组并保留不可变修订历史",
+		`summary: "Soft-delete a line group and keep its immutable revision history"`,
+		"x-summary-zh: 软删除线路组并保留不可变修订历史",
 		"平台会话未指定 target_scope_id 时删除本主控平台作用域线路组",
 		"显式指定租户作用域时返回 403",
 		"'204':",

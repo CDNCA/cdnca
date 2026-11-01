@@ -1035,6 +1035,7 @@ func isolatedDispatchPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "acmedispatch")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

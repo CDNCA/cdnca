@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, Input, Modal, Result, Select, Table, Tabs, type TableColumnsType } from 'antd'
 import { type Dayjs } from 'dayjs'
 
@@ -11,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import type { AnalyticsAudience } from '../api/analytics'
 import {
   analyticsLogsApi,
+  isBlockCIDR,
   type BlockEdgeProgress,
   type BlockHistory,
   type BlockStateFilters,
@@ -25,7 +27,7 @@ import { useSessionStore } from '../auth/session'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
 import '../i18n/blockLogCCBans'
 import './SiteBlockLogPage.css'
-import { FeedbackWhen, TimeRangeFilter } from '@cdnca/ui'
+import { FeedbackWhen, TimeRangeFilter, useLiveApply } from '@cdnca/ui'
 
 type BlockOwner = readonly [Principal['scope_kind'], string, string | null, string, number]
 type BlockView = 'current' | 'count' | 'history' | 'ccBans'
@@ -35,7 +37,8 @@ type BlockFilterKey = 'ip' | 'site' | 'filter'
 const historyKeys: readonly Extract<BlockFilterKey, 'ip' | 'site'>[] = ['ip', 'site']
 type BlockStateRow = CurrentBlock | BlockHistory
 
-const pageSizeOptions = [10, 30, 100, 300]
+// 后端每页上限 100（analyticslog/model.go MaxLimit）。
+const pageSizeOptions = [10, 30, 100]
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const staleBlockRead = new Error('Block-state owner changed during read')
@@ -131,6 +134,8 @@ function filterName(
 type BlockFilterState = {
   drafts: Record<BlockFilterKey, string>
   changeDraft: (key: BlockFilterKey, value: string) => void
+  /** A picked option applies at once (no debounce). */
+  pickFilter: (value: string) => void
   applied: BlockStateFilters
   /** The history tab narrows by occurrence window instead of by filter id. */
   timeRange: readonly [Dayjs | null, Dayjs | null]
@@ -146,6 +151,14 @@ type BlockFilterState = {
 
 const emptyDrafts: Record<BlockFilterKey, string> = { ip: '', site: '', filter: '' }
 
+// control-log-ui：IP 框的值 → 后端 cidr 参数（block_state.go validBlockCIDR 只认规范前缀）。
+// 单个 IP 按主机前缀 /32、/128 查；已是前缀的原样（IPv6 转小写）；还没输完的返回 null，不发请求。
+function ipFilterCIDR(value: string): string | null {
+  const lower = value.toLowerCase()
+  const cidr = lower.includes('/') ? lower : `${lower}/${lower.includes(':') ? 128 : 32}`
+  return isBlockCIDR(cidr) ? cidr : null
+}
+
 function useBlockFilterState(): BlockFilterState {
   const [drafts, setDrafts] = useState<Record<BlockFilterKey, string>>(emptyDrafts)
   const [applied, setApplied] = useState<BlockStateFilters>({})
@@ -158,10 +171,12 @@ function useBlockFilterState(): BlockFilterState {
   // cannot trigger a 400 from the block-state endpoint.
   const applyFilter = (key: BlockFilterKey, value: string) => {
     if (key === 'site' && value && !uuidPattern.test(value)) return
+    const cidr = key === 'ip' && value ? ipFilterCIDR(value) : null
+    if (key === 'ip' && value && !cidr) return
     setApplied((current) => {
       const updated = { ...current }
       if (key === 'ip') {
-        if (value) updated.cidr = value
+        if (cidr) updated.cidr = cidr
         else delete updated.cidr
       }
       if (key === 'site') {
@@ -177,9 +192,22 @@ function useBlockFilterState(): BlockFilterState {
     setPage(1)
   }
 
+  // 文本框停下 400ms 后生效（useLiveApply，同其它日志页）；下拉选完即生效。
   const changeDraft = (key: BlockFilterKey, value: string) => {
     setDrafts((current) => ({ ...current, [key]: value }))
-    applyFilter(key, value.trim())
+  }
+  const [liveDrafts, setLiveDrafts] = useState(emptyDrafts)
+  useLiveApply(drafts, liveDrafts, (next) => {
+    for (const key of Object.keys(next) as BlockFilterKey[]) {
+      if (next[key] !== liveDrafts[key]) applyFilter(key, next[key].trim())
+    }
+    setLiveDrafts(next)
+  })
+  const pickFilter = (value: string) => {
+    const next = { ...drafts, filter: value }
+    setDrafts(next)
+    setLiveDrafts(next)
+    applyFilter('filter', value)
   }
 
   const applyWindow = (value: readonly [Dayjs | null, Dayjs | null], preset = 'custom') => {
@@ -196,6 +224,7 @@ function useBlockFilterState(): BlockFilterState {
 
   const clearFilters = () => {
     setDrafts(emptyDrafts)
+    setLiveDrafts(emptyDrafts)
     setTimeRange([null, null])
     setTimePreset('custom')
     setApplied({})
@@ -203,7 +232,7 @@ function useBlockFilterState(): BlockFilterState {
   }
 
   return {
-    drafts, changeDraft, applied, timeRange, timePreset, applyWindow, clearFilters,
+    drafts, changeDraft, pickFilter, applied, timeRange, timePreset, applyWindow, clearFilters,
     page, setPage, pageSize, setPageSize,
   }
 }
@@ -220,7 +249,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
   const queryClient = useQueryClient()
   const audience: AnalyticsAudience = owner[0] === 'platform' ? 'admin' : 'tenant'
   const {
-    drafts, changeDraft, applied, timeRange, timePreset, applyWindow, clearFilters,
+    drafts, changeDraft, pickFilter, applied, timeRange, timePreset, applyWindow, clearFilters,
     page, setPage, pageSize, setPageSize,
   } = filters
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
@@ -238,7 +267,9 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
   const canManage = principal.permissions.includes('security_policies.manage')
   const ready = true
   const offset = (page - 1) * pageSize
-  const queryKey = ['analytics-block-state', ownerKey, view, applied, pageSize, offset] as const
+  // control-log-ui：条件变了按新数据读；同一条件下翻页、切 tab 回来 30 秒内用缓存。
+  const [generation] = useLogListGeneration([applied, pageSize])
+  const queryKey = ['analytics-block-state', ownerKey, generation, view, applied, pageSize, offset] as const
   const policyPicker = canListPolicies(principal)
   // Block rows come from ACL policies only (block_state_postgres.go keeps KindACL), so the picker lists those.
   const policyQuery = useQuery({
@@ -278,6 +309,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
     retry: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
+    ...logListQueryOptions,
   })
 
   const rows = query.data?.data ?? []
@@ -574,7 +606,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
                 notFoundContent={policyQuery.error ? t('blockState.filters.filterUnavailable') : undefined}
                 value={drafts.filter || undefined}
                 options={(policyQuery.data?.items ?? []).map((policy) => ({ value: policy.id, label: policy.name }))}
-                onChange={(value?: string) => changeDraft('filter', value ?? '')}
+                onChange={(value?: string) => pickFilter(value ?? '')}
               />
             ) : view === 'current' ? (
               <Input
@@ -627,7 +659,7 @@ function BlockStatePanel({ view, owner, ownerKey, principal, filters }: {
           size="small"
           columns={view === 'current' ? currentColumns : historyColumns}
           dataSource={rows as BlockStateRow[]}
-          loading={ready && query.isFetching && !query.data}
+          loading={ready && query.isFetching && (!query.data || query.isPlaceholderData)}
           pagination={{
             current: page,
             pageSize,
@@ -718,6 +750,9 @@ function CCBanPanel({ owner, ownerKey, principal }: { owner: BlockOwner; ownerKe
   const [tenantId, setTenantId] = useState('')
   const [tenantError, setTenantError] = useState(false)
   const [tenantSearch, setTenantSearch] = useState('')
+  // control-log-ui：租户名搜索同样停下 400ms 再查，不再每按一键查一次用户列表。
+  const [tenantSearchDraft, setTenantSearchDraft] = useState('')
+  useLiveApply(tenantSearchDraft, tenantSearch, setTenantSearch)
   const window = useMemo(() => {
     const to = new Date(Math.ceil(Date.now() / 60_000) * 60_000)
     return { from: new Date(to.getTime() - ccBanWindowDays * 86_400_000).toISOString(), to: to.toISOString() }
@@ -746,8 +781,17 @@ function CCBanPanel({ owner, ownerKey, principal }: { owner: BlockOwner; ownerKe
       setTenantId(uuidPattern.test(tenant) ? tenant : '')
     }
   }
+  // 客户端 IP 与（无名称列表权限时的）租户 UUID 边输入边生效，400ms 防抖；
+  // 租户 UUID 不合法时不生效，查询按钮照旧就地报错。
+  const liveTenant = audience === 'admin' && !tenantLookup ? draftTenant.trim() : tenantId
+  useLiveApply({ ip: draftIp.trim(), tenant: liveTenant }, { ip: clientIp, tenant: tenantId }, (next) => {
+    setClientIp(next.ip)
+    setTenantError(false)
+    setTenantId(next.tenant)
+  }, { valid: liveTenant === '' || uuidPattern.test(liveTenant) })
+  const [ccGeneration] = useLogListGeneration([tenantId, clientIp])
   const query = useQuery({
-    queryKey: ['analytics-cc-bans', ownerKey, tenantId, window.from, clientIp] as const,
+    queryKey: ['analytics-cc-bans', ownerKey, ccGeneration, tenantId, window.from, clientIp] as const,
     queryFn: async () => {
       const token = currentBlockAccess(ownerKey)
       if (!token) throw staleBlockRead
@@ -762,6 +806,7 @@ function CCBanPanel({ owner, ownerKey, principal }: { owner: BlockOwner; ownerKe
     retry: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
+    ...logListQueryOptions,
   })
   const columns: TableColumnsType<CCBan> = [
     { title: t('blockState.table.domain'), dataIndex: 'host', key: 'host', width: 200, ellipsis: true },
@@ -796,7 +841,7 @@ function CCBanPanel({ owner, ownerKey, principal }: { owner: BlockOwner; ownerKe
             value={tenantId || undefined}
             options={tenantOptions}
             notFoundContent={tenants.error ? t('blockState.ccBans.tenantLookupFailed') : undefined}
-            onSearch={(value) => setTenantSearch(value.trim())}
+            onSearch={(value) => setTenantSearchDraft(value.trim())}
             onChange={(value?: string) => setTenantId(value ?? '')}
           />
         ) : audience === 'admin' ? (
@@ -833,7 +878,7 @@ function CCBanPanel({ owner, ownerKey, principal }: { owner: BlockOwner; ownerKe
         size="small"
         columns={columns}
         dataSource={query.data?.data ?? []}
-        loading={query.isFetching && !query.data}
+        loading={query.isFetching && (!query.data || query.isPlaceholderData)}
         pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: pageSizeOptions.map(String) }}
         locale={{ emptyText: query.error ? ' ' : t('blockState.ccBans.empty') }}
       />

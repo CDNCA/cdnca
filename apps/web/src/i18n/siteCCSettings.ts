@@ -4,6 +4,7 @@ import i18n from './index'
 const zhCN = {
   noPolicy: '站点还没有已发布的 CC 规则集。在上方选择默认防护，即为本站建立规则集，之后可在这里设置黑白名单时间（自动切换在「自动防御」标签）。',
   noPolicyAutoSwitch: '站点还没有已发布的 CC 规则集。在「CC防护」标签选择默认防护，即为本站建立规则集，之后可在这里设置自动切换。',
+  openDefaultProtection: '去选择 CC 默认防护',
   autoSwitch: {
     label: '自动切换', enabled: '已开启', disabled: '未开启',
     hint: '网站访问量突增时临时切换到更严的防护规则；持续低于阈值达恢复时间后自动恢复默认防护。每个节点各自统计和切换。',
@@ -49,6 +50,7 @@ const zhCN = {
 const enUS = {
   noPolicy: 'The site has no published CC rule set yet. Choosing a default protection above creates one for the site, then set the blacklist/allowlist times here (automatic switching is on the Auto defense tab).',
   noPolicyAutoSwitch: 'The site has no published CC rule set yet. Choosing a default protection on the CC protection tab creates one for the site, then set automatic switching here.',
+  openDefaultProtection: 'Choose a CC default protection',
   autoSwitch: {
     label: 'Automatic switching', enabled: 'On', disabled: 'Off',
     hint: 'When traffic surges the site temporarily runs stricter rules, and returns to its default protection after staying below the threshold for the recovery time. Every node counts and switches on its own.',

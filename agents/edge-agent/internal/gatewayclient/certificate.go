@@ -174,8 +174,15 @@ func classifyCertificateError(err error) (commonv1.ErrorCode, string) {
 		return commonv1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT, "certificate artifact was rejected"
 	case errors.Is(err, ErrInvalidCertificateResult):
 		return commonv1.ErrorCode_ERROR_CODE_INTERNAL, "certificate activation result was invalid"
-	case errors.Is(err, certstore.ErrPrecheck), errors.Is(err, certstore.ErrActivation), errors.Is(err, certstore.ErrHealth):
-		return commonv1.ErrorCode_ERROR_CODE_UNAVAILABLE, "certificate activation failed"
+	// The message names the certstore stage (demo-fill 11-01: the controller
+	// saw one text for all three); the reason prefix is stable for the
+	// controller and console, the code stays UNAVAILABLE.
+	case errors.Is(err, certstore.ErrPrecheck):
+		return commonv1.ErrorCode_ERROR_CODE_UNAVAILABLE, "CERTIFICATE_PRECHECK_FAILED: OpenResty rejected the certificate configuration (nginx -t)"
+	case errors.Is(err, certstore.ErrActivation):
+		return commonv1.ErrorCode_ERROR_CODE_UNAVAILABLE, "CERTIFICATE_ACTIVATION_FAILED: OpenResty did not start or reload with the certificate"
+	case errors.Is(err, certstore.ErrHealth):
+		return commonv1.ErrorCode_ERROR_CODE_UNAVAILABLE, "CERTIFICATE_HEALTH_FAILED: TLS handshake with the certificate failed after activation"
 	case errors.Is(err, context.DeadlineExceeded):
 		return commonv1.ErrorCode_ERROR_CODE_DEADLINE_EXCEEDED, "certificate command deadline expired"
 	case errors.Is(err, ErrUnsupportedCommand):

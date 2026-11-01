@@ -130,6 +130,7 @@ func TestBuyerForwardingContract(t *testing.T) {
 	request(h, "GET", "/v1/admin/market/plugins?all_versions=1", "", nil)
 	request(h, "GET", "/v1/admin/market/plugins?compat=1.0.30", "", nil)
 	request(h, "GET", "/v1/admin/market/plugins?kind=theme&applies_to=user", "", nil)
+	request(h, "GET", "/v1/admin/market/plugins?plugin_ids=io.cdnca.crs,acme.reports", "", nil)
 	request(h, "GET", "/v1/admin/market/offers?region=hk&max_price=500&min_score=2.5&settlement_mode=escrow", "", nil)
 	request(h, "GET", "/v1/admin/market/offers?cursor=1792915200000000000%7E"+id+"&limit=50", "", nil)
 	request(h, "PUT", "/v1/admin/market/subscriptions/"+id+"/renewal-policy", `{"renewal_price_policy":"if_lesser_or_equal"}`,
@@ -151,6 +152,7 @@ func TestBuyerForwardingContract(t *testing.T) {
 		`GET /v1/plugins key= `,
 		`GET /v1/plugins?compat=1.0.30 key= `,
 		`GET /v1/plugins?applies_to=user&compat=1.0.35&kind=theme key= `,
+		`GET /v1/plugins?compat=1.0.35&plugin_ids=io.cdnca.crs%2Cacme.reports key= `,
 		`GET /v1/offers?max_price=500&min_score=2.5&region=hk&settlement_mode=escrow key= `,
 		`GET /v1/offers?cursor=1792915200000000000~` + id + `&limit=50 key= `,
 		`PUT /v1/subscriptions/` + id + `/renewal-policy key=rp-1 {"renewal_price_policy":"if_lesser_or_equal"}`,
@@ -167,6 +169,7 @@ func TestBuyerForwardingContract(t *testing.T) {
 	}
 	for _, bad := range []string{
 		"/v1/admin/market/plugins?kind=rootkit", "/v1/admin/market/plugins?kind=waf_rule_pack", "/v1/admin/market/plugins?kind=edge_script", "/v1/admin/market/plugins?sort=price", "/v1/admin/market/plugins?limit=0", "/v1/admin/market/plugins?applies_to=all", "/v1/admin/market/plugins?applies_to=user%2Csite",
+		"/v1/admin/market/plugins?plugin_ids=", "/v1/admin/market/plugins?plugin_ids=io.cdnca.crs,", "/v1/admin/market/plugins?plugin_ids=Bad.ID",
 		"/v1/admin/market/plugins?limit=201", "/v1/admin/market/offers?min_score=3.5", "/v1/admin/market/offers?max_price=-1", "/v1/admin/market/offers?limit=201",
 		"/v1/admin/market/licenses?q=x", "/v1/admin/market/offers?all_versions=1", "/v1/admin/market/usage-statements?as=operator",
 		"/v1/admin/market/disputes?status=open", "/v1/admin/market/disputes?subject_kind=offer",

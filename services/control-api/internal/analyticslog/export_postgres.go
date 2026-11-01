@@ -54,6 +54,18 @@ type AccessExport struct {
 	Downloadable bool         `json:"downloadable"`
 	// Filter 是申请时冻结的原查询条件（LOG-02）；文档版本不认识时为 null。
 	Filter *exportFilterBody `json:"filter"`
+	// 申请人与下载记录：下载 = 一次性令牌被消费（grants.consumed_at）。
+	RequestedBy      ExportUser  `json:"requested_by"`
+	DownloadCount    int         `json:"download_count"`
+	LastDownloadedAt *time.Time  `json:"last_downloaded_at"`
+	LastDownloadedBy *ExportUser `json:"last_downloaded_by"`
+}
+
+// ExportUser 是记录里显示的账号（用户名与显示名，不含其它资料）。
+type ExportUser struct {
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
 }
 
 type AccessExportGrant struct {
@@ -895,12 +907,19 @@ func (manager *ExportManager) exportAccess(ctx context.Context, actor Actor, aud
 }
 
 const exportSelectSQL = `SELECT request.id,latest.state,latest.reason,latest.snapshot_at,latest.row_count,
-	latest.byte_count,latest.artifact_sha256,request.created_at,artifact.artifact_expires_at,request.filter
+	latest.byte_count,latest.artifact_sha256,request.created_at,artifact.artifact_expires_at,request.filter,
+	requester.id,requester.username,requester.display_name,
+	downloads.count,downloads.last_at,downloader.id,downloader.username,downloader.display_name
 	FROM analytics_log_exports_v1 request
 	JOIN LATERAL (SELECT state,reason,snapshot_at,row_count,byte_count,artifact_sha256
 		FROM analytics_log_export_events_v1 event WHERE event.export_id=request.id
 		ORDER BY sequence DESC LIMIT 1) latest ON true
-	LEFT JOIN analytics_log_export_artifacts_v1 artifact ON artifact.export_id=request.id `
+	JOIN users requester ON requester.id=request.actor_user_id
+	LEFT JOIN analytics_log_export_artifacts_v1 artifact ON artifact.export_id=request.id
+	JOIN LATERAL (SELECT count(*)::int AS count,max(consumed_at) AS last_at,
+		(array_agg(actor_user_id ORDER BY consumed_at DESC))[1] AS last_user
+		FROM analytics_log_export_grants_v1 g WHERE g.export_id=request.id AND g.consumed_at IS NOT NULL) downloads ON true
+	LEFT JOIN users downloader ON downloader.id=downloads.last_user `
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -916,13 +935,22 @@ func scanExport(row rowScanner, now time.Time) (AccessExport, error) {
 	var id uuid.UUID
 	var job AccessExport
 	var digest, filter []byte
+	var requesterID uuid.UUID
+	var downloaderID *uuid.UUID
+	var downloaderUsername, downloaderName *string
 	if err := row.Scan(&id, &job.Status, &job.Reason, &job.SnapshotAt, &job.RowCount, &job.ByteCount,
-		&digest, &job.CreatedAt, &job.ExpiresAt, &filter); errors.Is(err, pgx.ErrNoRows) {
+		&digest, &job.CreatedAt, &job.ExpiresAt, &filter,
+		&requesterID, &job.RequestedBy.Username, &job.RequestedBy.DisplayName,
+		&job.DownloadCount, &job.LastDownloadedAt, &downloaderID, &downloaderUsername, &downloaderName); errors.Is(err, pgx.ErrNoRows) {
 		return AccessExport{}, ErrNotFound
 	} else if err != nil {
 		return AccessExport{}, ErrStorageUnavailable
 	}
 	job.ID = id.String()
+	job.RequestedBy.ID = requesterID.String()
+	if downloaderID != nil && downloaderUsername != nil && downloaderName != nil {
+		job.LastDownloadedBy = &ExportUser{ID: downloaderID.String(), Username: *downloaderUsername, DisplayName: *downloaderName}
+	}
 	if digest != nil {
 		if len(digest) != sha256.Size {
 			return AccessExport{}, ErrInvalidResponse

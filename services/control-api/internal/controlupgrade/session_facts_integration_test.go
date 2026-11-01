@@ -31,6 +31,7 @@ func TestSessionFactsUpgradeReadersPostgres(t *testing.T) {
 	if connection == "" {
 		t.Skip("TEST_DATABASE_URL is required")
 	}
+	connection = databasetest.FreshDatabaseURL(t, connection, "session_upgrade")
 	admin, err := pgxpool.New(t.Context(), connection)
 	if err != nil {
 		t.Fatal(err)

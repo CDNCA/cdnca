@@ -323,6 +323,13 @@ const (
 	// it only when the OpenResty binary exports the patch's function; control
 	// refuses to publish a site with it to a node without it.
 	CapabilityName_CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY CapabilityName = 77
+	// SSH_ACCESS v1: the
+	// node applies "only the controller may SSH" (SSHAccessCommand apply: its
+	// own nft table inet cdnca_ssh_access) with a 5 minute rollback timer,
+	// keeps it on SSHAccessCommand confirm, and answers SSHAccessReceipt
+	// (applied / confirmed / reverted / failed), also unprompted when the
+	// timer reverted it. Control sends commands only to nodes that declare it.
+	CapabilityName_CAPABILITY_NAME_SSH_ACCESS CapabilityName = 78
 )
 
 // Enum value maps for CapabilityName.
@@ -400,6 +407,7 @@ var (
 		75: "CAPABILITY_NAME_AGGREGATED_EDGE_PROBE",
 		76: "CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE",
 		77: "CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY",
+		78: "CAPABILITY_NAME_SSH_ACCESS",
 	}
 	CapabilityName_value = map[string]int32{
 		"CAPABILITY_NAME_UNSPECIFIED":                     0,
@@ -474,6 +482,7 @@ var (
 		"CAPABILITY_NAME_AGGREGATED_EDGE_PROBE":           75,
 		"CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE":          76,
 		"CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY":            77,
+		"CAPABILITY_NAME_SSH_ACCESS":                      78,
 	}
 )
 
@@ -10800,6 +10809,7 @@ type ConnectRequest struct {
 	//	*ConnectRequest_SiteDropReceipt
 	//	*ConnectRequest_CacheControlCancelReceipt
 	//	*ConnectRequest_GatewayAddressChangeReceipt
+	//	*ConnectRequest_SshAccessReceipt
 	Payload       isConnectRequest_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -11056,6 +11066,15 @@ func (x *ConnectRequest) GetGatewayAddressChangeReceipt() *GatewayAddressChangeR
 	return nil
 }
 
+func (x *ConnectRequest) GetSshAccessReceipt() *SSHAccessReceipt {
+	if x != nil {
+		if x, ok := x.Payload.(*ConnectRequest_SshAccessReceipt); ok {
+			return x.SshAccessReceipt
+		}
+	}
+	return nil
+}
+
 type isConnectRequest_Payload interface {
 	isConnectRequest_Payload()
 }
@@ -11152,6 +11171,10 @@ type ConnectRequest_GatewayAddressChangeReceipt struct {
 	GatewayAddressChangeReceipt *GatewayAddressChangeReceipt `protobuf:"bytes,28,opt,name=gateway_address_change_receipt,json=gatewayAddressChangeReceipt,proto3,oneof"`
 }
 
+type ConnectRequest_SshAccessReceipt struct {
+	SshAccessReceipt *SSHAccessReceipt `protobuf:"bytes,29,opt,name=ssh_access_receipt,json=sshAccessReceipt,proto3,oneof"`
+}
+
 func (*ConnectRequest_Hello) isConnectRequest_Payload() {}
 
 func (*ConnectRequest_Heartbeat) isConnectRequest_Payload() {}
@@ -11198,6 +11221,8 @@ func (*ConnectRequest_CacheControlCancelReceipt) isConnectRequest_Payload() {}
 
 func (*ConnectRequest_GatewayAddressChangeReceipt) isConnectRequest_Payload() {}
 
+func (*ConnectRequest_SshAccessReceipt) isConnectRequest_Payload() {}
+
 // ConnectResponse is one Gateway-to-Agent stream envelope.
 type ConnectResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -11231,6 +11256,7 @@ type ConnectResponse struct {
 	//	*ConnectResponse_SiteDropCommand
 	//	*ConnectResponse_CacheControlCancel
 	//	*ConnectResponse_GatewayAddressChangeCommand
+	//	*ConnectResponse_SshAccessCommand
 	Payload       isConnectResponse_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -11523,6 +11549,15 @@ func (x *ConnectResponse) GetGatewayAddressChangeCommand() *GatewayAddressChange
 	return nil
 }
 
+func (x *ConnectResponse) GetSshAccessCommand() *SSHAccessCommand {
+	if x != nil {
+		if x, ok := x.Payload.(*ConnectResponse_SshAccessCommand); ok {
+			return x.SshAccessCommand
+		}
+	}
+	return nil
+}
+
 type isConnectResponse_Payload interface {
 	isConnectResponse_Payload()
 }
@@ -11635,6 +11670,10 @@ type ConnectResponse_GatewayAddressChangeCommand struct {
 	GatewayAddressChangeCommand *GatewayAddressChangeCommand `protobuf:"bytes,31,opt,name=gateway_address_change_command,json=gatewayAddressChangeCommand,proto3,oneof"`
 }
 
+type ConnectResponse_SshAccessCommand struct {
+	SshAccessCommand *SSHAccessCommand `protobuf:"bytes,32,opt,name=ssh_access_command,json=sshAccessCommand,proto3,oneof"`
+}
+
 func (*ConnectResponse_Hello) isConnectResponse_Payload() {}
 
 func (*ConnectResponse_DeploymentCommand) isConnectResponse_Payload() {}
@@ -11688,6 +11727,8 @@ func (*ConnectResponse_SiteDropCommand) isConnectResponse_Payload() {}
 func (*ConnectResponse_CacheControlCancel) isConnectResponse_Payload() {}
 
 func (*ConnectResponse_GatewayAddressChangeCommand) isConnectResponse_Payload() {}
+
+func (*ConnectResponse_SshAccessCommand) isConnectResponse_Payload() {}
 
 // TelemetryClientHello must be the first Agent payload on every telemetry RPC.
 // last_durable_acknowledged_sequence is the Agent's fsynced spool cursor and is
@@ -13194,6 +13235,197 @@ func (x *GatewayAddressChangeReceipt) GetActiveServerName() string {
 	return ""
 }
 
+// SSHAccessCommand is the control plane's wanted "only the controller may
+// SSH" state for one node (CAPABILITY_NAME_SSH_ACCESS v1, node-ssh-tab).
+// operation "apply" carries the whole policy of revision (enabled, ssh_port
+// and the allowed networks: controller egress plus the operator allowlist);
+// the node applies it with a 5 minute rollback timer. operation "confirm"
+// (only revision is meaningful) keeps the applied revision: the control
+// plane reached sshd again through the new rules. The command stream keeps
+// each node's newest command and every session starts from it; a repeated
+// revision is answered with the node's current state, never applied twice.
+type SSHAccessCommand struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Event    *v1.EventMetadata      `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	NodeId   string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Revision uint64                 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	// operation: apply | confirm (libs/edgeconfig/sshaccess.Operation*).
+	Operation     string   `protobuf:"bytes,4,opt,name=operation,proto3" json:"operation,omitempty"`
+	Enabled       bool     `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	SshPort       uint32   `protobuf:"varint,6,opt,name=ssh_port,json=sshPort,proto3" json:"ssh_port,omitempty"`
+	Cidrs         []string `protobuf:"bytes,7,rep,name=cidrs,proto3" json:"cidrs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SSHAccessCommand) Reset() {
+	*x = SSHAccessCommand{}
+	mi := &file_agent_v1_types_proto_msgTypes[104]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SSHAccessCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SSHAccessCommand) ProtoMessage() {}
+
+func (x *SSHAccessCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_v1_types_proto_msgTypes[104]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SSHAccessCommand.ProtoReflect.Descriptor instead.
+func (*SSHAccessCommand) Descriptor() ([]byte, []int) {
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{104}
+}
+
+func (x *SSHAccessCommand) GetEvent() *v1.EventMetadata {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *SSHAccessCommand) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *SSHAccessCommand) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *SSHAccessCommand) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *SSHAccessCommand) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *SSHAccessCommand) GetSshPort() uint32 {
+	if x != nil {
+		return x.SshPort
+	}
+	return 0
+}
+
+func (x *SSHAccessCommand) GetCidrs() []string {
+	if x != nil {
+		return x.Cidrs
+	}
+	return nil
+}
+
+// SSHAccessReceipt reports the node's state of revision. It answers a
+// command (command_event_id set) or, without one, reports the rollback timer
+// reverting an unconfirmed revision.
+type SSHAccessReceipt struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Event          *v1.EventMetadata      `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	NodeId         string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	CommandEventId string                 `protobuf:"bytes,3,opt,name=command_event_id,json=commandEventId,proto3" json:"command_event_id,omitempty"`
+	Revision       uint64                 `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	// state: applied | confirmed | reverted | failed (sshaccess.State*).
+	State string `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	// failure_code: empty unless failed or reverted ([a-z][a-z0-9_]{0,63}).
+	FailureCode   string `protobuf:"bytes,6,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SSHAccessReceipt) Reset() {
+	*x = SSHAccessReceipt{}
+	mi := &file_agent_v1_types_proto_msgTypes[105]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SSHAccessReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SSHAccessReceipt) ProtoMessage() {}
+
+func (x *SSHAccessReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_v1_types_proto_msgTypes[105]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SSHAccessReceipt.ProtoReflect.Descriptor instead.
+func (*SSHAccessReceipt) Descriptor() ([]byte, []int) {
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{105}
+}
+
+func (x *SSHAccessReceipt) GetEvent() *v1.EventMetadata {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *SSHAccessReceipt) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *SSHAccessReceipt) GetCommandEventId() string {
+	if x != nil {
+		return x.CommandEventId
+	}
+	return ""
+}
+
+func (x *SSHAccessReceipt) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *SSHAccessReceipt) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *SSHAccessReceipt) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
 type SiteDropCommand struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Event         *v1.EventMetadata      `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
@@ -13207,7 +13439,7 @@ type SiteDropCommand struct {
 
 func (x *SiteDropCommand) Reset() {
 	*x = SiteDropCommand{}
-	mi := &file_agent_v1_types_proto_msgTypes[104]
+	mi := &file_agent_v1_types_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13219,7 +13451,7 @@ func (x *SiteDropCommand) String() string {
 func (*SiteDropCommand) ProtoMessage() {}
 
 func (x *SiteDropCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[104]
+	mi := &file_agent_v1_types_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13232,7 +13464,7 @@ func (x *SiteDropCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SiteDropCommand.ProtoReflect.Descriptor instead.
 func (*SiteDropCommand) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{104}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *SiteDropCommand) GetEvent() *v1.EventMetadata {
@@ -13285,7 +13517,7 @@ type SiteDropRejection struct {
 
 func (x *SiteDropRejection) Reset() {
 	*x = SiteDropRejection{}
-	mi := &file_agent_v1_types_proto_msgTypes[105]
+	mi := &file_agent_v1_types_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13297,7 +13529,7 @@ func (x *SiteDropRejection) String() string {
 func (*SiteDropRejection) ProtoMessage() {}
 
 func (x *SiteDropRejection) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[105]
+	mi := &file_agent_v1_types_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13310,7 +13542,7 @@ func (x *SiteDropRejection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SiteDropRejection.ProtoReflect.Descriptor instead.
 func (*SiteDropRejection) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{105}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *SiteDropRejection) GetSiteId() string {
@@ -13359,7 +13591,7 @@ type SiteDropReceipt struct {
 
 func (x *SiteDropReceipt) Reset() {
 	*x = SiteDropReceipt{}
-	mi := &file_agent_v1_types_proto_msgTypes[106]
+	mi := &file_agent_v1_types_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13371,7 +13603,7 @@ func (x *SiteDropReceipt) String() string {
 func (*SiteDropReceipt) ProtoMessage() {}
 
 func (x *SiteDropReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[106]
+	mi := &file_agent_v1_types_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13384,7 +13616,7 @@ func (x *SiteDropReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SiteDropReceipt.ProtoReflect.Descriptor instead.
 func (*SiteDropReceipt) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{106}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *SiteDropReceipt) GetEvent() *v1.EventMetadata {
@@ -13495,7 +13727,7 @@ type InstallationBanReceipt struct {
 
 func (x *InstallationBanReceipt) Reset() {
 	*x = InstallationBanReceipt{}
-	mi := &file_agent_v1_types_proto_msgTypes[107]
+	mi := &file_agent_v1_types_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13507,7 +13739,7 @@ func (x *InstallationBanReceipt) String() string {
 func (*InstallationBanReceipt) ProtoMessage() {}
 
 func (x *InstallationBanReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[107]
+	mi := &file_agent_v1_types_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13520,7 +13752,7 @@ func (x *InstallationBanReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallationBanReceipt.ProtoReflect.Descriptor instead.
 func (*InstallationBanReceipt) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{107}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *InstallationBanReceipt) GetEvent() *v1.EventMetadata {
@@ -13608,7 +13840,7 @@ type AutoDefenseCommand struct {
 
 func (x *AutoDefenseCommand) Reset() {
 	*x = AutoDefenseCommand{}
-	mi := &file_agent_v1_types_proto_msgTypes[108]
+	mi := &file_agent_v1_types_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13620,7 +13852,7 @@ func (x *AutoDefenseCommand) String() string {
 func (*AutoDefenseCommand) ProtoMessage() {}
 
 func (x *AutoDefenseCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[108]
+	mi := &file_agent_v1_types_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13633,7 +13865,7 @@ func (x *AutoDefenseCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutoDefenseCommand.ProtoReflect.Descriptor instead.
 func (*AutoDefenseCommand) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{108}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *AutoDefenseCommand) GetEvent() *v1.EventMetadata {
@@ -13693,7 +13925,7 @@ type AutoDefenseReceipt struct {
 
 func (x *AutoDefenseReceipt) Reset() {
 	*x = AutoDefenseReceipt{}
-	mi := &file_agent_v1_types_proto_msgTypes[109]
+	mi := &file_agent_v1_types_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13705,7 +13937,7 @@ func (x *AutoDefenseReceipt) String() string {
 func (*AutoDefenseReceipt) ProtoMessage() {}
 
 func (x *AutoDefenseReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[109]
+	mi := &file_agent_v1_types_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13718,7 +13950,7 @@ func (x *AutoDefenseReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutoDefenseReceipt.ProtoReflect.Descriptor instead.
 func (*AutoDefenseReceipt) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{109}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *AutoDefenseReceipt) GetEvent() *v1.EventMetadata {
@@ -13812,7 +14044,7 @@ type SecurityBanCommand struct {
 
 func (x *SecurityBanCommand) Reset() {
 	*x = SecurityBanCommand{}
-	mi := &file_agent_v1_types_proto_msgTypes[110]
+	mi := &file_agent_v1_types_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13824,7 +14056,7 @@ func (x *SecurityBanCommand) String() string {
 func (*SecurityBanCommand) ProtoMessage() {}
 
 func (x *SecurityBanCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[110]
+	mi := &file_agent_v1_types_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13837,7 +14069,7 @@ func (x *SecurityBanCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SecurityBanCommand.ProtoReflect.Descriptor instead.
 func (*SecurityBanCommand) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{110}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *SecurityBanCommand) GetEvent() *v1.EventMetadata {
@@ -13896,7 +14128,7 @@ type SecurityBanStatus struct {
 
 func (x *SecurityBanStatus) Reset() {
 	*x = SecurityBanStatus{}
-	mi := &file_agent_v1_types_proto_msgTypes[111]
+	mi := &file_agent_v1_types_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13908,7 +14140,7 @@ func (x *SecurityBanStatus) String() string {
 func (*SecurityBanStatus) ProtoMessage() {}
 
 func (x *SecurityBanStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[111]
+	mi := &file_agent_v1_types_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13921,7 +14153,7 @@ func (x *SecurityBanStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SecurityBanStatus.ProtoReflect.Descriptor instead.
 func (*SecurityBanStatus) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{111}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *SecurityBanStatus) GetEvent() *v1.EventMetadata {
@@ -14004,7 +14236,7 @@ type AutoDefenseReport struct {
 
 func (x *AutoDefenseReport) Reset() {
 	*x = AutoDefenseReport{}
-	mi := &file_agent_v1_types_proto_msgTypes[112]
+	mi := &file_agent_v1_types_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14016,7 +14248,7 @@ func (x *AutoDefenseReport) String() string {
 func (*AutoDefenseReport) ProtoMessage() {}
 
 func (x *AutoDefenseReport) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[112]
+	mi := &file_agent_v1_types_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14029,7 +14261,7 @@ func (x *AutoDefenseReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutoDefenseReport.ProtoReflect.Descriptor instead.
 func (*AutoDefenseReport) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{112}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *AutoDefenseReport) GetReportJson() []byte {
@@ -14060,7 +14292,7 @@ type FetchSiteObjectsRequest struct {
 
 func (x *FetchSiteObjectsRequest) Reset() {
 	*x = FetchSiteObjectsRequest{}
-	mi := &file_agent_v1_types_proto_msgTypes[113]
+	mi := &file_agent_v1_types_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14072,7 +14304,7 @@ func (x *FetchSiteObjectsRequest) String() string {
 func (*FetchSiteObjectsRequest) ProtoMessage() {}
 
 func (x *FetchSiteObjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[113]
+	mi := &file_agent_v1_types_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14085,7 +14317,7 @@ func (x *FetchSiteObjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchSiteObjectsRequest.ProtoReflect.Descriptor instead.
 func (*FetchSiteObjectsRequest) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{113}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *FetchSiteObjectsRequest) GetRequest() *v1.RequestMetadata {
@@ -14148,7 +14380,7 @@ type SiteObjectChunk struct {
 
 func (x *SiteObjectChunk) Reset() {
 	*x = SiteObjectChunk{}
-	mi := &file_agent_v1_types_proto_msgTypes[114]
+	mi := &file_agent_v1_types_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14160,7 +14392,7 @@ func (x *SiteObjectChunk) String() string {
 func (*SiteObjectChunk) ProtoMessage() {}
 
 func (x *SiteObjectChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[114]
+	mi := &file_agent_v1_types_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14173,7 +14405,7 @@ func (x *SiteObjectChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SiteObjectChunk.ProtoReflect.Descriptor instead.
 func (*SiteObjectChunk) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{114}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *SiteObjectChunk) GetRequestId() string {
@@ -14228,7 +14460,7 @@ type FetchSiteObjectsResponse struct {
 
 func (x *FetchSiteObjectsResponse) Reset() {
 	*x = FetchSiteObjectsResponse{}
-	mi := &file_agent_v1_types_proto_msgTypes[115]
+	mi := &file_agent_v1_types_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14240,7 +14472,7 @@ func (x *FetchSiteObjectsResponse) String() string {
 func (*FetchSiteObjectsResponse) ProtoMessage() {}
 
 func (x *FetchSiteObjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_v1_types_proto_msgTypes[115]
+	mi := &file_agent_v1_types_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14253,7 +14485,7 @@ func (x *FetchSiteObjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchSiteObjectsResponse.ProtoReflect.Descriptor instead.
 func (*FetchSiteObjectsResponse) Descriptor() ([]byte, []int) {
-	return file_agent_v1_types_proto_rawDescGZIP(), []int{115}
+	return file_agent_v1_types_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *FetchSiteObjectsResponse) GetChunk() *SiteObjectChunk {
@@ -15058,7 +15290,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\vStreamError\x12.\n" +
 	"\x05error\x18\x01 \x01(\v2\x18.common.v1.ProtocolErrorR\x05error\x121\n" +
 	"\x12related_message_id\x18\x02 \x01(\tH\x00R\x10relatedMessageId\x88\x01\x01B\x15\n" +
-	"\x13_related_message_id\"\x86\x10\n" +
+	"\x13_related_message_id\"\xd2\x10\n" +
 	"\x0eConnectRequest\x121\n" +
 	"\x06stream\x18\x01 \x01(\v2\x19.common.v1.StreamMetadataR\x06stream\x12,\n" +
 	"\x05hello\x18\x02 \x01(\v2\x14.agent.v1.AgentHelloH\x00R\x05hello\x123\n" +
@@ -15084,8 +15316,9 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x18installation_ban_receipt\x18\x19 \x01(\v2 .agent.v1.InstallationBanReceiptH\x00R\x16installationBanReceipt\x12G\n" +
 	"\x11site_drop_receipt\x18\x1a \x01(\v2\x19.agent.v1.SiteDropReceiptH\x00R\x0fsiteDropReceipt\x12f\n" +
 	"\x1ccache_control_cancel_receipt\x18\x1b \x01(\v2#.agent.v1.CacheControlCancelReceiptH\x00R\x19cacheControlCancelReceipt\x12l\n" +
-	"\x1egateway_address_change_receipt\x18\x1c \x01(\v2%.agent.v1.GatewayAddressChangeReceiptH\x00R\x1bgatewayAddressChangeReceiptB\t\n" +
-	"\apayloadJ\x04\b\x0f\x10\x10R\x13node_plugin_receipt\"\x9c\x12\n" +
+	"\x1egateway_address_change_receipt\x18\x1c \x01(\v2%.agent.v1.GatewayAddressChangeReceiptH\x00R\x1bgatewayAddressChangeReceipt\x12J\n" +
+	"\x12ssh_access_receipt\x18\x1d \x01(\v2\x1a.agent.v1.SSHAccessReceiptH\x00R\x10sshAccessReceiptB\t\n" +
+	"\apayloadJ\x04\b\x0f\x10\x10R\x13node_plugin_receipt\"\xe8\x12\n" +
 	"\x0fConnectResponse\x121\n" +
 	"\x06stream\x18\x01 \x01(\v2\x19.common.v1.StreamMetadataR\x06stream\x12.\n" +
 	"\x05hello\x18\x02 \x01(\v2\x16.agent.v1.GatewayHelloH\x00R\x05hello\x12L\n" +
@@ -15115,7 +15348,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x1agateway_endpoint_migration\x18\x1c \x01(\v2\".agent.v1.GatewayEndpointMigrationH\x00R\x18gatewayEndpointMigration\x12G\n" +
 	"\x11site_drop_command\x18\x1d \x01(\v2\x19.agent.v1.SiteDropCommandH\x00R\x0fsiteDropCommand\x12P\n" +
 	"\x14cache_control_cancel\x18\x1e \x01(\v2\x1c.agent.v1.CacheControlCancelH\x00R\x12cacheControlCancel\x12l\n" +
-	"\x1egateway_address_change_command\x18\x1f \x01(\v2%.agent.v1.GatewayAddressChangeCommandH\x00R\x1bgatewayAddressChangeCommandB\t\n" +
+	"\x1egateway_address_change_command\x18\x1f \x01(\v2%.agent.v1.GatewayAddressChangeCommandH\x00R\x1bgatewayAddressChangeCommand\x12J\n" +
+	"\x12ssh_access_command\x18  \x01(\v2\x1a.agent.v1.SSHAccessCommandH\x00R\x10sshAccessCommandB\t\n" +
 	"\apayloadJ\x04\b\x12\x10\x13R\x12node_plugin_bundle\"\xa0\x03\n" +
 	"\x14TelemetryClientHello\x12_\n" +
 	"\x1bsupported_protocol_versions\x18\x01 \x01(\v2\x1f.common.v1.ProtocolVersionRangeR\x19supportedProtocolVersions\x12K\n" +
@@ -15242,7 +15476,22 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"error_code\x18\a \x01(\tR\terrorCode\x12%\n" +
 	"\x0eactive_address\x18\b \x01(\tR\ractiveAddress\x12,\n" +
-	"\x12active_server_name\x18\t \x01(\tR\x10activeServerName\"\xb4\x01\n" +
+	"\x12active_server_name\x18\t \x01(\tR\x10activeServerName\"\xe0\x01\n" +
+	"\x10SSHAccessCommand\x12.\n" +
+	"\x05event\x18\x01 \x01(\v2\x18.common.v1.EventMetadataR\x05event\x12\x17\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x1a\n" +
+	"\brevision\x18\x03 \x01(\x04R\brevision\x12\x1c\n" +
+	"\toperation\x18\x04 \x01(\tR\toperation\x12\x18\n" +
+	"\aenabled\x18\x05 \x01(\bR\aenabled\x12\x19\n" +
+	"\bssh_port\x18\x06 \x01(\rR\asshPort\x12\x14\n" +
+	"\x05cidrs\x18\a \x03(\tR\x05cidrs\"\xda\x01\n" +
+	"\x10SSHAccessReceipt\x12.\n" +
+	"\x05event\x18\x01 \x01(\v2\x18.common.v1.EventMetadataR\x05event\x12\x17\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12(\n" +
+	"\x10command_event_id\x18\x03 \x01(\tR\x0ecommandEventId\x12\x1a\n" +
+	"\brevision\x18\x04 \x01(\x04R\brevision\x12\x14\n" +
+	"\x05state\x18\x05 \x01(\tR\x05state\x12!\n" +
+	"\ffailure_code\x18\x06 \x01(\tR\vfailureCode\"\xb4\x01\n" +
 	"\x0fSiteDropCommand\x12.\n" +
 	"\x05event\x18\x01 \x01(\v2\x18.common.v1.EventMetadataR\x05event\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x1a\n" +
@@ -15340,7 +15589,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x10total_size_bytes\x18\x05 \x01(\x04R\x0etotalSizeBytes\x12\"\n" +
 	"\rend_of_object\x18\x06 \x01(\bR\vendOfObject\"K\n" +
 	"\x18FetchSiteObjectsResponse\x12/\n" +
-	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\xf8\x14\n" +
+	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\x98\x15\n" +
 	"\x0eCapabilityName\x12\x1f\n" +
 	"\x1bCAPABILITY_NAME_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CAPABILITY_NAME_HTTP_1_1\x10\x01\x12\x1a\n" +
@@ -15414,7 +15663,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x18CAPABILITY_NAME_BAN_CIDR\x10J\x12)\n" +
 	"%CAPABILITY_NAME_AGGREGATED_EDGE_PROBE\x10K\x12*\n" +
 	"&CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE\x10L\x12(\n" +
-	"$CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY\x10M\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
+	"$CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY\x10M\x12\x1e\n" +
+	"\x1aCAPABILITY_NAME_SSH_ACCESS\x10N\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
 	"\x1aActiveConfigIdentitySchema\x12-\n" +
 	")ACTIVE_CONFIG_IDENTITY_SCHEMA_UNSPECIFIED\x10\x00\x12$\n" +
 	" ACTIVE_CONFIG_IDENTITY_SCHEMA_V1\x10\x01*\x9a\x04\n" +
@@ -15640,7 +15890,7 @@ func file_agent_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_agent_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 38)
-var file_agent_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 116)
+var file_agent_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 118)
 var file_agent_v1_types_proto_goTypes = []any{
 	(CapabilityName)(0),                          // 0: agent.v1.CapabilityName
 	(ActiveConfigIdentitySchema)(0),              // 1: agent.v1.ActiveConfigIdentitySchema
@@ -15784,68 +16034,70 @@ var file_agent_v1_types_proto_goTypes = []any{
 	(*InstallationBanCommand)(nil),               // 139: agent.v1.InstallationBanCommand
 	(*GatewayAddressChangeCommand)(nil),          // 140: agent.v1.GatewayAddressChangeCommand
 	(*GatewayAddressChangeReceipt)(nil),          // 141: agent.v1.GatewayAddressChangeReceipt
-	(*SiteDropCommand)(nil),                      // 142: agent.v1.SiteDropCommand
-	(*SiteDropRejection)(nil),                    // 143: agent.v1.SiteDropRejection
-	(*SiteDropReceipt)(nil),                      // 144: agent.v1.SiteDropReceipt
-	(*InstallationBanReceipt)(nil),               // 145: agent.v1.InstallationBanReceipt
-	(*AutoDefenseCommand)(nil),                   // 146: agent.v1.AutoDefenseCommand
-	(*AutoDefenseReceipt)(nil),                   // 147: agent.v1.AutoDefenseReceipt
-	(*SecurityBanCommand)(nil),                   // 148: agent.v1.SecurityBanCommand
-	(*SecurityBanStatus)(nil),                    // 149: agent.v1.SecurityBanStatus
-	(*AutoDefenseReport)(nil),                    // 150: agent.v1.AutoDefenseReport
-	(*FetchSiteObjectsRequest)(nil),              // 151: agent.v1.FetchSiteObjectsRequest
-	(*SiteObjectChunk)(nil),                      // 152: agent.v1.SiteObjectChunk
-	(*FetchSiteObjectsResponse)(nil),             // 153: agent.v1.FetchSiteObjectsResponse
-	(*timestamppb.Timestamp)(nil),                // 154: google.protobuf.Timestamp
-	(v1.ErrorCode)(0),                            // 155: common.v1.ErrorCode
-	(*v1.RequestMetadata)(nil),                   // 156: common.v1.RequestMetadata
-	(*v1.ProtocolVersionRange)(nil),              // 157: common.v1.ProtocolVersionRange
-	(*v1.ProtocolVersion)(nil),                   // 158: common.v1.ProtocolVersion
-	(*durationpb.Duration)(nil),                  // 159: google.protobuf.Duration
-	(*v1.EventMetadata)(nil),                     // 160: common.v1.EventMetadata
-	(*v1.ProtocolError)(nil),                     // 161: common.v1.ProtocolError
-	(*v1.StreamMetadata)(nil),                    // 162: common.v1.StreamMetadata
-	(*ConnectionsMetricEnvelopeV1)(nil),          // 163: agent.v1.ConnectionsMetricEnvelopeV1
+	(*SSHAccessCommand)(nil),                     // 142: agent.v1.SSHAccessCommand
+	(*SSHAccessReceipt)(nil),                     // 143: agent.v1.SSHAccessReceipt
+	(*SiteDropCommand)(nil),                      // 144: agent.v1.SiteDropCommand
+	(*SiteDropRejection)(nil),                    // 145: agent.v1.SiteDropRejection
+	(*SiteDropReceipt)(nil),                      // 146: agent.v1.SiteDropReceipt
+	(*InstallationBanReceipt)(nil),               // 147: agent.v1.InstallationBanReceipt
+	(*AutoDefenseCommand)(nil),                   // 148: agent.v1.AutoDefenseCommand
+	(*AutoDefenseReceipt)(nil),                   // 149: agent.v1.AutoDefenseReceipt
+	(*SecurityBanCommand)(nil),                   // 150: agent.v1.SecurityBanCommand
+	(*SecurityBanStatus)(nil),                    // 151: agent.v1.SecurityBanStatus
+	(*AutoDefenseReport)(nil),                    // 152: agent.v1.AutoDefenseReport
+	(*FetchSiteObjectsRequest)(nil),              // 153: agent.v1.FetchSiteObjectsRequest
+	(*SiteObjectChunk)(nil),                      // 154: agent.v1.SiteObjectChunk
+	(*FetchSiteObjectsResponse)(nil),             // 155: agent.v1.FetchSiteObjectsResponse
+	(*timestamppb.Timestamp)(nil),                // 156: google.protobuf.Timestamp
+	(v1.ErrorCode)(0),                            // 157: common.v1.ErrorCode
+	(*v1.RequestMetadata)(nil),                   // 158: common.v1.RequestMetadata
+	(*v1.ProtocolVersionRange)(nil),              // 159: common.v1.ProtocolVersionRange
+	(*v1.ProtocolVersion)(nil),                   // 160: common.v1.ProtocolVersion
+	(*durationpb.Duration)(nil),                  // 161: google.protobuf.Duration
+	(*v1.EventMetadata)(nil),                     // 162: common.v1.EventMetadata
+	(*v1.ProtocolError)(nil),                     // 163: common.v1.ProtocolError
+	(*v1.StreamMetadata)(nil),                    // 164: common.v1.StreamMetadata
+	(*ConnectionsMetricEnvelopeV1)(nil),          // 165: agent.v1.ConnectionsMetricEnvelopeV1
 }
 var file_agent_v1_types_proto_depIdxs = []int32{
 	0,   // 0: agent.v1.Capability.name:type_name -> agent.v1.CapabilityName
 	1,   // 1: agent.v1.ActiveConfigIdentity.schema:type_name -> agent.v1.ActiveConfigIdentitySchema
 	2,   // 2: agent.v1.ScopedApplyResult.state:type_name -> agent.v1.NodeDeploymentState
-	154, // 3: agent.v1.ScopedApplyResult.finished_time:type_name -> google.protobuf.Timestamp
-	155, // 4: agent.v1.ScopedApplyResult.error_code:type_name -> common.v1.ErrorCode
+	156, // 3: agent.v1.ScopedApplyResult.finished_time:type_name -> google.protobuf.Timestamp
+	157, // 4: agent.v1.ScopedApplyResult.error_code:type_name -> common.v1.ErrorCode
 	39,  // 5: agent.v1.ScopedConfigIdentity.current_config_identity:type_name -> agent.v1.ActiveConfigIdentity
 	39,  // 6: agent.v1.ScopedConfigIdentity.previous_config_identity:type_name -> agent.v1.ActiveConfigIdentity
 	40,  // 7: agent.v1.ScopedConfigIdentity.last_apply_result:type_name -> agent.v1.ScopedApplyResult
 	38,  // 8: agent.v1.AgentCapabilities.features:type_name -> agent.v1.Capability
-	154, // 9: agent.v1.CertificateBundle.not_before_time:type_name -> google.protobuf.Timestamp
-	154, // 10: agent.v1.CertificateBundle.expiration_time:type_name -> google.protobuf.Timestamp
-	154, // 11: agent.v1.CertificateBundle.renewal_time:type_name -> google.protobuf.Timestamp
-	156, // 12: agent.v1.EnrollRequest.request:type_name -> common.v1.RequestMetadata
-	157, // 13: agent.v1.EnrollRequest.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
+	156, // 9: agent.v1.CertificateBundle.not_before_time:type_name -> google.protobuf.Timestamp
+	156, // 10: agent.v1.CertificateBundle.expiration_time:type_name -> google.protobuf.Timestamp
+	156, // 11: agent.v1.CertificateBundle.renewal_time:type_name -> google.protobuf.Timestamp
+	158, // 12: agent.v1.EnrollRequest.request:type_name -> common.v1.RequestMetadata
+	159, // 13: agent.v1.EnrollRequest.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
 	42,  // 14: agent.v1.EnrollRequest.capabilities:type_name -> agent.v1.AgentCapabilities
-	158, // 15: agent.v1.EnrollResponse.selected_protocol_version:type_name -> common.v1.ProtocolVersion
+	160, // 15: agent.v1.EnrollResponse.selected_protocol_version:type_name -> common.v1.ProtocolVersion
 	43,  // 16: agent.v1.EnrollResponse.certificate:type_name -> agent.v1.CertificateBundle
-	156, // 17: agent.v1.RenewCertificateRequest.request:type_name -> common.v1.RequestMetadata
+	158, // 17: agent.v1.RenewCertificateRequest.request:type_name -> common.v1.RequestMetadata
 	43,  // 18: agent.v1.RenewCertificateResponse.certificate:type_name -> agent.v1.CertificateBundle
-	156, // 19: agent.v1.RecoverCertificateRequest.request:type_name -> common.v1.RequestMetadata
+	158, // 19: agent.v1.RecoverCertificateRequest.request:type_name -> common.v1.RequestMetadata
 	43,  // 20: agent.v1.RecoverCertificateResponse.certificate:type_name -> agent.v1.CertificateBundle
-	156, // 21: agent.v1.ReportNodeNetworkInventoryV1Request.request:type_name -> common.v1.RequestMetadata
+	158, // 21: agent.v1.ReportNodeNetworkInventoryV1Request.request:type_name -> common.v1.RequestMetadata
 	50,  // 22: agent.v1.ReportNodeNetworkInventoryV1Request.ipv4:type_name -> agent.v1.NodeNetworkCandidateV1
 	50,  // 23: agent.v1.ReportNodeNetworkInventoryV1Request.ipv6:type_name -> agent.v1.NodeNetworkCandidateV1
-	154, // 24: agent.v1.ReportNodeNetworkInventoryV1Response.received_time:type_name -> google.protobuf.Timestamp
+	156, // 24: agent.v1.ReportNodeNetworkInventoryV1Response.received_time:type_name -> google.protobuf.Timestamp
 	2,   // 25: agent.v1.ActiveDeployment.state:type_name -> agent.v1.NodeDeploymentState
 	39,  // 26: agent.v1.ActiveDeployment.observed_active_config_identity:type_name -> agent.v1.ActiveConfigIdentity
-	157, // 27: agent.v1.AgentHello.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
+	159, // 27: agent.v1.AgentHello.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
 	42,  // 28: agent.v1.AgentHello.capabilities:type_name -> agent.v1.AgentCapabilities
 	53,  // 29: agent.v1.AgentHello.active_deployments:type_name -> agent.v1.ActiveDeployment
 	39,  // 30: agent.v1.AgentHello.current_config_identity:type_name -> agent.v1.ActiveConfigIdentity
 	39,  // 31: agent.v1.AgentHello.previous_config_identity:type_name -> agent.v1.ActiveConfigIdentity
 	111, // 32: agent.v1.AgentHello.gateway_port_transition_proof:type_name -> agent.v1.GatewayPortTransitionProof
 	41,  // 33: agent.v1.AgentHello.scoped_config_identities:type_name -> agent.v1.ScopedConfigIdentity
-	158, // 34: agent.v1.GatewayHello.selected_protocol_version:type_name -> common.v1.ProtocolVersion
-	154, // 35: agent.v1.GatewayHello.server_time:type_name -> google.protobuf.Timestamp
-	159, // 36: agent.v1.GatewayHello.heartbeat_interval_duration:type_name -> google.protobuf.Duration
-	159, // 37: agent.v1.GatewayHello.offline_after_duration:type_name -> google.protobuf.Duration
+	160, // 34: agent.v1.GatewayHello.selected_protocol_version:type_name -> common.v1.ProtocolVersion
+	156, // 35: agent.v1.GatewayHello.server_time:type_name -> google.protobuf.Timestamp
+	161, // 36: agent.v1.GatewayHello.heartbeat_interval_duration:type_name -> google.protobuf.Duration
+	161, // 37: agent.v1.GatewayHello.offline_after_duration:type_name -> google.protobuf.Duration
 	38,  // 38: agent.v1.GatewayHello.enabled_capabilities:type_name -> agent.v1.Capability
 	0,   // 39: agent.v1.GatewayHello.known_capabilities:type_name -> agent.v1.CapabilityName
 	56,  // 40: agent.v1.GatewayHello.gateway_endpoints:type_name -> agent.v1.GatewayEndpointV1
@@ -15857,8 +16109,8 @@ var file_agent_v1_types_proto_depIdxs = []int32{
 	7,   // 46: agent.v1.EdgeRuntimeStatus.market_probe:type_name -> agent.v1.MarketProbeRole
 	59,  // 47: agent.v1.EdgeRuntimeStatus.native_runtime:type_name -> agent.v1.NativeRuntimeStatus
 	6,   // 48: agent.v1.NativeRuntimeStatus.state:type_name -> agent.v1.NativeRuntimeState
-	154, // 49: agent.v1.ErrorLogSummary.last_severe_time:type_name -> google.protobuf.Timestamp
-	160, // 50: agent.v1.Heartbeat.event:type_name -> common.v1.EventMetadata
+	156, // 49: agent.v1.ErrorLogSummary.last_severe_time:type_name -> google.protobuf.Timestamp
+	162, // 50: agent.v1.Heartbeat.event:type_name -> common.v1.EventMetadata
 	58,  // 51: agent.v1.Heartbeat.runtime:type_name -> agent.v1.EdgeRuntimeStatus
 	61,  // 52: agent.v1.Heartbeat.resources:type_name -> agent.v1.ResourceUsage
 	53,  // 53: agent.v1.Heartbeat.active_deployments:type_name -> agent.v1.ActiveDeployment
@@ -15866,83 +16118,83 @@ var file_agent_v1_types_proto_depIdxs = []int32{
 	39,  // 55: agent.v1.Heartbeat.current_config_identity:type_name -> agent.v1.ActiveConfigIdentity
 	39,  // 56: agent.v1.Heartbeat.previous_config_identity:type_name -> agent.v1.ActiveConfigIdentity
 	41,  // 57: agent.v1.Heartbeat.scoped_config_identities:type_name -> agent.v1.ScopedConfigIdentity
-	154, // 58: agent.v1.HeartbeatAck.received_time:type_name -> google.protobuf.Timestamp
+	156, // 58: agent.v1.HeartbeatAck.received_time:type_name -> google.protobuf.Timestamp
 	8,   // 59: agent.v1.ArtifactDescriptor.kind:type_name -> agent.v1.ArtifactKind
 	10,  // 60: agent.v1.ArtifactDescriptor.signature_algorithm:type_name -> agent.v1.ArtifactSignatureAlgorithm
 	9,   // 61: agent.v1.ArtifactDescriptor.compression:type_name -> agent.v1.ArtifactCompression
 	11,  // 62: agent.v1.ArtifactDescriptor.encryption_algorithm:type_name -> agent.v1.ArtifactEncryptionAlgorithm
-	156, // 63: agent.v1.FetchArtifactRequest.request:type_name -> common.v1.RequestMetadata
+	158, // 63: agent.v1.FetchArtifactRequest.request:type_name -> common.v1.RequestMetadata
 	65,  // 64: agent.v1.FetchArtifactResponse.chunk:type_name -> agent.v1.ArtifactChunk
-	159, // 65: agent.v1.HealthCheckPolicy.activation_timeout_duration:type_name -> google.protobuf.Duration
-	159, // 66: agent.v1.HealthCheckPolicy.observation_window_duration:type_name -> google.protobuf.Duration
-	160, // 67: agent.v1.DeploymentCommand.event:type_name -> common.v1.EventMetadata
+	161, // 65: agent.v1.HealthCheckPolicy.activation_timeout_duration:type_name -> google.protobuf.Duration
+	161, // 66: agent.v1.HealthCheckPolicy.observation_window_duration:type_name -> google.protobuf.Duration
+	162, // 67: agent.v1.DeploymentCommand.event:type_name -> common.v1.EventMetadata
 	12,  // 68: agent.v1.DeploymentCommand.action:type_name -> agent.v1.DeploymentAction
 	64,  // 69: agent.v1.DeploymentCommand.artifacts:type_name -> agent.v1.ArtifactDescriptor
 	38,  // 70: agent.v1.DeploymentCommand.required_capabilities:type_name -> agent.v1.Capability
 	68,  // 71: agent.v1.DeploymentCommand.health_check:type_name -> agent.v1.HealthCheckPolicy
-	154, // 72: agent.v1.DeploymentCommand.deadline_time:type_name -> google.protobuf.Timestamp
-	159, // 73: agent.v1.CheckResult.latency_duration:type_name -> google.protobuf.Duration
-	160, // 74: agent.v1.DeploymentStatus.event:type_name -> common.v1.EventMetadata
+	156, // 72: agent.v1.DeploymentCommand.deadline_time:type_name -> google.protobuf.Timestamp
+	161, // 73: agent.v1.CheckResult.latency_duration:type_name -> google.protobuf.Duration
+	162, // 74: agent.v1.DeploymentStatus.event:type_name -> common.v1.EventMetadata
 	2,   // 75: agent.v1.DeploymentStatus.state:type_name -> agent.v1.NodeDeploymentState
 	70,  // 76: agent.v1.DeploymentStatus.checks:type_name -> agent.v1.CheckResult
-	161, // 77: agent.v1.DeploymentStatus.error:type_name -> common.v1.ProtocolError
+	163, // 77: agent.v1.DeploymentStatus.error:type_name -> common.v1.ProtocolError
 	38,  // 78: agent.v1.DeploymentStatus.active_config_identity_capability:type_name -> agent.v1.Capability
 	39,  // 79: agent.v1.DeploymentStatus.active_config_identity:type_name -> agent.v1.ActiveConfigIdentity
-	160, // 80: agent.v1.AcmeHTTP01OverlayCommand.event:type_name -> common.v1.EventMetadata
+	162, // 80: agent.v1.AcmeHTTP01OverlayCommand.event:type_name -> common.v1.EventMetadata
 	64,  // 81: agent.v1.AcmeHTTP01OverlayCommand.artifact:type_name -> agent.v1.ArtifactDescriptor
 	68,  // 82: agent.v1.AcmeHTTP01OverlayCommand.health_check:type_name -> agent.v1.HealthCheckPolicy
-	154, // 83: agent.v1.AcmeHTTP01OverlayCommand.deadline_time:type_name -> google.protobuf.Timestamp
+	156, // 83: agent.v1.AcmeHTTP01OverlayCommand.deadline_time:type_name -> google.protobuf.Timestamp
 	37,  // 84: agent.v1.AcmeHTTP01OverlayCommand.purpose:type_name -> agent.v1.AcmeHTTP01OverlayPurpose
-	160, // 85: agent.v1.AcmeHTTP01OverlayStatus.event:type_name -> common.v1.EventMetadata
+	162, // 85: agent.v1.AcmeHTTP01OverlayStatus.event:type_name -> common.v1.EventMetadata
 	3,   // 86: agent.v1.AcmeHTTP01OverlayStatus.state:type_name -> agent.v1.AcmeHTTP01OverlayState
 	4,   // 87: agent.v1.AcmeHTTP01OverlayStatus.result_code:type_name -> agent.v1.AcmeHTTP01OverlayResultCode
 	70,  // 88: agent.v1.AcmeHTTP01OverlayStatus.checks:type_name -> agent.v1.CheckResult
-	161, // 89: agent.v1.AcmeHTTP01OverlayStatus.error:type_name -> common.v1.ProtocolError
-	160, // 90: agent.v1.CacheControlCommand.event:type_name -> common.v1.EventMetadata
+	163, // 89: agent.v1.AcmeHTTP01OverlayStatus.error:type_name -> common.v1.ProtocolError
+	162, // 90: agent.v1.CacheControlCommand.event:type_name -> common.v1.EventMetadata
 	13,  // 91: agent.v1.CacheControlCommand.action:type_name -> agent.v1.CacheControlAction
 	14,  // 92: agent.v1.CacheControlCommand.scope:type_name -> agent.v1.CacheControlScope
 	15,  // 93: agent.v1.CacheControlCommand.priority:type_name -> agent.v1.CacheControlPriority
 	74,  // 94: agent.v1.CacheControlCommand.targets:type_name -> agent.v1.CacheControlTarget
-	154, // 95: agent.v1.CacheControlCommand.deadline_time:type_name -> google.protobuf.Timestamp
+	156, // 95: agent.v1.CacheControlCommand.deadline_time:type_name -> google.protobuf.Timestamp
 	17,  // 96: agent.v1.CacheControlTargetResult.state:type_name -> agent.v1.CacheControlTargetState
-	154, // 97: agent.v1.CacheControlTargetResult.completed_time:type_name -> google.protobuf.Timestamp
-	160, // 98: agent.v1.CacheControlStatus.event:type_name -> common.v1.EventMetadata
+	156, // 97: agent.v1.CacheControlTargetResult.completed_time:type_name -> google.protobuf.Timestamp
+	162, // 98: agent.v1.CacheControlStatus.event:type_name -> common.v1.EventMetadata
 	13,  // 99: agent.v1.CacheControlStatus.action:type_name -> agent.v1.CacheControlAction
 	14,  // 100: agent.v1.CacheControlStatus.scope:type_name -> agent.v1.CacheControlScope
 	16,  // 101: agent.v1.CacheControlStatus.state:type_name -> agent.v1.CacheControlState
 	76,  // 102: agent.v1.CacheControlStatus.results:type_name -> agent.v1.CacheControlTargetResult
-	154, // 103: agent.v1.CacheControlStatusAck.persisted_time:type_name -> google.protobuf.Timestamp
-	160, // 104: agent.v1.CacheControlCancel.event:type_name -> common.v1.EventMetadata
-	154, // 105: agent.v1.CacheControlCancel.requested_time:type_name -> google.protobuf.Timestamp
-	160, // 106: agent.v1.CacheControlCancelReceipt.event:type_name -> common.v1.EventMetadata
+	156, // 103: agent.v1.CacheControlStatusAck.persisted_time:type_name -> google.protobuf.Timestamp
+	162, // 104: agent.v1.CacheControlCancel.event:type_name -> common.v1.EventMetadata
+	156, // 105: agent.v1.CacheControlCancel.requested_time:type_name -> google.protobuf.Timestamp
+	162, // 106: agent.v1.CacheControlCancelReceipt.event:type_name -> common.v1.EventMetadata
 	18,  // 107: agent.v1.CacheControlCancelReceipt.outcome:type_name -> agent.v1.CacheControlCancelOutcome
-	154, // 108: agent.v1.CacheControlCancelReceipt.settled_time:type_name -> google.protobuf.Timestamp
-	154, // 109: agent.v1.DeploymentStatusAck.persisted_time:type_name -> google.protobuf.Timestamp
-	154, // 110: agent.v1.DeploymentStatusAckReceipt.persisted_time:type_name -> google.protobuf.Timestamp
-	154, // 111: agent.v1.UpgradeStatusAck.persisted_time:type_name -> google.protobuf.Timestamp
-	154, // 112: agent.v1.UpgradeStatusAckReceipt.persisted_time:type_name -> google.protobuf.Timestamp
+	156, // 108: agent.v1.CacheControlCancelReceipt.settled_time:type_name -> google.protobuf.Timestamp
+	156, // 109: agent.v1.DeploymentStatusAck.persisted_time:type_name -> google.protobuf.Timestamp
+	156, // 110: agent.v1.DeploymentStatusAckReceipt.persisted_time:type_name -> google.protobuf.Timestamp
+	156, // 111: agent.v1.UpgradeStatusAck.persisted_time:type_name -> google.protobuf.Timestamp
+	156, // 112: agent.v1.UpgradeStatusAckReceipt.persisted_time:type_name -> google.protobuf.Timestamp
 	21,  // 113: agent.v1.FirewallCIDRTarget.action:type_name -> agent.v1.FirewallCIDRAction
-	154, // 114: agent.v1.FirewallCIDRTarget.expiration_time:type_name -> google.protobuf.Timestamp
+	156, // 114: agent.v1.FirewallCIDRTarget.expiration_time:type_name -> google.protobuf.Timestamp
 	22,  // 115: agent.v1.FirewallCIDRTarget.protocol:type_name -> agent.v1.FirewallProtocol
-	160, // 116: agent.v1.FirewallCommand.event:type_name -> common.v1.EventMetadata
+	162, // 116: agent.v1.FirewallCommand.event:type_name -> common.v1.EventMetadata
 	19,  // 117: agent.v1.FirewallCommand.schema:type_name -> agent.v1.FirewallSchema
 	20,  // 118: agent.v1.FirewallCommand.operation:type_name -> agent.v1.FirewallOperation
 	23,  // 119: agent.v1.FirewallCommand.recovery_reason:type_name -> agent.v1.FirewallRecoveryReason
 	87,  // 120: agent.v1.FirewallCommand.targets:type_name -> agent.v1.FirewallCIDRTarget
-	154, // 121: agent.v1.FirewallCommand.deadline_time:type_name -> google.protobuf.Timestamp
+	156, // 121: agent.v1.FirewallCommand.deadline_time:type_name -> google.protobuf.Timestamp
 	10,  // 122: agent.v1.FirewallCommand.signature_algorithm:type_name -> agent.v1.ArtifactSignatureAlgorithm
-	160, // 123: agent.v1.FirewallStatus.event:type_name -> common.v1.EventMetadata
+	162, // 123: agent.v1.FirewallStatus.event:type_name -> common.v1.EventMetadata
 	19,  // 124: agent.v1.FirewallStatus.schema:type_name -> agent.v1.FirewallSchema
 	20,  // 125: agent.v1.FirewallStatus.operation:type_name -> agent.v1.FirewallOperation
 	23,  // 126: agent.v1.FirewallStatus.recovery_reason:type_name -> agent.v1.FirewallRecoveryReason
 	24,  // 127: agent.v1.FirewallStatus.state:type_name -> agent.v1.FirewallStatusState
-	160, // 128: agent.v1.DrainCommand.event:type_name -> common.v1.EventMetadata
+	162, // 128: agent.v1.DrainCommand.event:type_name -> common.v1.EventMetadata
 	25,  // 129: agent.v1.DrainCommand.schema:type_name -> agent.v1.DrainSchema
-	154, // 130: agent.v1.DrainCommand.deadline_time:type_name -> google.protobuf.Timestamp
-	160, // 131: agent.v1.DrainStatus.event:type_name -> common.v1.EventMetadata
+	156, // 130: agent.v1.DrainCommand.deadline_time:type_name -> google.protobuf.Timestamp
+	162, // 131: agent.v1.DrainStatus.event:type_name -> common.v1.EventMetadata
 	25,  // 132: agent.v1.DrainStatus.schema:type_name -> agent.v1.DrainSchema
 	26,  // 133: agent.v1.DrainStatus.phase:type_name -> agent.v1.DrainPhase
-	160, // 134: agent.v1.NodeMonitoringArtifact.event:type_name -> common.v1.EventMetadata
+	162, // 134: agent.v1.NodeMonitoringArtifact.event:type_name -> common.v1.EventMetadata
 	27,  // 135: agent.v1.NodeMonitoringArtifact.schema:type_name -> agent.v1.NodeMonitoringSchema
 	97,  // 136: agent.v1.NodeXDPStatusV1.drops:type_name -> agent.v1.NodeDDoSDropV1
 	93,  // 137: agent.v1.NodeTelemetryV1.network_interfaces:type_name -> agent.v1.NodeNetworkInterfaceMetricsV1
@@ -15956,44 +16208,44 @@ var file_agent_v1_types_proto_depIdxs = []int32{
 	101, // 145: agent.v1.NodeTelemetryV1.mounts:type_name -> agent.v1.NodeMountV1
 	102, // 146: agent.v1.NodeTelemetryV1.port_group_overrides:type_name -> agent.v1.NodePortGroupOverrideV1
 	100, // 147: agent.v1.NodeTelemetryV1.storage:type_name -> agent.v1.NodeStorageV1
-	154, // 148: agent.v1.NodeLoadMetricsV1.observed_time:type_name -> google.protobuf.Timestamp
+	156, // 148: agent.v1.NodeLoadMetricsV1.observed_time:type_name -> google.protobuf.Timestamp
 	99,  // 149: agent.v1.NodeLoadMetricsV1.telemetry:type_name -> agent.v1.NodeTelemetryV1
-	160, // 150: agent.v1.NodeMonitoringReport.event:type_name -> common.v1.EventMetadata
+	162, // 150: agent.v1.NodeMonitoringReport.event:type_name -> common.v1.EventMetadata
 	27,  // 151: agent.v1.NodeMonitoringReport.schema:type_name -> agent.v1.NodeMonitoringSchema
 	28,  // 152: agent.v1.NodeMonitoringReport.kind:type_name -> agent.v1.NodeMonitoringRecordKind
 	105, // 153: agent.v1.NodeMonitoringReport.load_metrics_v1:type_name -> agent.v1.NodeLoadMetricsV1
-	154, // 154: agent.v1.NodeMonitoringAck.accepted_time:type_name -> google.protobuf.Timestamp
-	160, // 155: agent.v1.NodeMonitoringApplyStatus.event:type_name -> common.v1.EventMetadata
+	156, // 154: agent.v1.NodeMonitoringAck.accepted_time:type_name -> google.protobuf.Timestamp
+	162, // 155: agent.v1.NodeMonitoringApplyStatus.event:type_name -> common.v1.EventMetadata
 	27,  // 156: agent.v1.NodeMonitoringApplyStatus.schema:type_name -> agent.v1.NodeMonitoringSchema
 	29,  // 157: agent.v1.NodeMonitoringApplyStatus.state:type_name -> agent.v1.NodeMonitoringApplyState
-	160, // 158: agent.v1.GatewayPortTransitionCommand.event:type_name -> common.v1.EventMetadata
+	162, // 158: agent.v1.GatewayPortTransitionCommand.event:type_name -> common.v1.EventMetadata
 	30,  // 159: agent.v1.GatewayPortTransitionCommand.schema:type_name -> agent.v1.GatewayPortTransitionSchema
 	109, // 160: agent.v1.GatewayPortTransitionCommand.old_endpoint:type_name -> agent.v1.GatewayEndpoint
 	109, // 161: agent.v1.GatewayPortTransitionCommand.new_endpoint:type_name -> agent.v1.GatewayEndpoint
-	154, // 162: agent.v1.GatewayPortTransitionCommand.compatibility_deadline:type_name -> google.protobuf.Timestamp
-	154, // 163: agent.v1.GatewayPortTransitionCommand.rollback_deadline:type_name -> google.protobuf.Timestamp
+	156, // 162: agent.v1.GatewayPortTransitionCommand.compatibility_deadline:type_name -> google.protobuf.Timestamp
+	156, // 163: agent.v1.GatewayPortTransitionCommand.rollback_deadline:type_name -> google.protobuf.Timestamp
 	31,  // 164: agent.v1.GatewayPortTransitionCommand.action:type_name -> agent.v1.GatewayPortTransitionAction
 	109, // 165: agent.v1.GatewayPortTransitionProof.active_endpoint:type_name -> agent.v1.GatewayEndpoint
-	160, // 166: agent.v1.GatewayPortTransitionStatus.event:type_name -> common.v1.EventMetadata
+	162, // 166: agent.v1.GatewayPortTransitionStatus.event:type_name -> common.v1.EventMetadata
 	30,  // 167: agent.v1.GatewayPortTransitionStatus.schema:type_name -> agent.v1.GatewayPortTransitionSchema
 	32,  // 168: agent.v1.GatewayPortTransitionStatus.state:type_name -> agent.v1.GatewayPortTransitionState
 	109, // 169: agent.v1.GatewayPortTransitionStatus.active_endpoint:type_name -> agent.v1.GatewayEndpoint
-	160, // 170: agent.v1.MarketProbeCommand.event:type_name -> common.v1.EventMetadata
+	162, // 170: agent.v1.MarketProbeCommand.event:type_name -> common.v1.EventMetadata
 	115, // 171: agent.v1.MarketProbeCommand.targets:type_name -> agent.v1.MarketProbeTarget
-	154, // 172: agent.v1.MarketProbeCommand.expire_time:type_name -> google.protobuf.Timestamp
+	156, // 172: agent.v1.MarketProbeCommand.expire_time:type_name -> google.protobuf.Timestamp
 	114, // 173: agent.v1.MarketProbeCommand.benchmark:type_name -> agent.v1.MarketBenchmarkSpec
 	116, // 174: agent.v1.MarketProbeTarget.headers:type_name -> agent.v1.MarketProbeHeader
-	160, // 175: agent.v1.MarketProbeResult.event:type_name -> common.v1.EventMetadata
+	162, // 175: agent.v1.MarketProbeResult.event:type_name -> common.v1.EventMetadata
 	118, // 176: agent.v1.MarketProbeResult.results:type_name -> agent.v1.MarketProbeTargetResult
 	33,  // 177: agent.v1.MarketProbeTargetResult.outcome:type_name -> agent.v1.MarketProbeOutcome
-	160, // 178: agent.v1.L4LiveConnectionsCommand.event:type_name -> common.v1.EventMetadata
-	154, // 179: agent.v1.L4LiveConnectionsCommand.expire_time:type_name -> google.protobuf.Timestamp
-	154, // 180: agent.v1.L4LiveConnection.started_at:type_name -> google.protobuf.Timestamp
-	160, // 181: agent.v1.L4LiveConnectionsResult.event:type_name -> common.v1.EventMetadata
+	162, // 178: agent.v1.L4LiveConnectionsCommand.event:type_name -> common.v1.EventMetadata
+	156, // 179: agent.v1.L4LiveConnectionsCommand.expire_time:type_name -> google.protobuf.Timestamp
+	156, // 180: agent.v1.L4LiveConnection.started_at:type_name -> google.protobuf.Timestamp
+	162, // 181: agent.v1.L4LiveConnectionsResult.event:type_name -> common.v1.EventMetadata
 	120, // 182: agent.v1.L4LiveConnectionsResult.connections:type_name -> agent.v1.L4LiveConnection
 	121, // 183: agent.v1.L4LiveConnectionsResult.closed:type_name -> agent.v1.L4LiveConnectionClose
-	161, // 184: agent.v1.StreamError.error:type_name -> common.v1.ProtocolError
-	162, // 185: agent.v1.ConnectRequest.stream:type_name -> common.v1.StreamMetadata
+	163, // 184: agent.v1.StreamError.error:type_name -> common.v1.ProtocolError
+	164, // 185: agent.v1.ConnectRequest.stream:type_name -> common.v1.StreamMetadata
 	54,  // 186: agent.v1.ConnectRequest.hello:type_name -> agent.v1.AgentHello
 	62,  // 187: agent.v1.ConnectRequest.heartbeat:type_name -> agent.v1.Heartbeat
 	71,  // 188: agent.v1.ConnectRequest.deployment_status:type_name -> agent.v1.DeploymentStatus
@@ -16010,86 +16262,90 @@ var file_agent_v1_types_proto_depIdxs = []int32{
 	117, // 199: agent.v1.ConnectRequest.market_probe_result:type_name -> agent.v1.MarketProbeResult
 	122, // 200: agent.v1.ConnectRequest.l4_live_connections_result:type_name -> agent.v1.L4LiveConnectionsResult
 	138, // 201: agent.v1.ConnectRequest.edge_signer_trust_receipt:type_name -> agent.v1.EdgeSignerTrustReceipt
-	147, // 202: agent.v1.ConnectRequest.auto_defense_receipt:type_name -> agent.v1.AutoDefenseReceipt
-	149, // 203: agent.v1.ConnectRequest.security_ban_status:type_name -> agent.v1.SecurityBanStatus
-	150, // 204: agent.v1.ConnectRequest.auto_defense_report:type_name -> agent.v1.AutoDefenseReport
-	145, // 205: agent.v1.ConnectRequest.installation_ban_receipt:type_name -> agent.v1.InstallationBanReceipt
-	144, // 206: agent.v1.ConnectRequest.site_drop_receipt:type_name -> agent.v1.SiteDropReceipt
+	149, // 202: agent.v1.ConnectRequest.auto_defense_receipt:type_name -> agent.v1.AutoDefenseReceipt
+	151, // 203: agent.v1.ConnectRequest.security_ban_status:type_name -> agent.v1.SecurityBanStatus
+	152, // 204: agent.v1.ConnectRequest.auto_defense_report:type_name -> agent.v1.AutoDefenseReport
+	147, // 205: agent.v1.ConnectRequest.installation_ban_receipt:type_name -> agent.v1.InstallationBanReceipt
+	146, // 206: agent.v1.ConnectRequest.site_drop_receipt:type_name -> agent.v1.SiteDropReceipt
 	80,  // 207: agent.v1.ConnectRequest.cache_control_cancel_receipt:type_name -> agent.v1.CacheControlCancelReceipt
 	141, // 208: agent.v1.ConnectRequest.gateway_address_change_receipt:type_name -> agent.v1.GatewayAddressChangeReceipt
-	162, // 209: agent.v1.ConnectResponse.stream:type_name -> common.v1.StreamMetadata
-	55,  // 210: agent.v1.ConnectResponse.hello:type_name -> agent.v1.GatewayHello
-	69,  // 211: agent.v1.ConnectResponse.deployment_command:type_name -> agent.v1.DeploymentCommand
-	63,  // 212: agent.v1.ConnectResponse.heartbeat_ack:type_name -> agent.v1.HeartbeatAck
-	123, // 213: agent.v1.ConnectResponse.error:type_name -> agent.v1.StreamError
-	72,  // 214: agent.v1.ConnectResponse.acme_http01_overlay_command:type_name -> agent.v1.AcmeHTTP01OverlayCommand
-	75,  // 215: agent.v1.ConnectResponse.cache_control_command:type_name -> agent.v1.CacheControlCommand
-	78,  // 216: agent.v1.ConnectResponse.cache_control_status_ack:type_name -> agent.v1.CacheControlStatusAck
-	81,  // 217: agent.v1.ConnectResponse.deployment_status_ack:type_name -> agent.v1.DeploymentStatusAck
-	83,  // 218: agent.v1.ConnectResponse.upgrade_command:type_name -> agent.v1.UpgradeCommand
-	85,  // 219: agent.v1.ConnectResponse.upgrade_status_ack:type_name -> agent.v1.UpgradeStatusAck
-	86,  // 220: agent.v1.ConnectResponse.upgrade_status_ack_receipt:type_name -> agent.v1.UpgradeStatusAckReceipt
-	88,  // 221: agent.v1.ConnectResponse.firewall_command:type_name -> agent.v1.FirewallCommand
-	90,  // 222: agent.v1.ConnectResponse.drain_command:type_name -> agent.v1.DrainCommand
-	92,  // 223: agent.v1.ConnectResponse.node_monitoring_artifact:type_name -> agent.v1.NodeMonitoringArtifact
-	107, // 224: agent.v1.ConnectResponse.node_monitoring_ack:type_name -> agent.v1.NodeMonitoringAck
-	110, // 225: agent.v1.ConnectResponse.gateway_port_transition_command:type_name -> agent.v1.GatewayPortTransitionCommand
-	113, // 226: agent.v1.ConnectResponse.market_probe_command:type_name -> agent.v1.MarketProbeCommand
-	119, // 227: agent.v1.ConnectResponse.l4_live_connections_command:type_name -> agent.v1.L4LiveConnectionsCommand
-	137, // 228: agent.v1.ConnectResponse.edge_signer_trust_bundle:type_name -> agent.v1.EdgeSignerTrustBundle
-	148, // 229: agent.v1.ConnectResponse.security_ban_command:type_name -> agent.v1.SecurityBanCommand
-	136, // 230: agent.v1.ConnectResponse.sched302_table:type_name -> agent.v1.Sched302Table
-	146, // 231: agent.v1.ConnectResponse.auto_defense_command:type_name -> agent.v1.AutoDefenseCommand
-	139, // 232: agent.v1.ConnectResponse.installation_ban_command:type_name -> agent.v1.InstallationBanCommand
-	57,  // 233: agent.v1.ConnectResponse.gateway_endpoint_migration:type_name -> agent.v1.GatewayEndpointMigration
-	142, // 234: agent.v1.ConnectResponse.site_drop_command:type_name -> agent.v1.SiteDropCommand
-	79,  // 235: agent.v1.ConnectResponse.cache_control_cancel:type_name -> agent.v1.CacheControlCancel
-	140, // 236: agent.v1.ConnectResponse.gateway_address_change_command:type_name -> agent.v1.GatewayAddressChangeCommand
-	157, // 237: agent.v1.TelemetryClientHello.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
-	158, // 238: agent.v1.TelemetryGatewayHello.selected_protocol_version:type_name -> common.v1.ProtocolVersion
-	154, // 239: agent.v1.TelemetryGatewayHello.server_time:type_name -> google.protobuf.Timestamp
-	34,  // 240: agent.v1.TelemetryRecord.kind:type_name -> agent.v1.TelemetryKind
-	128, // 241: agent.v1.TelemetryBatch.records:type_name -> agent.v1.TelemetryRecord
-	163, // 242: agent.v1.ConnectionsTelemetryRecordV1.envelope:type_name -> agent.v1.ConnectionsMetricEnvelopeV1
-	130, // 243: agent.v1.ConnectionsTelemetryBatchV1.records:type_name -> agent.v1.ConnectionsTelemetryRecordV1
-	154, // 244: agent.v1.TelemetryAck.accepted_time:type_name -> google.protobuf.Timestamp
-	159, // 245: agent.v1.TelemetryAck.retry_after_duration:type_name -> google.protobuf.Duration
-	161, // 246: agent.v1.TelemetryError.error:type_name -> common.v1.ProtocolError
-	162, // 247: agent.v1.StreamTelemetryRequest.stream:type_name -> common.v1.StreamMetadata
-	126, // 248: agent.v1.StreamTelemetryRequest.hello:type_name -> agent.v1.TelemetryClientHello
-	129, // 249: agent.v1.StreamTelemetryRequest.batch:type_name -> agent.v1.TelemetryBatch
-	131, // 250: agent.v1.StreamTelemetryRequest.connections_batch:type_name -> agent.v1.ConnectionsTelemetryBatchV1
-	162, // 251: agent.v1.StreamTelemetryResponse.stream:type_name -> common.v1.StreamMetadata
-	127, // 252: agent.v1.StreamTelemetryResponse.hello:type_name -> agent.v1.TelemetryGatewayHello
-	132, // 253: agent.v1.StreamTelemetryResponse.ack:type_name -> agent.v1.TelemetryAck
-	133, // 254: agent.v1.StreamTelemetryResponse.error:type_name -> agent.v1.TelemetryError
-	160, // 255: agent.v1.Sched302Table.event:type_name -> common.v1.EventMetadata
-	36,  // 256: agent.v1.Sched302Table.schema:type_name -> agent.v1.Sched302Schema
-	10,  // 257: agent.v1.Sched302Table.signature_algorithm:type_name -> agent.v1.ArtifactSignatureAlgorithm
-	160, // 258: agent.v1.EdgeSignerTrustBundle.event:type_name -> common.v1.EventMetadata
-	35,  // 259: agent.v1.EdgeSignerTrustBundle.schema:type_name -> agent.v1.EdgeSignerTrustSchema
-	160, // 260: agent.v1.EdgeSignerTrustReceipt.event:type_name -> common.v1.EventMetadata
-	35,  // 261: agent.v1.EdgeSignerTrustReceipt.schema:type_name -> agent.v1.EdgeSignerTrustSchema
-	160, // 262: agent.v1.InstallationBanCommand.event:type_name -> common.v1.EventMetadata
-	160, // 263: agent.v1.GatewayAddressChangeCommand.event:type_name -> common.v1.EventMetadata
-	160, // 264: agent.v1.GatewayAddressChangeReceipt.event:type_name -> common.v1.EventMetadata
-	160, // 265: agent.v1.SiteDropCommand.event:type_name -> common.v1.EventMetadata
-	160, // 266: agent.v1.SiteDropReceipt.event:type_name -> common.v1.EventMetadata
-	143, // 267: agent.v1.SiteDropReceipt.rejected:type_name -> agent.v1.SiteDropRejection
-	160, // 268: agent.v1.InstallationBanReceipt.event:type_name -> common.v1.EventMetadata
-	154, // 269: agent.v1.InstallationBanReceipt.ticket_issued_time:type_name -> google.protobuf.Timestamp
-	154, // 270: agent.v1.InstallationBanReceipt.ticket_not_after_time:type_name -> google.protobuf.Timestamp
-	160, // 271: agent.v1.AutoDefenseCommand.event:type_name -> common.v1.EventMetadata
-	160, // 272: agent.v1.AutoDefenseReceipt.event:type_name -> common.v1.EventMetadata
-	160, // 273: agent.v1.SecurityBanCommand.event:type_name -> common.v1.EventMetadata
-	160, // 274: agent.v1.SecurityBanStatus.event:type_name -> common.v1.EventMetadata
-	156, // 275: agent.v1.FetchSiteObjectsRequest.request:type_name -> common.v1.RequestMetadata
-	152, // 276: agent.v1.FetchSiteObjectsResponse.chunk:type_name -> agent.v1.SiteObjectChunk
-	277, // [277:277] is the sub-list for method output_type
-	277, // [277:277] is the sub-list for method input_type
-	277, // [277:277] is the sub-list for extension type_name
-	277, // [277:277] is the sub-list for extension extendee
-	0,   // [0:277] is the sub-list for field type_name
+	143, // 209: agent.v1.ConnectRequest.ssh_access_receipt:type_name -> agent.v1.SSHAccessReceipt
+	164, // 210: agent.v1.ConnectResponse.stream:type_name -> common.v1.StreamMetadata
+	55,  // 211: agent.v1.ConnectResponse.hello:type_name -> agent.v1.GatewayHello
+	69,  // 212: agent.v1.ConnectResponse.deployment_command:type_name -> agent.v1.DeploymentCommand
+	63,  // 213: agent.v1.ConnectResponse.heartbeat_ack:type_name -> agent.v1.HeartbeatAck
+	123, // 214: agent.v1.ConnectResponse.error:type_name -> agent.v1.StreamError
+	72,  // 215: agent.v1.ConnectResponse.acme_http01_overlay_command:type_name -> agent.v1.AcmeHTTP01OverlayCommand
+	75,  // 216: agent.v1.ConnectResponse.cache_control_command:type_name -> agent.v1.CacheControlCommand
+	78,  // 217: agent.v1.ConnectResponse.cache_control_status_ack:type_name -> agent.v1.CacheControlStatusAck
+	81,  // 218: agent.v1.ConnectResponse.deployment_status_ack:type_name -> agent.v1.DeploymentStatusAck
+	83,  // 219: agent.v1.ConnectResponse.upgrade_command:type_name -> agent.v1.UpgradeCommand
+	85,  // 220: agent.v1.ConnectResponse.upgrade_status_ack:type_name -> agent.v1.UpgradeStatusAck
+	86,  // 221: agent.v1.ConnectResponse.upgrade_status_ack_receipt:type_name -> agent.v1.UpgradeStatusAckReceipt
+	88,  // 222: agent.v1.ConnectResponse.firewall_command:type_name -> agent.v1.FirewallCommand
+	90,  // 223: agent.v1.ConnectResponse.drain_command:type_name -> agent.v1.DrainCommand
+	92,  // 224: agent.v1.ConnectResponse.node_monitoring_artifact:type_name -> agent.v1.NodeMonitoringArtifact
+	107, // 225: agent.v1.ConnectResponse.node_monitoring_ack:type_name -> agent.v1.NodeMonitoringAck
+	110, // 226: agent.v1.ConnectResponse.gateway_port_transition_command:type_name -> agent.v1.GatewayPortTransitionCommand
+	113, // 227: agent.v1.ConnectResponse.market_probe_command:type_name -> agent.v1.MarketProbeCommand
+	119, // 228: agent.v1.ConnectResponse.l4_live_connections_command:type_name -> agent.v1.L4LiveConnectionsCommand
+	137, // 229: agent.v1.ConnectResponse.edge_signer_trust_bundle:type_name -> agent.v1.EdgeSignerTrustBundle
+	150, // 230: agent.v1.ConnectResponse.security_ban_command:type_name -> agent.v1.SecurityBanCommand
+	136, // 231: agent.v1.ConnectResponse.sched302_table:type_name -> agent.v1.Sched302Table
+	148, // 232: agent.v1.ConnectResponse.auto_defense_command:type_name -> agent.v1.AutoDefenseCommand
+	139, // 233: agent.v1.ConnectResponse.installation_ban_command:type_name -> agent.v1.InstallationBanCommand
+	57,  // 234: agent.v1.ConnectResponse.gateway_endpoint_migration:type_name -> agent.v1.GatewayEndpointMigration
+	144, // 235: agent.v1.ConnectResponse.site_drop_command:type_name -> agent.v1.SiteDropCommand
+	79,  // 236: agent.v1.ConnectResponse.cache_control_cancel:type_name -> agent.v1.CacheControlCancel
+	140, // 237: agent.v1.ConnectResponse.gateway_address_change_command:type_name -> agent.v1.GatewayAddressChangeCommand
+	142, // 238: agent.v1.ConnectResponse.ssh_access_command:type_name -> agent.v1.SSHAccessCommand
+	159, // 239: agent.v1.TelemetryClientHello.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
+	160, // 240: agent.v1.TelemetryGatewayHello.selected_protocol_version:type_name -> common.v1.ProtocolVersion
+	156, // 241: agent.v1.TelemetryGatewayHello.server_time:type_name -> google.protobuf.Timestamp
+	34,  // 242: agent.v1.TelemetryRecord.kind:type_name -> agent.v1.TelemetryKind
+	128, // 243: agent.v1.TelemetryBatch.records:type_name -> agent.v1.TelemetryRecord
+	165, // 244: agent.v1.ConnectionsTelemetryRecordV1.envelope:type_name -> agent.v1.ConnectionsMetricEnvelopeV1
+	130, // 245: agent.v1.ConnectionsTelemetryBatchV1.records:type_name -> agent.v1.ConnectionsTelemetryRecordV1
+	156, // 246: agent.v1.TelemetryAck.accepted_time:type_name -> google.protobuf.Timestamp
+	161, // 247: agent.v1.TelemetryAck.retry_after_duration:type_name -> google.protobuf.Duration
+	163, // 248: agent.v1.TelemetryError.error:type_name -> common.v1.ProtocolError
+	164, // 249: agent.v1.StreamTelemetryRequest.stream:type_name -> common.v1.StreamMetadata
+	126, // 250: agent.v1.StreamTelemetryRequest.hello:type_name -> agent.v1.TelemetryClientHello
+	129, // 251: agent.v1.StreamTelemetryRequest.batch:type_name -> agent.v1.TelemetryBatch
+	131, // 252: agent.v1.StreamTelemetryRequest.connections_batch:type_name -> agent.v1.ConnectionsTelemetryBatchV1
+	164, // 253: agent.v1.StreamTelemetryResponse.stream:type_name -> common.v1.StreamMetadata
+	127, // 254: agent.v1.StreamTelemetryResponse.hello:type_name -> agent.v1.TelemetryGatewayHello
+	132, // 255: agent.v1.StreamTelemetryResponse.ack:type_name -> agent.v1.TelemetryAck
+	133, // 256: agent.v1.StreamTelemetryResponse.error:type_name -> agent.v1.TelemetryError
+	162, // 257: agent.v1.Sched302Table.event:type_name -> common.v1.EventMetadata
+	36,  // 258: agent.v1.Sched302Table.schema:type_name -> agent.v1.Sched302Schema
+	10,  // 259: agent.v1.Sched302Table.signature_algorithm:type_name -> agent.v1.ArtifactSignatureAlgorithm
+	162, // 260: agent.v1.EdgeSignerTrustBundle.event:type_name -> common.v1.EventMetadata
+	35,  // 261: agent.v1.EdgeSignerTrustBundle.schema:type_name -> agent.v1.EdgeSignerTrustSchema
+	162, // 262: agent.v1.EdgeSignerTrustReceipt.event:type_name -> common.v1.EventMetadata
+	35,  // 263: agent.v1.EdgeSignerTrustReceipt.schema:type_name -> agent.v1.EdgeSignerTrustSchema
+	162, // 264: agent.v1.InstallationBanCommand.event:type_name -> common.v1.EventMetadata
+	162, // 265: agent.v1.GatewayAddressChangeCommand.event:type_name -> common.v1.EventMetadata
+	162, // 266: agent.v1.GatewayAddressChangeReceipt.event:type_name -> common.v1.EventMetadata
+	162, // 267: agent.v1.SSHAccessCommand.event:type_name -> common.v1.EventMetadata
+	162, // 268: agent.v1.SSHAccessReceipt.event:type_name -> common.v1.EventMetadata
+	162, // 269: agent.v1.SiteDropCommand.event:type_name -> common.v1.EventMetadata
+	162, // 270: agent.v1.SiteDropReceipt.event:type_name -> common.v1.EventMetadata
+	145, // 271: agent.v1.SiteDropReceipt.rejected:type_name -> agent.v1.SiteDropRejection
+	162, // 272: agent.v1.InstallationBanReceipt.event:type_name -> common.v1.EventMetadata
+	156, // 273: agent.v1.InstallationBanReceipt.ticket_issued_time:type_name -> google.protobuf.Timestamp
+	156, // 274: agent.v1.InstallationBanReceipt.ticket_not_after_time:type_name -> google.protobuf.Timestamp
+	162, // 275: agent.v1.AutoDefenseCommand.event:type_name -> common.v1.EventMetadata
+	162, // 276: agent.v1.AutoDefenseReceipt.event:type_name -> common.v1.EventMetadata
+	162, // 277: agent.v1.SecurityBanCommand.event:type_name -> common.v1.EventMetadata
+	162, // 278: agent.v1.SecurityBanStatus.event:type_name -> common.v1.EventMetadata
+	158, // 279: agent.v1.FetchSiteObjectsRequest.request:type_name -> common.v1.RequestMetadata
+	154, // 280: agent.v1.FetchSiteObjectsResponse.chunk:type_name -> agent.v1.SiteObjectChunk
+	281, // [281:281] is the sub-list for method output_type
+	281, // [281:281] is the sub-list for method input_type
+	281, // [281:281] is the sub-list for extension type_name
+	281, // [281:281] is the sub-list for extension extendee
+	0,   // [0:281] is the sub-list for field type_name
 }
 
 func init() { file_agent_v1_types_proto_init() }
@@ -16134,6 +16390,7 @@ func file_agent_v1_types_proto_init() {
 		(*ConnectRequest_SiteDropReceipt)(nil),
 		(*ConnectRequest_CacheControlCancelReceipt)(nil),
 		(*ConnectRequest_GatewayAddressChangeReceipt)(nil),
+		(*ConnectRequest_SshAccessReceipt)(nil),
 	}
 	file_agent_v1_types_proto_msgTypes[87].OneofWrappers = []any{
 		(*ConnectResponse_Hello)(nil),
@@ -16163,6 +16420,7 @@ func file_agent_v1_types_proto_init() {
 		(*ConnectResponse_SiteDropCommand)(nil),
 		(*ConnectResponse_CacheControlCancel)(nil),
 		(*ConnectResponse_GatewayAddressChangeCommand)(nil),
+		(*ConnectResponse_SshAccessCommand)(nil),
 	}
 	file_agent_v1_types_proto_msgTypes[88].OneofWrappers = []any{}
 	file_agent_v1_types_proto_msgTypes[90].OneofWrappers = []any{}
@@ -16184,7 +16442,7 @@ func file_agent_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_v1_types_proto_rawDesc), len(file_agent_v1_types_proto_rawDesc)),
 			NumEnums:      38,
-			NumMessages:   116,
+			NumMessages:   118,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

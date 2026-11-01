@@ -1229,7 +1229,13 @@ components:
           maxItems: 16
           uniqueItems: true
           items: {type: string, maxLength: 128}
-        disk_quota_bytes: {type: integer, format: int64, minimum: 0, maximum: 17592186044416}
+        disk_quota_bytes:
+          type: integer
+          format: int64
+          maximum: 17592186044416
+          anyOf: [{const: 0}, {minimum: 67108864}]
+          description: 0 only when mode is disabled; otherwise at least 64 MiB (67108864).
+          x-description-zh: 仅 mode 为 disabled 时为 0，其余模式至少 64 MiB（67108864）。
     PolicyDocumentV2:
       type: object
       additionalProperties: false
@@ -1252,7 +1258,13 @@ components:
           maxItems: 16
           uniqueItems: true
           items: {type: string, maxLength: 128}
-        disk_quota_bytes: {type: integer, format: int64, minimum: 0, maximum: 17592186044416}
+        disk_quota_bytes:
+          type: integer
+          format: int64
+          maximum: 17592186044416
+          anyOf: [{const: 0}, {minimum: 67108864}]
+          description: 0 only when mode is disabled; otherwise at least 64 MiB (67108864).
+          x-description-zh: 仅 mode 为 disabled 时为 0，其余模式至少 64 MiB（67108864）。
     Policy:
       type: object
       additionalProperties: false

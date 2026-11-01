@@ -49,6 +49,7 @@ func runMarketRulePackFlow(t *testing.T, fixture licenseFixture, client, platfor
 	if client.list().find(market.AuthorizationID) != nil {
 		t.Fatal("tenant scope offered the platform rule pack")
 	}
+	tenantScope := client.tenantID // the platform client has no tenant; step 3 publishes a site of this tenant
 	client = platformClient
 	item := client.list().find(market.AuthorizationID)
 	if item == nil || item.Status != "pending_confirmation" || item.Version != "1.0.0" {
@@ -100,7 +101,7 @@ func runMarketRulePackFlow(t *testing.T, fixture licenseFixture, client, platfor
 	}
 
 	// 3. Platform enables the developer pack; a tenant site publishes it in security.mounts.
-	platform, tenant, siteID := rulePackE2EScopes(t, pool, client.tenantID)
+	platform, tenant, siteID := rulePackE2EScopes(t, pool, tenantScope)
 	packs := rulepackcontrol.NewService(pool, time.Now)
 	if _, _, err := packs.PutOverride(ctx, platform, rulepackcontrol.OverrideInput{Level: rulepack.LevelPlatform,
 		PackID: rulePackID, State: rulepack.StateEnabled}); err != nil {
@@ -110,11 +111,22 @@ func runMarketRulePackFlow(t *testing.T, fixture licenseFixture, client, platfor
 	if err != nil {
 		t.Fatalf("publish site mounts: %v", err)
 	}
-	if mounted.Published == nil || len(mounted.Published.Security.Mounts) != 1 {
+	if mounted.Published == nil {
 		t.Fatalf("site mounts=%+v", mounted.Published)
 	}
-	mount := mounted.Published.Security.Mounts[0]
-	if mount.PackID != rulePackID || mount.Layer != rulepack.LayerDeveloper || mount.SHA256 != local.SHA256 {
+	// System-layer packs enabled by default (e.g. system/bot-ai-crawler) are mounted too; exactly one developer
+	// mount, and it is this pack.
+	var developer []rulepack.Mount
+	for _, candidate := range mounted.Published.Security.Mounts {
+		if candidate.Layer == rulepack.LayerDeveloper {
+			developer = append(developer, candidate)
+		}
+	}
+	if len(developer) != 1 {
+		t.Fatalf("site developer mounts=%+v", mounted.Published.Security.Mounts)
+	}
+	mount := developer[0]
+	if mount.PackID != rulePackID || mount.SHA256 != local.SHA256 {
 		t.Fatalf("site mount=%+v local=%+v", mount, local)
 	}
 	t.Logf("market rule pack %s mounted on site %s (resolved %s); node enforcement waits for the site object "+

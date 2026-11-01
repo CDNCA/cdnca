@@ -24,10 +24,9 @@ import (
 	controlv1 "github.com/cdnca/cdnca/proto/gen/go/controlinternal/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/config"
 	"github.com/cdnca/cdnca/services/control-api/internal/controlinternal"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeidentity"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -564,38 +563,5 @@ func assertControlRuntimeIdentityFacts(t *testing.T, pool *pgxpool.Pool, nodeID 
 
 func openControlRuntimeDatabase(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	schema := "control_runtime_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop test schema: %v", err)
-		}
-	})
-	poolConfig, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	poolConfig.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }

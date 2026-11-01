@@ -96,6 +96,13 @@ const (
 	// refusal is in the edge_publication.node_scope_conflict audit (adm-fix-a2:
 	// 73 retried one 350 times as publish_outcome_unknown until its deadline).
 	FailureNodeScopeConflict = "node_scope_conflict"
+	// FailureSiteConfigInvalid: a stored site the publication cannot compile
+	// (edgepublish.SiteConfigInvalidError, e.g. HTTPS off with HTTPS ports).
+	// Retrying cannot change it; the reason is in the
+	// edge_publication.site_config_invalid audit and the site's next save
+	// publishes again (73 retried one every 5 seconds as
+	// publish_outcome_unknown).
+	FailureSiteConfigInvalid = "site_config_invalid"
 )
 
 var (

@@ -17,6 +17,7 @@ import (
 	"github.com/cdnca/cdnca/libs/entitlement"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
 	"github.com/cdnca/cdnca/services/control-api/internal/packageperiod"
@@ -33,6 +34,7 @@ func TestAddonSiteAdmissionPostgres(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "addon_site")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

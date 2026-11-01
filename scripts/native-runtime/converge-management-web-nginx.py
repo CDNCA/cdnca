@@ -14,8 +14,10 @@ the fresh-install gzip / HTTP/2 / hashed-asset cache settings.
 Only the exact installer edits are made (including the website root fallback,
 asset cache rule, /favicon.ico and /robots.txt, the sandboxed /site/t/ of
 theme plugin page bundles, the node installer served from the active
-release, and the /dashboard console entry without a trailing slash); any other
-local drift is refused.
+release, the /dashboard console entry without a trailing slash, the log and
+website content JSON gzip, the favicon fallback, the billing bridge downloads,
+and brotli_static where libnginx-mod-http-brotli-static is installed); any
+other local drift is refused.
 """
 import argparse
 import difflib
@@ -163,6 +165,68 @@ DASHBOARD_ENTRY = '''        # /dashboard without a trailing slash is the consol
 DASHBOARD_ENTRY_BLOCK = re.compile(r'(?m)^[ \t]*location[ \t]+=[ \t]*/dashboard[ \t]*\{[ \t]*\n'
                                    r'[ \t]*rewrite[ \t]+\^[ \t]+/index\.html[ \t]+break;[ \t]*\n[ \t]*\}[ \t]*\n')
 DASHBOARD_ANCHOR = '        location /dashboard/ {\n'
+# Log/list GET reads compress their JSON; inserted at the
+# top of location ^~ /v1/ so it inherits the proxy headers set there.
+API_GZIP_ANCHOR = '        location ^~ /v1/ {\n            proxy_http_version 1.1;\n'
+API_GZIP = '''        location ^~ /v1/ {
+            # Log/list reads and the public website content are the only compressed
+            # API JSON: they stream nothing and carry no credential or CSRF token (API
+            # auth is a Bearer header, so BREACH has no secret to recover). The logs
+            # send no ETag; the website content's ETag, weakened by gzip, still
+            # revalidates (control-api compares If-None-Match weakly, RFC 9110).
+            # Exact GET-only routes; exports, grants and POST actions stay plain.
+            location ~ ^/v1/(?:(?:admin/)?(?:analytics/(?:logs/(?:access|block-events|blocks/(?:current|current-count|history)|cc-bans|cc-coordination|[a-z-]+/geo-evidence/[^/]+)|l4-session-logs)|audit-logs(?:/categories)?|observability/logs|billing-bridge/logs)|control-site/content)$ {
+                gzip_types application/json;
+                proxy_pass http://127.0.0.1:8080;
+            }
+            proxy_http_version 1.1;
+'''
+# Hosts converged by api-gzip alone (logs only) get the website content too.
+API_GZIP_LOGS = '''        location ^~ /v1/ {
+            # Log/list reads are the only compressed API JSON: they send no ETag (gzip
+            # would weaken it), stream nothing, and carry no credential or CSRF token
+            # (API auth is a Bearer header, so BREACH has no secret to recover).
+            # Exact GET-only routes; exports, grants and POST actions stay plain.
+            location ~ ^/v1/(?:admin/)?(?:analytics/(?:logs/(?:access|block-events|blocks/(?:current|current-count|history)|cc-bans|cc-coordination|[a-z-]+/geo-evidence/[^/]+)|l4-session-logs)|audit-logs(?:/categories)?|observability/logs|billing-bridge/logs)$ {
+                gzip_types application/json;
+                proxy_pass http://127.0.0.1:8080;
+            }
+            proxy_http_version 1.1;
+'''
+# The favicon falls back to the console's own favicon, not the logo (cb5635c28).
+FAVICON_ERROR_OLD = '''        location = /v1/brand-assets/favicon {
+            proxy_intercept_errors on;
+            error_page 404 = @brand_logo_fallback;
+'''
+FAVICON_ERROR = FAVICON_ERROR_OLD.replace('@brand_logo_fallback', '@brand_favicon_fallback')
+FAVICON_FALLBACK = '''        location @brand_favicon_fallback {
+            if ($request_method !~ "^(GET|HEAD)$") { return 404; }
+            rewrite ^ /dashboard/favicon.png last;
+        }
+'''
+FAVICON_FALLBACK_ANCHOR = '        location @brand_logo_fallback {\n'
+# Billing integration PHP modules ship with the active release (5b9b5bd10).
+BILLING_BRIDGE = '''        # Billing integration PHP modules (ADR 0019) ship with the active release.
+        location ^~ /downloads/billing-bridge/ {
+            root /data/cdnca-native-root/cdnca/current/static/web;
+            try_files $uri =404;
+            default_type application/zip;
+        }
+'''
+# The website's precompressed .br, where the distribution's brotli_static
+# module is installed; never on a
+# BaoTa host, whose own nginx cannot load it.
+BROTLI_MODULE = Path('/usr/lib/nginx/modules/ngx_http_brotli_static_module.so')
+BROTLI_LOAD = f'load_module {BROTLI_MODULE};\n'
+STATIC_ASSETS = '''        location ~* ^/(?:dashboard/)?(?:assets/.*|.*\\.(?:css|js|mjs|map|json|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf))$ {
+            rewrite ^/dashboard/(.*)$ /$1 break;
+            try_files $uri =404;
+'''
+BROTLI_STATIC = '            brotli_static on;\n'
+BAOTA_DOWNLOAD = '    # 宝塔环境节点升级下载直连端口（fix-btenv2）'
+# A plain host's http block ends with the empty line of node_download_server.
+HTTP_END_OLD = '\n    }\n}\n'
+HTTP_END = '\n    }\n\n}\n'
 EDITS = (  # (exact anchor line, replacement), each anchor must occur exactly once
     ('    keepalive_timeout 65;\n', '    keepalive_timeout 65;\n' + HTTP_ADDITIONS),
     ('        add_header Cache-Control "no-store" always;\n', '        add_header Cache-Control $cdnca_cache_control always;\n'),
@@ -170,10 +234,59 @@ EDITS = (  # (exact anchor line, replacement), each anchor must occur exactly on
 )
 
 
-def converge(raw):
-    """Return (converged bytes, listen port). Raises ValueError for unknown input."""
+# `control-api control-host bind` adds a copy of the
+# management server for the bound domain between these markers, right after
+# the installer's server. Convergence works on the installer's server alone
+# and derives the domain copy from the converged result again.
+BIND_BEGIN = '    # cdnca-host-bind begin (control-api control-host bind)\n'
+BIND_END = '    # cdnca-host-bind end\n'
+BIND_BLOCK = re.compile(r'\n' + re.escape(BIND_BEGIN) + r'(.*?)' + re.escape(BIND_END), re.S)
+MAIN_SERVER = re.compile(r'\n    server \{\n        listen [^\n]* ssl(?: http2)?;\n        server_name _;\n.*?\n    \}\n', re.S)
+CERT_LINE = re.compile(r'(?m)^        ssl_certificate(_key)? [^\n]*;\n')
+
+
+def split_bind(text):
+    """(text without the bind block, (domain, cert, key) or None)."""
+    blocks = BIND_BLOCK.findall(text)
+    if not blocks:
+        return text, None
+    if len(blocks) != 1:
+        raise ValueError('more than one bound-domain server block; converge manually')
+    block = blocks[0]
+    name = re.findall(r'(?m)^        server_name ([^ ;\n]+);$', block)
+    cert = re.findall(r'(?m)^        ssl_certificate ([^ ;\n]+);$', block)
+    key = re.findall(r'(?m)^        ssl_certificate_key ([^ ;\n]+);$', block)
+    if len(name) != 1 or len(cert) != 1 or len(key) != 1:
+        raise ValueError('unexpected bound-domain server block; converge manually')
+    return BIND_BLOCK.sub('\n', text, count=1), (name[0], cert[0], key[0])
+
+
+def render_bind(text, bound):
+    """Insert the bound-domain copy of the (single) installer server."""
+    if bound is None:
+        return text
+    domain, cert, key = bound
+    servers = list(MAIN_SERVER.finditer(text))
+    if len(servers) != 1:
+        raise ValueError('expected exactly one installer management server for the bound domain')
+    server = servers[0].group(0)[1:].replace('        server_name _;\n', f'        server_name {domain};\n', 1)
+    server = CERT_LINE.sub(lambda m: f'        ssl_certificate_key {key};\n' if m[1] else f'        ssl_certificate {cert};\n', server)
+    end = servers[0].end()
+    return text[:end] + BIND_BEGIN + server + BIND_END + text[end:]
+
+
+def converge(raw, brotli=False):
+    """Return (converged bytes, listen port). Raises ValueError for unknown input.
+    brotli: the brotli_static module is installed on this host."""
     if type(raw) is not bytes or not 1 <= len(raw) <= LIMIT or b'\r' in raw or b'\0' in raw:
         raise ValueError('unknown management nginx configuration')
+    text, bound = split_bind(raw.decode('utf-8'))
+    converged, port = converge_main(text.encode('utf-8'), brotli)
+    result = render_bind(converged.decode('utf-8'), bound).encode('utf-8')
+    return (raw if result == raw else result), port
+
+
+def converge_main(raw, brotli=False):
     text = raw.decode('utf-8')
     if text.count('\nhttp {\n') != 1 or 'root /data/cdnca-native-root/cdnca/current/static/web;' not in text:
         raise ValueError('not an installer-generated management nginx configuration')
@@ -188,7 +301,7 @@ def converge(raw):
                     all(line == XFF_PEER for line in re.findall(r'(?m)^.*X-Forwarded-For.*\n', text)))
         if not all(expected):
             raise ValueError('partially converged configuration; refusing to guess')
-        converged = converge_dashboard(converge_node_installer(converge_site(text))).encode('utf-8')
+        converged = converge_rest(text, brotli).encode('utf-8')
         return (raw if converged == raw else converged), port
     if re.search(r'\bgzip|\bhttp2\b|location \^~ /v1/auth/', text):
         raise ValueError('local gzip/http2/auth customisation present; converge manually')
@@ -201,7 +314,60 @@ def converge(raw):
     if not forwarded or any(line != XFF_PEER for line in forwarded):
         raise ValueError('unexpected X-Forwarded-For configuration; converge manually')
     text = LISTEN.sub(lambda match: f'        listen {match[1]} ssl http2;', text, count=1)
-    return converge_dashboard(converge_node_installer(converge_site(text))).encode('utf-8'), port
+    return converge_rest(text, brotli).encode('utf-8'), port
+
+
+def converge_rest(text, brotli):
+    text = converge_api_gzip(converge_dashboard(converge_node_installer(converge_site(text))))
+    return converge_http_end(converge_brotli(converge_billing_bridge(converge_favicon(text)), brotli))
+
+
+def converge_favicon(text):
+    """The favicon falls back to the console's favicon instead of the logo."""
+    if '@brand_favicon_fallback' in text:
+        if text.count(FAVICON_ERROR) != 1 or text.count(FAVICON_FALLBACK + FAVICON_FALLBACK_ANCHOR) != 1 or \
+                text.count('@brand_favicon_fallback') != 2:
+            raise ValueError('partially converged favicon fallback; converge manually')
+        return text
+    if text.count(FAVICON_ERROR_OLD) != 1 or text.count(FAVICON_FALLBACK_ANCHOR) != 1:
+        raise ValueError('unexpected brand favicon locations; converge manually')
+    return text.replace(FAVICON_ERROR_OLD, FAVICON_ERROR).replace(FAVICON_FALLBACK_ANCHOR, FAVICON_FALLBACK + FAVICON_FALLBACK_ANCHOR)
+
+
+def converge_billing_bridge(text):
+    """Serves the billing integration modules from the active release, right
+    after the node installer locations."""
+    if BILLING_BRIDGE in text:
+        if text.count(BILLING_BRIDGE) != 1 or text.count(NODE_INSTALLER + BILLING_BRIDGE + NODE_INSTALLER_ANCHOR) != 1:
+            raise ValueError('partially converged billing bridge downloads; converge manually')
+        return text
+    if 'billing-bridge/ ' in text or text.count(NODE_INSTALLER + NODE_INSTALLER_ANCHOR) != 1:
+        raise ValueError('unexpected billing bridge downloads; converge manually')
+    return text.replace(NODE_INSTALLER + NODE_INSTALLER_ANCHOR, NODE_INSTALLER + BILLING_BRIDGE + NODE_INSTALLER_ANCHOR)
+
+
+def converge_brotli(text, brotli):
+    """Loads brotli_static and serves the precompressed .br of static assets
+    where the module is installed; a host without it keeps gzip_static only."""
+    present = 'brotli' in text
+    if present and not (text.startswith(BROTLI_LOAD) and text.count('brotli') == 2 and text.count(STATIC_ASSETS + BROTLI_STATIC) == 1):
+        raise ValueError('unexpected brotli configuration; converge manually')
+    if present or not brotli or BAOTA_DOWNLOAD in text:
+        if present and not brotli:
+            raise ValueError(f'brotli_static configured but {BROTLI_MODULE} is missing; converge manually')
+        return text
+    if text.count(STATIC_ASSETS) != 1 or 'load_module' in text:
+        raise ValueError('unexpected static asset location; converge manually')
+    return BROTLI_LOAD + text.replace(STATIC_ASSETS, STATIC_ASSETS + BROTLI_STATIC)
+
+
+def converge_http_end(text):
+    """A plain host's http block ends with the installer's empty line."""
+    if BAOTA_DOWNLOAD in text or text.endswith(HTTP_END):
+        return text
+    if not text.endswith(HTTP_END_OLD):
+        raise ValueError('unexpected end of the http block; converge manually')
+    return text[:-len(HTTP_END_OLD)] + HTTP_END
 
 
 def converge_site(text):
@@ -244,12 +410,27 @@ def converge_node_installer(text):
     """Serves /downloads/install-node.sh from the active release, falling back
     to the copy published at install time."""
     if NODE_INSTALLER in text:
-        if text.count(NODE_INSTALLER) != 1 or text.count(NODE_INSTALLER + NODE_INSTALLER_ANCHOR) != 1:
+        if text.count(NODE_INSTALLER) != 1 or (text.count(NODE_INSTALLER + NODE_INSTALLER_ANCHOR) +
+                                               text.count(NODE_INSTALLER + BILLING_BRIDGE + NODE_INSTALLER_ANCHOR)) != 1:
             raise ValueError('partially converged node installer locations; converge manually')
         return text
     if re.search(r'install-node\.sh|@published_node_installer', text) or text.count(NODE_INSTALLER_ANCHOR) != 1:
         raise ValueError('unexpected node installer locations; converge manually')
     return text.replace(NODE_INSTALLER_ANCHOR, NODE_INSTALLER + NODE_INSTALLER_ANCHOR)
+
+
+def converge_api_gzip(text):
+    """Compresses the log/list GET reads' and the website content's JSON (no
+    token; the content's weakened ETag still revalidates)."""
+    if text.count(API_GZIP_LOGS) == 1 and text.count('gzip_types application/json;') == 1:
+        text = text.replace(API_GZIP_LOGS, API_GZIP)
+    if API_GZIP in text:
+        if text.count(API_GZIP) != 1 or text.count('gzip_types application/json;') != 1:
+            raise ValueError('partially converged API gzip location; converge manually')
+        return text
+    if 'application/json' in text or text.count(API_GZIP_ANCHOR) != 1:
+        raise ValueError('unexpected /v1/ location or JSON gzip; converge manually')
+    return text.replace(API_GZIP_ANCHOR, API_GZIP)
 
 
 def converge_dashboard(text):
@@ -374,11 +555,12 @@ def backup_path(config, original):
     return config.with_name(f'{config.name}.pre-converge-{hashlib.sha256(original).hexdigest()[:16]}')
 
 
-def apply(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0):
+def apply(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0, brotli=None):
+    brotli = BROTLI_MODULE.is_file() if brotli is None else brotli
     fd = locked(lock)
     try:
         original, info = read_owned(config)
-        updated, port = converge(original)
+        updated, port = converge(original, brotli)
         if updated == original:
             return 'already converged'
         mode = stat.S_IMODE(info.st_mode)
@@ -398,13 +580,14 @@ def apply(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run
         os.close(fd)
 
 
-def rollback(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0):
+def rollback(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0, brotli=None):
+    brotli = BROTLI_MODULE.is_file() if brotli is None else brotli
     fd = locked(lock)
     try:
         current, info = read_owned(config)
-        _, port = converge(current)
+        _, port = converge(current, brotli)
         candidates = sorted(config.parent.glob(f'{config.name}.pre-converge-*'))
-        originals = [data for data in (read_owned(path)[0] for path in candidates) if converge(data)[0] == current and data != current]
+        originals = [data for data in (read_owned(path)[0] for path in candidates) if converge(data, brotli)[0] == current and data != current]
         if len(originals) != 1:
             raise ValueError('no unique backup whose convergence equals the current configuration')
         replace(config, originals[0], stat.S_IMODE(info.st_mode), run, nginx, runtime, current)
@@ -422,7 +605,7 @@ def main(argv=None):
     try:
         if action == 'check':
             original, _ = read_owned(CONFIG)
-            updated, _ = converge(original)
+            updated, _ = converge(original, BROTLI_MODULE.is_file())
             sys.stdout.writelines(difflib.unified_diff(original.decode().splitlines(True), updated.decode().splitlines(True),
                                                        str(CONFIG), str(CONFIG) + ' (converged)'))
             print('already converged' if updated == original else 'convergence pending; run apply', file=sys.stderr)

@@ -56,17 +56,28 @@ type Runtime struct {
 	// Changed is called after a new revision was accepted (node delivery wake).
 	Changed func()
 
-	revision uint64
-	rebound  bool
+	revision    uint64
+	rebound     bool
+	reinstalled bool
 }
 
 // CodeMasterIPRebound is the license service refusal for a controller whose
 // license was rebound to another server's IP (fix-ipswitch).
 const CodeMasterIPRebound = "master_ip_rebound"
 
+// RetiredReasonReinstall: the license holder used 重装主控;
+// same refusal as a rebind, shown as "license used for a reinstall".
+const RetiredReasonReinstall = "reinstall"
+
 func isRebound(err error) bool {
 	var httpError *HTTPError
 	return errors.As(err, &httpError) && httpError.Code == CodeMasterIPRebound
+}
+
+func isReinstalled(err error) bool {
+	var httpError *HTTPError
+	return errors.As(err, &httpError) && httpError.Code == CodeMasterIPRebound &&
+		httpError.RetiredReason == RetiredReasonReinstall
 }
 
 // Restore applies the stored state before the HTTP server starts, so a
@@ -88,6 +99,7 @@ func (runtime *Runtime) SyncOnce(ctx context.Context) error {
 	// Only a definite answer changes the flag; an outage keeps the last one.
 	if err == nil || isRebound(err) {
 		runtime.rebound = err != nil
+		runtime.reinstalled = isReinstalled(err)
 	}
 	if err == nil {
 		// a refused document is reported; the stored state is applied either way
@@ -114,12 +126,13 @@ func (runtime *Runtime) SyncOnce(ctx context.Context) error {
 func (runtime *Runtime) apply(state State) installationlock.Lock {
 	lock := Evaluate(state, runtime.Now())
 	lock.Rebound = runtime.rebound
+	lock.Reinstalled = runtime.reinstalled
 	previous := installationlock.Current()
 	installationlock.Set(lock)
 	if lock.Locked != previous.Locked || lock.Reason != previous.Reason || lock.BanID != previous.BanID ||
-		lock.Rebound != previous.Rebound {
+		lock.Rebound != previous.Rebound || lock.Reinstalled != previous.Reinstalled {
 		runtime.logger().Warn("installation lock state", "locked", lock.Locked, "reason", lock.Reason, "ban_id", lock.BanID,
-			"rebound", lock.Rebound)
+			"rebound", lock.Rebound, "reinstalled", lock.Reinstalled)
 	}
 	revision := latestRevision(state)
 	if revision > runtime.revision {

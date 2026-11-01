@@ -2324,7 +2324,10 @@ func (sink *NATSIsolationSink) runTerminalEvidenceRecoveryWorker() {
 				err = fmt.Errorf("settle terminal evidence recovery: %w", err)
 			}
 		}
-		if errors.Is(err, nats.ErrKeyNotFound) || errors.Is(err, nats.ErrKeyDeleted) {
+		// ErrMsgAlreadyAckd：处理器在 RecordTerminal 返回可重试错误后已对同一个 *nats.Msg 做了 NAK，
+		// 客户端短路了这次 TERM。证据已确认、标记停在 term_pending，重投经 TerminalEvidenceConfirmed 直接 TERM。
+		if errors.Is(err, nats.ErrKeyNotFound) || errors.Is(err, nats.ErrKeyDeleted) ||
+			errors.Is(err, nats.ErrMsgAlreadyAckd) {
 			sink.finishTerminalEvidenceRecovery(task)
 			continue
 		}

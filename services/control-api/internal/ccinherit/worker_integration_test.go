@@ -6,14 +6,12 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/libs/entitlement/rulecatalog"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/securityactivation"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
@@ -47,42 +45,7 @@ type fixture struct {
 
 func migratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-		return pool
-	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "ccinherit_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		cleanup, cancel := databasetest.CleanupContext()
-		defer cancel()
-		_, _ = admin.Exec(cleanup, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 func exec(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) {
@@ -375,8 +338,11 @@ func TestWorkerFollowsPlatformAutoSwitchOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 	platformNode := uuid.New()
-	exec(t, value.pool, `INSERT INTO nodes(id,display_id,scope_id,name,region,admin_state,created_by_user_id) VALUES($1,2,$2,'edge-east','east','active',$3)`,
-		platformNode, platformScope, value.userID)
+	// On the fixture clock: the worker's platform watermark is the newest of
+	// the platform outbox rows (written at testNow+N) and platform nodes, so
+	// a node stamped with the database clock would hide every later override.
+	exec(t, value.pool, `INSERT INTO nodes(id,display_id,scope_id,name,region,admin_state,created_by_user_id,created_at,updated_at)
+		VALUES($1,2,$2,'edge-east','east','active',$3,$4,$4)`, platformNode, platformScope, value.userID, testNow)
 	clock := func() time.Time { return testNow }
 	store := securitypolicy.NewStoreWithClock(value.pool, clock)
 	service := securitypolicy.NewService(store)
@@ -401,6 +367,9 @@ func TestWorkerFollowsPlatformAutoSwitchOverrides(t *testing.T) {
 	}
 
 	overrideID := uuid.New()
+	// The outbox row references its config revision (217), whose actor is a
+	// member of the platform scope, as the platform write path records it.
+	exec(t, value.pool, `INSERT INTO memberships(scope_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, platformScope, value.userID)
 	setPlatform := func(scopeType, scopeID, document string, at time.Time, deleted bool) {
 		digest := sha256.Sum256([]byte(document))
 		id := overrideID
@@ -413,9 +382,18 @@ func TestWorkerFollowsPlatformAutoSwitchOverrides(t *testing.T) {
 		if deleted {
 			exec(t, value.pool, `UPDATE openresty_security_configs SET deleted_at=$2 WHERE id=$1`, id, at)
 		}
+		var revision int64
+		if err := value.pool.QueryRow(t.Context(), `SELECT revision FROM openresty_security_configs WHERE id=$1`, id).Scan(&revision); err != nil {
+			t.Fatal(err)
+		}
+		exec(t, value.pool, `INSERT INTO openresty_security_config_revisions(tenant_scope_id,config_id,revision,scope_type,scope_id,operation,
+			document,document_sha256,key_configured,actor_scope_id,actor_user_id,request_id,created_at)
+			VALUES($1,$2,$3,$4,$5,'override.patch',$6,$7,false,$1,$8,'ccinherit-platform',$9)`,
+			platformScope, id, revision, scopeType, scopeID, document, digest[:], value.userID, at)
 		exec(t, value.pool, `INSERT INTO openresty_security_publication_outbox(id,tenant_scope_id,config_id,revision,scope_type,scope_id,operation,
 			document,document_sha256,state,available_at,created_at,updated_at)
-			VALUES($1,$2,$3,1,$4,$5,'override.patch',$6,$7,'pending',$8,$8,$8)`, uuid.New(), platformScope, id, scopeType, scopeID, document, digest[:], at)
+			VALUES($1,$2,$3,$4,$5,$6,'override.patch',$7,$8,'pending',$9,$9,$9)`, uuid.New(), platformScope, id, revision, scopeType, scopeID,
+			document, digest[:], at)
 	}
 	setPlatform("region", "east", `{"auto_switch":{"enable":true,"qps_50x":0,"qps_total":50,"rule":"10003","seconds":300}}`, testNow.Add(time.Minute), false)
 	if err := worker.Reconcile(t.Context()); err != nil {
@@ -440,6 +418,10 @@ func TestWorkerFollowsPlatformAutoSwitchOverrides(t *testing.T) {
 	if len(starter.inputs) != 1 || starter.inputs[0].SiteID != site || starter.inputs[0].PolicyVersion != after.Revision {
 		t.Fatalf("override not republished: %+v", starter.inputs)
 	}
+	// The recording starter activates nothing; the fallback reactivates sites
+	// running the override revision (reactivate), so one site runs it, as a
+	// completed activation leaves it.
+	active, _ := value.bind(t, after, after.Revision, "layers-active.example")
 
 	setPlatform("region", "east", `{"auto_switch":{"enable":true,"qps_50x":0,"qps_total":50,"rule":"10003","seconds":300}}`, testNow.Add(2*time.Minute), true)
 	if err := worker.Reconcile(t.Context()); err != nil {
@@ -449,7 +431,7 @@ func TestWorkerFollowsPlatformAutoSwitchOverrides(t *testing.T) {
 	if err != nil || len(fallback.CCSettings.AutoSwitch.Overrides) != 0 || fallback.Revision != after.Revision+1 {
 		t.Fatalf("deleted override did not fall back: %+v %v", fallback.CCSettings.AutoSwitch, err)
 	}
-	if len(starter.inputs) != 2 {
+	if len(starter.inputs) != 2 || starter.inputs[1].SiteID != active || starter.inputs[1].PolicyVersion != fallback.Revision {
 		t.Fatalf("fallback not republished: %+v", starter.inputs)
 	}
 }

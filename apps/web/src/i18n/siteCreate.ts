@@ -81,7 +81,7 @@ const zhCN = {
   httpsEnabled: { label: '启用 HTTPS' },
   httpsPorts: { label: 'HTTPS 监听端口', placeholder: '留空使用默认设置（未设置为 443）' },
   cname: { label: 'CNAME', placeholder: '可选，例如 edge.example.com', help: '留空自动分配；填写则使用你自己的 CNAME 主机名（选了套餐时以套餐分配为准）' },
-  cnamePackage: { label: 'CNAME 分配', value: '由所选套餐决定：CNAME 域名、主机名与分配模式按套餐生成，建站时不能单独设置；需要修改请到套餐里改' },
+  cnamePackage: { label: 'CNAME 分配', value: '跟随所选套餐：CNAME 域名、主机名与分配方式取自套餐，建站时不能单独设置。套餐选「按网站生成」时，站点回读的分配模式为 site（每个网站一条 CNAME）；选共享（按套餐生成）时为 package（同一套餐共用一条）。需要修改请到套餐里改' },
   tls: { safeOnly: 'TLS 固定启用 TLSv1.2 和 TLSv1.3，不允许降级。' },
   validation: {
     ports: '监听端口必须为 1-65535 的不重复整数，HTTP 与 HTTPS 不能重叠。',
@@ -206,7 +206,7 @@ const enUS = {
   httpsEnabled: { label: 'Enable HTTPS' },
   httpsPorts: { label: 'HTTPS listen ports', placeholder: 'Leave empty to use the default setting (443 if none)' },
   cname: { label: 'CNAME', placeholder: 'Optional, for example edge.example.com', help: 'Leave empty to allocate automatically; fill it to use your own CNAME hostname (with a package, the package allocation wins)' },
-  cnamePackage: { label: 'CNAME allocation', value: 'Decided by the selected package: the CNAME domain, hostname and mode follow the package and cannot be set when creating a site; change them on the package' },
+  cnamePackage: { label: 'CNAME allocation', value: 'Follows the selected package: the CNAME domain, hostname and allocation mode come from the package and cannot be set when creating a site. A package set to "per site" reads back as mode site (one CNAME per site); a shared package reads back as package (one CNAME for the whole package). Change them on the package' },
   tls: { safeOnly: 'TLSv1.2 and TLSv1.3 are always enabled; downgrade is blocked.' },
   validation: {
     ports: 'Listen ports must be unique integers from 1 to 65535, and HTTP and HTTPS cannot overlap.',

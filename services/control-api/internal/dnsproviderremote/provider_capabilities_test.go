@@ -77,15 +77,19 @@ func TestProviderCapabilityMatrixDrivesReconcileValidation(t *testing.T) {
 	}
 }
 
+func basicLines() []string {
+	return []string{LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas}
+}
+
 func TestSupportedLinesFollowCapabilityAndMappings(t *testing.T) {
 	want := map[string][]string{
-		providerAliyun:     {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
+		providerAliyun:     append(basicLines(), provinceLines()...),
 		providerCloudflare: {LineDefault},
-		providerHuawei:     {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
-		providerDNSPodCN:   {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
+		providerHuawei:     append(basicLines(), provinceLines()...),
+		providerDNSPodCN:   append(basicLines(), provinceLines()...),
 		// Provider-level; the plan tier narrows it (TestDNSComPlanTierLines).
 		providerDNSCom:     {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
-		providerDNSLA:      {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
+		providerDNSLA:      append(basicLines(), provinceLines()...),
 		providerNameCom:    {LineDefault},
 		providerCustomHTTP: {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
 		providerPlugin:     {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},

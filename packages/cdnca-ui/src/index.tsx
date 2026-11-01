@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { App, ConfigProvider, message, type AppProps, type ConfigProviderProps, type ThemeConfig } from 'antd'
+import { ConfigProvider, message, type AppProps, type ConfigProviderProps, type ThemeConfig } from 'antd'
 
+import { CdncaApp } from './app'
 import { FeedbackProvider } from './feedback'
 import tokens from './tokens.json'
 
@@ -204,6 +205,7 @@ export function useFeedbackMessage() {
 export * from './components'
 export * from './CdncaGlyph'
 export * from './feedback'
+export * from './outcomeUnknown'
 export * from './formErrors'
 export * from './reviewRules'
 export * from './PasswordStrength'
@@ -214,6 +216,7 @@ export * from './PriceBadge'
 export * from './PromoPlanFields'
 export * from './liveFilter'
 export * from './IdOrNameInput'
+export { useApp } from './app'
 
 export type CdncaProviderProps = Omit<ConfigProviderProps, 'theme'> & {
   children: ReactNode
@@ -226,7 +229,8 @@ export type CdncaProviderProps = Omit<ConfigProviderProps, 'theme'> & {
 /**
  * Root of every front end: the shared ConfigProvider theme and antd App, so
  * App.useApp() message / notification / modal look and sit the same in all
- * four ends. Errors and warnings go through useFeedback() (dialogs); success
+ * four ends. CdncaApp stands in for antd App and loads the modal code on the
+ * first modal.* call (./app.tsx). Errors and warnings go through useFeedback() (dialogs); success
  * hints through App.useApp().message. Never antd's static API.
  */
 export function CdncaProvider({ children, tokens: overrides, look = 'classic', ...config }: CdncaProviderProps) {
@@ -245,9 +249,9 @@ export function CdncaProvider({ children, tokens: overrides, look = 'classic', .
   ), [closeLabel, config.modal])
   return (
     <ConfigProvider button={{ autoInsertSpace: false }} {...config} modal={modal} theme={theme}>
-      <App className={look === 'console' ? 'cdnca-app cdnca-console' : 'cdnca-app'} message={feedbackConfig.message} notification={feedbackConfig.notification}>
+      <CdncaApp className={look === 'console' ? 'cdnca-app cdnca-console' : 'cdnca-app'} message={feedbackConfig.message} notification={feedbackConfig.notification}>
         <FeedbackProvider>{children}</FeedbackProvider>
-      </App>
+      </CdncaApp>
     </ConfigProvider>
   )
 }

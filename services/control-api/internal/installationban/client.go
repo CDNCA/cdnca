@@ -31,6 +31,9 @@ var (
 type HTTPError struct {
 	StatusCode int
 	Code       string
+	// RetiredReason accompanies master_ip_rebound: "reinstall" when the
+	// license holder retired this installation from 我的授权 → 重装主控.
+	RetiredReason string
 }
 
 func (err *HTTPError) Error() string {
@@ -109,8 +112,9 @@ func (client *Client) Fetch(ctx context.Context, now time.Time) (Documents, erro
 	if response.StatusCode != http.StatusOK {
 		// The license service answers {"code": …}; {"error": {"code": …}} is accepted too.
 		var payload struct {
-			Code  string `json:"code"`
-			Error struct {
+			Code          string `json:"code"`
+			RetiredReason string `json:"retired_reason"`
+			Error         struct {
 				Code string `json:"code"`
 			} `json:"error"`
 		}
@@ -119,7 +123,11 @@ func (client *Client) Fetch(ctx context.Context, now time.Time) (Documents, erro
 		if code == "" {
 			code = payload.Error.Code
 		}
-		return Documents{}, &HTTPError{StatusCode: response.StatusCode, Code: code}
+		retired := ""
+		if code == CodeMasterIPRebound && payload.RetiredReason == RetiredReasonReinstall {
+			retired = RetiredReasonReinstall
+		}
+		return Documents{}, &HTTPError{StatusCode: response.StatusCode, Code: code, RetiredReason: retired}
 	}
 	state, notice, ticket, err := contract.DecodeStateResponse(body)
 	if err != nil || state.InstallationID != client.installationID.String() {

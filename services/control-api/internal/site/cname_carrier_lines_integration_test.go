@@ -13,6 +13,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
 	"github.com/cdnca/cdnca/services/control-api/internal/cnamelines"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsproviderremotesource"
 	"github.com/cdnca/cdnca/services/control-api/internal/jobstate"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
@@ -59,6 +60,7 @@ func TestCNAMECarrierLinesPublishEndpointsPerLine(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "cname_lines")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

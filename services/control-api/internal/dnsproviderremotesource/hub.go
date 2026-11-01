@@ -3,6 +3,7 @@ package dnsproviderremotesource
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -63,11 +64,34 @@ type HubFieldError struct{ Field string }
 func (e *HubFieldError) Error() string { return "dns hub: invalid " + e.Field }
 func (e *HubFieldError) Unwrap() error { return ErrHubInvalid }
 
-// HubActor is the tenant session member.
+// HubActor is the tenant member, signed in or calling with an API key.
 type HubActor struct {
 	UserID, ScopeID uuid.UUID
 	ScopeKind       string
 	RequestID       string
+	// APIKeyID is set when the call uses a tenant API key (plugapi-S1):
+	// APIKeyScopes then also bound the permission (key scopes ∩ the owner's
+	// live RBAC) and audit events carry actor_ref api_key:<id>.
+	APIKeyID     uuid.UUID
+	APIKeyScopes []string
+}
+
+// Hub write permissions: dns.manage (also DNS account credentials) or
+// dns.records.manage (records only, migration 603).
+const (
+	PermissionHubRead          = "dns.read"
+	PermissionHubManage        = "dns.manage"
+	PermissionHubRecordsManage = "dns.records.manage"
+)
+
+var hubWritePermissions = []string{PermissionHubManage, PermissionHubRecordsManage}
+
+// auditRef is the audit actor_ref of the call ("" for a session).
+func (actor HubActor) auditRef() string {
+	if actor.APIKeyID == uuid.Nil {
+		return ""
+	}
+	return "api_key:" + actor.APIKeyID.String()
 }
 
 func NewHub(source *Source, remote dnsproviderremote.HubRemote, auditor HubAuditor, now func() time.Time) (*Hub, error) {
@@ -85,10 +109,19 @@ func NewHub(source *Source, remote dnsproviderremote.HubRemote, auditor HubAudit
 		refreshInterval: HubRefreshInterval}, nil
 }
 
-// authorize checks the actor inside tx (see Hub).
-func (h *Hub) authorize(ctx context.Context, tx pgx.Tx, actor HubActor, permission string) error {
-	if actor.UserID == uuid.Nil || actor.ScopeID == uuid.Nil || actor.ScopeKind != "tenant" {
+// authorize checks the actor inside tx (see Hub): it must hold one of
+// permissions. An API key call holds only what its scopes also list.
+func (h *Hub) authorize(ctx context.Context, tx pgx.Tx, actor HubActor, permissions ...string) error {
+	if actor.UserID == uuid.Nil || actor.ScopeID == uuid.Nil || actor.ScopeKind != "tenant" || len(permissions) == 0 {
 		return ErrHubPermission
+	}
+	if actor.APIKeyID != uuid.Nil {
+		permissions = slices.DeleteFunc(slices.Clone(permissions), func(permission string) bool {
+			return !slices.Contains(actor.APIKeyScopes, permission)
+		})
+		if len(permissions) == 0 {
+			return ErrHubPermission
+		}
 	}
 	var allowed bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(
@@ -98,8 +131,8 @@ func (h *Hub) authorize(ctx context.Context, tx pgx.Tx, actor HubActor, permissi
 			JOIN users account ON account.id=membership.user_id
 			WHERE scope.id=$1 AND scope.kind='tenant' AND tenant.status='active' AND
 			      membership.status='active' AND account.status='active'
-		) AND EXISTS(SELECT 1 FROM custom_rbac_effective_permissions($1,$2) WHERE permission_name=$3)`,
-		actor.ScopeID, actor.UserID, permission).Scan(&allowed)
+		) AND EXISTS(SELECT 1 FROM custom_rbac_effective_permissions($1,$2) WHERE permission_name=ANY($3::text[]))`,
+		actor.ScopeID, actor.UserID, permissions).Scan(&allowed)
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,24 @@
+cmd	$(document).ready(function(){})
+cmd	$(this).hide()
+cmd	echo is a command
+cmd	Tom & Jerry echo the theme
+cmd	price [ 3 -eq 3 ] maybe
+cmd	${#items} items
+cmd	sleep 0 && rest
+cmd	`echoes`
+cmd	a;echoes
+format	50% off
+format	100%d
+format	AAAA
+format	%s
+format	Save 20%s today
+format	%20s
+format	width %1024px
+format	5 * 55
+format	%E5%A5%BD
+redirect	javascript:void(0)
+redirect	//ellesse.us/cdn/shop/files/a.webp
+redirect	/https://www.netshoes.com.br/lst/x
+redirect	https://example.com//path
+redirect	こんにちは。世界
+redirect	ーカー

@@ -106,7 +106,7 @@ function GatewayManagementContent() {
   const installer = (window as InstallRuntime).__CDNCA_LICENSING_SERVER__ ?? ''
   let command = ''
   if (created) {
-    try { command = buildGatewayInstallCommand(created.binding_token, window.location.origin, installer, created.gateway.host) } catch { command = '' }
+    try { command = buildGatewayInstallCommand(created.binding_token, window.location.origin, installer, created.gateway.host, i18n.resolvedLanguage) } catch { command = '' }
   }
   const copy = async () => {
     try { await navigator.clipboard.writeText(command); setCopied(true) } catch { setFailure(t('command.copyFailed')) }
@@ -218,7 +218,7 @@ function LocalGatewayNote({ open, installer }: { open: boolean; installer: strin
     select: (result) => (result.node_health.available ? result.node_health.value.total : null),
     retry: false,
   })
-  const command = buildEnableGatewayAccessCommand(installer)
+  const command = buildEnableGatewayAccessCommand(installer, i18n.resolvedLanguage)
   const copy = async () => {
     try { await navigator.clipboard.writeText(command); setCopied(true) } catch { setCopied(false) }
   }

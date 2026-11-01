@@ -52,6 +52,7 @@ export function LoginPage() {
   const [captchaShown, setCaptchaShown] = useState(false)
   const [captchaAnswer, setCaptchaAnswer] = useState<{ id: string; answer: string } | null>(null)
   const [captchaReset, setCaptchaReset] = useState(0)
+  const [submitted, setSubmitted] = useState(false)
   const active = useRef(true)
   const version = useRef(0)
   const inFlight = useRef(false)
@@ -108,6 +109,7 @@ export function LoginPage() {
     setHumanReset(value => value + 1)
     setCaptchaShown(false)
     setCaptchaAnswer(null)
+    setSubmitted(false)
   }, [form, sessionEpoch])
   useEffect(() => {
     if (retryAt <= Date.now()) return
@@ -320,7 +322,11 @@ export function LoginPage() {
               clearOnDestroy
               layout="vertical"
               requiredMark={false}
-              onFinish={(values) => void submit(values)}
+              // Field rules only run once the user has tried to submit, so a
+              // half-typed password does not flash 「请输入密码」 under the box.
+              validateTrigger={submitted ? 'onChange' : []}
+              onFinish={(values) => { setSubmitted(true); void submit(values) }}
+              onFinishFailed={() => setSubmitted(true)}
               onValuesChange={(changed) => {
                 if ('username' in changed || 'password' in changed) resetChallenge()
                 else if ('otp' in changed) setError(null)
@@ -351,12 +357,15 @@ export function LoginPage() {
                   aria-label={t('password')}
                 />
               </Form.Item>
-              {captchaShown ? <Form.Item>
-                <LoginCaptchaField resetKey={captchaReset} disabled={busy !== null} onChange={setCaptchaAnswer} />
-              </Form.Item> : null}
+              {captchaShown ? <>
+                <Alert className="login-form-alert" type="warning" showIcon message={challengeT('captchaHint')} />
+                <Form.Item>
+                  <LoginCaptchaField resetKey={captchaReset} disabled={busy !== null} onChange={setCaptchaAnswer} />
+                </Form.Item>
+              </> : null}
               {requirement ? <>
-                <Alert className="login-notice" type="info" showIcon message={challengeT(requirement.channel)} />
-                {sent ? <Alert className="login-notice" type="success" message={challengeT('sent')} /> : null}
+                <Alert className="login-form-alert" type="info" showIcon message={challengeT(requirement.channel)} />
+                {sent ? <Alert className="login-form-alert" type="success" message={challengeT('sent')} /> : null}
                 {humanRequired && captcha ? <ExternalCaptchaWidget
                   adapter={browserExternalCaptchaAdapter}
                   config={captcha}

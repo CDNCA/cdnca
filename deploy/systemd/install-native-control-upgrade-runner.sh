@@ -150,6 +150,17 @@ try:
         "CONTROL_UPGRADE_" + name for name in durations} | {"CDNCA_NATIVE_UPGRADE_" + name + "_URL" for name in urls} | {
         "CONTROL_UPGRADE_PROTOCOL_VERSION", "CONTROL_UPGRADE_PLAN_SOURCE_MAX_BYTES", "CONTROL_UPGRADE_PLAN_SOURCE_URL",
         "CDNCA_NATIVE_UPGRADE_CONTROL_UNIT", "CDNCA_NATIVE_UPGRADE_GATEWAY_UNIT"}
+    # Optional loopback IP:port the console index check dials (the local control-web).
+    if "CDNCA_NATIVE_UPGRADE_WEB_INDEX_ADDRESS" in environment:
+        required.add("CDNCA_NATIVE_UPGRADE_WEB_INDEX_ADDRESS")
+        index_host, _, index_port = environment["CDNCA_NATIVE_UPGRADE_WEB_INDEX_ADDRESS"].rpartition(":")
+        try:
+            index_ip = ipaddress.ip_address(index_host[1:-1] if index_host.startswith("[") else index_host)
+        except ValueError:
+            index_ip = None
+        native_runner_require(index_ip is not None and index_ip.is_loopback and re.fullmatch(r"[1-9][0-9]{0,4}", index_port) and
+                              int(index_port) <= 65535 and index_host in (str(index_ip), "[" + str(index_ip) + "]") and
+                              (":" in str(index_ip)) == index_host.startswith("["))
     native_runner_require(set(environment) == required and all(environment[key] == value for key, value in fixed.items()))
     for name, maximum in durations.items():
         value = re.fullmatch(r"([1-9][0-9]{0,8})(ms|s|m)", environment["CONTROL_UPGRADE_" + name])

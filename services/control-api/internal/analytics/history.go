@@ -17,8 +17,11 @@ var (
 	ErrIngestHistoryGenerationChanged     = errors.New("analytics ingest history generation changed")
 	ErrIngestHistoryGenerationUnavailable = errors.New("analytics ingest history generation unavailable")
 	ErrIngestReceiptConflict              = errors.New("analytics ingest receipt conflicts with durable identity")
-	ErrIngestRecoveryFenced               = errors.New("analytics ingest recovery claim was fenced")
-	ErrIngestWriteOutcomeUnknown          = errors.New("analytics ingest write outcome is unknown")
+	// ErrIngestPreparationNotContiguous: 098 用同一个 P9803 报"准备不连号"，与身份冲突不同，
+	// 是可自愈的排序/地板落后（处理器 nak 并排期 broker 对账），不得记成 receipt conflict。
+	ErrIngestPreparationNotContiguous = errors.New("analytics ingest preparation sequence is not contiguous")
+	ErrIngestRecoveryFenced           = errors.New("analytics ingest recovery claim was fenced")
+	ErrIngestWriteOutcomeUnknown      = errors.New("analytics ingest write outcome is unknown")
 )
 
 const RejectReceiptConflict = "RECEIPT_CONFLICT"

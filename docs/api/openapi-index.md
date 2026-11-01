@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 1166 个 operation，并包含
-1141 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 1173 个 operation，并包含
+1148 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -42,7 +42,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，895 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，902 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -598,8 +598,12 @@
 | `control.yaml` | `POST` | `/v1/escalate/line-groups/grants` | `grantEscalateLineGroup` |
 | `control.yaml` | `DELETE` | `/v1/escalate/line-groups/grants/{grant_id}` | `revokeEscalateLineGroupGrant` |
 | `control.yaml` | `PUT` | `/v1/escalate/line-groups/{line_group_id}/tier` | `putEscalateLineGroupTier` |
+| `control.yaml` | `GET` | `/v1/firewall-actions/default` | `getFirewallActionTenantDefault` |
+| `control.yaml` | `PUT` | `/v1/firewall-actions/default` | `putFirewallActionTenantDefault` |
 | `control.yaml` | `GET` | `/v1/firewall-actions/policy` | `getFirewallActionPolicy` |
 | `control.yaml` | `PUT` | `/v1/firewall-actions/policy` | `putFirewallActionPolicy` |
+| `control.yaml` | `PATCH` | `/v1/firewall-actions/policy` | `setFirewallActionPolicyEnabled` |
+| `control.yaml` | `DELETE` | `/v1/firewall-actions/policy` | `inheritFirewallActionPolicy` |
 | `control.yaml` | `POST` | `/v1/firewall-actions/policy/recover` | `recoverFirewallActionLKG` |
 | `control.yaml` | `POST` | `/v1/gateway-bindings/complete` | `completeAgentGatewayBinding` |
 | `control.yaml` | `GET` | `/v1/identity-verification/admin/cases` | `listPlatformIdentityVerificationCases` |
@@ -660,9 +664,12 @@
 | `control.yaml` | `PUT` | `/v1/node-line-groups/{id}` | `updateNodeLineGroup` |
 | `control.yaml` | `DELETE` | `/v1/node-line-groups/{id}` | `deleteNodeLineGroup` |
 | `control.yaml` | `POST` | `/v1/node-line-groups/{id}/decisions` | `decideNodeLineGroupEndpoint` |
+| `control.yaml` | `GET` | `/v1/node-line-groups/{id}/latency-matrix` | `getNodeLineGroupLatencyMatrix` |
 | `control.yaml` | `POST` | `/v1/node-line-groups/{id}/platform-default` | `setNodeLineGroupPlatformDefault` |
 | `control.yaml` | `GET` | `/v1/node-line-groups/{id}/revisions/{revision}` | `getNodeLineGroupRevision` |
 | `control.yaml` | `POST` | `/v1/node-line-groups/{id}/rollback` | `rollbackNodeLineGroup` |
+| `control.yaml` | `GET` | `/v1/node-line-groups/{id}/smart-schedule` | `getNodeLineGroupSmartSchedule` |
+| `control.yaml` | `PUT` | `/v1/node-line-groups/{id}/smart-schedule` | `putNodeLineGroupSmartSchedule` |
 | `control.yaml` | `GET` | `/v1/node-line-groups/{id}/target-snapshots` | `getNodeLineGroupTargetSnapshot` |
 | `control.yaml` | `POST` | `/v1/node-line-groups/{id}/target-snapshots` | `createNodeLineGroupTargetSnapshot` |
 | `control.yaml` | `POST` | `/v1/node-registrations` | `registerNode` |

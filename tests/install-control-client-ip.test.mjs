@@ -37,7 +37,8 @@ test('control API trusts only the loopback nginx as the client-address proxy', (
 
 test('every nginx API proxy replaces client forwarding headers with the TCP peer address', () => {
   const config = block('write_nginx_config')
-  const proxies = [...config.matchAll(/location [^{]*\{((?:(?!\n        \})[\s\S])*?proxy_pass http:\/\/127\.0\.0\.1:8080;)/g)]
+  // Only the location's own (12-space) proxy_pass: /v1/'s nested gzip location inherits the headers.
+  const proxies = [...config.matchAll(/location [^{]*\{((?:(?!\n        \})[\s\S])*?\n {12}proxy_pass http:\/\/127\.0\.0\.1:8080;)/g)]
     .map((match) => match[1]).filter((body) => body.includes('proxy_set_header'))
   // brand favicon/logo/login_ad, /v1/auth/ (gzip off) and /v1/
   assert.equal(proxies.length, 5)

@@ -1703,7 +1703,9 @@ local function inspect_values(target, key)
             if target == "upload_filename" then
                 push_value(list, name)
             else
-                local base = name:match("([^/\\]*)$") or name
+                local base, index = name, #name -- after the last / or \\ (scanning back: linear)
+                while index > 0 and not (string.byte(name, index) == 47 or string.byte(name, index) == 92) do index = index - 1 end
+                if index > 0 then base = name:sub(index + 1) end
                 local extension = base:match("%.([^.]+)$")
                 if extension then push_value(list, string.lower(extension)) end
             end
@@ -2248,6 +2250,17 @@ end
 -- Ambiguous English words (cat, find, host, ...) after a separator need a
 -- shell-like argument. Port of scripts/security/wsa-proto/det.py cmd.
 local CMDI = { words = {}, ambiguous = {}, english = {} } -- one main-chunk local
+-- basename(text, backslash): the part after the last "/" (and "\\" with
+-- backslash), scanning back from the end (defense-perf): text:match("([^/]*)$")
+-- retries from every start, quadratic in a long value without the separator
+-- near its end (a 63 KB benign JSON token took 11 s in the cmd detector).
+function CMDI.basename(text, backslash)
+    for index = #text, 1, -1 do
+        local b = string.byte(text, index)
+        if b == 47 or backslash and b == 92 then return text:sub(index + 1) end
+    end
+    return text
+end
 for word in ([[cat tac head tail less more nl ls dir id whoami uname hostname ifconfig ip netstat ps env printenv
     wget curl nc ncat netcat telnet ssh scp bash sh zsh dash ksh csh tcsh python python2 python3 perl ruby php lua
     node ping nslookup dig host traceroute chmod chown chgrp rm mv cp touch mkdir rmdir kill pkill killall sleep
@@ -2255,6 +2268,8 @@ for word in ([[cat tac head tail less more nl ls dir id whoami uname hostname if
     lwp-download fetch powershell cmd certutil bitsadmin systeminfo net reg]]):gmatch("%S+") do
     CMDI.words[word] = true
 end
+CMDI.longest = 0
+for word in pairs(CMDI.words) do CMDI.longest = math.max(CMDI.longest, #word) end
 for word in ([[at id host find more head tail touch less net fetch ip kill sleep dir cat env nl od su sh ps rm mv cp
     dd ftp ping]]):gmatch("%S+") do CMDI.ambiguous[word] = true end
 for word in ([[cat at more head tail touch less net fetch find kill sleep host dir]]):gmatch("%S+") do
@@ -2273,37 +2288,55 @@ function CMDI.unevade(w)
         :gsub('""', ""):gsub("\\", ""))
 end
 
--- shell glob (* ? [..]) against a literal, anchored
-function CMDI.glob(pattern, text)
-    local lua = pattern:gsub("[%^%$%(%)%%%.%+%-]", "%%%0"):gsub("%*", ".*"):gsub("%?", ".")
+-- shell glob (* ? [..]) as an anchored Lua pattern (defense-perf: built
+-- once per word, not once per command it is tried against)
+function CMDI.glob_pattern(pattern)
+    return "^" .. pattern:gsub("[%^%$%(%)%%%.%+%-]", "%%%0"):gsub("%*", ".*"):gsub("%?", ".") .. "$"
+end
+
+-- shell glob against a literal, anchored
+function CMDI.glob(pattern, text, compiled)
     -- an unbalanced [ (e.g. "[Host:") is no shell class: not a match
     -- (it made string.match raise "malformed pattern", a 500)
-    local ok, matched = pcall(string.match, text, "^" .. lua .. "$")
+    local ok, matched = pcall(string.match, text, compiled or CMDI.glob_pattern(pattern))
     return ok and matched ~= nil
 end
 
 -- is the word a command; second result: was it disguised
 function CMDI.word(raw)
     local w = string.lower(CMDI.unevade(raw)):gsub("^['\"]+", ""):gsub("['\"]+$", "")
-    local base = w:match("([^/]*)$")
+    local base = CMDI.basename(w)
     if CMDI.words[base] then return true, raw ~= w and CMDI.unevade(raw) ~= raw end
     if #base >= 2 and #base <= 24 and base:find("[?*%[]") and base:find("%a") then
         local fixed = not base:find("*", 1, true)
-        for command in pairs(CMDI.words) do
-            if (not fixed or #command == #base) and CMDI.glob(base, command) then return true, true end
+        local compiled = CMDI.glob_pattern(base)
+        -- (defense-perf) a literal first byte must be the command's; without
+        -- "*" the lengths must be equal; a "*"-less glob longer than every
+        -- command, or a "*" one whose literal bytes are more, matches none
+        local first = base:sub(1, 1)
+        if first:find("[?*%[]") then first = nil end
+        local literal = #base:gsub("%[[^%]]*%]", "?"):gsub("[*]", "")
+        if literal <= CMDI.longest then
+            for command in pairs(CMDI.words) do
+                if (not fixed or #command == #base) and (not first or command:sub(1, 1) == first)
+                    and CMDI.glob(base, command, compiled) then return true, true end
+            end
         end
     end
     return false, false
 end
 
 function CMDI.sensitive_glob(token)
+    -- (defense-perf) the sensitive paths are short: a glob of one is too
+    if #token > 128 or not token:find("[?*%[]") then return false end
     local t = string.lower(CMDI.unevade(token))
     if not t:find("[?*%[]") or t:sub(1, 1) ~= "/" then return false end
     local _, slashes = t:gsub("/", "")
     local _, letters = t:gsub("%a", "")
     if slashes < 2 or letters < 2 then return false end
+    local compiled = CMDI.glob_pattern(t)
     for _, path in ipairs(CMDI.sensitive) do
-        if CMDI.glob(t, path) then return true end
+        if CMDI.glob(t, path, compiled) then return true end
     end
     return false
 end
@@ -2318,12 +2351,13 @@ end
 function CMDI.after_separator(s, finish, word, separator)
     local ok, disguised = CMDI.word(word)
     if not ok then return false end
-    local w = string.lower(CMDI.unevade(word)):gsub("^['\"]+", ""):gsub("['\"]+$", ""):match("([^/]*)$")
+    local w = CMDI.basename((string.lower(CMDI.unevade(word)):gsub("^['\"]+", ""):gsub("['\"]+$", "")))
     if not CMDI.ambiguous[w] or disguised or word:find("/", 1, true) then return true end
-    local rest = s:sub(finish + 1)
-    if CMDI.argument(rest) then return true end
-    if not CMDI.english[w] and rest:match("^%s*$") then return true end
-    return (separator == "`" or separator == "$(") and rest:match("^%s*[`)]") ~= nil
+    -- (defense-perf: anchored on s, not a copy of the rest; the argument
+    -- patterns read the first 256 bytes only)
+    if CMDI.argument(s:sub(finish + 1, finish + 256)) then return true end
+    if not CMDI.english[w] and s:find("^%s*$", finish + 1) then return true end
+    return (separator == "`" or separator == "$(") and s:find("^%s*[`)]", finish + 1) ~= nil
 end
 
 function CMDI.detect(value)
@@ -2333,6 +2367,18 @@ function CMDI.detect(value)
     -- expansion $((n+n)) and $IFS / ${IFS} as a space
     if s:find("$((", 1, true) and s:find("%$%(%(%s*%d+%s*[%+%-%*/%%]%s*%d+%s*%)%)") then return true end
     if s:find("%${?IFS[}%$%w]") then return true end
+    -- defense-perf: commix's blind probes, str=$(echo X); str1=${#str};
+    -- [ 9 -eq ${str1} ] (none of them in 5.1M benign values): echo / printf
+    -- / expr run in a command substitution or after a separator, or a
+    -- length expansion together with a shell test
+    if s:find("echo", 1, true) or s:find("printf", 1, true) or s:find("expr", 1, true) then
+        if s:find("%$%(%s*echo%s") or s:find("%$%(%s*printf%s") or s:find("%$%(%s*expr%s")
+            or s:find("`%s*echo%s+[^`]+`") or s:find("`%s*printf%s+[^`]+`")
+            or s:find("[;|&]%s*echo%s+%S") or s:find("[;|&]%s*printf%s+%S") then return true end
+    end
+    if s:find("${#", 1, true) and s:find("%${#[%a_][%w_]*}") and s:find("%[%s+%S+%s+%-[enlg][qet]%s+%S+%s+%]") then
+        return true
+    end
     -- fork bomb f(){ f|f& };f — the backreference pattern is slow, so only when "()" and "|" are there
     if s:find("()", 1, true) and s:find("|", 1, true)
         and s:match("([%w_:]+)%s*%(%)%s*{%s*%1%s*|%s*%1%s*&%s*}%s*;%s*%1") then return true end
@@ -2346,17 +2392,20 @@ function CMDI.detect(value)
         end
     end
     local position = s:find("[;|&`]") or s:find("$(", 1, true) or #s + 1
+    -- defense-perf: matches anchored at a position (no copy of the rest per
+    -- separator; the next "$(" searched again only once passed): linear
+    local dollar = s:find("$(", position, true)
     while position <= #s do
         local start, finish, separator = s:find("([;|&`]+)", position)
-        local dollar = s:find("$(", position, true)
+        if dollar and dollar < position then dollar = s:find("$(", position, true) end
         if dollar and (not start or dollar < start) then start, finish, separator = dollar, dollar + 1, "$(" end
         if not start then break end
         if separator ~= "$(" then
             separator = separator:sub(1, 1) == "`" and "`" or separator:match("^([;|&][|&]?)")
         end
-        local after = s:sub(finish + 1)
-        local skip = after:match("^%s*") .. (after:match("^%s*(%$[%a_][%w_]*%s+)") or "")
-        local word_start = finish + #skip + 1
+        local _, spaces = s:find("^%s*", finish + 1)
+        local _, variable = s:find("^%$[%a_][%w_]*%s+", spaces + 1)
+        local word_start = (variable or spaces) + 1
         local word = s:match("^([^%s;|&`()<>]+)", word_start)
         -- the word ends at whitespace or a separator; quotes and $vars inside belong to it
         if word then word = word:gsub("^(.-)[%s].*$", "%1") end
@@ -2423,6 +2472,17 @@ end
 DETECTORS.HOST = "^[%w%-]+%.[%w%-%.]*[%w]"
 function DETECTORS.redirect(value)
     local s = value:match("^%s*(.-)%s*$")
+    -- defense-perf (none in 5.1M benign values): a javascript: target that
+    -- calls alert / prompt / confirm / eval, //host.tld// (a doubled slash
+    -- after the host), a host behind a full width dot or a lookalike slash
+    -- (U+3002 U+FF61 U+FF0E U+30FC U+FF70 U+3031 U+3035)
+    local lower = string.lower(s)
+    if lower:find("javascript:", 1, true) and (lower:find("javascript:%s*alert%s*%(") or lower:find("javascript:%s*prompt%s*%(")
+        or lower:find("javascript:%s*confirm%s*%(") or lower:find("javascript:%s*eval%s*%(")) then return true end
+    if s:find("^//[%w%-%.]+%.%a%a+//") then return true end
+    if s:find("[\227\239]") and (s:find("^/?\227\131\188[%w%-]+%.%a") or s:find("^/?\227\128\177[%w%-]+%.%a")
+        or s:find("^/?\227\128\181[%w%-]+%.%a") or s:find("^/?\239\189\176[%w%-]+%.%a") or s:find("^/?/?[%w%-]+\227\128\130%a%a")
+        or s:find("^/?/?[%w%-]+\239\189\161%a%a") or s:find("^/?/?[%w%-]+\239\188\142%a%a")) then return true end
     local lead, after = s:match("^([/\\][/\\%s%c]*)(.*)$")
     if lead and (lead:find("[\\%c%s]") and lead:find("[/\\].*[/\\%c%s]") or #lead >= 3 and not lead:find("[^/]")) then
         return after:find(DETECTORS.HOST) ~= nil or after:find("^%[") ~= nil
@@ -2460,6 +2520,17 @@ end
 function DETECTORS.format(value)
     if #value > 1024 or not value:find("%", 1, true) then return false end
     if value:find("%%%d+%$[hlLqjzt]*[nspxXdiouc]") then return true end
+    -- defense-perf: a whole value that is one probe directive (none in 5.1M
+    -- benign values): padding AAAA%x / ppppp%n, "%x * 55" / "f(x)=%s x 123",
+    -- a width of 4+ digits (%.16705u), %N\$hn
+    local directive = "%%[-+ #0]*%d*%.?%d*[hlLqjzt]*[pxXnsduoeEfgGic]$"
+    local s = value:match("^%s*(.-)%s*$")
+    if s:find("^%S?%S?%S?%S?%S?%S?%S?%S?AAAA+[._]?" .. directive) or s:find("^%S?%S?%S?%S?%S?%S?%S?%S?pppp+[._]?" .. directive)
+        or s:find("^%S?%S?%S?%S?%S?%S?%S?%S?BBBB+[._]?" .. directive) or s:find("^%S?%S?%S?%S?%S?%S?%S?%S?[xX][xX][xX][xX]+[._]?" .. directive)
+        or s:find("^f?%(?x?%)?=?%%[-+ #0]*%d*%.?%d*[hlLqjzt]*[pxXnsduoeEfgGic] [*x] %d+$")
+        or s:find("^%%[-+ #0]*%.?%d%d%d%d+[duxXsc]$") or s:find("%%%d+\\?%$h?hn") then
+        return true
+    end
     local run, pointer = 0, false
     local index = 1
     while true do
@@ -2549,13 +2620,17 @@ DETECTORS.UPLOAD_EXEC = {}
 DETECTORS.words(DETECTORS.UPLOAD_EXEC, [[php php2 php3 php4 php5 php6 php7 php8 pht phtm phtml phar pgif inc asp aspx asa cer cdx ashx asmx
     axd jsp jspx jsw jsv jspf shtml shtm stm cgi pl py rb sh war]])
 function DETECTORS.upload(name)
-    local base = string.lower(name:match("([^/\\]*)$") or name)
+    local base = string.lower(CMDI.basename(name, true))
     if base == ".htaccess" or base == "web.config" or base == ".user.ini" then return true end
     if base:find("%z") or base:find("%%00") or base:find("::$data", 1, true) or base:find("[;:]") then return true end
     for part in base:gmatch("%.([^.]*)") do
-        if DETECTORS.UPLOAD_EXEC[(part:gsub("[%s]+$", ""))] then return true end
+        -- (defense-perf) trailing spaces dropped scanning back: "[%s]+$" and
+        -- "[%s.]+$" retry from every byte, quadratic in a long name
+        local last = #part
+        while last > 0 and part:sub(last, last):find("%s") do last = last - 1 end
+        if DETECTORS.UPLOAD_EXEC[part:sub(1, last)] then return true end
     end
-    return base:find("[%s.]+$") ~= nil and base:find("%.") ~= nil
+    return base:sub(-1):find("[%s.]") ~= nil and base:find("%.") ~= nil
 end
 
 -- Additional injection detectors.

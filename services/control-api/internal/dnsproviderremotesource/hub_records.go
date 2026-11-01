@@ -67,7 +67,7 @@ func (h *Hub) ListRecords(ctx context.Context, actor HubActor, providerID uuid.U
 	callCtx, cancel := context.WithTimeout(ctx, hubCallTimeout)
 	defer cancel()
 	list := HubRecordList{ProviderID: providerID, Apex: apex, Items: []HubRecord{}}
-	err := h.withAccount(callCtx, actor, "dns.read", providerID, apex, func(tx pgx.Tx, account hubAccount, config dnsproviderremote.ProviderConfig) error {
+	err := h.withAccount(callCtx, actor, []string{PermissionHubRead}, providerID, apex, func(tx pgx.Tx, account hubAccount, config dnsproviderremote.ProviderConfig) error {
 		records, skipped, err := h.remote.ListHubRecords(callCtx, config, "")
 		if err != nil {
 			return err
@@ -105,14 +105,14 @@ func (h *Hub) ListRecords(ctx context.Context, actor HubActor, providerID uuid.U
 // withAccount runs fn in one transaction holding the own account FOR SHARE
 // (a credential replacement waits for the provider call) once the actor is
 // authorized and apex is in the account's cached domain list.
-func (h *Hub) withAccount(ctx context.Context, actor HubActor, permission string, providerID uuid.UUID, apex string,
+func (h *Hub) withAccount(ctx context.Context, actor HubActor, permissions []string, providerID uuid.UUID, apex string,
 	fn func(pgx.Tx, hubAccount, dnsproviderremote.ProviderConfig) error) error {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	if err := h.authorize(ctx, tx, actor, permission); err != nil {
+	if err := h.authorize(ctx, tx, actor, permissions...); err != nil {
 		return err
 	}
 	account, err := h.account(ctx, tx, actor.ScopeID, providerID, true)
@@ -335,7 +335,7 @@ func (h *Hub) Mutate(ctx context.Context, actor HubActor, mutation HubMutation) 
 	callCtx, cancel := context.WithTimeout(ctx, hubCallTimeout)
 	defer cancel()
 	var result HubMutationResult
-	err = h.withAccount(callCtx, actor, "dns.manage", mutation.ProviderID, apex, func(tx pgx.Tx, account hubAccount, config dnsproviderremote.ProviderConfig) error {
+	err = h.withAccount(callCtx, actor, hubWritePermissions, mutation.ProviderID, apex, func(tx pgx.Tx, account hubAccount, config dnsproviderremote.ProviderConfig) error {
 		// One member's key runs once at a time; a replay returns the stored result.
 		if _, err := tx.Exec(callCtx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 599))`,
 			actor.ScopeID.String()+"/"+actor.UserID.String()+"/"+mutation.IdempotencyKey); err != nil {
@@ -779,7 +779,7 @@ func hubRecordAuditEvent(actor HubActor, account hubAccount, mutation HubMutatio
 		}
 	}
 	return audit.Event{
-		ScopeID: actor.ScopeID, ActorUserID: &actor.UserID, Action: action,
+		ScopeID: actor.ScopeID, ActorUserID: &actor.UserID, ActorRef: actor.auditRef(), Action: action,
 		ResourceType: "dns_record", ResourceID: outcome.recordName, RequestID: actor.RequestID,
 		Result: result, ReasonCode: reason, Changes: changes,
 		Payload: map[string]any{"op_id": opID.String(), "provider_id": account.ID.String(),

@@ -7,7 +7,7 @@ import { ApiError } from '../../api/auth'
 import { siteTrafficLimitApi, type SiteTrafficLimitSetting, type SiteTrafficLimitState } from '../../api/siteTrafficLimit'
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/siteTrafficLimit'
-import { FormRow } from './SiteEditFields'
+import { FormRow, SettingGroup } from './SiteEditFields'
 import { useInstantDraft, useInstantFeedback } from './instantSave'
 import { FeedbackWhen } from '@cdnca/ui'
 
@@ -116,19 +116,20 @@ export function SiteTrafficLimitCard({ siteId, accessToken, canManage }: {
     </FormRow>
   }
 
-  return <section className="site-setting-section site-traffic-limit" aria-labelledby="site-traffic-limit-title" aria-busy={save.isPending} {...instant.typingProps}>
-    <div className="site-basic-title-line"><h2 id="site-traffic-limit-title">{t('title')}{' '}
-      <Tag color={exceeded ? 'error' : 'default'}>{exceeded ? t(`status.${exceeded}`) : t('status.within')}</Tag></h2></div>
-    <p className="site-setting-section-help">{t('hint')}</p>
-    <FormRow label={t('enabled')}>
-      <Switch aria-label={t('enabled')} checked={draft.enabled} disabled={disabled} onChange={(enabled) => set({ enabled })} />
-    </FormRow>
+  // 与「更多设置」其它卡片同一形态；开关在标题右侧，三个上限与时区并排，提示页 HTML 整行
+  return <SettingGroup title={<>{t('title')}{' '}
+      <Tag color={exceeded ? 'error' : 'default'}>{exceeded ? t(`status.${exceeded}`) : t('status.within')}</Tag></>}
+    titleId="site-traffic-limit-title" help={t('hint')} className="site-traffic-limit is-wide"
+    extra={<Switch aria-label={t('enabled')} checked={draft.enabled} disabled={disabled} onChange={(enabled) => set({ enabled })} />}>
+    <div aria-busy={save.isPending} {...instant.typingProps}>
+    <div className="site-setting-inline-fields">
     {cap('daily')}{cap('monthly')}{cap('total')}
     <FormRow label={<label htmlFor="site-traffic-limit-zone">{t('timeZone')}</label>}>
       <Select id="site-traffic-limit-zone" aria-label={t('timeZone')} value={draft.timeZone} disabled={disabled}
         options={[...new Set([draft.timeZone, ...timeZones])].map((value) => ({ value, label: value }))}
         onChange={(timeZone) => set({ timeZone })} />
     </FormRow>
+    </div>
     <FormRow label={<label htmlFor="site-traffic-limit-notice">{t('notice')}</label>}>
       <Input.TextArea id="site-traffic-limit-notice" rows={5} value={draft.notice} disabled={disabled}
         placeholder={t('noticePlaceholder')} status={tooLarge ? 'error' : undefined} onChange={(event) => set({ notice: event.target.value })} />
@@ -140,5 +141,6 @@ export function SiteTrafficLimitCard({ siteId, accessToken, canManage }: {
       {state.total_since ? <span>{t('status.totalSince', { time: formatDateTime(state.total_since, language) })}</span> : null}
     </Space>}>{null}</FormRow> : null}
     {errorMessage ? <FeedbackWhen title={errorMessage} /> : null}
-  </section>
+    </div>
+  </SettingGroup>
 }

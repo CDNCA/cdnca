@@ -154,7 +154,7 @@ func newHuaweiLineRemote(t *testing.T) (*huaweiLineZone, *providerReconcileRemot
 	// default-line set has no "line" field, as older v2 responses omit it.
 	zone.sets = append(zone.sets,
 		map[string]any{"id": "rs-shanxi", "zone_id": "zone-hw", "name": "www.example.test.", "type": "A", "ttl": 300,
-			"records": []any{"192.0.2.10"}, "line": "Dianxin_Shanxi"},
+			"records": []any{"192.0.2.10"}, "line": "Dianxin_Huabei"},
 		map[string]any{"id": "rs-default", "zone_id": "zone-hw", "name": "www.example.test.", "type": "A", "ttl": 300,
 			"records": []any{"192.0.2.10"}})
 	config := reconcileHTTPProviderConfig(providerHuawei)
@@ -306,9 +306,9 @@ func TestHuaweiLineUpdateAndDeleteKeepTheSetLine(t *testing.T) {
 	// Deleting the last value of an unmapped-line set removes it.
 	applyHuaweiLine(t, remote, config, dnscheck.ProviderOperation{Action: dnscheck.ProviderDelete,
 		RecordID: "rs-shanxi", Name: "www.example.test.", Type: dnscheck.RecordA, Value: "192.0.2.10", TTL: 300,
-		Line: "huawei:Dianxin_Shanxi"})
-	if zone.set("Dianxin_Shanxi") != nil {
-		t.Fatal("Shanxi set was not deleted")
+		Line: "huawei:Dianxin_Huabei"})
+	if zone.set("Dianxin_Huabei") != nil {
+		t.Fatal("Huabei set was not deleted")
 	}
 	if records := zone.set(nil)["records"].([]any); len(records) != 1 {
 		t.Fatalf("default set was touched: %v", records)
@@ -321,7 +321,7 @@ func TestHuaweiLineRejectsLineChangeAndUnmappedLinesBeforeNetwork(t *testing.T) 
 		{Action: dnscheck.ProviderUpdate, RecordID: "rs-default", Name: "www.example.test.", Type: dnscheck.RecordA,
 			Value: "192.0.2.10", TTL: 300, Line: LineTelecom, PreviousValue: "192.0.2.10", PreviousTTL: 300},
 		{Action: dnscheck.ProviderCreate, Name: "www.example.test.", Type: dnscheck.RecordA, Value: "192.0.2.10",
-			TTL: 300, Line: "huawei:Dianxin_Shanxi"},
+			TTL: 300, Line: "huawei:Dianxin_Huabei"},
 	} {
 		if _, err := remote.Mutate(t.Context(), config, operation); ErrorCodeOf(err) != CodeUnsupported {
 			t.Fatalf("Mutate(%s %q) error = %v, want unsupported", operation.Action, operation.Line, err)
@@ -342,7 +342,7 @@ func TestHuaweiListZoneRecordsReportsUnifiedLines(t *testing.T) {
 	for _, record := range records {
 		lines[record.ID] = record.Line
 	}
-	if lines["rs-default"] != LineDefault || lines["rs-shanxi"] != "huawei:Dianxin_Shanxi" {
+	if lines["rs-default"] != LineDefault || lines["rs-shanxi"] != "huawei:Dianxin_Huabei" {
 		t.Fatalf("lines = %v", lines)
 	}
 }

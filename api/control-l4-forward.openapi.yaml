@@ -80,23 +80,28 @@ paths:
           schema: {type: string, minLength: 1, maxLength: 253}
         - name: cname_hostname
           in: query
-          description: Case-insensitive literal substring of the package CNAME hostname (按套餐 streams).
+          description: "Case-insensitive literal substring of the package CNAME hostname (streams in package mode)."
+          x-description-zh: Case-insensitive literal substring of the package CNAME hostname (按套餐 streams).
           schema: {type: string, minLength: 1, maxLength: 253}
         - name: region_id
           in: query
-          description: 区域. Exact line.region_id (the stream's own region, else its package's). Platform principals only; tenant principals get 403.
+          description: "Region. Exact line.region_id (the stream's own region, else its package's). Platform principals only; tenant principals get 403."
+          x-description-zh: 区域. Exact line.region_id (the stream's own region, else its package's). Platform principals only; tenant principals get 403.
           schema: {type: string, format: uuid}
         - name: node_group_id
           in: query
-          description: 线路分组. Exact line.node_group_id (the stream's own line group, else its package's primary group). Platform principals only; tenant principals get 403.
+          description: "Line group. Exact line.node_group_id (the stream's own line group, else its package's primary group). Platform principals only; tenant principals get 403."
+          x-description-zh: 线路分组. Exact line.node_group_id (the stream's own line group, else its package's primary group). Platform principals only; tenant principals get 403.
           schema: {type: string, format: uuid}
         - name: sync_state
           in: query
-          description: 同步状态. Exact sync_state, derived from the latest intent's automatic publication and its node deployment receipts.
+          description: "Sync state. Exact sync_state, derived from the latest intent's automatic publication and its node deployment receipts."
+          x-description-zh: 同步状态. Exact sync_state, derived from the latest intent's automatic publication and its node deployment receipts.
           schema: {type: string, enum: [done, pending, failed]}
         - name: admin_status
           in: query
-          description: 状态. Exact admin_status.
+          description: "Status. Exact admin_status."
+          x-description-zh: 状态. Exact admin_status.
           schema: {$ref: '#/components/schemas/StreamAdminStatus'}
       responses:
         '200':
@@ -148,8 +153,10 @@ paths:
   /v1/streams/batch:
     post:
       operationId: batchCreateStreams
-      summary: 批量添加 forwarding rules, one per line
-      description: >-
+      summary: "Bulk add forwarding rules, one per line"
+      x-summary-zh: 批量添加 forwarding rules, one per line
+      description: "Each line is \"listen ports|IP|origin port\", e.g. \"88 99/udp|1.2.3.4|8080\": the first port (default tcp, \"/udp\" or \"/tcp\" suffix) is the primary listener, the others additional listeners; the origin is an IP address or a domain name. template holds the fields every line shares (package, remark, timeouts, DNS policy for domain origins, …); its listen and origin fields are ignored. Lines are validated and written in order. With ignore_errors a failed line is skipped and the others are committed (200). Without it the batch is atomic: one failed line and nothing is written (422, the failed line says why, the rest are skipped). The idempotency key covers the whole batch."
+      x-description-zh: >-
         Each line is "监听端口|IP|回源端口", e.g. "88 99/udp|1.2.3.4|8080": the first
         port (default tcp, "/udp" or "/tcp" suffix) is the primary listener, the
         others additional listeners; the origin is an IP address or a domain name.
@@ -196,8 +203,10 @@ paths:
   /v1/streams/batch-action:
     post:
       operationId: batchStreamAction
-      summary: 更多操作 on selected forwarding rules (platform)
-      description: >-
+      summary: "More actions on selected forwarding rules (platform)"
+      x-summary-zh: 更多操作 on selected forwarding rules (platform)
+      description: "Platform principals only. set_status sets admin_status; a status other than normal takes the stream off the nodes until it is normal again. cname_domain (change CNAME domain), cname_mode (change CNAME mode) and line_group (change line group: region_id, node_group_id, backup_node_group_id) set the stream's own overrides; \"\" / an omitted id clears one, so the stream follows its package. A stream's line group (its own, else its package's) adds its nodes to the scope's publication targets. Each item carries its own expected_revision and is applied alone: a missing or stale item fails with its code (stream_not_found, version_conflict, and for cname_regenerate stream_cname_not_overridden / stream_cname_not_failed) and the others are applied."
+      x-description-zh: >-
         Platform principals only. set_status (设置状态) sets admin_status; a
         status other than normal takes the stream off the nodes until it is
         normal again. cname_domain (修改CNAME域名), cname_mode (修改CNAME生成模式)
@@ -934,7 +943,8 @@ components:
         package_subscription_id:
           type: string
           format: uuid
-          description: The stream's package subscription (所属套餐). A stream belongs to no website (migration 506); its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME.
+          description: "The stream's package subscription. A stream belongs to no website (migration 506); its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME."
+          x-description-zh: The stream's package subscription (所属套餐). A stream belongs to no website (migration 506); its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME.
         name: {type: string, minLength: 1, maxLength: 128}
         remark: {type: string, maxLength: 256}
         protocol: {$ref: '#/components/schemas/StreamProtocol'}
@@ -948,11 +958,13 @@ components:
           minimum: 0
           maximum: 65535
           default: 0
-          description: 端口范围. When non-zero the primary listener is listen_port..listen_port_end (greater than listen_port, at most 1000 ports), each port a socket of its own that counts against the package's stream_ports. A range may not cover the node ports 80/443/18080/18443, overlap a website port or another stream's socket of the same protocol, nor be TLS passthrough; such saves are refused with stream_port_conflict whose details say where. v2 streams only. Requires TCP/UDP capability API version 9 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
+          description: "Port range. When non-zero the primary listener is listen_port..listen_port_end (greater than listen_port, at most 1000 ports), each port a socket of its own that counts against the package's stream_ports. A range may not cover the node ports 80/443/18080/18443, overlap a website port or another stream's socket of the same protocol, nor be TLS passthrough; such saves are refused with stream_port_conflict whose details say where. v2 streams only. Requires TCP/UDP capability API version 9 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes."
+          x-description-zh: 端口范围. When non-zero the primary listener is listen_port..listen_port_end (greater than listen_port, at most 1000 ports), each port a socket of its own that counts against the package's stream_ports. A range may not cover the node ports 80/443/18080/18443, overlap a website port or another stream's socket of the same protocol, nor be TLS passthrough; such saves are refused with stream_port_conflict whose details say where. v2 streams only. Requires TCP/UDP capability API version 9 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
         upstream_follow_port:
           type: boolean
           default: false
-          description: 跟随端口回源. Connect to the origin on the port the client connected to (for a range, the matching port). upstream_port is then stored as listen_port and may be omitted. v2 streams only. Requires TCP/UDP capability API version 9.
+          description: "Follow port to origin. Connect to the origin on the port the client connected to (for a range, the matching port). upstream_port is then stored as listen_port and may be omitted. v2 streams only. Requires TCP/UDP capability API version 9."
+          x-description-zh: 跟随端口回源. Connect to the origin on the port the client connected to (for a range, the matching port). upstream_port is then stored as listen_port and may be omitted. v2 streams only. Requires TCP/UDP capability API version 9.
         additional_listeners:
           type: array
           maxItems: 63
@@ -996,7 +1008,8 @@ components:
           minimum: 0
           maximum: 100000
           default: 0
-          description: 单 IP 新建连接速率. New connections (UDP sessions) one client IP may open to this stream per second, shared by all its listeners; 0 is unlimited. The client is the PROXY protocol address when the peer is a trusted proxy. Requires TCP/UDP capability API version 6 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
+          description: "New connection rate per IP. New connections (UDP sessions) one client IP may open to this stream per second, shared by all its listeners; 0 is unlimited. The client is the PROXY protocol address when the peer is a trusted proxy. Requires TCP/UDP capability API version 6 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes."
+          x-description-zh: 单 IP 新建连接速率. New connections (UDP sessions) one client IP may open to this stream per second, shared by all its listeners; 0 is unlimited. The client is the PROXY protocol address when the peer is a trusted proxy. Requires TCP/UDP capability API version 6 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
         new_connection_burst:
           type: integer
           minimum: 0
@@ -1012,27 +1025,32 @@ components:
         toa:
           type: boolean
           default: false
-          description: 回源携带客户端 IP via TOA. The node writes the IPv4 client address and port into TCP option 254 (length 8) on the handshake ACK towards the origin; the origin needs a TOA module (docs/user/l4-toa.md). IPv6 clients are forwarded without the option. TCP only (all listeners); excludes proxy_protocol_v1 and proxy_protocol_inbound. Requires capability L4_TOA v1 on every target node (Linux 5.10+ with the node's eBPF probe passing); otherwise publication is refused with node_capability_unavailable naming the nodes.
+          description: "Pass the client IP to the origin via TOA. The node writes the IPv4 client address and port into TCP option 254 (length 8) on the handshake ACK towards the origin; the origin needs a TOA module (docs/user/l4-toa.md). IPv6 clients are forwarded without the option. TCP only (all listeners); excludes proxy_protocol_v1 and proxy_protocol_inbound. Requires capability L4_TOA v1 on every target node (Linux 5.10+ with the node's eBPF probe passing); otherwise publication is refused with node_capability_unavailable naming the nodes."
+          x-description-zh: 回源携带客户端 IP via TOA. The node writes the IPv4 client address and port into TCP option 254 (length 8) on the handshake ACK towards the origin; the origin needs a TOA module (docs/user/l4-toa.md). IPv6 clients are forwarded without the option. TCP only (all listeners); excludes proxy_protocol_v1 and proxy_protocol_inbound. Requires capability L4_TOA v1 on every target node (Linux 5.10+ with the node's eBPF probe passing); otherwise publication is refused with node_capability_unavailable naming the nodes.
         session_log_enabled:
           type: boolean
           default: false
-          description: 会话日志. Write a per-session access log (client IP — the PROXY protocol address when the peer is a trusted proxy — upstream, bytes, duration and end reason, refused sessions included) and register live TCP sessions for the real-time connection list. v2 streams only. Requires TCP/UDP capability API version 7 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
+          description: "Session log. Write a per-session access log (client IP — the PROXY protocol address when the peer is a trusted proxy — upstream, bytes, duration and end reason, refused sessions included) and register live TCP sessions for the real-time connection list. v2 streams only. Requires TCP/UDP capability API version 7 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes."
+          x-description-zh: 会话日志. Write a per-session access log (client IP — the PROXY protocol address when the peer is a trusted proxy — upstream, bytes, duration and end reason, refused sessions included) and register live TCP sessions for the real-time connection list. v2 streams only. Requires TCP/UDP capability API version 7 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
         guard_rules:
           type: array
           default: []
           maxItems: 64
           items: {$ref: '#/components/schemas/StreamGuardRule'}
-          description: 防护规则. Evaluated in order on each new connection (UDP session) at the node; the first rule whose conditions all hold decides. Omitted or empty is none; responses always carry the array. v2 streams only. Requires TCP/UDP capability API version 10 on every target node; a rule with a geo condition also requires IP_INTEL v2 and a verified IP intelligence library on every target node. Otherwise publication is refused with node_capability_unavailable naming the nodes.
+          description: "Guard rules. Evaluated in order on each new connection (UDP session) at the node; the first rule whose conditions all hold decides. Omitted or empty is none; responses always carry the array. v2 streams only. Requires TCP/UDP capability API version 10 on every target node; a rule with a geo condition also requires IP_INTEL v2 and a verified IP intelligence library on every target node. Otherwise publication is refused with node_capability_unavailable naming the nodes."
+          x-description-zh: 防护规则. Evaluated in order on each new connection (UDP session) at the node; the first rule whose conditions all hold decides. Omitted or empty is none; responses always carry the array. v2 streams only. Requires TCP/UDP capability API version 10 on every target node; a rule with a geo condition also requires IP_INTEL v2 and a verified IP intelligence library on every target node. Otherwise publication is refused with node_capability_unavailable naming the nodes.
         origins:
           type: array
           minItems: 1
           maxItems: 64
           items: {$ref: '#/components/schemas/StreamOrigin'}
-          description: 源站列表. Several origins on upstream_port, each with a weight (1..100, share of new connections) and down (下线, gets none); at least one up. Several origins are IP addresses; a single origin may be a domain name (then dns_policy applies). When sent, upstream_address/upstream_host are taken from the first origin; omitted keeps the single upstream_address/upstream_host. Responses always carry the list (one entry, weight 1, for a single origin). Not with upstream_follow_port when several. Several origins, or balance_way ip_hash, require TCP/UDP capability API version 11 on every target node.
+          description: "Origins. Several origins on upstream_port, each with a weight (1..100, share of new connections) and down (offline, gets none); at least one up. Several origins are IP addresses; a single origin may be a domain name (then dns_policy applies). When sent, upstream_address/upstream_host are taken from the first origin; omitted keeps the single upstream_address/upstream_host. Responses always carry the list (one entry, weight 1, for a single origin). Not with upstream_follow_port when several. Several origins, or balance_way ip_hash, require TCP/UDP capability API version 11 on every target node."
+          x-description-zh: 源站列表. Several origins on upstream_port, each with a weight (1..100, share of new connections) and down (下线, gets none); at least one up. Several origins are IP addresses; a single origin may be a domain name (then dns_policy applies). When sent, upstream_address/upstream_host are taken from the first origin; omitted keeps the single upstream_address/upstream_host. Responses always carry the list (one entry, weight 1, for a single origin). Not with upstream_follow_port when several. Several origins, or balance_way ip_hash, require TCP/UDP capability API version 11 on every target node.
         listen_ipv6:
           type: boolean
           default: false
-          description: IPv6开启. The node also listens on [::] for the stream's own sockets. Requires TCP/UDP capability API version 11.
+          description: "IPv6 enabled. The node also listens on [::] for the stream's own sockets. Requires TCP/UDP capability API version 11."
+          x-description-zh: IPv6开启. The node also listens on [::] for the stream's own sockets. Requires TCP/UDP capability API version 11.
         acl:
           $ref: '#/components/schemas/StreamACL'
         enabled: {type: boolean}
@@ -1054,7 +1072,8 @@ components:
       type: object
       additionalProperties: false
       required: [default_action]
-      description: >-
+      description: "Access control IP rules. Rules are evaluated in order, the first matching rule decides; otherwise default_action (allow by default / deny by default). The node enforces them as the stream's leading guard rules (client_ip allow / drop), ahead of guard_rules, so they need TCP/UDP capability API version 10 and count against the platform ACL rule limit together with guard_rules. Omitted on a write keeps default allow without rules."
+      x-description-zh: >-
         访问控制 IP rules. Rules are evaluated in order, the first matching rule
         decides; otherwise default_action (默认允许 allow / 默认拒绝 deny). The
         node enforces them as the stream's leading guard rules (client_ip allow /
@@ -1077,13 +1096,15 @@ components:
     StreamAdminStatus:
       type: string
       enum: [normal, locked, traffic_exceeded, package_expired]
-      description: 状态 (设置状态). Only normal streams are served.
+      description: "Status (set status). Only normal streams are served."
+      x-description-zh: 状态 (设置状态). Only normal streams are served.
     StreamLine:
       type: object
       additionalProperties: false
       readOnly: true
       required: [region_id, region_name, node_group_id, node_group_name, backup_node_group_id, backup_node_group_name]
-      description: 线路. The region and line groups serving the stream, its own (overrides) first, else its package's.
+      description: "Line. The region and line groups serving the stream, its own (overrides) first, else its package's."
+      x-description-zh: 线路. The region and line groups serving the stream, its own (overrides) first, else its package's.
       properties:
         region_id: {oneOf: [{type: string, format: uuid}, {type: 'null'}]}
         region_name: {type: string}
@@ -1155,8 +1176,8 @@ components:
       properties:
         action: {type: string, enum: [set_status, cname_domain, cname_mode, line_group, cname_regenerate]}
         admin_status: {$ref: '#/components/schemas/StreamAdminStatus'}
-        cname_domain: {type: string, maxLength: 253, description: 'A CNAME domain of 节点管理 > DNS配置, or "" to follow the package.'}
-        cname_mode: {type: string, enum: ['', site, package], description: '按转发生成 (site) / 按套餐生成 (package), or "" to follow the package.'}
+        cname_domain: {type: string, maxLength: 253, description: "A CNAME domain of Node management > DNS settings, or \"\" to follow the package.", x-description-zh: 'A CNAME domain of 节点管理 > DNS配置, or "" to follow the package.'}
+        cname_mode: {type: string, enum: ['', site, package], description: "Generate per forwarding rule (site) / per package (package), or \"\" to follow the package.", x-description-zh: '按转发生成 (site) / 按套餐生成 (package), or "" to follow the package.'}
         region_id: {type: string, format: uuid, description: A platform region; omitted to follow the package.}
         node_group_id: {type: string, format: uuid, description: A live platform general line group; omitted to follow the package.}
         backup_node_group_id: {type: string, format: uuid, description: A live platform general line group other than node_group_id.}
@@ -1797,7 +1818,8 @@ components:
             cname:
               type: [string, 'null']
               readOnly: true
-              description: Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname (migration 505) once written to DNS; otherwise 按套餐 (effective cname_mode package) projects the package's allocation, and 按转发 without an override has none (null).
+              description: "Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname (migration 505) once written to DNS; otherwise package mode (effective cname_mode package) projects the package's allocation, and forwarding-rule mode without an override has none (null)."
+              x-description-zh: Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname (migration 505) once written to DNS; otherwise 按套餐 (effective cname_mode package) projects the package's allocation, and 按转发 without an override has none (null).
             cname_domain:
               type: [string, 'null']
               readOnly: true
@@ -1810,7 +1832,8 @@ components:
               type: [string, 'null']
               enum: [pending, failed, done, null]
               readOnly: true
-              description: CNAME state (生成中 / 失败可重试 / 已生成) of the stream's own CNAME when it has an override, else of the package's allocation (按套餐 only).
+              description: "CNAME state (generating / failed, retryable / generated) of the stream's own CNAME when it has an override, else of the package's allocation (package mode only)."
+              x-description-zh: CNAME state (生成中 / 失败可重试 / 已生成) of the stream's own CNAME when it has an override, else of the package's allocation (按套餐 only).
             cname_failure_code:
               type: [string, 'null']
               readOnly: true
@@ -1824,7 +1847,8 @@ components:
               type: string
               enum: [done, pending, failed]
               readOnly: true
-              description: 同步状态. From the latest intent's automatic publication, whose outcome is every target node's deployment receipt (done = all healthy); pending until then. Never written by clients.
+              description: "Sync state. From the latest intent's automatic publication, whose outcome is every target node's deployment receipt (done = all healthy); pending until then. Never written by clients."
+              x-description-zh: 同步状态. From the latest intent's automatic publication, whose outcome is every target node's deployment receipt (done = all healthy); pending until then. Never written by clients.
             owner:
               oneOf:
                 - $ref: '#/components/schemas/StreamOwner'

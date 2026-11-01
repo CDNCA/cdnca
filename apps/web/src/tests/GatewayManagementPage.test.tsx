@@ -4,7 +4,7 @@ import { CdncaProvider } from '@cdnca/ui'
 import { MemoryRouter } from 'react-router-dom'
 
 import { AppRoutes } from '../App'
-import { buildGatewayInstallCommand, type Gateway } from '../api/gateways'
+import { buildEnableGatewayAccessCommand, buildGatewayInstallCommand, type Gateway } from '../api/gateways'
 import { useSessionStore } from '../auth/session'
 import GatewayManagementPage from '../pages/GatewayManagementPage'
 import { getBreadcrumbLabels, isImplementedPath } from '../routes/navigation'
@@ -82,6 +82,21 @@ describe('Gateway management', () => {
     expect(command).toBe(`(f=$(mktemp) || exit 1; trap 'rc=$?; rm -f "$f"; exit $rc' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; { curl --proto '=https' --proto-redir '=https' -fsSL -o "$f" 'https://license.example.com/downloads/install-control.sh'; } || { rc=$?; echo '[cdnca-control] error: 无法下载安装脚本' >&2; exit $rc; }; { [ "$(head -c 2 "$f")" = '#!' ] && [ "$(tail -n 1 "$f")" = 'main "$@"' ]; } || { echo '[cdnca-control] error: 下载的安装脚本为空或不完整' >&2; exit 1; }; printf '%s\\n' '${token}' | bash "$f" --mode gateway --control 'https://console.example.com' --gateway-host 'gw1.example.com' --gateway-token-file -)`)
     expect(() => buildGatewayInstallCommand('gwt1.bad', 'https://c.example.com', 'https://l.example.com', 'h')).toThrow()
     expect(() => buildGatewayInstallCommand(token, 'http://c.example.com', 'https://l.example.com', 'h')).toThrow()
+  })
+
+  it('gateway and enable-gateway-access commands carry --lang zh / --lang en for a Chinese / English UI', () => {
+    const plain = buildGatewayInstallCommand(token, 'https://console.example.com', 'https://license.example.com', 'gw1.example.com')
+    const zh = buildGatewayInstallCommand(token, 'https://console.example.com', 'https://license.example.com', 'gw1.example.com', 'zh-CN')
+    expect(zh).toBe(plain.replace('--gateway-token-file -)', '--gateway-token-file - --lang zh)'))
+    expect(buildGatewayInstallCommand(token, 'https://console.example.com', 'https://license.example.com', 'gw1.example.com', 'en-US'))
+      .toBe(zh.replace('--gateway-token-file - --lang zh)', '--gateway-token-file - --lang en)').replace('无法下载安装脚本', 'cannot download the installer').replace('下载的安装脚本为空或不完整', 'the downloaded installer is empty or incomplete'))
+    const access = buildEnableGatewayAccessCommand('https://license.example.com', 'zh-CN')
+    expect(access).toMatch(/bash "\$f" enable-gateway-access --lang zh\)$/)
+    expect(buildEnableGatewayAccessCommand('https://license.example.com')).toBe(access.replace(' --lang zh)', ')'))
+    expect(buildEnableGatewayAccessCommand('https://license.example.com', 'en-US')).toBe(access.replace('enable-gateway-access --lang zh)', 'enable-gateway-access --lang en)').replace('无法下载安装脚本', 'cannot download the installer').replace('下载的安装脚本为空或不完整', 'the downloaded installer is empty or incomplete'))
+    expect(buildEnableGatewayAccessCommand('', 'zh-CN')).toBe('bash install-control.sh enable-gateway-access --lang zh')
+    expect(buildEnableGatewayAccessCommand('')).toBe('bash install-control.sh enable-gateway-access')
+    expect(buildEnableGatewayAccessCommand('', 'en-US')).toBe('bash install-control.sh enable-gateway-access --lang en')
   })
 
   it('is a system route gated by system.gateway.manage', () => {
@@ -181,7 +196,7 @@ describe('Gateway management', () => {
     expect(screen.getByText(/还没有开启独立网关接入/)).toBeInTheDocument()
     const command = screen.getByLabelText('开启独立网关接入的命令') as HTMLTextAreaElement
     expect(command.value).toContain("'https://license.example.com/downloads/install-control.sh'")
-    expect(command.value).toMatch(/bash "\$f" enable-gateway-access\)$/)
+    expect(command.value).toMatch(/bash "\$f" enable-gateway-access --lang zh\)$/)
     expect(screen.queryByRole('button', { name: '添加网关' })).not.toBeInTheDocument()
     expect(screen.queryByText(/未开放独立网关接入/)).not.toBeInTheDocument()
     expect(screen.queryByRole('alert', { name: /警告|warning/i })).not.toBeInTheDocument()

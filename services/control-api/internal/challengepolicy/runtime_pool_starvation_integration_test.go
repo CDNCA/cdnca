@@ -239,6 +239,7 @@ func openChallengePoolStarvationTestPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "challenge_pool_starvation")
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

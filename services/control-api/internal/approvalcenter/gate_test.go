@@ -152,6 +152,8 @@ func TestGateHoldsEveryCatalogEntryWhenChecked(t *testing.T) {
 		{RuleFirewallPolicy, http.MethodPost, "/v1/firewall/policy/recover", `{}`},
 		{RuleFirewallPolicy, http.MethodPut, "/v1/firewall-actions/policy", `{}`},
 		{RuleFirewallPolicy, http.MethodPost, "/v1/firewall-actions/policy/recover", `{}`},
+		{RuleFirewallPolicy, http.MethodPut, "/v1/firewall-actions/default", `{}`},
+		{RuleFirewallPolicy, http.MethodDelete, "/v1/firewall-actions/policy", ``},
 		{RuleControlUpgrade, http.MethodPost, "/v1/admin/control-upgrade-plan/issue", `{}`},
 		{RuleControlUpgrade, http.MethodPost, "/v1/admin/control-upgrade-rollouts/r1/start", ``},
 		{RuleControlUpgrade, http.MethodPost, "/v1/admin/control-upgrade-rollouts/r1/rollback", ``},

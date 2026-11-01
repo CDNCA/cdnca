@@ -77,7 +77,12 @@ let traditionalLocaleRequested = false
 i18n.addResourceBundle = ((locale, namespace, resources, deep, overwrite) => {
   if (!shouldRegisterLocaleBundle(locale)) return i18n
   const result = addResourceBundle(locale, namespace, resources, deep, overwrite)
-  if (locale === 'zh-CN' && traditionalLocaleReady) {
+  // zh-TW 一经请求（转换尚在进行时也算），之后注册的简体命名空间都要转一份繁体，
+  // 否则转换开始后才注册的模块在 zh-TW 下缺键。
+  // 繁体转换是异步的（opencc 懒加载）：转完之前 zh-TW 先放简体原文，同步注册后立即渲染的组件
+  // 不缺键（与启动时 zh-TW 先克隆简体同理）；overwrite=false 不覆盖已转好的繁体。
+  if (locale === 'zh-CN' && (traditionalLocaleReady || traditionalLocaleRequested)) {
+    addResourceBundle('zh-TW', namespace, structuredClone(resources), true, false)
     void traditionalize(resources).then((converted) => {
       addResourceBundle('zh-TW', namespace, converted, deep, overwrite)
     })
@@ -85,26 +90,40 @@ i18n.addResourceBundle = ((locale, namespace, resources, deep, overwrite) => {
   return result
 }) as typeof i18n.addResourceBundle
 
-let fullResourcesLoad: Promise<void> | undefined
+// 全量资源按语言分文件：只加载当前语言那一份，zh-TW 用简体那份转换；
+// 切换语言时再补载目标语言。
+type FullLocale = 'zh-CN' | 'en-US'
+const fullLoaders: Record<FullLocale, () => Promise<Resource[string]>> = {
+  'zh-CN': () => import('./resources.zhCN').then((module) => module.zhCN),
+  'en-US': () => import('./resources.enUS').then((module) => module.enUS),
+}
+const fullLoads = new Map<FullLocale, Promise<void>>()
+let fullResourcesWanted = false
+const fullLocaleOf = (locale: string | undefined): FullLocale => (locale === 'en-US' ? 'en-US' : 'zh-CN')
 
-/** 装入 resources.ts 的全部命名空间（控制台壳加载前调用；重复调用只加载一次）。 */
-export function loadFullResources(): Promise<void> {
+function loadFullLocale(locale: FullLocale): Promise<void> {
+  let load = fullLoads.get(locale)
+  if (load) return load
   // overwrite=false：页面补充模块（如 i18n/securityPolicies*.ts）往同一命名空间追加或覆盖的键
   // 已在 store 里时保留补充值，与原先“基础资源先装、补充模块后覆盖”的结果一致。
-  fullResourcesLoad ??= import('./resources').then(async (full) => {
-    for (const [namespace, bundle] of Object.entries(full.enUS)) addResourceBundle('en-US', namespace, bundle, true, false)
-    for (const [namespace, bundle] of Object.entries(full.zhCN)) addResourceBundle('zh-CN', namespace, bundle, true, false)
-    if (traditionalLocaleReady || traditionalLocaleRequested) {
-      const converted = await traditionalize(full.zhCN)
+  load = fullLoaders[locale]().then(async (full) => {
+    for (const [namespace, bundle] of Object.entries(full)) addResourceBundle(locale, namespace, bundle, true, false)
+    if (locale === 'zh-CN' && (traditionalLocaleReady || traditionalLocaleRequested)) {
+      const converted = await traditionalize(full)
       for (const [namespace, bundle] of Object.entries(converted as Record<string, unknown>)) {
         addResourceBundle('zh-TW', namespace, bundle, true, false)
       }
     }
-  }).catch((error: unknown) => {
-    fullResourcesLoad = undefined
-    throw error
   })
-  return fullResourcesLoad
+  load.catch(() => { fullLoads.delete(locale) })
+  fullLoads.set(locale, load)
+  return load
+}
+
+/** 装入当前语言的全部命名空间（控制台壳加载前调用；重复调用只加载一次）。 */
+export function loadFullResources(): Promise<void> {
+  fullResourcesWanted = true
+  return loadFullLocale(fullLocaleOf(i18n.resolvedLanguage))
 }
 
 if (typeof document !== 'undefined') {
@@ -130,9 +149,12 @@ export async function changeLocale(locale: UserLocale): Promise<void> {
   } catch {
     // Language switching remains available when storage is blocked.
   }
+  if (nextLocale === 'zh-TW') traditionalLocaleRequested = true
+  // 控制台壳已要过全量资源时，先补载目标语言再切换，切过去的页面不缺键。
+  if (fullResourcesWanted && userLocales.includes(nextLocale as (typeof userLocales)[number])) {
+    await loadFullLocale(fullLocaleOf(nextLocale)).catch(() => undefined)
+  }
   if (nextLocale === 'zh-TW') {
-    traditionalLocaleRequested = true
-    await fullResourcesLoad?.catch(() => undefined)
     const bundles = i18n.store.data['zh-CN'] ?? {}
     const convertedBundles = await traditionalize(bundles)
     for (const [namespace, resources] of Object.entries(convertedBundles as Record<string, unknown>)) {

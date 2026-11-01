@@ -36,6 +36,15 @@ import { businessTimeZone, formatNumber, formatQuota } from '../i18n/formatters'
 import { formatAnalyticsBandwidth, formatAnalyticsBytes } from '../i18n/analyticsUnits'
 import '../styles/adminHomeReference.css'
 import { peakHourlyBandwidth } from './adminHomeMetrics'
+import {
+  adminDashboardOwner,
+  adminDashboardQuery,
+  adminDashboardQueryPrefix,
+  currentAdminDashboardAccess,
+  defaultAdminDashboardRange,
+  staleAdminDashboardRead,
+  type AdminDashboardOwner,
+} from './adminHomeDashboardQuery'
 import { themeColor, themeColorAlpha } from '../theme/themeColor'
 
 interface Metric {
@@ -44,28 +53,8 @@ interface Metric {
   tone?: 'danger' | 'success'
 }
 
-type AdminDashboardOwner = readonly ['platform', string, null, string, number]
 type AdminAnalyticsRange = 'today' | 'yesterday' | 'seven_days' | 'thirty_days'
 type AdminAnalyticsRankDimension = 'domain' | 'url' | 'ip' | 'region' | 'carrier'
-const staleAdminDashboardRead = new Error('stale admin dashboard read')
-
-function adminDashboardOwner(principal: Principal, sessionEpoch: number): AdminDashboardOwner | null {
-  if (
-    principal.scope_kind !== 'platform' ||
-    !principal.scope_id ||
-    principal.tenant_id !== null ||
-    !principal.user_id ||
-    !sessionEpoch
-  ) return null
-  return ['platform', principal.scope_id, null, principal.user_id, sessionEpoch]
-}
-
-function currentAdminDashboardAccess(ownerKey: string): string | null {
-  const { accessToken, principal, sessionEpoch } = useSessionStore.getState()
-  if (!accessToken || !principal || !principal.permissions.includes('platform.admin')) return null
-  const owner = adminDashboardOwner(principal, sessionEpoch)
-  return owner && JSON.stringify(owner) === ownerKey ? accessToken : null
-}
 
 type EntitlementRefreshOutcome = 'in_progress' | 'not_done' | 'unknown' | 'applied' | 'locked' | 'failed'
 type DashboardEntitlement = AdminDashboard['entitlement'] extends DashboardSection<infer T> ? T : never
@@ -665,12 +654,12 @@ function AdminHomePageContent({ owner, ownerKey, principal }: { owner: AdminDash
   const { t, i18n } = useTranslation('adminHome')
   const { t: overviewT } = useTranslation('dashboardOverview')
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
-  const [range, setRange] = useState<AdminDashboardRange>('seven_days')
+  const [range, setRange] = useState<AdminDashboardRange>(defaultAdminDashboardRange)
   const [networkRange, setNetworkRange] = useState<AdminAnalyticsRange>('today')
   const [monitorRange, setMonitorRange] = useState<AdminAnalyticsRange>('today')
   const queryClient = useQueryClient()
   const queryOwner = useRef(owner).current
-  const queryPrefix = useMemo(() => ['dashboard', 'admin', ...queryOwner] as const, [queryOwner])
+  const queryPrefix = useMemo(() => adminDashboardQueryPrefix(queryOwner), [queryOwner])
   const lineageActiveRef = useRef(true)
   const currentSessionCanRead = useCallback(() => (
     lineageActiveRef.current && Boolean(currentAdminDashboardAccess(ownerKey))
@@ -686,21 +675,9 @@ function AdminHomePageContent({ owner, ownerKey, principal }: { owner: AdminDash
     }
   }, [ownerKey, queryClient, queryPrefix])
 
+  // Same key and read as the entry's prefetch (adminHomeDashboardQuery.ts), so the first load joins it.
   const dashboardQuery = useQuery({
-    queryKey: [...queryPrefix, range, businessTimeZone],
-    queryFn: async ({ signal }) => {
-      const token = currentAdminDashboardAccess(ownerKey)
-      if (!token) throw staleAdminDashboardRead
-      try {
-        const result = await dashboardApi.admin(token, range, businessTimeZone, signal)
-        if (!currentSessionCanRead()) throw staleAdminDashboardRead
-        return result
-      } catch (error) {
-        if (!currentSessionCanRead()) throw staleAdminDashboardRead
-        throw error
-      }
-    },
-    staleTime: 30_000,
+    ...adminDashboardQuery(queryOwner, range, currentSessionCanRead),
     placeholderData: keepPreviousData,
   })
   const generatedAt = dashboardQuery.data?.meta.generated_at

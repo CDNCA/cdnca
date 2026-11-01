@@ -24,6 +24,7 @@ func TestIAMTxAuthorizerAuthorizesPlatformSessionOnlyForItsOwnScope(t *testing.T
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "openresty_platform_auth")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

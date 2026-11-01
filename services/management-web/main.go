@@ -102,12 +102,18 @@ func dashboardRouteRedirect(path, rawQuery string) string {
 }
 
 func acceptsGzip(request *http.Request) bool {
+	return acceptsEncoding(request, "gzip")
+}
+
+// acceptsEncoding reports whether a GET without Range lists coding in
+// Accept-Encoding with a non-zero q.
+func acceptsEncoding(request *http.Request, coding string) bool {
 	if request.Method != http.MethodGet || request.Header.Get("Range") != "" {
 		return false
 	}
 	for _, value := range strings.Split(request.Header.Get("Accept-Encoding"), ",") {
 		parts := strings.Split(strings.TrimSpace(value), ";")
-		if !strings.EqualFold(strings.TrimSpace(parts[0]), "gzip") {
+		if !strings.EqualFold(strings.TrimSpace(parts[0]), coding) {
 			continue
 		}
 		for _, parameter := range parts[1:] {
@@ -143,11 +149,17 @@ func (response *gzipResponseWriter) Write(payload []byte) (int, error) {
 // .gz name is derived only from the cleaned request path, so it stays inside
 // root. Content-Type follows the original extension.
 func servePrecompressed(response http.ResponseWriter, request *http.Request, root, staticPath string) bool {
+	return servePrecompressedAs(response, request, root, staticPath, ".gz", "gzip")
+}
+
+// servePrecompressedAs serves root+path+suffix with the given Content-Encoding
+// (".br"/"br" or ".gz"/"gzip"); same path rules as servePrecompressed.
+func servePrecompressedAs(response http.ResponseWriter, request *http.Request, root, staticPath, suffix, coding string) bool {
 	if root == "" || strings.Contains("/"+staticPath+"/", "/../") {
 		return false
 	}
 	cleaned := path.Clean("/" + staticPath)
-	file, err := os.Open(filepath.Join(root, filepath.FromSlash(cleaned)) + ".gz")
+	file, err := os.Open(filepath.Join(root, filepath.FromSlash(cleaned)) + suffix)
 	if err != nil {
 		return false
 	}
@@ -160,7 +172,7 @@ func servePrecompressed(response http.ResponseWriter, request *http.Request, roo
 		response.Header().Set("Content-Type", contentType)
 	}
 	response.Header().Add("Vary", "Accept-Encoding")
-	response.Header().Set("Content-Encoding", "gzip")
+	response.Header().Set("Content-Encoding", coding)
 	http.ServeContent(response, request, cleaned, info.ModTime(), file)
 	return true
 }
@@ -173,6 +185,11 @@ func serveStatic(response http.ResponseWriter, request *http.Request, files http
 	}
 	staticRequest := request.Clone(request.Context())
 	staticRequest.URL.Path = path
+	// The build writes .br beside .gz: brotli first when the
+	// browser takes it, then the .gz, then gzip on the fly.
+	if acceptsEncoding(request, "br") && compressibleAsset(path) && servePrecompressedAs(response, request, root, path, ".br", "br") {
+		return
+	}
 	if acceptsGzip(request) && compressibleAsset(path) {
 		if servePrecompressed(response, request, root, path) {
 			return

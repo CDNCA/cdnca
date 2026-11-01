@@ -111,7 +111,7 @@ RUN set -eu; \
 	chmod 0555 /usr/local/share/cdnca /usr/local/share/cdnca/runtime /usr/local/share/cdnca/range /usr/local/share/cdnca/security /usr/local/share/cdnca/challenge /usr/local/share/cdnca/httppolicy /usr/local/share/cdnca/firewallaction /usr/local/share/cdnca/siteaccess /usr/local/share/cdnca/errorpage /usr/local/share/cdnca/originauth /usr/local/share/cdnca/dynroute /usr/local/share/cdnca/sched302 /opt/cdnca /opt/cdnca/l4geo; \
 	chmod 0555 /usr/local/openresty/site/lualib/resty; \
 	printf '%s  %s\n' d528c1309c2bfa0c9c48348185c1966d8a764a67164099cf6a522955667f7fdc /usr/local/share/cdnca/range/guard.lua | sha256sum -c -; \
-	 echo '92f3fd132d9a526afaf0264fc537969e6e28498654abc39f908a2e88472ab7f7  /usr/local/share/cdnca/security/cdnca_waf.lua' | sha256sum -c -; \
+	 echo '4be775094f4a8d93349eebcc24eae40647d4ca6936892142e272c014258a20c3  /usr/local/share/cdnca/security/cdnca_waf.lua' | sha256sum -c -; \
 		echo 'f319da5a0c9ea6cfb977261a8ddca63f57530336d28851dc5fcf80715f1dedb0  /usr/local/share/cdnca/security/cdnca_rule_interp.lua' | sha256sum -c -; \
 		echo 'ea49f5bfa9b7945d5af8f521ae4cecd95cca7ef0ea89363afe2e8c5b077e4e8f  /usr/local/share/cdnca/security/cdnca_banlist.lua' | sha256sum -c -; \
 		echo '5011685413909ce4b8b2ff010e3d505378d3c9ac6797218afc16118c80b990c0  /usr/local/share/cdnca/dynroute/cdnca_site.lua' | sha256sum -c -; \
@@ -186,7 +186,7 @@ STOPSIGNAL SIGQUIT
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
 	  CMD test -f "$CDNCA_SECURITY_RUNTIME_READY_FILE" && \
 	      printf '%s  %s\n' d528c1309c2bfa0c9c48348185c1966d8a764a67164099cf6a522955667f7fdc /usr/local/share/cdnca/range/guard.lua | sha256sum -c - >/dev/null && \
-	      printf '%s  %s\n' 92f3fd132d9a526afaf0264fc537969e6e28498654abc39f908a2e88472ab7f7 /usr/local/share/cdnca/security/cdnca_waf.lua | sha256sum -c - >/dev/null && \
+	      printf '%s  %s\n' 4be775094f4a8d93349eebcc24eae40647d4ca6936892142e272c014258a20c3 /usr/local/share/cdnca/security/cdnca_waf.lua | sha256sum -c - >/dev/null && \
 	      printf '%s  %s\n' 858e87fffc8c8e246cf50ead9e272f673a97f682031a7e012a533722e3f5dbfd /usr/local/share/cdnca/security/cc.lua | sha256sum -c - >/dev/null && \
 	      grep -F '"cc_api_version":2' "$CDNCA_SECURITY_RUNTIME_READY_FILE" >/dev/null && \
 	      printf '%s  %s\n' 38314497958285c1072e4e1ef7d4c0fbe41e3e03ed148807a008a6cb88e4cb21 /usr/local/share/cdnca/security/cc_adaptive.lua | sha256sum -c - >/dev/null && \

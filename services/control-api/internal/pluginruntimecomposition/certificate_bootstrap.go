@@ -13,7 +13,9 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,6 +34,9 @@ const (
 	bootstrapStateSchema    = "cdnca.plugin-runtime-client-state/v1"
 	bootstrapMaxLifetime    = 15 * time.Minute
 	bootstrapRefreshBefore  = 5 * time.Minute
+	// bootstrapClockSkew 是主控与授权端之间容忍的时钟偏差（两端各自 NTP，签发时刻跨秒即可差出 1 秒）。
+	// 授权端对 requested_at 用同一容忍值（license-service installationCertificateClockSkew）。
+	bootstrapClockSkew = time.Minute
 )
 
 var (
@@ -40,6 +45,9 @@ var (
 	ErrCertificateBootstrapDenied               = errors.New("certificate bootstrap denied")
 	ErrCertificateBootstrapConflict             = errors.New("certificate bootstrap conflict")
 	ErrCertificateBootstrapUnavailable          = errors.New("certificate bootstrap unavailable")
+	// errCertificateBootstrapRequestExpired：授权端查无该 request_id 的签发回执且 requested_at 已出时窗
+	// （400 request_expired）。只有这时丢弃 pending 才安全：已签发的请求总会被原样回放。
+	errCertificateBootstrapRequestExpired = errors.New("certificate bootstrap request expired")
 )
 
 type CertificateManagerConfig struct {
@@ -199,28 +207,74 @@ func (manager *CertificateManager) Ensure(ctx context.Context) (RuntimeCredentia
 			return cloneRuntimeCredential(credential), nil
 		}
 	}
-	requestBytes, privateKey, generation, pendingName, err := manager.prepareRequest(now)
+	// 至多三轮：重放 pending →（授权端已无该请求且已过时窗）丢弃并重新发起，或（授权端回放了已签发但已过期的
+	// 证书）先提交以对齐代数，再按新代数轮换一次。
+	for round := 0; round < 3; round++ {
+		request, err := manager.prepareRequest(now)
+		if err != nil {
+			return RuntimeCredential{}, err
+		}
+		response, err := manager.issue(ctx, request.body)
+		if err != nil && request.replayed && errors.Is(err, errCertificateBootstrapRequestExpired) {
+			// 授权端先按 request_id 查回执再校验时窗：request_expired 说明这次请求从未签发，安全丢弃并重新发起。
+			clear(request.privateKey)
+			if err := manager.discardPending(now, request); err != nil {
+				return RuntimeCredential{}, err
+			}
+			continue
+		}
+		if err != nil {
+			clear(request.privateKey)
+			return RuntimeCredential{}, err
+		}
+		// The issuer stamps NotBefore with its clock when it signs, after this request was prepared; once issuance
+		// crosses a second boundary the certificate is "not yet valid" at the preparation time. Check it at arrival.
+		received := manager.config.Now().UTC().Truncate(time.Second)
+		credential, stale, err := manager.validateResponse(response, request.privateKey, request.generation, received)
+		if err == nil && stale && (!request.replayed || response.NotBefore.Before(request.requestedAt.Add(-bootstrapClockSkew))) {
+			err = fmt.Errorf("%w: certificate expired on arrival", ErrCertificateBootstrapInvalidState)
+		}
+		if err != nil {
+			clear(request.privateKey)
+			return RuntimeCredential{}, err
+		}
+		if err := manager.commitCredential(credential, request.privateKey, response, request.pendingName, received); err != nil {
+			clear(request.privateKey)
+			return RuntimeCredential{}, err
+		}
+		clear(request.privateKey)
+		manager.generation = response.Generation
+		if stale {
+			// 重放拿回的是授权端早已签发、现已过期的证书：已提交以对齐代数（授权端头已是该代），接着按它轮换。
+			clearRuntimeCredential(&credential)
+			manager.credential = nil
+			continue
+		}
+		manager.credential = &credential
+		return cloneRuntimeCredential(credential), nil
+	}
+	return RuntimeCredential{}, ErrCertificateBootstrapUnavailable
+}
+
+type preparedRequest struct {
+	body        []byte
+	privateKey  ed25519.PrivateKey
+	generation  uint64
+	pendingName string
+	requestedAt time.Time
+	replayed    bool // 来自上次未完成的 pending（重启或上次失败），不是本轮新建
+}
+
+// discardPending 用 pending 当时基于的代数重新发起一次轮换（新密钥、新 request_id），再删掉旧 pending 私钥。
+func (manager *CertificateManager) discardPending(now time.Time, stale preparedRequest) error {
+	manager.generation = stale.generation
+	fresh, err := manager.newRequest(now)
 	if err != nil {
-		return RuntimeCredential{}, err
+		return err
 	}
-	response, err := manager.issue(ctx, requestBytes)
-	if err != nil {
-		return RuntimeCredential{}, err
-	}
-	// The issuer stamps NotBefore with its clock when it signs, after this request was prepared; once issuance
-	// crosses a second boundary the certificate is "not yet valid" at the preparation time. Check it at arrival.
-	received := manager.config.Now().UTC().Truncate(time.Second)
-	credential, err := manager.validateResponse(response, privateKey, generation, received)
-	if err != nil {
-		return RuntimeCredential{}, err
-	}
-	if err := manager.commitCredential(credential, privateKey, response, pendingName, received); err != nil {
-		return RuntimeCredential{}, err
-	}
-	clear(privateKey)
-	manager.credential = &credential
-	manager.generation = response.Generation
-	return cloneRuntimeCredential(credential), nil
+	clear(fresh.privateKey)
+	_ = os.Remove(filepath.Join(filepath.Dir(manager.config.StateFile), stale.pendingName))
+	return nil
 }
 
 func (manager *CertificateManager) GetClientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
@@ -229,6 +283,14 @@ func (manager *CertificateManager) GetClientCertificate(*tls.CertificateRequestI
 	}
 	credential, err := manager.Ensure(context.Background())
 	if err != nil {
+		// 续签失败（授权端不可达等）：手上证书按本机时钟扣掉偏差容差仍有效就照常出示，握手不因提前续签失败而断；
+		// 已过期则本次握手失败，下一次握手再试续签（Ensure 每次都重新尝试，不缓存失败）。
+		if current, ok := manager.currentValidCertificate(); ok {
+			slog.Warn("installation client certificate renewal failed; presenting the current certificate until it expires",
+				"error", err, "not_after", current.Leaf.NotAfter)
+			return current, nil
+		}
+		slog.Warn("installation client certificate unavailable: renewal failed and no valid certificate is held", "error", err)
 		return nil, err
 	}
 	certificate := cloneTLSCertificate(credential.TLSCertificate)
@@ -236,55 +298,78 @@ func (manager *CertificateManager) GetClientCertificate(*tls.CertificateRequestI
 	return &certificate, nil
 }
 
-func (manager *CertificateManager) prepareRequest(now time.Time) ([]byte, ed25519.PrivateKey, uint64, string, error) {
+// currentValidCertificate 返回内存中的当前证书副本（Leaf 已填），仅当它距到期还多于 bootstrapClockSkew。
+func (manager *CertificateManager) currentValidCertificate() (*tls.Certificate, bool) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.credential == nil || len(manager.credential.TLSCertificate.Certificate) == 0 {
+		return nil, false
+	}
+	leaf, err := x509.ParseCertificate(manager.credential.TLSCertificate.Certificate[0])
+	if err != nil || !manager.config.Now().UTC().Before(leaf.NotAfter.Add(-bootstrapClockSkew)) {
+		return nil, false
+	}
+	certificate := cloneTLSCertificate(manager.credential.TLSCertificate)
+	certificate.Leaf = leaf
+	return &certificate, true
+}
+
+func (manager *CertificateManager) prepareRequest(now time.Time) (preparedRequest, error) {
 	if stateBytes, err := os.ReadFile(manager.config.StateFile); err == nil {
 		var pending pendingState
 		if decodeCanonicalLine(stateBytes, &pending) && pending.Schema == bootstrapStateSchema && pending.Status == "pending" && pending.InstallationID == manager.config.InstallationID.String() {
 			path := filepath.Join(filepath.Dir(manager.config.StateFile), pending.PrivateKeyFile)
 			encoded, readErr := os.ReadFile(path)
 			if readErr != nil || sha256Hex(encoded) != pending.PrivateKeySHA256 {
-				return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+				return preparedRequest{}, ErrCertificateBootstrapInvalidState
 			}
 			key, parseErr := parseEd25519Private(encoded)
 			if parseErr != nil {
-				return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+				return preparedRequest{}, ErrCertificateBootstrapInvalidState
 			}
 			body, decodeErr := base64.RawURLEncoding.DecodeString(pending.RequestBody)
-			if decodeErr != nil {
+			var replay bootstrapRequest
+			if decodeErr != nil || json.Unmarshal(body, &replay) != nil || replay.RequestedAt.IsZero() {
 				clear(key)
-				return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+				return preparedRequest{}, ErrCertificateBootstrapInvalidState
 			}
-			return body, key, pending.ExpectedGeneration, pending.PrivateKeyFile, nil
+			return preparedRequest{body: body, privateKey: key, generation: pending.ExpectedGeneration,
+				pendingName: pending.PrivateKeyFile, requestedAt: replay.RequestedAt.UTC(), replayed: true}, nil
 		}
 		var committed committedState
 		if decodeCanonicalLine(stateBytes, &committed) && committed.Schema == bootstrapStateSchema && committed.Status == "committed" && committed.InstallationID == manager.config.InstallationID.String() {
 			// A valid committed state is the starting point for a rotation.
 		} else if len(stateBytes) > 0 {
-			return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+			return preparedRequest{}, ErrCertificateBootstrapInvalidState
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+		return preparedRequest{}, ErrCertificateBootstrapInvalidState
 	} else {
 		for _, path := range []string{manager.config.CertificateFile, manager.config.PrivateKeyFile, manager.config.RuntimeCAFile} {
 			if _, statErr := os.Lstat(path); statErr == nil {
-				return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+				return preparedRequest{}, ErrCertificateBootstrapInvalidState
 			}
 		}
 	}
+	return manager.newRequest(now)
+}
+
+// newRequest 以 manager.generation 为期望代数新建签发请求，先把私钥与 pending 状态落盘再返回。
+func (manager *CertificateManager) newRequest(now time.Time) (preparedRequest, error) {
 	_, privateKey, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		return nil, nil, 0, "", ErrCertificateBootstrapUnavailable
+		return preparedRequest{}, ErrCertificateBootstrapUnavailable
 	}
 	requestID, err := uuid.NewV7()
 	if err != nil {
 		clear(privateKey)
-		return nil, nil, 0, "", ErrCertificateBootstrapUnavailable
+		return preparedRequest{}, ErrCertificateBootstrapUnavailable
 	}
 	csrTemplate := &x509.CertificateRequest{URIs: []*url.URL{{Scheme: "spiffe", Host: "cdn-platform", Path: "/installation/" + manager.config.InstallationID.String()}}, Subject: pkix.Name{CommonName: manager.config.InstallationID.String()}}
 	csrDER, err := x509.CreateCertificateRequest(nil, csrTemplate, privateKey)
 	if err != nil {
 		clear(privateKey)
-		return nil, nil, 0, "", ErrCertificateBootstrapUnavailable
+		return preparedRequest{}, ErrCertificateBootstrapUnavailable
 	}
 	csrEncoded := base64.RawURLEncoding.EncodeToString(csrDER)
 	generation := manager.generation
@@ -297,12 +382,12 @@ func (manager *CertificateManager) prepareRequest(now time.Time) ([]byte, ed2551
 	file, err := os.OpenFile(filepath.Join(filepath.Dir(manager.config.StateFile), name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		clear(privateKey)
-		return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+		return preparedRequest{}, ErrCertificateBootstrapInvalidState
 	}
 	keyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
 	if err != nil {
 		clear(privateKey)
-		return nil, nil, 0, "", ErrCertificateBootstrapUnavailable
+		return preparedRequest{}, ErrCertificateBootstrapUnavailable
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 	if _, err = file.Write(keyPEM); err == nil {
@@ -311,14 +396,14 @@ func (manager *CertificateManager) prepareRequest(now time.Time) ([]byte, ed2551
 	_ = file.Close()
 	if err != nil {
 		clear(privateKey)
-		return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+		return preparedRequest{}, ErrCertificateBootstrapInvalidState
 	}
 	pending := pendingState{bootstrapStateSchema, "pending", manager.config.InstallationID.String(), requestID.String(), generation, base64.RawURLEncoding.EncodeToString(body), name, sha256Hex(keyPEM), now.Format(time.RFC3339)}
 	if err := atomicWrite(manager.config.StateFile, pending, 0o600); err != nil {
 		clear(privateKey)
-		return nil, nil, 0, "", ErrCertificateBootstrapInvalidState
+		return preparedRequest{}, ErrCertificateBootstrapInvalidState
 	}
-	return body, privateKey, generation, name, nil
+	return preparedRequest{body: body, privateKey: privateKey, generation: generation, pendingName: name, requestedAt: requestedAt}, nil
 }
 
 func (manager *CertificateManager) issue(ctx context.Context, body []byte) (bootstrapResponse, error) {
@@ -348,6 +433,8 @@ func (manager *CertificateManager) issue(ctx context.Context, body []byte) (boot
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		switch {
+		case resp.StatusCode == 400 && bootstrapErrorCode(resp, manager.config.MaxBodyBytes) == "request_expired":
+			return bootstrapResponse{}, fmt.Errorf("%w: %w", ErrCertificateBootstrapDenied, errCertificateBootstrapRequestExpired)
 		case resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 404:
 			return bootstrapResponse{}, ErrCertificateBootstrapDenied
 		case resp.StatusCode == 409:
@@ -373,43 +460,70 @@ func (manager *CertificateManager) issue(ctx context.Context, body []byte) (boot
 	return result, nil
 }
 
-func (manager *CertificateManager) validateResponse(response bootstrapResponse, privateKey ed25519.PrivateKey, expectedGeneration uint64, now time.Time) (RuntimeCredential, error) {
+// validateResponse 校验签发结果；stale=true 表示证书本身合规但到手时已在续签窗口内或已过期（只会出现在授权端
+// 回放早先签发的结果时），由调用方决定是否只用它对齐代数。NotBefore 容忍 bootstrapClockSkew 的时钟偏差。
+// bootstrapErrorCode 读授权端错误体的稳定 code（只用于分支判断，不进错误信息或日志）。
+func bootstrapErrorCode(resp *http.Response, limit int64) string {
+	encoded, err := io.ReadAll(io.LimitReader(resp.Body, limit))
+	if err != nil {
+		return ""
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(bytes.TrimSpace(encoded), &body) != nil {
+		return ""
+	}
+	return body.Code
+}
+
+func (manager *CertificateManager) validateResponse(response bootstrapResponse, privateKey ed25519.PrivateKey, expectedGeneration uint64, now time.Time) (RuntimeCredential, bool, error) {
 	if response.Schema != bootstrapResponseSchema || response.CertificateID == uuid.Nil || response.InstallationID != manager.config.InstallationID || response.Generation != expectedGeneration+1 || response.Serial != hex.EncodeToString(response.CertificateID[:]) || response.Status != "active" || response.Revision != 1 || response.RevokedAt != nil || response.RevocationReason != nil {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	certDER, err := base64.RawURLEncoding.DecodeString(response.CertificateDER)
 	if err != nil {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	caDER, err := base64.RawURLEncoding.DecodeString(response.CACertificateDER)
 	if err != nil {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	leaf, err := x509.ParseCertificate(certDER)
 	if err != nil {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	ca, err := x509.ParseCertificate(caDER)
 	if err != nil {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	spiffe := "spiffe://cdn-platform/installation/" + manager.config.InstallationID.String()
 	if response.SPIFFEID != spiffe || leaf.NotBefore.UTC() != response.NotBefore.UTC() || leaf.NotAfter.UTC() != response.NotAfter.UTC() || leaf.NotAfter.Sub(leaf.NotBefore) != bootstrapMaxLifetime || len(leaf.DNSNames) != 0 || leaf.VerifyHostname("invalid") == nil || leaf.ExtKeyUsage[0] != x509.ExtKeyUsageClientAuth {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	if len(leaf.URIs) != 1 || leaf.URIs[0].String() != spiffe {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	pub, ok := privateKey.Public().(ed25519.PublicKey)
 	if !ok || !bytes.Equal(pub, leaf.PublicKey.(ed25519.PublicKey)) {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+		return RuntimeCredential{}, false, ErrCertificateBootstrapInvalidState
 	}
 	pool := x509.NewCertPool()
 	pool.AddCert(ca)
-	if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool, Intermediates: x509.NewCertPool(), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, CurrentTime: now}); err != nil {
-		return RuntimeCredential{}, ErrCertificateBootstrapInvalidState
+	// 授权端用自己的时钟写 NotBefore：比本机快几毫秒、又恰好跨秒时，证书在本机"截断到秒的 now"还未生效
+	// （73 10-30 15:04:34 第 17 代即因此被判 invalid state）。时间单独按偏差容忍判断，链校验取有效期内的时刻。
+	if now.Add(bootstrapClockSkew).Before(leaf.NotBefore) {
+		return RuntimeCredential{}, false, fmt.Errorf("%w: certificate not yet valid beyond clock skew", ErrCertificateBootstrapInvalidState)
 	}
-	return RuntimeCredential{CertificateID: response.CertificateID, PrivateKey: append(ed25519.PrivateKey(nil), privateKey...), TLSCertificate: tls.Certificate{Certificate: [][]byte{certDER, caDER}, PrivateKey: append(ed25519.PrivateKey(nil), privateKey...)}, RootCAs: pool}, nil
+	verifyAt := now
+	if verifyAt.Before(leaf.NotBefore) || !verifyAt.Before(leaf.NotAfter) {
+		verifyAt = leaf.NotBefore
+	}
+	if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool, Intermediates: x509.NewCertPool(), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, CurrentTime: verifyAt}); err != nil {
+		return RuntimeCredential{}, false, fmt.Errorf("%w: certificate chain does not verify", ErrCertificateBootstrapInvalidState)
+	}
+	stale := !now.Before(leaf.NotAfter.Add(-bootstrapRefreshBefore))
+	return RuntimeCredential{CertificateID: response.CertificateID, PrivateKey: append(ed25519.PrivateKey(nil), privateKey...), TLSCertificate: tls.Certificate{Certificate: [][]byte{certDER, caDER}, PrivateKey: append(ed25519.PrivateKey(nil), privateKey...)}, RootCAs: pool}, stale, nil
 }
 
 func (manager *CertificateManager) commitCredential(credential RuntimeCredential, privateKey ed25519.PrivateKey, response bootstrapResponse, pendingName string, now time.Time) error {

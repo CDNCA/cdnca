@@ -454,26 +454,34 @@ func (mode bootstrapTestResponseMode) String() string {
 }
 
 type certificateBootstrapFixture struct {
-	t                   *testing.T
-	mu                  sync.Mutex
-	installationID      uuid.UUID
-	activationPrivate   ed25519.PrivateKey
-	runtimeCAPrivate    ed25519.PrivateKey
-	runtimeCA           *x509.Certificate
-	runtimeCADER        []byte
-	server              *httptest.Server
-	targetDir           string
-	bootstrapCADir      string
-	bootstrapCAFile     string
-	certificateFile     string
-	privateKeyFile      string
-	runtimeCAFile       string
-	stateFile           string
-	now                 time.Time
-	status              int
-	errorBody           []byte
-	responseMode        bootstrapTestResponseMode
-	issueLatency        time.Duration // the issuer's clock advances by this much before it signs
+	t                 *testing.T
+	mu                sync.Mutex
+	installationID    uuid.UUID
+	activationPrivate ed25519.PrivateKey
+	runtimeCAPrivate  ed25519.PrivateKey
+	runtimeCA         *x509.Certificate
+	runtimeCADER      []byte
+	server            *httptest.Server
+	targetDir         string
+	bootstrapCADir    string
+	bootstrapCAFile   string
+	certificateFile   string
+	privateKeyFile    string
+	runtimeCAFile     string
+	stateFile         string
+	now               time.Time
+	status            int
+	errorBody         []byte
+	responseMode      bootstrapTestResponseMode
+	issueLatency      time.Duration // the issuer's clock advances by this much before it signs
+	singleHead        bool          // like the license service: one active head, renewals must name its generation
+	issuerSkew        time.Duration // the issuer's clock runs this much ahead of the control's when it signs
+	// licenseReplay mirrors license-service issuance: a request_id with a receipt replays the stored response
+	// whatever its age; without one, requested_at older than 5 minutes is 400 request_expired.
+	licenseReplay       bool
+	receipts            map[string][]byte
+	loseNextIssued      bool // issue and record the receipt, then answer 503 (the response never reaches the control)
+	headGeneration      uint64
 	blockResponses      bool
 	responseStarted     chan struct{}
 	responseRelease     chan struct{}
@@ -568,6 +576,24 @@ func (fixture *certificateBootstrapFixture) serveHTTP(response http.ResponseWrit
 		request.Header.Get("Origin") == "" && request.Header.Get("Idempotency-Key") == ""
 	fixture.validRequest = fixture.validRequest || fixture.validateRequest(request, body)
 	status, errorBody, block := fixture.status, fixture.errorBody, fixture.blockResponses
+	var replayed []byte
+	if fixture.licenseReplay && status == 0 {
+		var issued bootstrapTestIssueBody
+		_ = json.Unmarshal(body, &issued)
+		if stored, ok := fixture.receipts[issued.RequestID]; ok {
+			replayed = stored
+		} else if issued.RequestedAt.Before(fixture.now.Add(-5 * time.Minute)) {
+			status, errorBody = http.StatusBadRequest, []byte(`{"code":"request_expired","request_id":"x"}`)
+		}
+	}
+	if fixture.singleHead && status == 0 && replayed == nil {
+		var issued bootstrapTestIssueBody
+		if json.Unmarshal(body, &issued) == nil && issued.ExpectedGeneration == fixture.headGeneration {
+			fixture.headGeneration++
+		} else {
+			status = http.StatusConflict
+		}
+	}
 	mode := fixture.responseMode
 	fixture.now = fixture.now.Add(fixture.issueLatency)
 	fixture.mu.Unlock()
@@ -588,10 +614,28 @@ func (fixture *certificateBootstrapFixture) serveHTTP(response http.ResponseWrit
 		response.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	encoded, err := fixture.responseBytes(bodyValue, mode)
-	if err != nil {
-		response.WriteHeader(http.StatusInternalServerError)
-		return
+	encoded := replayed
+	if encoded == nil {
+		var err error
+		encoded, err = fixture.responseBytes(bodyValue, mode)
+		if err != nil {
+			response.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+	if fixture.licenseReplay {
+		fixture.mu.Lock()
+		if fixture.receipts == nil {
+			fixture.receipts = map[string][]byte{}
+		}
+		fixture.receipts[bodyValue.RequestID] = encoded
+		lose := fixture.loseNextIssued && replayed == nil
+		fixture.loseNextIssued = fixture.loseNextIssued && !lose
+		fixture.mu.Unlock()
+		if lose {
+			response.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 	}
 	if mode == bootstrapResponseWrongContentType {
 		response.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -670,10 +714,11 @@ func (fixture *certificateBootstrapFixture) responseBytes(request bootstrapTestI
 	if err != nil {
 		return nil, err
 	}
-	now := fixture.currentNow()
+	now := fixture.currentNow().Add(fixture.issuerSkew).Truncate(time.Second)
 	certificateID := uuid.MustParse("018f47de-0f4a-7c4b-8f3b-f8d51df94b79")
 	if request.ExpectedGeneration > 0 {
 		certificateID = uuid.MustParse("018f47de-0f4b-7c4b-8f3b-f8d51df94b80")
+		certificateID[15] = byte(request.ExpectedGeneration)
 	}
 	publicKey := csr.PublicKey
 	if mode == bootstrapResponseWrongKey {
@@ -889,5 +934,127 @@ func replaceBytes(t *testing.T, path string, value []byte) {
 	t.Helper()
 	if err := os.WriteFile(path, value, 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// 授权端时钟比主控快几十毫秒、签发恰好跨秒时，NotBefore
+// 比主控截断到秒的到达时刻晚 1 秒。偏差在容忍范围内必须接受；超出容忍范围仍拒绝。
+func TestCertificateManagerToleratesIssuerClockAheadAcrossSecond(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		skew time.Duration
+		want error
+	}{
+		{name: "20ms ahead across second", skew: 20 * time.Millisecond},
+		{name: "two minutes ahead", skew: 2 * time.Minute, want: ErrCertificateBootstrapInvalidState},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newCertificateBootstrapFixture(t)
+			defer fixture.close()
+			fixture.mu.Lock()
+			fixture.now = fixture.now.Add(990 * time.Millisecond)
+			fixture.mu.Unlock()
+			fixture.issuerSkew = test.skew
+			manager, err := NewCertificateManager(fixture.config())
+			if err != nil {
+				t.Fatal(err)
+			}
+			credential, err := manager.Ensure(t.Context())
+			if test.want != nil {
+				if !errors.Is(err, test.want) {
+					t.Fatalf("Ensure() error = %v, want %v", err, test.want)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Ensure() with issuer clock %v ahead error = %v", test.skew, err)
+			}
+			assertBootstrapFinalFiles(t, fixture, credential)
+			assertBootstrapCommittedState(t, fixture, credential)
+		})
+	}
+}
+
+// 轮换请求已在授权端签发（头已前进），但主控没拿到/没收下结果，pending 留到证书过期之后。
+// 重放必须拿回原签发结果对齐代数，再按新代数轮换出可用证书；旧代码永久 denied/invalid state。
+func TestCertificateManagerRecoversIssuedPendingAfterExpiry(t *testing.T) {
+	fixture := newCertificateBootstrapFixture(t)
+	defer fixture.close()
+	fixture.licenseReplay, fixture.singleHead = true, true
+	manager, err := NewCertificateManager(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := manager.Ensure(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := parseLeafCertificate(t, first.TLSCertificate)
+	fixture.setNow(leaf.NotAfter.Add(-5 * time.Minute))
+	fixture.loseNextIssued = true
+	if _, err := manager.Ensure(t.Context()); !errors.Is(err, ErrCertificateBootstrapUnavailable) {
+		t.Fatalf("rotation with lost response error = %v", err)
+	}
+	if fixture.headGeneration != 2 {
+		t.Fatalf("issuer head generation = %d, want 2", fixture.headGeneration)
+	}
+	fixture.setNow(leaf.NotAfter.Add(time.Hour))
+	restarted, err := NewCertificateManager(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := restarted.Ensure(t.Context())
+	if err != nil {
+		t.Fatalf("Ensure() after the issued pending expired error = %v", err)
+	}
+	if fixture.headGeneration != 3 {
+		t.Fatalf("issuer head generation = %d, want 3 (replayed 2, then rotated)", fixture.headGeneration)
+	}
+	current := parseLeafCertificate(t, credential.TLSCertificate)
+	if !fixture.currentNow().Before(current.NotAfter.Add(-bootstrapRefreshBefore)) {
+		t.Fatalf("recovered certificate expires at %s, now %s", current.NotAfter, fixture.currentNow())
+	}
+	assertBootstrapFinalFiles(t, fixture, credential)
+	assertBootstrapCommittedState(t, fixture, credential)
+	pendingKeys, _ := filepath.Glob(filepath.Join(fixture.targetDir, ".*.key.pending"))
+	if len(pendingKeys) != 0 {
+		t.Fatalf("pending keys left behind: %v", pendingKeys)
+	}
+}
+
+// pending 请求从未签发（授权端当时不可用），过了请求时窗后授权端回 request_expired；
+// 主控必须丢弃它并按原代数重新发起，旧代码每次重放同一过期请求、永久 denied。
+func TestCertificateManagerDiscardsNeverIssuedExpiredPending(t *testing.T) {
+	fixture := newCertificateBootstrapFixture(t)
+	defer fixture.close()
+	fixture.licenseReplay, fixture.singleHead = true, true
+	fixture.status = http.StatusServiceUnavailable
+	manager, err := NewCertificateManager(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Ensure(t.Context()); !errors.Is(err, ErrCertificateBootstrapUnavailable) {
+		t.Fatalf("first Ensure() error = %v", err)
+	}
+	fixture.mu.Lock()
+	fixture.status = 0
+	fixture.mu.Unlock()
+	fixture.setNow(fixture.currentNow().Add(10 * time.Minute))
+	restarted, err := NewCertificateManager(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := restarted.Ensure(t.Context())
+	if err != nil {
+		t.Fatalf("Ensure() with a never-issued expired pending error = %v", err)
+	}
+	if fixture.headGeneration != 1 {
+		t.Fatalf("issuer head generation = %d, want 1", fixture.headGeneration)
+	}
+	assertBootstrapFinalFiles(t, fixture, credential)
+	assertBootstrapCommittedState(t, fixture, credential)
+	pendingKeys, _ := filepath.Glob(filepath.Join(fixture.targetDir, ".*.key.pending"))
+	if len(pendingKeys) != 0 {
+		t.Fatalf("pending keys left behind: %v", pendingKeys)
 	}
 }

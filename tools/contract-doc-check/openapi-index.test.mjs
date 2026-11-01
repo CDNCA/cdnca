@@ -509,9 +509,9 @@ test("current YAML and external refs include all required operations", async () 
   assert.equal(documents.length, 4);
 	// fix-certmenu：证书资产吊销下线（control.yaml 与 dns-acme.yaml 各 1 条，同一 wire tuple）。
 	// fix-cacheflow5：缓存写请求回执 GET /v1[/admin]/cache-operation-requests/{key} 两条。
-	// 用户端域名解析（ADR 0020 §3，/v1/dns/hub/*）7 条。
-	assert.equal(result.operations.length, 1166);
-	assert.equal(result.distinctTupleCount, 1141);
+	// 用户端域名解析（ADR 0020 §3，/v1/dns/hub/*）7 条；智能调度、节点 SSH、防火墙动作默认设置与主控绑定域名 7 条。
+	assert.equal(result.operations.length, 1173);
+	assert.equal(result.distinctTupleCount, 1148);
 	assert.equal(result.overlaps.length, 25);
   const operationIDs = new Set(result.operations.map(({operationId}) => operationId));
   assert.deepEqual(legacyMissingOperationIDs.filter((value) => !operationIDs.has(value)), []);

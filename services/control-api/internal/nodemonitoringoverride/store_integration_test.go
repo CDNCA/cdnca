@@ -42,6 +42,7 @@ func newOverrideHarness(t *testing.T) *overrideHarness {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 	t.Cleanup(cancel)
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "node_monitoring_override")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -189,7 +190,7 @@ func (harness *overrideHarness) claim() map[uuid.UUID][]deliveredConfig {
 	return result
 }
 
-func boolPointer(value bool) *bool        { return &value }
+func boolPointer(value bool) *bool       { return &value }
 func stringPointer(value string) *string { return &value }
 func intPointer(value int) *int          { return &value }
 
@@ -225,7 +226,7 @@ func TestNodeMonitoringOverrideDeliversEffectiveRevisionToServingNodeOnly(t *tes
 	// Changing the override delivers a strictly newer revision to that node only.
 	harness.now = harness.now.Add(time.Minute)
 	view, _, err = harness.store.Put(harness.ctx, harness.actor, PutRequest{NodeID: serving, ExpectedRevision: 1,
-		Fields: Fields{MonitorEnabled: boolPointer(false), Protocol: stringPointer("tcp"), ProbeTimeoutMS: intPointer(3000)},
+		Fields:         Fields{MonitorEnabled: boolPointer(false), Protocol: stringPointer("tcp"), ProbeTimeoutMS: intPointer(3000)},
 		IdempotencyKey: "put-2", RequestID: "request-2"})
 	if err != nil || view.Revision != 2 || view.EffectiveRevision == nil || *view.EffectiveRevision != 3 ||
 		view.EffectivePolicy == nil || view.EffectivePolicy.Enabled || view.EffectivePolicy.RequestedProtocol != "tcp" ||
@@ -243,7 +244,7 @@ func TestNodeMonitoringOverrideDeliversEffectiveRevisionToServingNodeOnly(t *tes
 
 	// Replaying the same request returns the stored response without a write.
 	replay, replayed, err := harness.store.Put(harness.ctx, harness.actor, PutRequest{NodeID: serving, ExpectedRevision: 1,
-		Fields: Fields{MonitorEnabled: boolPointer(false), Protocol: stringPointer("tcp"), ProbeTimeoutMS: intPointer(3000)},
+		Fields:         Fields{MonitorEnabled: boolPointer(false), Protocol: stringPointer("tcp"), ProbeTimeoutMS: intPointer(3000)},
 		IdempotencyKey: "put-2", RequestID: "request-2b"})
 	if err != nil || !replayed || replay.Revision != 2 {
 		t.Fatalf("replay = %#v, %v, %v", replay, replayed, err)
@@ -258,7 +259,7 @@ func TestNodeMonitoringOverrideDeliversEffectiveRevisionToServingNodeOnly(t *tes
 	}
 	// An unchanged save is a no-op: no revision bump, no redelivery.
 	if view, _, err = harness.store.Put(harness.ctx, harness.actor, PutRequest{NodeID: serving, ExpectedRevision: 2,
-		Fields: Fields{MonitorEnabled: boolPointer(false), Protocol: stringPointer("tcp"), ProbeTimeoutMS: intPointer(3000)},
+		Fields:         Fields{MonitorEnabled: boolPointer(false), Protocol: stringPointer("tcp"), ProbeTimeoutMS: intPointer(3000)},
 		IdempotencyKey: "put-4", RequestID: "request-4"}); err != nil || view.Revision != 2 {
 		t.Fatalf("unchanged Put() = %#v, %v", view, err)
 	}

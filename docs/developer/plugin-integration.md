@@ -124,6 +124,8 @@ v1 清单的 `spec.entrypoint.type` 是 schema `oneOf` 的四种之一：`extern
 plugin、capability、action、revision 与 expiry。不得用用户 JWT、管理员 Cookie、全局 API
 key 或长期共享密钥模拟插件身份；撤销或事实过期后的新请求默认拒绝。
 
+客户可在主控为某个插件安装签发 API Key 并绑定该安装（插件身份）。经租户授权，插件身份可写**本租户自己账号下**的 DNS 记录（DNS 统一管理）与自己 CF 等账号的自定义主机名/配置，以及本租户站点；不能改主控自有节点调度、线路组、节点下发、平台 DNS/CDN 账号，第三方 CDN 适配器仍只由官方提供（[ADR 0007 §3.2](../adr/0007-plugin-platform-architecture.md)，修订 2026-10-30）。插件身份的每个写请求逐次审计（`actor_kind=plugin`，带 `plugin_id`、`installation_id`），按安装限频（超限 `429` + `Retry-After`）；客户撤销该 Key 或停用/卸载安装后，新请求立即 `401`。
+
 卸载先撤销服务身份并停止新投递，再清理非审计配置。历史审计、资金账本和已完成投递记录按各自保留策略保存。升级必须重新校验签名、兼容范围和新增权限；不能因版本升级自动扩大授权。
 
 ## 7. API 调用规则
@@ -134,19 +136,37 @@ key 或长期共享密钥模拟插件身份；撤销或事实过期后的新请�
 
 | 方向 | 认证 | 适用范围 | 失效后怎么办 |
 | --- | --- | --- | --- |
-| 插件服务 → 客户主控 OpenAPI | 客户在目标租户创建并交给你的 API Key：`Authorization: CdncaKey <key_id>.<secret>` | 只限契约标注 `cdncaApiKey` 的接口，范围以[开放接口目录](https://www.cdnca.com/developers/api)中“API Key 可调”的接口为准；实际权限是 Key 的 scope 与创建者当前权限的交集，另受 IP 允许列表和有效期限制 | 由客户核对 Key 是否已撤销、过期或轮换，再把新 secret 交给你；不能用客户会话代替 |
+| 插件服务 → 客户主控 OpenAPI | 客户在目标租户创建并交给你的 API Key：`Authorization: CdncaKey <key_id>.<secret>`；建议客户签发时绑定你的插件安装（插件身份，第 6 节） | 只限契约标注 `cdncaApiKey` 的接口，范围以[开放接口目录](https://www.cdnca.com/developers/api)中“API Key 可调”的接口为准；实际权限是 Key 的 scope 与创建者当前权限的交集，另受 IP 允许列表和有效期限制；绑定安装的 Key 写请求按安装限频，安装停用/卸载即失效 | 由客户核对 Key 是否已撤销、过期或轮换、安装是否仍启用，再把新 secret 交给你；不能用客户会话代替 |
 | 主控页面（`ui_page`）→ 插件后端 | 主控代理附带 `X-Cdnca-Plugin-Context`、`X-Cdnca-Plugin-Signature`、`X-Cdnca-Plugin-Key-Id`（第 8.3 节） | 只用于你的 `api_base_url`；不含用户会话或 token | 验签失败按 key_id 重新取得安装签名公钥 |
 | 主控 → provider 服务 | `cdnca.provider/v1` 签名请求，响应用你的响应私钥签名 | provider 协议动作 | 按安装公钥与时间窗、nonce 规则处理 |
 | 主控 → Webhook 接收端 | Webhook v2 HMAC（第 8 节），secret 由客户创建或轮换订阅时取得 | 订阅的测试事件与已开放领域事件 | 按 `X-CDNCA-Webhook-Key-Id` 选择当前或仍有效的旧 secret |
 
 只接受登录会话的接口（例如创建 API Key、管理 Webhook 订阅）由客户本人在主控里操作；插件服务不得索取、转存或代用客户会话或 Cookie。
 
+插件常用的租户 API Key 开放范围（1.0.35；完整清单与字段以开放接口目录为准）：
+
+| 领域 | 可调接口 | 权限码 |
+| --- | --- | --- |
+| 网站 | `GET /v1/sites`、`GET /v1/sites/{id}`、`GET /v1/sites/{id}/origin-routing`、`GET /v1/sites/{id}/origin-status` | `sites.read` |
+| 网站 | `PATCH /v1/sites/{id}`（`section=basic` 含域名、`section=origin` 回源池）、`PUT /v1/sites/{id}/origin-routing` | `sites.manage` |
+| DNS 统一管理 | `GET /v1/dns/hub/domains`、`GET /v1/dns/hub/domains/{provider_id}/{apex}/records` | `dns.read` |
+| DNS 统一管理 | 记录增改删（含分线路 `line`、`weight`）、`POST /v1/dns/hub/records/batch`、`POST /v1/dns/hub/domains/refresh` | `dns.records.manage` 或 `dns.manage` |
+| 租户第三方 CDN | 供应商、账号（只读，只有 `secret_fingerprints`）、接入、站点绑定、自定义主机名状态、用量 | `edge.tenant.read` |
+| 租户第三方 CDN | 建/改接入、绑定/解绑站点、同步/回读自定义主机名、重发验证记录 | `edge.tenant.manage` |
+| 租户第三方 CDN | 站点调度 `GET .../sites/{site_id}/schedule`、可用性 `.../availability`、切换记录 `GET /v1/aggregated-edge/switch-events`、整站保底链 `.../fallback-chain`、`/events`、`/availability`（只读） | `edge.tenant.read` |
+
+- `dns.records.manage` 只管 DNS 统一管理里的记录，不能读写 `/v1/dns/providers` 下的 DNS 账号凭据；给插件的 Key 优先用它而不是 `dns.manage`。
+- 同一 apex 被客户多家 DNS 账号托管（如主辅 NS）时，`GET /v1/dns/hub/domains` 对每个 `(provider_id, apex)` 各返回一项；`q` 是子串过滤，需在插件侧按 apex 精确匹配。
+- 按线路写 DNS 记录的插件先读整站保底链：`enabled` 为 true 时主控在自动切换站点默认线路，插件应以 `current` 为准、不要改写默认线路，或提示客户关闭整站自动切换。
+- 不开放给 API Key（返回 403 `api_key_not_allowed`）：`POST /v1/sites`、`DELETE /v1/sites/{id}`、`POST /v1/sites/batch-action`、站点锁定/解锁/转移；第三方 CDN 账号增改删/验证/回退源站、退役接入、清缓存、调度修改/解冻/手动切换/保持、保底链修改/切换/回切；`/v1/dns/providers` 凭据管理。
+- 跨租户的站点、域名、接入一律 404；Key 缺权限 403 `permission_denied`。第三方 CDN 接口另需主控授权 `module.aggregated_edge` 与套餐开启 `aggregated_edge`。
+
 ### 7.2 调用规则
 
 - 使用对应 OpenAPI 文件中的版本化路径和 Schema，不能依赖界面私有请求。
 - 写请求携带 1 到 128 字符的 `Idempotency-Key`；网络超时后使用相同 key 和相同正文重试。
 - 记录响应 `X-Request-ID`，并在支持时透传 W3C `traceparent`。
-- `401` 表示所用 API Key 无效、已撤销、过期或已轮换：停止用旧 secret 重试，请客户核对或重新签发 Key（第三方没有可刷新的工作负载凭据）；`403` 表示 Key scope、创建者当前权限或租户范围不足，不能无限重试；`409` 需要读取当前资源或检查幂等冲突；`429` 和 `503` 使用带抖动的指数退避并尊重 `Retry-After`。
+- `401` 表示所用 API Key 无效、已撤销、过期或已轮换：停止用旧 secret 重试，请客户核对或重新签发 Key（第三方没有可刷新的工作负载凭据）；`401` 也可能是绑定的插件安装已停用或卸载；`403` 表示 Key scope、创建者当前权限或租户范围不足，不能无限重试；`409` 需要读取当前资源或检查幂等冲突；`429` 和 `503` 使用带抖动的指数退避并尊重 `Retry-After`。
 - 日志不得记录访问令牌、Webhook Secret、DNS 密钥、证书私钥、完整请求体或未经脱敏的安全事件。
 
 ## 8. 事件与 Webhook

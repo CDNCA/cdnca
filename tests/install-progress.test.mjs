@@ -133,3 +133,25 @@ for (const [name, source] of installers) {
     assert.match(source, /^cleanup\(\) \{\n {2}local status=\$\?.*\n {2}\[ -z "\$\{PROGRESS_PREFIX:-\}" \] \|\| progress_on_exit "\$status"$/m)
   })
 }
+
+// installer-i18n B：INSTALL_LANG=en 时阶段名取 “中文^English” 的英文部分，进度文案为英文；默认中文。
+test('English progress lines use the English stage names', () => {
+  const stages = ["'甲^Alpha|60|120|'", "'乙^Beta|60|120|'"]
+  const en = run('INSTALL_LANG=en; progress_init; progress_stage; fake_elapsed 90; progress_stage; progress_done', { stages })
+  assert.equal(en.status, 0, en.stderr)
+  assert.match(en.stderr, /^\[t\] 2 steps, expected ~2–4 min; full output in /)
+  assert.match(en.stderr, /\[t\] \[1\/2\] Alpha \(~1–2 min\) \.\.\./)
+  assert.match(en.stderr, /\[t\] ✓ \[1\/2\] Alpha done \(1:30\)/)
+  assert.match(en.stderr, /all 2 steps done in 1:3\d\. Install log: /)
+  assert.doesNotMatch(en.stderr, /\p{Script=Han}/u)
+  const zh = run('progress_init; progress_stage', { stages })
+  assert.match(zh.stderr, /\[t\] \[1\/2\] 甲（约 1–2 分钟）……/)
+  assert.doesNotMatch(zh.stderr, /Alpha/)
+})
+
+for (const [name, source] of installers) {
+  test(`${name} stage table carries an English name for every stage`, () => {
+    const stages = source.match(/^PROGRESS_STAGES=\(\n([\s\S]*?)\n\)$/m)[1].split('\n')
+    for (const stage of stages) assert.match(stage, /^ {2}'[^|'^]*\p{Script=Han}[^|'^]*\^[ -~]+\|\d+\|\d+\|(interactive)?'$/u)
+  })
+}

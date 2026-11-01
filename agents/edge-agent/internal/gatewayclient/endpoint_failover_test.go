@@ -154,6 +154,19 @@ func TestFailoverDialerLearnsPersistsAndReloadsThePublishedList(t *testing.T) {
 	}
 }
 
+// An installed node's primary has no transport (grpc by default); the
+// published list names the same Gateway "grpc". It is not kept twice, so a
+// node whose Gateway moved dials the new address next.
+func TestFailoverDialerDropsThePrimaryWithTheDefaultTransport(t *testing.T) {
+	var calls []string
+	base := MTLSDialerConfig{Address: "192.0.2.10:19444", TunnelAudience: "aud"}
+	dialer := newTestFailover(&calls, nil, base)
+	dialer.Learn([]*agentv1.GatewayEndpointV1{endpointV1("192.0.2.10:19444", "grpc"), endpointV1("192.0.2.20:19444", "grpc")}, "v1")
+	if got := dialer.entries(); len(got) != 1 || got[0].Address != "192.0.2.20:19444" {
+		t.Fatalf("entries = %+v", got)
+	}
+}
+
 // Failover reaches learned entries; once an earlier one answers again the
 // probe moves the start of the next session back without dialing through
 // the current session.

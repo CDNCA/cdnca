@@ -248,6 +248,7 @@ func (s *Service) UpdateSettings(ctx context.Context, actor Actor, ifMatch strin
 	if err != nil {
 		return Settings{}, err
 	}
+	s.syncNodeDefaultsAfterChange(ctx)
 	return saved, nil
 }
 

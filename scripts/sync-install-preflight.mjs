@@ -6,6 +6,7 @@
 //   scripts/lib/ssh-guard.sh          -> "ssh-guard" (fail2ban sshd, every installer)
 //   scripts/lib/install-progress.sh   -> "install-progress" (stage/progress display)
 //   scripts/lib/package-automation.sh -> "package-automation" (apt-daily/unattended-upgrades)
+//   scripts/lib/install-i18n.sh       -> "install-i18n" (--lang zh|en, msg)
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -13,11 +14,11 @@ import path from 'node:path'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const libraries = { 'install-preflight': 'scripts/lib/install-preflight.sh', 'systemd-compat': 'scripts/lib/systemd-compat.sh',
   'ssh-guard': 'scripts/lib/ssh-guard.sh', 'install-progress': 'scripts/lib/install-progress.sh',
-  'package-automation': 'scripts/lib/package-automation.sh' }
+  'package-automation': 'scripts/lib/package-automation.sh', 'install-i18n': 'scripts/lib/install-i18n.sh' }
 // Libraries each installer embeds.
 export const embeds = {
-  'scripts/install-control.sh': ['install-preflight', 'systemd-compat', 'ssh-guard', 'install-progress', 'package-automation'],
-  'scripts/install-node.sh': ['install-preflight', 'systemd-compat', 'ssh-guard', 'install-progress', 'package-automation'],
+  'scripts/install-control.sh': ['install-preflight', 'systemd-compat', 'ssh-guard', 'install-progress', 'package-automation', 'install-i18n'],
+  'scripts/install-node.sh': ['install-preflight', 'systemd-compat', 'ssh-guard', 'install-progress', 'package-automation', 'install-i18n'],
 }
 // Installers that embed install-preflight (tests/install-preflight.test.mjs).
 export const installers = Object.keys(embeds).filter((relative) => embeds[relative].includes('install-preflight'))

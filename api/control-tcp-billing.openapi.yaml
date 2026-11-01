@@ -11,10 +11,12 @@ paths:
   /v1/admin/tcp-billing:
     get:
       operationId: getTCPBillingOverview
-      summary: 读取 TCP 流量计费策略与不可变结算快照
+      summary: "Read the TCP traffic billing policy and immutable settlement snapshots"
+      x-summary-zh: 读取 TCP 流量计费策略与不可变结算快照
       responses:
         '200':
-          description: TCP 计费概览
+          description: "TCP billing overview"
+          x-description-zh: TCP 计费概览
           content:
             application/json:
               schema:
@@ -25,7 +27,8 @@ paths:
   /v1/admin/tcp-billing/factor-revisions:
     post:
       operationId: scheduleTCPBillingFactorRevision
-      summary: 新建仅在目标结算周期开始时生效的 TCP 系数修订
+      summary: "Create a TCP coefficient revision that takes effect only when the target billing cycle starts"
+      x-summary-zh: 新建仅在目标结算周期开始时生效的 TCP 系数修订
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -38,7 +41,8 @@ paths:
               $ref: '#/components/schemas/ScheduleFactorRequest'
       responses:
         '201':
-          description: 已建立新修订；相同请求重放通过 Idempotency-Replayed 标识
+          description: "New revision created; a replay of the same request is marked by Idempotency-Replayed"
+          x-description-zh: 已建立新修订；相同请求重放通过 Idempotency-Replayed 标识
           headers:
             Idempotency-Replayed:
               schema: { type: boolean }
@@ -51,7 +55,8 @@ paths:
   /v1/admin/tcp-billing/settlements:
     post:
       operationId: settleTCPBillingCycle
-      summary: 使用已冻结的最终计量证据结算一个 TCP 流量周期
+      summary: "Settle one TCP traffic cycle from frozen final metering evidence"
+      x-summary-zh: 使用已冻结的最终计量证据结算一个 TCP 流量周期
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/RequestID'
@@ -63,7 +68,8 @@ paths:
               $ref: '#/components/schemas/SettlementRequest'
       responses:
         '201':
-          description: 已写入不可变结算快照
+          description: "Immutable settlement snapshot written"
+          x-description-zh: 已写入不可变结算快照
           content:
             application/json:
               schema:
@@ -73,7 +79,8 @@ paths:
   /v1/admin/tcp-billing/settlements/{settlement_id}/adjustments:
     post:
       operationId: adjustTCPBillingSettlement
-      summary: 追加退款或全额撤销事实，不修改原结算
+      summary: "Append a refund or full reversal without changing the original settlement"
+      x-summary-zh: 追加退款或全额撤销事实，不修改原结算
       parameters:
         - name: settlement_id
           in: path
@@ -89,7 +96,8 @@ paths:
               $ref: '#/components/schemas/AdjustmentRequest'
       responses:
         '201':
-          description: 已追加调整事实
+          description: "Adjustment appended"
+          x-description-zh: 已追加调整事实
           content:
             application/json:
               schema:
@@ -107,7 +115,8 @@ components:
       name: If-Match
       in: header
       required: true
-      description: expected_head_revision 的强 ETag，例如 "1"
+      description: "Strong ETag of expected_head_revision, e.g. \"1\""
+      x-description-zh: expected_head_revision 的强 ETag，例如 "1"
       schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
     IdempotencyKey:
       name: Idempotency-Key
@@ -265,20 +274,26 @@ components:
             request_id: { type: string }
   responses:
     ValidationError:
-      description: 输入无效
+      description: "Invalid input"
+      x-description-zh: 输入无效
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
     Unauthenticated:
-      description: 会话无效
+      description: "Invalid session"
+      x-description-zh: 会话无效
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
     PermissionDenied:
-      description: 权限不足
+      description: "Insufficient permission"
+      x-description-zh: 权限不足
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
     NotFound:
-      description: 资源不存在
+      description: "Resource not found"
+      x-description-zh: 资源不存在
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
     Conflict:
-      description: tcp_billing_revision_conflict 或 tcp_billing_idempotency_conflict
+      description: "tcp_billing_revision_conflict or tcp_billing_idempotency_conflict"
+      x-description-zh: tcp_billing_revision_conflict 或 tcp_billing_idempotency_conflict
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
     Unavailable:
-      description: 服务暂不可用
+      description: "Service temporarily unavailable"
+      x-description-zh: 服务暂不可用
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }

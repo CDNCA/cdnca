@@ -87,6 +87,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/errorpageobjectstore"
 	"github.com/cdnca/cdnca/services/control-api/internal/errorpagepublicationhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/errorpagescanner"
+	"github.com/cdnca/cdnca/services/control-api/internal/firewallactioncontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/firewallactionhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/firewallcontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/firewalldispatch"
@@ -148,6 +149,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/sitecapture"
 	"github.com/cdnca/cdnca/services/control-api/internal/sitecapturehttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/sitegroup"
+	"github.com/cdnca/cdnca/services/control-api/internal/smartsched"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemconfig"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemconfigpublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemmailsettings"
@@ -215,8 +217,12 @@ func run(args []string) error {
 		return runNativeBackup(args[1:])
 	case "signer-revocation":
 		return runSignerRevocation(args[1:], os.Stdout)
+	case "control-host":
+		return runControlHost(args[1:], os.Stdout, os.Stderr)
 	case "plugin-webhook-attestation-key":
 		return runPluginWebhookAttestationKey(args[1:], os.Stdout)
+	case "gateway-entrypoint":
+		return runGatewayEntrypoint(args[1:], os.Stdout)
 	default:
 		return usageError()
 	}
@@ -1236,6 +1242,13 @@ func runServer() error {
 	if err != nil {
 		return runtimeStageError{stage: "initialize Agent Gateway registry", err: err}
 	}
+	if gatewayRegistry != nil {
+		// node-install-defaults follows the published entry points (Q20): after an
+		// upgrade, a restore or control-host bind the copied node command matches them.
+		if _, err := gatewayRegistry.SyncNodeDefaults(ctx); err != nil {
+			slog.Warn("node install defaults not synchronized with the Gateway entry points", "error", err)
+		}
+	}
 	controlRuntime, err := openControlInternalRuntimeWithGateways(ctx, cfg, pool, overlayArtifacts, controlInternalGatewayRegistry(gatewayRegistry))
 	if err != nil {
 		return err
@@ -1783,6 +1796,13 @@ func runServer() error {
 		return runtimeStageError{stage: "initialize CNAME carrier lines", err: err}
 	}
 	go cnameCarrierLines.Run(ctx, cnameCarrierLineInterval)
+	// Smart scheduling (migration 609): latency from the dnspup / peer probe
+	// logs, selections per line; cnamelines writes them on its next tick.
+	smartSchedule, err := smartsched.NewWorker(pool, time.Now, slog.Default().With("component", "smart_schedule"))
+	if err != nil {
+		return runtimeStageError{stage: "initialize smart schedule", err: err}
+	}
+	go smartSchedule.Run(ctx, time.Minute)
 	nodeExternalProbe, err := openNodeExternalProbe(pool, edgeRuntime.connection)
 	if err != nil {
 		return runtimeStageError{stage: "initialize node external probe", err: err}
@@ -1801,11 +1821,18 @@ func runServer() error {
 	}
 	go originProbe.Run(ctx, originfailover.RoundInterval)
 	nodeSSHInstall, nodeSSHInstallHandlerFactory, err := buildNodeSSHInstallRuntime(pool, identityService, credentialCipher,
-		trust, cfg.APIKeyPepper)
+		trust, cfg.APIKeyPepper, cfg.NodeSSHControllerCIDRs)
 	if err != nil {
 		return runtimeStageError{stage: "initialize node SSH install", err: err}
 	}
 	go nodeSSHInstall.Run(ctx, nodeSSHInstallInterval)
+	nodeSSHAccess, err := buildNodeSSHAccessDelivery(nodeSSHInstall, edgeRuntime.connection)
+	if err != nil {
+		return runtimeStageError{stage: "initialize node SSH access delivery", err: err}
+	}
+	if nodeSSHAccess != nil {
+		go func() { _ = nodeSSHAccess.Run(ctx) }()
+	}
 	nodeInstallTrust, err := openNodeInstallTrustWatcher(pool)
 	if err != nil {
 		return runtimeStageError{stage: "initialize node install trust check", err: err}
@@ -1886,7 +1913,8 @@ func runServer() error {
 	if err != nil {
 		return runtimeStageError{stage: "initialize domain trust runtime", err: err}
 	}
-	dnsHubHandlerFactory, err := buildDNSHubRuntime(pool, identityService, credentialCipher)
+	dnsHubHandlerFactory, err := buildDNSHubRuntime(pool, identityService, credentialCipher,
+		apikey.NewServiceWithPepperKeyring(pool, cfg.APIKeyPepperKeyring, time.Now))
 	if err != nil {
 		return runtimeStageError{stage: "initialize DNS hub runtime", err: err}
 	}
@@ -2961,6 +2989,17 @@ func runServer() error {
 		defer background.Done()
 		source := nodeIPLocationSource{lookup: analyticslog.NewPostgresIPIntelLookup(pool, slog.Default())}
 		node.NewIPLocationResolver(pool, source, slog.Default()).Run(ctx, nodeIPLocationInterval)
+	}()
+	// Firewall action publication receipts: node deployments of
+	// the releases carrying a candidate move its active revision and LKG.
+	firewallActionReceipts, err := firewallactioncontrol.NewReceiptWorker(pool, time.Now)
+	if err != nil {
+		return runtimeStageError{stage: "initialize firewall action receipts", err: err}
+	}
+	background.Add(1)
+	go func() {
+		defer background.Done()
+		firewallactioncontrol.RunReceipts(ctx, firewallActionReceipts, firewallactioncontrol.ReceiptInterval, slog.Default())
 	}()
 	// Approval requests left executing by an interrupted process become
 	// "outcome unknown" after 10 minutes (at start, then every minute); never replayed.
@@ -6138,7 +6177,7 @@ func existingBootstrapPlatformUser(ctx context.Context, pool *pgxpool.Pool, user
 }
 
 func usageError() error {
-	return errors.New("usage: control-api serve | migrate up|down | bootstrap-user --username USER --email EMAIL [--display-name NAME] [--existing-ok] | admin-access-allowlist disable|status | recover-platform-admin --user-id UUID --scope-id UUID --request-id UUID (--status | --expected-username OLD --expected-revision N --new-username NEW [--password-stdin]) | bootstrap-node-ca --username USER --certificate-file FILE [--key-id ID] | bootstrap-system-configuration --username USER | install-community --installation-id UUID | community-register --account NAME --password-stdin | community-refresh | install-entitlement --bundle FILE --trusted-keys FILE [--trusted-keyset FILE] [--revocation FILE] | fetch-entitlement-revocation --license-service URL --installation-id UUID --installation-key FILE | report-installation-endpoints --license-service URL --installation-key FILE --request-file FILE [--refresh-request] | native-backup COMMAND (see control-api native-backup) | signer-revocation import-checkpoint|import-edge-trust --in FILE | plugin-webhook-attestation-key status|rotate | verify-native-upgrade --installation-id UUID --version VERSION --source-commit COMMIT --source-tree TREE --artifact-sha256 SHA --runner-sha256 SHA")
+	return errors.New("usage: control-api serve | migrate up|down | bootstrap-user --username USER --email EMAIL [--display-name NAME] [--existing-ok] | admin-access-allowlist disable|status | recover-platform-admin --user-id UUID --scope-id UUID --request-id UUID (--status | --expected-username OLD --expected-revision N --new-username NEW [--password-stdin]) | bootstrap-node-ca --username USER --certificate-file FILE [--key-id ID] | bootstrap-system-configuration --username USER | install-community --installation-id UUID | community-register --account NAME --password-stdin | community-refresh | install-entitlement --bundle FILE --trusted-keys FILE [--trusted-keyset FILE] [--revocation FILE] | fetch-entitlement-revocation --license-service URL --installation-id UUID --installation-key FILE | report-installation-endpoints --license-service URL --installation-key FILE --request-file FILE [--refresh-request] | native-backup COMMAND (see control-api native-backup) | control-host bind|status (see control-api control-host) | signer-revocation import-checkpoint|import-edge-trust --in FILE | plugin-webhook-attestation-key status|rotate | verify-native-upgrade --installation-id UUID --version VERSION --source-commit COMMIT --source-tree TREE --artifact-sha256 SHA --runner-sha256 SHA")
 }
 
 // approvalStepUpConsumer is the approval center's step-up consumer; a typed

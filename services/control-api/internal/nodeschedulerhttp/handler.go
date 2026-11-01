@@ -76,6 +76,8 @@ type Handler struct {
 	service       Service
 	authenticator Authenticator
 	mux           *http.ServeMux
+	// smartReader enables the smart schedule routes (migration 609; nil: 503).
+	smartReader nodescheduler.SmartScheduleReader
 }
 
 type requestContextKey string
@@ -97,6 +99,8 @@ func NewHandler(service Service, authenticator Authenticator) (*Handler, error) 
 	handler.mux.HandleFunc("/v1/node-line-groups/{id}/target-snapshots", handler.targetSnapshot)
 	handler.mux.HandleFunc("/v1/node-line-groups/{id}/rollback", handler.rollback)
 	handler.mux.HandleFunc("/v1/node-line-groups/{id}/platform-default", handler.platformDefault)
+	handler.mux.HandleFunc("/v1/node-line-groups/{id}/smart-schedule", handler.smartSchedule)
+	handler.mux.HandleFunc("/v1/node-line-groups/{id}/latency-matrix", handler.latencyMatrix)
 	handler.mux.HandleFunc("/v1/l2-configs", handler.l2ConfigCollection)
 	handler.mux.HandleFunc("/v1/l2-configs/{id}", handler.l2ConfigItem)
 	handler.mux.HandleFunc("/v1/l2-conds", handler.l2ConditionCollection)

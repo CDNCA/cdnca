@@ -8,6 +8,7 @@ import { marketApi, type AdvisoryDisposition, type MarketAdvisory } from '../../
 import { useSessionStore } from '../../auth/session'
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/pluginStore'
+import { pluginName, usePluginCatalog } from './usePluginCatalog'
 import { useFeedback } from '@cdnca/ui'
 
 const severityColor: Record<MarketAdvisory['severity'], string> = { critical: 'red', high: 'volcano', medium: 'orange', low: 'gold' }
@@ -21,6 +22,7 @@ export function AdvisoryList({ items, loading, canAcknowledge }: { items: Market
   const feedback = useFeedback()
   const token = useSessionStore((state) => state.accessToken) ?? ''
   const client = useQueryClient()
+  const catalog = usePluginCatalog(token, items.map((a) => a.plugin_id))
   const [target, setTarget] = useState<MarketAdvisory | null>(null)
   const [disposition, setDisposition] = useState<AdvisoryDisposition>('upgraded')
   const [note, setNote] = useState('')
@@ -41,7 +43,8 @@ export function AdvisoryList({ items, loading, canAcknowledge }: { items: Market
           <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{a.body}</Typography.Paragraph> }}
         columns={[
           { title: t('advisories.plugin'), dataIndex: 'plugin_id', render: (v: string, a) => <Space direction="vertical" size={0}>
-            <strong>{a.title}</strong><Typography.Text type="secondary">{v}</Typography.Text></Space> },
+            <strong>{a.title}</strong><Typography.Text type="secondary">{pluginName(catalog, v, i18n.resolvedLanguage)}</Typography.Text>
+            {pluginName(catalog, v, i18n.resolvedLanguage) !== v ? <Typography.Text type="secondary" className="plugin-market-id">{v}</Typography.Text> : null}</Space> },
           { title: t('advisories.severity'), dataIndex: 'severity', render: (v: MarketAdvisory['severity']) =>
             <Tag color={severityColor[v]}>{t(`advisories.severities.${v}`)}</Tag> },
           { title: t('advisories.affected'), dataIndex: 'affected_versions', render: (v: string) => <code>{v}</code> },

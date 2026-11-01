@@ -271,11 +271,14 @@ type DeploymentView struct {
 	MaxAttempts uint32     `json:"max_attempts"`
 	State       string     `json:"state"`
 	ErrorCode   string     `json:"error_code,omitempty"`
-	CreatedAt   string     `json:"created_at"`
-	UpdatedAt   string     `json:"updated_at"`
-	CanRetry    bool       `json:"can_retry"`
-	Cohort      *int       `json:"cohort,omitempty"`
-	Released    *bool      `json:"released,omitempty"`
+	// ErrorMessage: the node's own failure text beside error_code;
+	// not for a superseded or frozen deployment (not failures).
+	ErrorMessage string `json:"error_message,omitempty"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	CanRetry     bool   `json:"can_retry"`
+	Cohort       *int   `json:"cohort,omitempty"`
+	Released     *bool  `json:"released,omitempty"`
 	// Superseded: the node ignored this old release, it already runs a newer
 	// one or this release was rolled back (fix-cfgflow2 §1). Not a failure.
 	Superseded bool `json:"superseded,omitempty"`

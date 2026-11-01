@@ -89,6 +89,7 @@ func licenseState(t *testing.T, fixture licenseFixture, pluginID string) license
 func controlE2EDatabase(t *testing.T, databaseURL string) (*pgxpool.Pool, uuid.UUID,
 	func(*identity.TokenManager) string) {
 	t.Helper()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "control_e2e")
 	ctx := t.Context()
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {

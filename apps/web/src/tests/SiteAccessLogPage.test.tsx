@@ -881,7 +881,38 @@ describe('SiteAccessLogPage', () => {
     expect(screen.getByRole('button', { name: '按当前条件重新申请' })).toBeInTheDocument()
   })
 
-  // 重新登录（全新页面、无内存状态）后日志视图按当前条件找回原申请，就地显示失败原因；
+  // 申请记录显示申请人、状态（列名不是“状态码”）与最近下载人/时间、次数
+  it('shows the requester and the last downloader with time in the export records', async () => {
+    await changeLocale('zh-CN')
+    authenticate()
+    const owner = { id: '018f0000-0000-7000-8000-0000000000a1', username: 'user', display_name: 'user' }
+    const fresh = {
+      id: '018f0000-0000-7000-8000-000000000081', status: 'completed', reason: 'completed', snapshot_at: '2026-07-28T08:00:00Z',
+      row_count: 4, byte_count: 1362, created_at: '2026-07-28T08:00:01Z', expires_at: '2999-01-01T00:00:00Z', downloadable: true, filter: null,
+      requested_by: owner, download_count: 0, last_downloaded_at: null, last_downloaded_by: null,
+    }
+    const fetched = { ...fresh, id: '018f0000-0000-7000-8000-000000000082', download_count: 2, last_downloaded_at: '2026-07-28T08:05:00Z',
+      last_downloaded_by: { id: owner.id, username: 'user', display_name: '张三' } }
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'https://cdnca.test')
+      if (url.pathname.endsWith('/access/exports') && init?.method === 'POST') return Promise.resolve(json(fresh, 202))
+      if (url.pathname.endsWith('/access/exports')) return Promise.resolve(json({ data: [fresh, fetched] }))
+      return Promise.resolve(page(input))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<SiteAccessLogPage />)
+    expect(await screen.findByText('/asset.js')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '申请下载' }))
+    expect(await screen.findByRole('columnheader', { name: '申请人' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '状态' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: '状态码' })).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '下载记录' })).toBeInTheDocument()
+    expect(screen.getByText('未下载')).toBeInTheDocument()
+    expect(screen.getByText(/张三（user） · /)).toBeInTheDocument()
+    expect(screen.getByText('共下载 2 次')).toBeInTheDocument()
+  })
+
+  // fix-logowner LOG-01：重新登录（全新页面、无内存状态）后日志视图按当前条件找回原申请，就地显示失败原因；
   // 重试用同一幂等键（由原申请编号决定）与同一条件，再次重试也不换键。
   it('finds the existing export for the applied filters after relogin and retries a failure in place with one key', async () => {
     await changeLocale('zh-CN')

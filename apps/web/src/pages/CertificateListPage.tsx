@@ -17,9 +17,11 @@ import {
   Table,
   Tag,
   Tooltip,
+  Typography,
+  Grid,
   type TableColumnsType,
 } from 'antd'
-import { ArrowLeft, ChevronDown, CircleCheck, Download, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronDown, CircleCheck, Download, Link2, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -47,7 +49,7 @@ import {
   type CertificateAssetListFilters,
   type CertificateIssuer,
 } from '../api/certificates'
-import { dnsApi, type DNSProvider } from '../api/dns'
+import { dnsApi, ownDNSProviders, type DNSProvider } from '../api/dns'
 import { usersApi, type ManagedUser } from '../api/users'
 import { sitesApi } from '../api/sites'
 import { pemFileAccept, readPEMFile, type PEMFileError, type PEMFileKind } from './certificateFiles'
@@ -56,6 +58,7 @@ import { localizedUnknownApiError } from '../i18n/apiError'
 import '../i18n/certificateAssets'
 import '../i18n/dnsProviders'
 import { CertificateFailureReason } from '../components/CertificateFailureReason'
+import { CertificateSyncStatus } from '../components/CertificateSyncStatus'
 import { formatDateTime } from '../i18n/formatters'
 import {
   credentialFields,
@@ -65,7 +68,7 @@ import {
   type ProviderForm,
 } from './NodeDnsPage'
 import './CertificateListPage.css'
-import { AdvancedFilters, FeedbackWhen, OutcomeUnknown, fieldReasonText, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply, type AdvancedFilterItem, type FormErrorMap } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, MODAL_WIDTH, OutcomeUnknown, fieldReasonText, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply, type AdvancedFilterItem, type FormErrorMap } from '@cdnca/ui'
 import { certificateSearch, userSearch } from './idNameSources'
 
 // Order fields named differently on the form: the domains
@@ -196,8 +199,9 @@ function serverAssetFilters(draft: CertificateFilterDraft): CertificateAssetList
     domain: text(draft.domain),
     domains: domains.length > 0 ? domains : undefined,
     user: text(draft.user),
-    certificate_id: text(draft.certificateID),
-    name: text(draft.name),
+    // 证书ID 填的不是数字时按证书名称过滤（与「证书名称」同时填时以名称框为准）。
+    certificate_id: /^\d+$/.test(draft.certificateID.trim()) ? text(draft.certificateID) : undefined,
+    name: text(draft.name) ?? text(draft.certificateID),
     remark: text(draft.remark),
     source: draft.type,
     dns_provider_id: draft.dnsApi,
@@ -247,7 +251,8 @@ function canManageCertificatePermission(principal: Principal, permission: Certif
 const certificateColumnWidths = {
   assets: {
     selection: 60, id: 52, user: 144, certificate: 192, type: 76, createdAt: 100, expiresAt: 100,
-    autoRenew: 80, status: 76, actions: 200,
+    // 状态列可能并排「已生效」与「同步失败」，加宽并允许换行。
+    autoRenew: 80, status: 104, actions: 200,
   },
   orders: { domains: 200, challenge: 96, status: 76, autoRenew: 80, notAfter: 100, failure: 428, createdAt: 100 },
 } as const
@@ -465,6 +470,22 @@ function latestAssetVersion(detail: CertificateAssetDetail | undefined): Certifi
     (latest, version) => !latest || version.version > latest.version ? version : latest,
     undefined,
   )
+}
+
+// 自动签发未命名的证书，服务端生成名是 “ACME <订单 UUID>”（acmedispatch/certificate_store.go:170），
+// 详情标题改用主域名；用户自己起的名字照常显示。
+const generatedACMEName = /^ACME [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function shortID(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 8)}…` : value
+}
+
+/** Whole days until not_after: positive = left, 0 = today, negative = expired that many days ago. */
+function daysUntil(notAfter: string, now = Date.now()): number | null {
+  const at = Date.parse(notAfter)
+  if (!Number.isFinite(at)) return null
+  return at > now ? Math.ceil((at - now) / DAY_MS) : -Math.floor((now - at) / DAY_MS)
 }
 
 function assetStatusFilter(version: CertificateAssetVersion | undefined, now = Date.now()): 'normal' | 'expiring' | 'expired' | 'other' {
@@ -699,6 +720,7 @@ function CertificateListPageContent({
 }) {
   const { t, i18n } = useTranslation('certificates')
   const { t: assetT } = useTranslation('certificateAssets')
+  const { t: syncT } = useTranslation('certificatePublicationFailures')
   const { t: systemT } = useTranslation('systemSettings')
   const sessionPrincipal = useSessionStore((state) => state.principal)
   const { t: dnsT } = useTranslation('dnsProviders')
@@ -708,6 +730,8 @@ function CertificateListPageContent({
   const queryOwner = useRef(owner).current
   // A tenant's certificates are all its own: the 用户 column (and export field) is platform-only.
   const isTenant = queryOwner[0] === 'tenant'
+  // <576 宽单列，详情表次要列收进展开行。
+  const compact = Grid.useBreakpoint().xs === true
   const targetScopeID = queryOwner[0] === 'platform' ? queryOwner[1] ?? undefined : undefined
   const lineageActiveRef = useRef(true)
   const assetPrefix = useMemo(() => ['certificate-assets', ...queryOwner] as const, [queryOwner])
@@ -929,9 +953,10 @@ function CertificateListPageContent({
       try {
         const value = await dnsApi.list(token)
         if (!currentSessionAccess('dns.read')) throw invalidCertificateResponse()
+        // 用户端看不到平台 DNS 副本：服务端租户列表已不返回，这里再过滤一次。
         const items = queryOwner[0] === 'platform'
           ? value.items.filter((provider) => provider.scope_id === providerScopeID)
-          : value.items
+          : ownDNSProviders(value.items)
         for (const provider of items) assertProviderOwner(queryOwner, provider, providerScopeID ?? queryOwner[1])
         return { ...value, items }
       } catch (error) {
@@ -1034,8 +1059,7 @@ function CertificateListPageContent({
     defaultProviderAppliedRef.current = applied
     const providerID = addDefaults.certificate_type === 'acme' ? addDefaults.dns_provider_id : undefined
     if (!providerID || form.getFieldValue('dns_provider_id')) return
-    if (providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled' &&
-      (!isTenant || item.managed_by !== 'platform'))) {
+    if (providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled')) {
       form.setFieldValue('dns_provider_id', providerID)
     }
   }, [editorOpen, isTenant, addDefaults, addTarget?.scopeID, addTargetKey, providersQuery.data, form])
@@ -1203,7 +1227,7 @@ function CertificateListPageContent({
 		},
 	  })
 
-	  // 更多 > 禁用/启用/下载证书；表头 更多操作 只放批量动作。
+	  // fix-certops（ 更多 > 禁用/启用/下载证书；表头 更多操作 只放批量动作）。
 	  const assetScopeID = (asset: CertificateAsset) => queryOwner[0] === 'platform' ? asset.tenant_scope_id : undefined
 	  const certOpError = (error: unknown) => {
 		const apiError = error instanceof ApiError ? error : new ApiError('request failed')
@@ -1456,7 +1480,7 @@ function CertificateListPageContent({
 	  // CERT-08：结果未知时冻结输入，只能用原请求重试
 	  const defaultsUncertain = Boolean(defaultWriteError && outcomeUnknown(defaultWriteError) && defaultsAttemptRef.current)
 	  const defaultsLocked = defaultsMutation.isPending || defaultsUncertain
-  // A refused default field (certificate_type / issuer /
+  // a refused default field (certificate_type / issuer /
   // dns_provider_id) is shown under its select instead of the dialog, until
   // that select changes.
   const refusedDefault = submitErrorFields(defaultWriteError).find((item) => defaultFieldNames.has(item.field))
@@ -1787,9 +1811,9 @@ function CertificateListPageContent({
     if (addDefaults.certificate_type === 'uploaded' && editorOpen && !attempt) chooseUpload()
   })
   // 可用 DNS 服务商只有一个时自动选中（两个及以上才让用户选）。
-  // DNS-SEC-20261027-01：平台托管的 DNS 副本不能用于用户本人的 DNS 验证（服务端同样拒绝）；平台管理员代申请照常可选。
-  const usableProviders = useMemo(() => (providersQuery.data?.items ?? []).filter((item) => item.status !== 'disabled' &&
-    !(isTenant && item.managed_by === 'platform')), [providersQuery.data?.items, isTenant])
+  // 用户端列表已不含平台托管的 DNS 副本；平台管理员代申请照常可选。
+  const usableProviders = useMemo(() => (providersQuery.data?.items ?? []).filter((item) => item.status !== 'disabled'),
+    [providersQuery.data?.items])
   useEffect(() => {
     if (usableProviders.length !== 1) return
     const only = usableProviders[0]!.id
@@ -1806,8 +1830,7 @@ function CertificateListPageContent({
     batchProviderAppliedRef.current = applied
     const providerID = addDefaults.certificate_type === 'acme' ? addDefaults.dns_provider_id : undefined
     if (providerID && !batchForm.getFieldValue('dns_provider_id') &&
-      providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled' &&
-        (!isTenant || item.managed_by !== 'platform'))) {
+      providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled')) {
       batchForm.setFieldValue('dns_provider_id', providerID)
     }
   }, [addDefaults, addTarget?.scopeID, addTargetKey, batchForm, batchOpen, isTenant, providersQuery.data])
@@ -2093,19 +2116,21 @@ function CertificateListPageContent({
     {
       title: assetT('assetColumns.status'), key: 'status', width: certificateColumnWidths.assets.status,
       // 有进行中的重新申请/续签时，在状态旁标“申请中”。
-      render: (_, row) => <>
+      render: (_, row) => <span className="certificate-status-cell">
         {/* 禁用优先于版本状态，状态列只放一个标签。 */}
         {row.asset.disabled ? <Tooltip title={assetT('certOps.disabledHint')}><Tag>{assetT('assetStates.disabled')}</Tag></Tooltip> : row.version ? (
           <Tag color={row.filter === 'expired' ? 'error' : row.filter === 'expiring' ? 'warning' : row.filter === 'normal' ? 'success' : 'processing'}>
             {assetT(`assetStates.${row.version.status}`)}
           </Tag>
         ) : <Tag>{assetT('assetStates.loading')}</Tag>}
+        {/* 当前绑定发布永久失败时标「同步失败」，悬停看原因。 */}
+        <CertificateSyncStatus sync={row.asset.sync} />
         {row.inFlight ? (
           <Button type="link" size="small" className="certificate-applying-link" title={assetT('assetActions.orders')} onClick={() => openOrders(row)}>
             <Tag color="processing">{assetT('assetStates.applying')}</Tag>
           </Button>
         ) : null}
-      </>,
+      </span>,
     },
     {
       title: assetT('assetColumns.actions'), key: 'actions', width: certificateColumnWidths.assets.actions, fixed: 'right',
@@ -2201,41 +2226,58 @@ function CertificateListPageContent({
       render: (value: string) => stackedDateTime(formatDateTime(value, i18n.resolvedLanguage) || value),
     },
   ]
+	  // 两张表都不设 scroll.x；域名列吃剩余宽度并省略，窄屏（<576）隐藏次要列、收进展开行。
+	  const acmeOrderCell = (value: string) => (
+		<Typography.Text className="certificate-detail-mono" title={value} copyable={{ text: value, tooltips: [assetT('detail.copyOrder'), assetT('detail.copied')] }}>
+		  {shortID(value)}
+		</Typography.Text>
+	  )
+	  const versionStatusCell = (version: CertificateAssetVersion) => (
+		<span className="certificate-detail-tags">
+		  <Tag color={version.status === 'active' ? 'success' : version.status === 'expired' || version.status === 'revoked' ? 'error' : version.status === 'pending_activation' ? 'processing' : 'default'}>
+			{assetT(`assetStates.${version.status}`)}
+		  </Tag>
+		  {version.renewal_due ? <Tooltip title={version.renewal_due_at ? formatDateTime(version.renewal_due_at, i18n.resolvedLanguage) : undefined}><Tag color="warning">{assetT('renewal.due')}</Tag></Tooltip> : null}
+		</span>
+	  )
+	  const detailHasACMEOrder = Boolean(detail?.versions.some((version) => version.acme_order_id))
 	  const versionColumns: TableColumnsType<CertificateAssetVersion> = [
-	    { title: assetT('versionColumns.version'), dataIndex: 'version', width: 80 },
+	    { title: assetT('versionColumns.version'), dataIndex: 'version', width: compact ? 64 : 76, render: (value: number) => assetT('detail.version', { version: value }) },
+	    { title: assetT('versionColumns.status'), dataIndex: 'status', width: compact ? 96 : 150, render: (_, version) => versionStatusCell(version) },
 	    {
-	      title: assetT('versionColumns.status'), dataIndex: 'status', width: 130,
-	      render: (value: CertificateAssetVersion['status']) => assetT(`assetStates.${value}`),
-	    },
-	    {
-	      title: assetT('versionColumns.domains'), dataIndex: 'sans', width: 220, ellipsis: true,
+	      title: assetT('versionColumns.domains'), dataIndex: 'sans', ellipsis: { showTitle: false }, className: 'certificate-detail-secondary',
       render: (value: string[]) => <span title={value.join(', ')}>{value.join(', ')}</span>,
     },
 		{
-		  title: assetT('versionColumns.notAfter'), dataIndex: 'not_after', width: 180,
-		  render: (value: string) => formatDateTime(value, i18n.resolvedLanguage) || value,
+		  title: assetT('versionColumns.notAfter'), dataIndex: 'not_after', width: 104, className: 'certificate-detail-secondary',
+		  // 只显示日期，悬停看完整时间。
+		  render: (value: string) => {
+			const full = formatDateTime(value, i18n.resolvedLanguage) || value
+			return <span className="certificate-detail-nowrap" title={full}>{full.split(' ')[0]}</span>
+		  },
 		},
+		...(detailHasACMEOrder ? [{
+		  title: assetT('versionColumns.acmeOrder'), dataIndex: 'acme_order_id', width: 132, className: 'certificate-detail-secondary',
+		  render: (value?: string) => value ? acmeOrderCell(value) : assetT('values.none'),
+		} satisfies TableColumnsType<CertificateAssetVersion>[number]] : []),
 		{
-		  title: assetT('versionColumns.acmeOrder'), dataIndex: 'acme_order_id', width: 180, ellipsis: true,
-		  render: (value?: string) => value ?? assetT('values.none'),
-		},
-		{
-		  title: assetT('versionColumns.renewal'), dataIndex: 'renewal_due', width: 120,
-		  render: (value: boolean, version) => value ? <span title={version.renewal_due_at ?? undefined}>{assetT('renewal.due')}</span> : assetT('renewal.notDue'),
-		},
-		{
-		  title: assetT('versionColumns.actions'), key: 'actions', width: 120,
+		  title: assetT('versionColumns.actions'), key: 'actions', width: compact ? 76 : 84,
 		  render: (_, version) => canManage && !['active', 'revoked', 'expired'].includes(version.status)
 			? <Button type="link" size="small" disabled={commandLocked} onClick={() => activateVersion(version)}>{assetT('assetActions.activate')}</Button>
 			: null,
 		},
 	  ]
 	  const bindingColumns: TableColumnsType<CertificateAssetBinding> = [
-		{ title: assetT('bindingColumns.site'), dataIndex: 'site_id', width: 280, ellipsis: true },
-		{ title: assetT('bindingColumns.revision'), dataIndex: 'revision', width: 100 },
-		{ title: assetT('bindingColumns.default'), dataIndex: 'default', width: 100, render: (value: boolean) => assetT(value ? 'values.enabled' : 'values.disabled') },
 		{
-		  title: assetT('bindingColumns.actions'), key: 'actions', width: 100,
+		  title: assetT('bindingColumns.site'), dataIndex: 'site_id', ellipsis: { showTitle: false },
+		  render: (value: string) => <span className="certificate-detail-mono" title={value}>{value}</span>,
+		},
+		{ title: assetT('bindingColumns.revision'), dataIndex: 'revision', width: 96, className: 'certificate-detail-secondary' },
+		{ title: assetT('bindingColumns.default'), dataIndex: 'default', width: compact ? 80 : 96, render: (value: boolean) => assetT(value ? 'values.enabled' : 'values.disabled') },
+		// 每个绑定网站的同步状态，失败时原因直接显示。
+		{ title: syncT('syncColumn'), key: 'sync', width: compact ? 128 : 200, render: (_, binding) => <CertificateSyncStatus sync={binding.sync} detailed /> },
+		{
+		  title: assetT('bindingColumns.actions'), key: 'actions', width: compact ? 56 : 72,
 		  render: (_, binding) => canManage
 			? <Button type="link" danger size="small" disabled={commandLocked} onClick={() => unbind(binding)}>{assetT('assetActions.unbind')}</Button>
 			: null,
@@ -2360,7 +2402,7 @@ function CertificateListPageContent({
       ? <Input.TextArea aria-label={assetT('advancedFilters.multiDomain')} value={filterDraft.multiDomain} autoSize={{ minRows: 1, maxRows: 2 }} placeholder={assetT('advancedFilters.multiDomainPlaceholder')} onChange={(event) => updateFilterDraft({ multiDomain: event.target.value })} />
       : key === 'user' || key === 'certificateID'
         ? <IdOrNameInput aria-label={assetT(`advancedFilters.${key}`)} value={filterDraft[key]} placeholder={assetT(`advancedFilters.${key}Placeholder`)}
-          freeText={key === 'user'} isId={(text) => /^\d+$/.test(text)} search={key === 'user' ? ownerSearch : certificateIDSearch}
+          freeText isId={(text) => /^\d+$/.test(text)} search={key === 'user' ? ownerSearch : certificateIDSearch}
           onChange={(next) => updateFilterDraft({ [key]: next })} />
         : <Input aria-label={assetT(`advancedFilters.${key}`)} value={filterDraft[key]} placeholder={assetT(`advancedFilters.${key}Placeholder`)} onChange={(event) => updateFilterDraft({ [key]: event.target.value })} />,
   })
@@ -2606,8 +2648,9 @@ function CertificateListPageContent({
       ) : null}
       {sectionTab === 'dnsApi' ? (
         <div className="certificate-section-content certificate-dns-panel">
-          {targetSelector ? <div className="certificate-default-field"><label>{assetT('target.label')}</label>{targetSelector(providerWritesLocked)}</div> : null}
+          {/* 目标用户选择框与「新增 DNS API/删除选中」同一行，选择框约 320px。 */}
           <div className="certificate-dns-toolbar">
+            {targetSelector ? <div className="certificate-default-field certificate-dns-target"><label>{assetT('target.label')}</label>{targetSelector(providerWritesLocked)}</div> : null}
             <Space wrap>
               {canManageDNS ? <Button type="primary" icon={<Plus size={15} />} disabled={providerWritesLocked || !targetUser} onClick={() => {
                 setProviderWriteError(null)
@@ -2689,34 +2732,87 @@ function CertificateListPageContent({
         </div>
       ) : null}
 		<Modal
-		  className="identity-modal" title={assetT('detail.title')} open={detail !== null} width={820}
-		  footer={<Space>
-			{canManage ? <Button disabled={commandLocked || !detail?.versions.some((item) => item.status === 'active')} onClick={openBind}>{assetT('assetActions.bind')}</Button> : null}
-			<Button disabled={canManage && commandLocked} onClick={() => { setDetail(null); setBindings([]); setCommandError(null) }}>{assetT('assetActions.close')}</Button>
-		  </Space>}
+		  className="identity-modal certificate-detail-modal" title={assetT('detail.title')} open={detail !== null} width={MODAL_WIDTH.M}
+		  footer={<Button disabled={canManage && commandLocked} onClick={() => { setDetail(null); setBindings([]); setCommandError(null) }}>{assetT('assetActions.close')}</Button>}
 		  closable={!canManage || !commandLocked} maskClosable={!canManage || !commandLocked} keyboard={!canManage || !commandLocked}
 		  onCancel={() => { if (!canManage || !commandLocked) { setDetail(null); setBindings([]); setCommandError(null) } }} destroyOnHidden
 		>
-		  {detail ? (
-			<>
-			  {commandAlert}
-			  <Space size="large" wrap>
-              <span>{assetT('detail.name')}: {detail.asset.name}</span>
-              <span>{assetT('detail.source')}: {assetT(`assetSources.${detail.asset.source}`)}</span>
-              <span>{assetT('detail.revision')}: {detail.asset.revision}</span>
-            </Space>
-            <Table
-				className="identity-table-scroll" rowKey="id" size="small" columns={versionColumns}
-				dataSource={detail.versions} pagination={false} scroll={{ x: 730 }}
-				locale={{ emptyText: assetT('assetValues.noVersions') }}
-			  />
-			  <Table
-				className="identity-table-scroll" rowKey="site_id" size="small" columns={bindingColumns}
-				dataSource={bindings} pagination={false} scroll={{ x: 580 }}
-				locale={{ emptyText: assetT('assetValues.noBindings') }}
-			  />
-			</>
-		  ) : null}
+		  {detail ? (() => {
+			const live = detail.versions.find((item) => item.status === 'active') ?? latestAssetVersion(detail)
+			const days = live ? daysUntil(live.not_after) : null
+			const title = generatedACMEName.test(detail.asset.name) && live?.sans[0] ? live.sans[0] : detail.asset.name
+			const countdown = days === null ? assetT('values.none')
+			  : days > 0 ? assetT('detail.daysLeft', { days }) : days === 0 ? assetT('detail.expiresToday') : assetT('detail.expiredAgo', { days: -days })
+			const renewal = detail.asset.source === 'uploaded' ? assetT('detail.renewManual')
+			  : detail.asset.disabled ? assetT('assetStates.disabled')
+			  : live?.renewal_due ? assetT('renewal.due')
+			  : assetT(detail.asset.auto_renew ? 'autoRenew.enabled' : 'autoRenew.disabled')
+			const bindBlocked = commandLocked || !detail.versions.some((item) => item.status === 'active')
+			const bindButton = canManage
+			  ? <Button type={bindings.length === 0 ? 'primary' : 'default'} size="small" icon={<Link2 size={14} aria-hidden />} disabled={bindBlocked} onClick={openBind}>{assetT('assetActions.bind')}</Button>
+			  : null
+			return (
+			  <div className="certificate-detail">
+				{commandAlert}
+				<section className="certificate-detail-summary" aria-label={assetT('detail.summary')}>
+				  <div className="certificate-detail-head">
+					<h3 id="certificate-detail-heading" title={title}>{title}</h3>
+					<Tag color={detail.asset.source === 'acme' ? 'processing' : 'default'}>{assetT(`assetSources.${detail.asset.source}`)}</Tag>
+					{detail.asset.disabled ? <Tag>{assetT('assetStates.disabled')}</Tag> : null}
+				  </div>
+				  {title !== detail.asset.name && !generatedACMEName.test(detail.asset.name) ? <p className="certificate-detail-sub">{detail.asset.name}</p> : null}
+				  <Typography.Text type="secondary" className="certificate-detail-id certificate-detail-mono" title={detail.asset.id}
+					copyable={{ text: detail.asset.id, tooltips: [assetT('detail.copyID'), assetT('detail.copied')] }}>
+					{assetT('detail.id', { id: shortID(detail.asset.id) })}
+				  </Typography.Text>
+				  <dl className="certificate-detail-facts">
+					<div><dt>{assetT('detail.liveVersion')}</dt><dd>{live ? assetT('detail.version', { version: live.version }) : assetT('values.none')}</dd></div>
+					<div>
+					  <dt>{assetT('detail.expires')}</dt>
+					  <dd className={days !== null && days <= 0 ? 'is-error' : days !== null && days <= 30 ? 'is-warning' : undefined}>{countdown}</dd>
+					  {live ? <small>{formatDateTime(live.not_after, i18n.resolvedLanguage) || live.not_after}</small> : null}
+					</div>
+					<div><dt>{assetT('detail.renewal')}</dt><dd>{renewal}</dd></div>
+					{detail.asset.sync ? <div className="certificate-detail-sync"><dt>{syncT('syncLabel')}</dt><dd><CertificateSyncStatus sync={detail.asset.sync} detailed /></dd></div> : null}
+				  </dl>
+				</section>
+				<section className="certificate-detail-section" aria-labelledby="certificate-detail-versions">
+				  <h4 id="certificate-detail-versions">{assetT('detail.versions', { total: detail.versions.length })}</h4>
+				  <Table
+					rowKey="id" size="small" tableLayout="fixed" pagination={false}
+					columns={compact ? versionColumns.filter((column) => column.className !== 'certificate-detail-secondary') : versionColumns}
+					dataSource={detail.versions}
+					expandable={compact ? { expandedRowRender: (version) => (
+					  <dl className="certificate-detail-more">
+						<div><dt>{assetT('versionColumns.notAfter')}</dt><dd>{formatDateTime(version.not_after, i18n.resolvedLanguage) || version.not_after}</dd></div>
+						<div><dt>{assetT('versionColumns.domains')}</dt><dd>{version.sans.join(', ')}</dd></div>
+						{version.acme_order_id ? <div><dt>{assetT('versionColumns.acmeOrder')}</dt><dd>{acmeOrderCell(version.acme_order_id)}</dd></div> : null}
+					  </dl>
+					) } : undefined}
+					locale={{ emptyText: assetT('assetValues.noVersions') }}
+				  />
+				</section>
+				<section className="certificate-detail-section" aria-labelledby="certificate-detail-bindings">
+				  <div className="certificate-detail-section-head">
+					<h4 id="certificate-detail-bindings">{bindings.length ? assetT('detail.bindingsCount', { total: bindings.length }) : assetT('detail.bindings')}</h4>
+					{bindings.length ? bindButton : null}
+				  </div>
+				  {bindings.length ? (
+					<Table
+					  rowKey="site_id" size="small" tableLayout="fixed" pagination={false}
+					  columns={compact ? bindingColumns.filter((column) => column.className !== 'certificate-detail-secondary') : bindingColumns}
+					  dataSource={bindings}
+					/>
+				  ) : (
+					<div className="certificate-detail-empty">
+					  <span>{assetT('detail.noBindings')}</span>
+					  {bindButton}
+					</div>
+				  )}
+				</section>
+			  </div>
+			)
+		  })() : null}
 		</Modal>
 		<Modal
 		  className="identity-modal" title={assetT('bind.title')} open={canManage && bindTarget !== null}

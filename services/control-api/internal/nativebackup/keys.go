@@ -209,18 +209,32 @@ func lockDirectory(directory string) (func(), error) {
 
 const RecoveryKitSchema = "cdnca.control-native-backup.recovery-kit/v1"
 
+const (
+	recoveryNoteSealed = "恢复口令不保存在任何地方；请与本文件分开保管。恢复时：control-api native-backup restore --recovery-kit 本文件 / " +
+		"The passphrase is not stored anywhere; keep it apart from this file. Restore: control-api native-backup restore --recovery-kit FILE"
+	recoveryNotePlain = "这个文件就是恢复凭据，任何拿到它的人都能解开备份，请离线妥善保管。恢复时：control-api native-backup restore --recovery-kit 本文件 / " +
+		"This file is the recovery credential: anyone holding it can decrypt the backups. Keep it offline and safe. Restore: control-api native-backup restore --recovery-kit FILE"
+)
+
 // RecoveryKit lets an operator restore an off-site bundle after the original
-// host is gone: the age identity sealed with a passphrase (scrypt) and the
-// signer fingerprint to pin. Store it apart from the backups.
+// host is gone: the age identity and the signer fingerprint to pin. By
+// default the identity is stored as is and the file itself is the
+// credential; with a passphrase it is sealed (scrypt) instead. A kit without
+// has_passphrase predates the choice and is always sealed.
 type RecoveryKit struct {
 	Schema           string    `json:"schema"`
 	InstallationID   string    `json:"installation_id"`
 	SignerFinger     string    `json:"signer_fingerprint"`
 	Recipient        string    `json:"recipient"`
 	CreatedAt        time.Time `json:"created_at"`
-	SealedIdentity   string    `json:"sealed_identity"`
+	HasPassphrase    *bool     `json:"has_passphrase,omitempty"`
+	Identity         string    `json:"identity,omitempty"`
+	SealedIdentity   string    `json:"sealed_identity,omitempty"`
 	PassphraseHintCN string    `json:"note"`
 }
+
+// NeedsPassphrase reports whether opening the kit asks for a passphrase.
+func (kit RecoveryKit) NeedsPassphrase() bool { return kit.HasPassphrase == nil || *kit.HasPassphrase }
 
 var ErrWeakPassphrase = errors.New("recovery passphrase must be 12 to 1024 characters")
 
@@ -229,7 +243,18 @@ func validPassphrase(passphrase string) bool {
 	return utf8.ValidString(passphrase) && count >= 12 && count <= 1024 && !strings.ContainsRune(passphrase, 0)
 }
 
+// ExportRecoveryKit writes the identity as is when passphrase is empty, and
+// sealed under the passphrase (12 to 1024 characters) otherwise.
 func ExportRecoveryKit(ring KeyRing, installationID, passphrase string, now time.Time) (RecoveryKit, error) {
+	kit := RecoveryKit{Schema: RecoveryKitSchema, InstallationID: installationID, SignerFinger: ring.Fingerprint(),
+		Recipient: ring.Recipient(), CreatedAt: now.UTC()}
+	sealed := passphrase != ""
+	kit.HasPassphrase = &sealed
+	if !sealed {
+		kit.Identity = ring.Identity.String()
+		kit.PassphraseHintCN = recoveryNotePlain
+		return kit, nil
+	}
 	if !validPassphrase(passphrase) {
 		return RecoveryKit{}, ErrWeakPassphrase
 	}
@@ -238,8 +263,8 @@ func ExportRecoveryKit(ring KeyRing, installationID, passphrase string, now time
 		return RecoveryKit{}, err
 	}
 	recipient.SetWorkFactor(18)
-	var sealed bytes.Buffer
-	writer, err := age.Encrypt(&sealed, recipient)
+	var ciphertext bytes.Buffer
+	writer, err := age.Encrypt(&ciphertext, recipient)
 	if err != nil {
 		return RecoveryKit{}, err
 	}
@@ -249,33 +274,52 @@ func ExportRecoveryKit(ring KeyRing, installationID, passphrase string, now time
 	if err := writer.Close(); err != nil {
 		return RecoveryKit{}, err
 	}
-	return RecoveryKit{Schema: RecoveryKitSchema, InstallationID: installationID, SignerFinger: ring.Fingerprint(),
-		Recipient: ring.Recipient(), CreatedAt: now.UTC(), SealedIdentity: encodeBase64(sealed.Bytes()),
-		PassphraseHintCN: "恢复口令不保存在任何地方；请与本文件分开保管。恢复时：control-api native-backup restore --recovery-kit 本文件"}, nil
+	kit.SealedIdentity = encodeBase64(ciphertext.Bytes())
+	kit.PassphraseHintCN = recoveryNoteSealed
+	return kit, nil
 }
 
-func OpenRecoveryKit(encoded []byte, passphrase string) (*age.X25519Identity, RecoveryKit, error) {
+// ParseRecoveryKit decodes a kit without opening it, so a caller can tell
+// whether a passphrase is needed before asking for one.
+func ParseRecoveryKit(encoded []byte) (RecoveryKit, error) {
 	var kit RecoveryKit
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&kit); err != nil || kit.Schema != RecoveryKitSchema || !fingerprintPattern.MatchString(kit.SignerFinger) {
-		return nil, RecoveryKit{}, errors.New("recovery kit is invalid")
+		return RecoveryKit{}, errors.New("recovery kit is invalid")
 	}
-	sealed, err := decodeBase64(kit.SealedIdentity)
-	if err != nil {
-		return nil, RecoveryKit{}, errors.New("recovery kit is invalid")
+	if kit.NeedsPassphrase() != (kit.SealedIdentity != "") || kit.NeedsPassphrase() == (kit.Identity != "") {
+		return RecoveryKit{}, errors.New("recovery kit is invalid")
 	}
-	scrypt, err := age.NewScryptIdentity(passphrase)
+	return kit, nil
+}
+
+// OpenRecoveryKit returns the identity; passphrase is ignored for a kit
+// exported without one.
+func OpenRecoveryKit(encoded []byte, passphrase string) (*age.X25519Identity, RecoveryKit, error) {
+	kit, err := ParseRecoveryKit(encoded)
 	if err != nil {
 		return nil, RecoveryKit{}, err
 	}
-	reader, err := age.Decrypt(bytes.NewReader(sealed), scrypt)
-	if err != nil {
-		return nil, RecoveryKit{}, errors.New("recovery passphrase is wrong or the kit is damaged")
-	}
-	plain, err := io.ReadAll(io.LimitReader(reader, 4096))
-	if err != nil {
-		return nil, RecoveryKit{}, errors.New("recovery kit is damaged")
+	var plain []byte
+	if !kit.NeedsPassphrase() {
+		plain = []byte(kit.Identity)
+	} else {
+		sealed, err := decodeBase64(kit.SealedIdentity)
+		if err != nil {
+			return nil, RecoveryKit{}, errors.New("recovery kit is invalid")
+		}
+		scrypt, err := age.NewScryptIdentity(passphrase)
+		if err != nil {
+			return nil, RecoveryKit{}, err
+		}
+		reader, err := age.Decrypt(bytes.NewReader(sealed), scrypt)
+		if err != nil {
+			return nil, RecoveryKit{}, errors.New("recovery passphrase is wrong or the kit is damaged")
+		}
+		if plain, err = io.ReadAll(io.LimitReader(reader, 4096)); err != nil {
+			return nil, RecoveryKit{}, errors.New("recovery kit is damaged")
+		}
 	}
 	identity, err := age.ParseX25519Identity(strings.TrimSpace(string(plain)))
 	clear(plain)

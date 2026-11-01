@@ -215,6 +215,7 @@ func wafReportGrantsTestPools(t *testing.T) (*pgxpool.Pool, *pgxpool.Pool) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL is required for real runtime-role migration tests")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "waf_report_grants")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

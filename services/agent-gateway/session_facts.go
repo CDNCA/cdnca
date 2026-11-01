@@ -38,7 +38,7 @@ func newGatewaySessionFacts(identity nodeIdentity, epoch uint64, selected *commo
 			return nil
 		}
 	}
-	if len(capabilities.ProtoReflect().GetUnknown()) != 0 || len(capabilities.Features) == 0 || len(capabilities.Features) > 64 {
+	if len(capabilities.ProtoReflect().GetUnknown()) != 0 || len(capabilities.Features) == 0 || len(capabilities.Features) > agentv1.MaxCapabilities {
 		return nil
 	}
 	// A capability this Gateway build does not know (a newer Agent) is left

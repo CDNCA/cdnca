@@ -24,12 +24,17 @@ var reviewedAuditReaders = []string{
 	// newest row of a (scope, action, resource) group is always kept.
 	"site/transfer.go",
 	"analyticslog/block_state_postgres.go",
+	// job.retry receipt: reads the row this transaction just appended for the
+	// job (newest of its (scope, action, resource) group, always kept).
+	"analyticslog/export_postgres.go",
 	"audit/audittest/audittest.go", // integration-test helper only, not a production reader
 	"audit/log.go",
 	"auditlog/store.go",
 	"cachecontrol/job_command_receipt.go",
 	"cachecontrol/lifecycle.go",
 	"cachecontrol/store.go",
+	// cache.write.reject replay: a cache.* row, all of which are pinned (331).
+	"cachecontrol/write_receipt.go",
 	"cachecontrolhttp/reader.go",
 	"cnameallocation/store.go",
 	"controlupgrade/create_store.go",

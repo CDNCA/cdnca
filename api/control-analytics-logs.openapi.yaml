@@ -1187,7 +1187,8 @@ components:
     AccessExport:
       type: object
       additionalProperties: false
-      required: [id, status, reason, snapshot_at, row_count, byte_count, created_at, expires_at, downloadable, filter]
+      required: [id, status, reason, snapshot_at, row_count, byte_count, created_at, expires_at, downloadable, filter,
+        requested_by, download_count, last_downloaded_at, last_downloaded_by]
       properties:
         id: {type: string, format: uuid}
         status: {type: string, enum: [pending, running, completed, failed]}
@@ -1200,10 +1201,29 @@ components:
         expires_at: {type: [string, 'null'], format: date-time}
         downloadable: {type: boolean}
         filter:
-          description: 申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。
+          description: "The original query conditions frozen at request time; null when the stored document version is not recognised."
+          x-description-zh: 申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。
           oneOf:
             - {$ref: '#/components/schemas/AccessExportFilter'}
             - {type: 'null'}
+        requested_by: {$ref: '#/components/schemas/AccessExportUser'}
+        download_count:
+          description: 已消费的一次性下载授权数（每次成功下载 1 次）。
+          type: integer
+          minimum: 0
+        last_downloaded_at: {type: [string, 'null'], format: date-time}
+        last_downloaded_by:
+          oneOf:
+            - {$ref: '#/components/schemas/AccessExportUser'}
+            - {type: 'null'}
+    AccessExportUser:
+      type: object
+      additionalProperties: false
+      required: [id, username, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string, minLength: 1, maxLength: 128}
+        display_name: {type: string, minLength: 1, maxLength: 256}
     AccessExportList:
       type: object
       additionalProperties: false

@@ -19,6 +19,7 @@ import {
 } from '../api/originAuthRules'
 import { useSessionStore } from '../auth/session'
 import { DataState } from '../components/DataState'
+import { isFeatureDisabled } from '../i18n/apiError'
 import '../i18n/originAuthRules'
 
 type Owner = readonly ['tenant', string, string, number]
@@ -82,6 +83,7 @@ export function currentOriginAuthRuleAccess(ownerKey: string): string | null {
 
 export function originAuthRuleErrorKey(error: unknown) {
   if (!(error instanceof ApiError)) return 'errors.requestFailed'
+  if (isFeatureDisabled(error)) return 'errors:feature_disabled'
   if (error.status === 403 || error.code === 'permission_denied' || error.code === 'origin_auth_permission_denied') return 'errors.forbiddenTitle'
   if (error.status === 404) return 'errors.notFound'
   if (error.status === 409) return 'errors.conflict'

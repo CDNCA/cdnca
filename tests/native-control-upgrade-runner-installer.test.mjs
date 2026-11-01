@@ -489,6 +489,19 @@ for (const host of ['127.0.0.1', '[::1]']) {
   })
 }
 
+// 10-30 73: the console index check dials the local control-web (optional loopback IP:port).
+for (const [address, ok] of [['127.0.0.1:443', true], ['127.0.0.1:18443', true], ['[::1]:443', true],
+  ['203.0.113.7:443', false], ['localhost:443', false], ['127.0.0.1:0', false], ['127.0.0.1:0443', false], ['::1:443', false], ['127.0.0.1', false]]) {
+  test(`native runner static preflight ${ok ? 'accepts' : 'rejects'} console index address ${address}`, () => {
+    const value = runnerInstallerFixture()
+    try {
+      value.env.CDNCA_NATIVE_UPGRADE_WEB_INDEX_ADDRESS = address
+      const result = runRunnerInstaller(value)
+      assert.equal(result.status, ok ? 0 : 1, result.stderr)
+    } finally { rmSync(value.root, { recursive: true, force: true }) }
+  })
+}
+
 test('a FIFO input is rejected promptly without waiting for a writer', () => {
   const value = runnerInstallerFixture()
   try {

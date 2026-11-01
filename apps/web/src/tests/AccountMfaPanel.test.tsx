@@ -577,7 +577,7 @@ describe('AccountMfaPanel', () => {
     ['logout', 'new-principal'] as const,
     ['same-principal same-expiry relogin', 'same-principal'] as const,
     ['different-principal relogin', 'different-principal'] as const,
-  ])('applies the second refresh guard after a pending old me across %s', async (
+  ])('applies the second refresh guard after a pending old refresh answer across %s', async (
     transition,
     nextIdentity,
   ) => {
@@ -599,30 +599,23 @@ describe('AccountMfaPanel', () => {
       const oldMeResponse = deferred<Response>()
       let oldMeCalls = 0
       let refreshCalls = 0
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
         const path = String(url)
         if (path === '/v1/auth/refresh') {
           refreshCalls += 1
-          return json({
-            ...authResponse(refreshCalls === 1 ? oldActor : nextActor),
-            access_token: refreshCalls === 1
-              ? `old-me-token-${transition}-${oldOutcome}`
-              : `current-refresh-${transition}-${oldOutcome}`,
-            expires_in: 73,
-          })
+          // the refresh answer carries the principal (no /v1/auth/me after it),
+          // so the old attempt stays pending at its refresh answer instead.
+          if (refreshCalls === 1) {
+            oldMeCalls += 1
+            return oldMeResponse.promise
+          }
+          return json({ ...authResponse(nextActor), access_token: `current-refresh-${transition}-${oldOutcome}`, expires_in: 73 })
         }
         if (path === '/v1/auth/login') {
           return json({ ...authResponse(nextActor), access_token: `login-${transition}-${oldOutcome}`, expires_in: 73 })
         }
         if (path === '/v1/auth/logout') return new Response(null, { status: 204 })
-        if (path === '/v1/auth/me') {
-          const authorization = new Headers(init?.headers).get('Authorization')
-          if (authorization === `Bearer old-me-token-${transition}-${oldOutcome}`) {
-            oldMeCalls += 1
-            return oldMeResponse.promise
-          }
-          return json(nextActor)
-        }
+        if (path === '/v1/auth/me') return json(nextActor)
         throw new Error(`unexpected request: ${path}`)
       })
 
@@ -659,8 +652,8 @@ describe('AccountMfaPanel', () => {
           expect(currentState.sessionEpoch).toBe(transitionState.sessionEpoch)
         }
 
-        if (oldOutcome === 'success') oldMeResponse.resolve(json(oldActor))
-        else oldMeResponse.reject(new TypeError('stale me failed'))
+        if (oldOutcome === 'success') oldMeResponse.resolve(json({ ...authResponse(oldActor), access_token: `old-me-token-${transition}-${oldOutcome}`, expires_in: 73 }))
+        else oldMeResponse.reject(new TypeError('stale refresh failed'))
         expect(await observedOldRefresh).toBe('rejected')
         expect(useSessionStore.getState()).toMatchObject({
           accessToken: currentState.accessToken,
@@ -763,7 +756,7 @@ describe('AccountMfaPanel', () => {
     }
   })
 
-  it('fails closed when refresh me returns a different principal identity', async () => {
+  it('fails closed when the refresh answer has a different principal identity', async () => {
     const actorA = principal({
       user_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       username: 'refresh-a',
@@ -777,8 +770,7 @@ describe('AccountMfaPanel', () => {
     useSessionStore.getState().setSession({ ...authResponse(actorA), access_token: 'refresh-a-token' }, actorA, 'new')
     const startingEpoch = useSessionStore.getState().sessionEpoch
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(json({ ...authResponse(actorA), access_token: 'mismatched-me-token' }))
-      .mockResolvedValueOnce(json(actorB))
+      .mockResolvedValueOnce(json({ ...authResponse(actorB), access_token: 'mismatched-refresh-token' }))
 
     await expect(refreshSession()).rejects.toThrow()
     expect(useSessionStore.getState()).toMatchObject({

@@ -1700,6 +1700,10 @@ function SiteListPageSession({
   // 更换所属用户：平台管理员（服务端按 tenantaccess 平台管理员规则再校验）。
   const canTransferSite = role === 'admin' && principal.scope_kind === 'platform' && canManageSites
   const canReadDNSReconcile = principal.scope_kind === 'tenant' && principal.permissions.includes('dns.read')
+  // 平台管理员也能打开「解析检测」全站列表（/v1/sites 与 auto-dns/sync 服务端已接受平台主体），
+  // 之前点击只弹“暂不可用”；详细检测（/site/:id/dns-reconcile）仍只给租户，面板内按 scope 隐藏。
+  const canOpenDnsCheck = canReadDNSReconcile ||
+    (role === 'admin' && principal.scope_kind === 'platform' && principal.permissions.includes('dns.read'))
   // DNS API：租户看自己的 DNS 服务商账号（本页内嵌，不跳管理员 /node/dns）；平台管理员仍去节点管理 > DNS配置。
   const canOpenDnsApi = principal.permissions.includes('dns.read') &&
     (principal.scope_kind === 'tenant' || (role === 'admin' && principal.scope_kind === 'platform'))
@@ -3000,7 +3004,7 @@ function SiteListPageSession({
                   return
                 }
                 if (index === 4) {
-                  if (!canReadDNSReconcile) {
+                  if (!canOpenDnsCheck) {
                     blockAction(item)
                     return
                   }
@@ -3026,7 +3030,7 @@ function SiteListPageSession({
       {activeSubnav === 'groups' && !forbidden ? <SiteGroupsPage />
         : activeSubnav === 'dnsApi' && !forbidden && canOpenDnsApi && tenantScope ? <SiteDnsApiPanel />
         : activeSubnav === 'defaults' && !forbidden && canOpenWebsiteDefaults && tenantScope ? <SiteDefaultsPanel />
-        : activeSubnav === 'dnsCheck' && !forbidden && canReadDNSReconcile ? <SiteDnsCheckPanel onConfigureDnsApi={() => setActiveSubnav('dnsApi')} restore={routeState?.dnsCheckBack} /> : <>
+        : activeSubnav === 'dnsCheck' && !forbidden && canOpenDnsCheck ? <SiteDnsCheckPanel onConfigureDnsApi={() => tenantScope ? setActiveSubnav('dnsApi') : navigate('/node/dns')} restore={routeState?.dnsCheckBack} /> : <>
       <div className="site-toolbar">
         <AdvancedFilters
           className="site-advanced-filters"

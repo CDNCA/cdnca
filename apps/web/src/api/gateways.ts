@@ -1,6 +1,7 @@
-import { buildInstallerCommand, quoteShellArgument as quote } from '@cdnca/ui/installer-command'
+import { buildInstallerCommand, installerLanguageArgument, quoteShellArgument as quote } from '@cdnca/ui/installer-command'
 
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { responseETag } from './etag'
 
 // Standalone Agent Gateways (ADR 0013 §3.4, GW-06). Server: services/control-api/internal/gatewayregistry.
 export type GatewayStatus = 'pending' | 'bound' | 'active' | 'disabled' | 'deleted'
@@ -99,7 +100,7 @@ async function versionedSettings(accessToken: string, init: RequestInit = {}): P
     throw networkApiError()
   }
   if (!response.ok) throw await responseApiError(response)
-  const etag = response.headers.get('ETag') ?? ''
+  const etag = responseETag(response) ?? ''
   if (!settingsETag.test(etag)) throw new ApiError('API response was invalid', response.status, 'invalid_response')
   return { settings: await response.json() as GatewaySettings, etag }
 }
@@ -144,28 +145,30 @@ const tokenPattern = /^gwt1\.[0-9a-f-]{36}\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/
  * comes from the authorization center that published this console, is
  * downloaded to a temporary file and checked before it runs.
  */
-export function buildGatewayInstallCommand(bindingToken: string, controlOrigin: string, installerOrigin: string, host: string): string {
+export function buildGatewayInstallCommand(bindingToken: string, controlOrigin: string, installerOrigin: string, host: string, language?: string): string {
   if (!tokenPattern.test(bindingToken)) throw new Error('invalid binding token')
   const control = new URL(controlOrigin)
   const installer = new URL(installerOrigin)
   if (control.protocol !== 'https:' || installer.protocol !== 'https:') throw new Error('installation origins must be https')
   return buildInstallerCommand({
     urls: [`${installer.origin}/downloads/install-control.sh`], protocols: '=https', label: '[cdnca-control]',
-    args: `--mode gateway --control ${quote(control.origin)} --gateway-host ${quote(host)} --gateway-token-file -`, stdinSecret: bindingToken,
+    args: `--mode gateway --control ${quote(control.origin)} --gateway-host ${quote(host)} --gateway-token-file -`, stdinSecret: bindingToken, language,
   })
 }
 
 /**
  * One command, run as root on an installed control host, that opens standalone
  * Gateway access in place (install-control.sh enable-gateway-access). Without
- * the authorization center origin the bare form is returned.
+ * the authorization center origin the bare form is returned. An English UI
+ * (language) adds --lang en, a Chinese one --lang zh.
  */
-export function buildEnableGatewayAccessCommand(installerOrigin: string): string {
+export function buildEnableGatewayAccessCommand(installerOrigin: string, language?: string): string {
+  const bare = `bash install-control.sh enable-gateway-access${installerLanguageArgument(language)}`
   let installer: URL
-  try { installer = new URL(installerOrigin) } catch { return 'bash install-control.sh enable-gateway-access' }
-  if (installer.protocol !== 'https:') return 'bash install-control.sh enable-gateway-access'
+  try { installer = new URL(installerOrigin) } catch { return bare }
+  if (installer.protocol !== 'https:') return bare
   return buildInstallerCommand({
     urls: [`${installer.origin}/downloads/install-control.sh`], protocols: '=https', label: '[cdnca-control]',
-    args: 'enable-gateway-access',
+    args: 'enable-gateway-access', language,
   })
 }

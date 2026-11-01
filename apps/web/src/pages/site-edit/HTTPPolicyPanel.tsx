@@ -457,6 +457,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     </div>,
     referer: (
       <div className="site-instant-contents" {...commits.typingProps}><SettingGroup title={t('refererTitle')} status={config.referer_check ? t('stateOn') : t('stateOff')} help={t('refererShort')} tip={t('refererHelp')}
+        className={config.referer_check ? 'is-wide' : undefined}
         extra={<Switch aria-label={t('refererEnabled')} checked={config.referer_check !== null} disabled={locked}
           onChange={(enabled) => editConfig((current) => ({ ...current, referer_check: enabled
             ? refererCheckFrom(refererDraft) ?? refererCheckFrom(emptyRefererDraft()) : null }))} />}>
@@ -482,6 +483,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     ),
     cors: (
       <div className="site-instant-contents" {...commits.typingProps}><SettingGroup title={t('corsTitle')} status={config.cors ? t('stateOn') : t('stateOff')} help={t('corsShort')}
+        className={config.cors ? 'is-wide' : undefined}
         extra={<Switch aria-label={t('corsEnabled')} checked={config.cors !== null} disabled={locked}
           onChange={(enabled) => editConfig((current) => ({ ...current, cors: enabled ? {
             allowed_origins: [], allowed_methods: [], allowed_headers: [], exposed_headers: [], allow_credentials: false, max_age_seconds: 600,
@@ -498,7 +500,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     ),
     // URL 转向 (one list; 内部重写 is one of its types, our rewrites)
     redirects: (
-      <SettingGroup title={t('redirects')} status={count(redirectRows.length)} help={t('redirectsShort')}
+      <SettingGroup title={t('redirects')} status={count(redirectRows.length)} help={t('redirectsShort')} className={redirectRows.length ? 'is-wide' : undefined}
         extra={canWrite ? <Button type="primary" icon={<Plus size={15} />} disabled={editLocked}
           onClick={() => setRedirectDialog({ list: 'redirects', index: null })}>{t('addRedirect')}</Button> : null}>
         {redirectRows.length ? (
@@ -509,6 +511,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     rewrites: null,
     requestHeaders: (
       <SettingGroup title={t('requestHeadersTitle')} status={count(config.request_headers.length)} help={t('requestHeadersShort')}
+        className={config.request_headers.length ? 'is-wide' : undefined}
         extra={canWrite ? <Button type="primary" icon={<Plus size={15} />} disabled={editLocked}
           onClick={() => setHeaderDialog({ side: 'request', index: null })}>{t('addRequestHeader')}</Button> : null}>
         {config.request_headers.length ? (
@@ -519,6 +522,7 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
     ),
     responseHeaders: (
       <SettingGroup title={t('responseHeadersTitle')} status={count(config.response_headers.length)} help={t('responseHeadersShort')} tip={t('responseHeaderHint')}
+        className={config.response_headers.length ? 'is-wide' : undefined}
         extra={canWrite ? <Button type="primary" icon={<Plus size={15} />} disabled={editLocked}
           onClick={() => setHeaderDialog({ side: 'response', index: null })}>{t('addResponseHeader')}</Button> : null}>
         {config.response_headers.length ? (
@@ -528,7 +532,6 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
       </SettingGroup>
     ),
     actions: <>
-      {!policy ? <p className="site-setting-section-help">{t('empty')}</p> : null}
       {!canWrite ? <Alert type="info" message={t('readOnly')} /> : null}
       {notice ? <Alert type="success" message={notice} closable onClose={() => setNotice('')} /> : null}
       {writeError ? uncertain ? <OutcomeUnknown title={t('unknownTitle')} detail={t('unknownDescription')} action={<Space><Button loading={abandoning} disabled={mutation.isPending} onClick={() => { void abandon() }}>{t('abandonRefresh')}</Button>
@@ -550,9 +553,11 @@ export default function HTTPPolicyPanel(props: HTTPPolicyPanelProps) {
           draft={redirectDialog.index === null ? null : redirectDialog.list === 'rewrites'
             ? draftFromRewrite(config.rewrites[redirectDialog.index]!) : draftFromRedirect(config.redirects[redirectDialog.index]!)} />
       ) : null}
-      <h3 className="site-setting-subtitle">{t('publicationPreview')}</h3>
-      {preview ? <Alert type="info" message={t('previewSummary', { revision: preview.snapshot.policy_version, included: t(included ? 'previewIncluded' : 'previewExcluded') })}
-        description={<code>{preview.sha256}</code>} /> : previewQuery.isPending ? <Spin size="small" /> : <Alert type="info" message={t('previewUnavailable')} />}
+      {/* 「暂无 HTTP 策略」与发布预览原是分区末尾的散落文字，收进一张整行卡片 */}
+      <SettingGroup title={t('publicationPreview')} className="is-wide" help={!policy ? t('empty') : undefined}>
+        {preview ? <Alert type="info" message={t('previewSummary', { revision: preview.snapshot.policy_version, included: t(included ? 'previewIncluded' : 'previewExcluded') })}
+          description={<code>{preview.sha256}</code>} /> : previewQuery.isPending ? <Spin size="small" /> : <Alert type="info" message={t('previewUnavailable')} />}
+      </SettingGroup>
     </>,
   }
   if (props.children) return props.children(parts, null)

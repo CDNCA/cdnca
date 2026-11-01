@@ -35,6 +35,16 @@ type HTTPClient interface {
 type Client struct {
 	baseURL *url.URL
 	http    HTTPClient
+	// longPoll is http with a timeout covering a revocation long poll; nil
+	// (an injected HTTPClient) uses http for both.
+	longPoll HTTPClient
+}
+
+func (client *Client) longPollHTTP(wait bool) HTTPClient {
+	if wait && client.longPoll != nil {
+		return client.longPoll
+	}
+	return client.http
 }
 
 type operation struct {
@@ -83,16 +93,21 @@ func NewClient(rawBaseURL string, httpClient HTTPClient) (*Client, error) {
 		baseURL.RawQuery != "" || baseURL.Fragment != "" {
 		return nil, ErrInvalidConfiguration
 	}
+	var longPoll HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{
+		standard := &http.Client{
 			Timeout: 15 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
 		}
+		// Same transport (connection reuse), longer timeout for long polls.
+		long := *standard
+		long.Timeout = revocationLongPollTimeout
+		httpClient, longPoll = standard, &long
 	}
 	baseURL.Path = strings.TrimRight(baseURL.Path, "/")
-	return &Client{baseURL: baseURL, http: httpClient}, nil
+	return &Client{baseURL: baseURL, http: httpClient, longPoll: longPoll}, nil
 }
 
 func prepareActivation(

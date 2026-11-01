@@ -34,3 +34,18 @@ export function useRuntimeFeatureOff(feature: RuntimeFeature, accessToken: strin
   }).data
   return features !== undefined && !features.includes(feature)
 }
+
+// useDemoLocked: the signed-in account is a locked demo account; account
+// settings (password, contacts, MFA, API keys) are shown disabled and the API
+// refuses them with 403 demo_account_locked. Like useRuntimeFeatureOff it
+// never fetches: it reads the shell's GET /v1/runtime-features answer.
+export function useDemoLocked(accessToken: string | null): boolean {
+  const features = useQuery({
+    queryKey: runtimeFeaturesQueryKey,
+    queryFn: () => fetchRuntimeFeatures(accessToken ?? ''),
+    enabled: false,
+    staleTime: Infinity,
+    retry: false,
+  }).data
+  return features?.includes('demo_locked') ?? false
+}

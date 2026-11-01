@@ -19,6 +19,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/cachecontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/certificateasset"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/httppolicycontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitybinding"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
@@ -36,6 +37,7 @@ func TestSiteTransferCopiesSettingsAndReleasesDefenses(t *testing.T) {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "site_transfer_copy")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

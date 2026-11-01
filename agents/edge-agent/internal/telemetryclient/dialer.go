@@ -83,6 +83,7 @@ func NewMTLSDialer(config MTLSDialerConfig) (Dialer, error) {
 	}
 	options := []grpc.DialOption{
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		grpc.WithSharedWriteBuffer(true), // see gatewayclient
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(config.MaximumReceiveBytes), grpc.MaxCallSendMsgSize(config.MaximumSendBytes)),
 	}
 	address := config.Address

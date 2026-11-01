@@ -5,14 +5,24 @@ info:
   description: >-
     ADR 0020 §3. The tenant's own DNS accounts (managed_by=tenant; the platform copy never appears),
     their hosted domains and the domains' A/AAAA/CNAME/TXT records, read live from the DNS provider.
-    Tenant session only (a platform session gets 403). Another tenant's account, domain or record reads
-    as 404 dns_hub_not_found.
+    Tenant session or tenant API key (`Authorization: CdncaKey <key_id>.<secret>`; a platform session gets
+    403). With an API key the effective permissions are the key scopes intersected with the owner's current
+    RBAC grants, checked again in the database on every call. Reads need dns.read; writes (refresh, record
+    create/update/delete and batch) need dns.manage or dns.records.manage. dns.records.manage only changes
+    records in the hub: it never reads or changes DNS account credentials (/v1/dns/providers stays
+    dns.manage). Another tenant's account, domain or record reads as 404 dns_hub_not_found. Writes made
+    with an API key are audited with actor_ref api_key:<id>.
 paths:
   /v1/dns/hub/domains:
     get:
       operationId: listTenantDNSHubDomains
       summary: Own DNS accounts and one page of their cached hosted domains
-      security: [{bearerAuth: []}]
+      description: >-
+        One item per (provider_id, apex), ordered by apex then provider_id. When the same apex is
+        hosted by several of the tenant's DNS accounts (for example primary and secondary name
+        servers), each account appears as its own item, so this lists every (provider_id, apex) pair
+        of that apex; q is a substring filter, so match the apex exactly on the client.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-permissions: [dns.read]
       parameters:
         - {$ref: '#/components/parameters/RequestID'}
@@ -34,8 +44,8 @@ paths:
     post:
       operationId: refreshTenantDNSHubDomains
       summary: Re-list hosted domains (each account at most once a minute)
-      security: [{bearerAuth: []}]
-      x-required-permissions: [dns.manage]
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-any-permission: [dns.manage, dns.records.manage]
       parameters:
         - {$ref: '#/components/parameters/RequestID'}
       requestBody:
@@ -67,7 +77,7 @@ paths:
     get:
       operationId: listTenantDNSHubRecords
       summary: Live A/AAAA/CNAME/TXT records of a hosted domain
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-permissions: [dns.read]
       parameters:
         - {$ref: '#/components/parameters/ProviderID'}
@@ -90,8 +100,8 @@ paths:
     post:
       operationId: createTenantDNSHubRecord
       summary: Create a record and read it back
-      security: [{bearerAuth: []}]
-      x-required-permissions: [dns.manage]
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-any-permission: [dns.manage, dns.records.manage]
       parameters:
         - {$ref: '#/components/parameters/ProviderID'}
         - {$ref: '#/components/parameters/Apex'}
@@ -116,8 +126,8 @@ paths:
     patch:
       operationId: updateTenantDNSHubRecord
       summary: Change a record if it still holds expected
-      security: [{bearerAuth: []}]
-      x-required-permissions: [dns.manage]
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-any-permission: [dns.manage, dns.records.manage]
       parameters:
         - {$ref: '#/components/parameters/ProviderID'}
         - {$ref: '#/components/parameters/Apex'}
@@ -145,8 +155,8 @@ paths:
     delete:
       operationId: deleteTenantDNSHubRecord
       summary: Delete a record if it still holds expected
-      security: [{bearerAuth: []}]
-      x-required-permissions: [dns.manage]
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-any-permission: [dns.manage, dns.records.manage]
       parameters:
         - {$ref: '#/components/parameters/ProviderID'}
         - {$ref: '#/components/parameters/Apex'}
@@ -178,8 +188,8 @@ paths:
     post:
       operationId: batchTenantDNSHubRecords
       summary: Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)
-      security: [{bearerAuth: []}]
-      x-required-permissions: [dns.manage]
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-any-permission: [dns.manage, dns.records.manage]
       parameters:
         - {$ref: '#/components/parameters/RequestID'}
         - {$ref: '#/components/parameters/IdempotencyKey'}
@@ -236,6 +246,11 @@ paths:
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Send `CdncaKey <key_id>.<secret>` (tenant API key).
   parameters:
     RequestID: {name: X-Request-ID, in: header, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}

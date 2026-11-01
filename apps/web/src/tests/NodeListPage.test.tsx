@@ -518,6 +518,14 @@ describe('NodeListPage', () => {
     expect(table).toHaveAttribute('aria-busy', 'false')
   })
 
+  it('shows no SSH tab to a read-only operator', async () => {
+    authenticate(['nodes.read', 'regions.read'])
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [] }))
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+    expect(await screen.findAllByRole('tab')).toHaveLength(4)
+    expect(screen.queryByRole('tab', { name: 'SSH 连接' })).not.toBeInTheDocument()
+  })
+
   it('keeps the observed node-list tabs and baseline table headings', async () => {
     authenticate()
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [] }))
@@ -526,7 +534,9 @@ describe('NodeListPage', () => {
     renderWithProviders(<NodeListPage />, ['/node/list'])
 
     expect(screen.getByRole('heading', { name: '节点管理' })).toBeInTheDocument()
-    expect(await screen.findAllByRole('tab')).toHaveLength(4)
+    // 「SSH 连接」 follows 区域管理 for node managers.
+    expect(await screen.findAllByRole('tab')).toHaveLength(5)
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['节点列表', '待初始化', '同步失败已禁用', '区域管理', 'SSH 连接'])
     expect(screen.getByRole('tab', { name: '节点列表', selected: true })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '待初始化' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '同步失败已禁用' })).not.toHaveAttribute('aria-disabled', 'true')

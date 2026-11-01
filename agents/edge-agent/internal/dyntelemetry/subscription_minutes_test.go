@@ -73,3 +73,18 @@ func TestSubscriptionMinutesBindToLowestSiteAndRetryAfterSpoolFailure(t *testing
 		t.Fatalf("second take: taken=%d err=%v", taken, err)
 	}
 }
+
+// logscan：首个站点发布前 OpenResty 未启动、控制套接字不存在；没有可绑定的站点时不去取分钟数据，
+// 否则每 15 秒失败一次，遥测在 degraded / recovered 之间来回告警。
+func TestSubscriptionMinutesSkipTakeWithoutSites(t *testing.T) {
+	takes := 0
+	source := &SubscriptionMinutes{NodeID: "44444444-4444-4444-8444-444444444444",
+		Sites: func() []MinuteSite { return nil },
+		Take: func(context.Context) ([]NodeMinute, error) {
+			takes++
+			return nil, errors.New("dial unix cdnca-site-admin.sock: connect: no such file or directory")
+		}}
+	if err := source.Sync(context.Background(), &minuteSink{}, 100); err != nil || takes != 0 {
+		t.Fatalf("no sites: err=%v takes=%d, want nil and 0", err, takes)
+	}
+}

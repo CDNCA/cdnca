@@ -1388,6 +1388,7 @@ func newPGFixtureWith(t *testing.T, migrate func(context.Context, *pgxpool.Pool)
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
 	ctx := context.Background()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "acme_worker")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

@@ -225,7 +225,7 @@ func (m *Manager) run(ctx context.Context, command Command, normalized Manifest,
 			if err := runBounded(ctx, m.config.PrecheckTimeout, func(operationCtx context.Context) error {
 				return m.prechecker.Precheck(operationCtx, command.ConfigVersionID, releasePath)
 			}); err != nil {
-				return m.terminalFailure(value, record, "PRECHECK_FAILED", "release precheck failed", true, StateFailed)
+				return m.terminalFailure(value, record, "PRECHECK_FAILED", precheckSummary(err, "release precheck failed"), true, StateFailed)
 			}
 			if err := m.advance(value, record, StatePrechecked, phaseActivate, false, "", ""); err != nil {
 				return Result{}, err
@@ -405,7 +405,7 @@ func (m *Manager) runExplicitRollback(ctx context.Context, command Command, valu
 			if err := runBounded(ctx, m.config.PrecheckTimeout, func(operationCtx context.Context) error {
 				return m.prechecker.Precheck(operationCtx, command.ConfigVersionID, releasePath)
 			}); err != nil {
-				return m.explicitRollbackFailure(value, record, "ROLLBACK_PRECHECK_FAILED", "rollback release precheck failed", true, StateFailed)
+				return m.explicitRollbackFailure(value, record, "ROLLBACK_PRECHECK_FAILED", precheckSummary(err, "rollback release precheck failed"), true, StateFailed)
 			}
 			if err := m.advance(value, record, StatePrechecked, phaseExplicitRollbackActivate, false, "", ""); err != nil {
 				return Result{}, err
@@ -733,6 +733,20 @@ func (m *Manager) waitHealthy(ctx context.Context, versionID string) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// precheckSummary is the reported summary of a failed precheck: the cause's
+// own reportable line when it offers one (the L4 runtime's l4_precheck_failed
+// text, already one line of at most 512 bytes; node-logs2), else fallback.
+// Other precheck errors stay unreported: they may carry configuration text.
+func precheckSummary(err error, fallback string) string {
+	var reportable interface{ PrecheckSummary() string }
+	if errors.As(err, &reportable) {
+		if summary := reportable.PrecheckSummary(); summary != "" && len(summary) <= 512 && !strings.ContainsAny(summary, "\r\n") {
+			return summary
+		}
+	}
+	return fallback
 }
 
 func runBounded(ctx context.Context, timeout time.Duration, operation func(context.Context) error) error {

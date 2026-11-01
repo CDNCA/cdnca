@@ -27,7 +27,8 @@ type nativeExecutor struct {
 	inspect  nativeProcessInspector
 	now      func() time.Time
 	client   *http.Client
-	// webClient checks WebIndexURL; it is client unless WebCAFile is set.
+	// webClient checks WebIndexURL: it always dials the local control-web
+	// (WebIndexAddress) and trusts WebCAFile when set, else the client's roots.
 	webClient *http.Client
 	platform  NativePlatform
 	syncDir   func(string) error

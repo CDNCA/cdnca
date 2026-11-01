@@ -14,6 +14,7 @@ import (
 
 	contract "github.com/cdnca/cdnca/libs/edgeconfig/securityban"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
+	"github.com/cdnca/cdnca/services/control-api/internal/natsready"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -420,7 +421,7 @@ func (distributor *Distributor) consumeReceipts(ctx context.Context) {
 		delivery, err := distributor.config.Transport.NextReceipt(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				distributor.config.Logger.Warn("security ban receipts unavailable", "error", err)
+				natsready.LogUnbound(distributor.config.Logger, "security ban receipts unavailable", err)
 				select {
 				case <-ctx.Done():
 				case <-time.After(distributor.config.Interval):

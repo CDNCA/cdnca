@@ -210,7 +210,9 @@ func (s *Service) CreateSelf(ctx context.Context, principal identity.Principal, 
 		Scopes      []string   `json:"scopes"`
 		IPAllowlist []string   `json:"ip_allowlist"`
 		ExpiresAt   *time.Time `json:"expires_at"`
-	}{input.Name, input.Scopes, input.IPAllowlist, input.ExpiresAt})
+		// 只在绑定插件安装时进摘要，原有请求的幂等摘要不变。
+		PluginInstallationAuthorizationID *uuid.UUID `json:"plugin_installation_authorization_id,omitempty"`
+	}{input.Name, input.Scopes, input.IPAllowlist, input.ExpiresAt, input.PluginInstallationAuthorizationID})
 	return s.createActive(ctx, principal, principal.ScopeID, *principal.TenantID, principal.UserID, input, digest)
 }
 
@@ -454,18 +456,28 @@ func (s *Service) AuthenticateWithKeyID(
 	ctx context.Context,
 	raw string,
 ) (identity.Principal, uuid.UUID, time.Time, error) {
+	principal, keyID, authenticatedAt, _, err := s.AuthenticateWithPluginBinding(ctx, raw)
+	return principal, keyID, authenticatedAt, err
+}
+
+// AuthenticateWithPluginBinding 与 AuthenticateWithKeyID 相同，另返回密钥绑定的插件安装（未绑定为 nil）。
+// 绑定的安装不是 enabled（停用、卸载）时按无效凭据拒绝（ADR 0007 §3.2 一键撤权）。
+func (s *Service) AuthenticateWithPluginBinding(
+	ctx context.Context,
+	raw string,
+) (identity.Principal, uuid.UUID, time.Time, *PluginBinding, error) {
 	if !s.available() {
-		return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
 	}
 	keyID, secret, ok := parseCredential(raw)
 	if !ok {
-		return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
 	}
 	if err := requireAPIKeyEnabled(ctx, s.pool); err != nil {
 		if errors.Is(err, ErrDisabled) {
-			return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+			return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
 		}
-		return identity.Principal{}, uuid.Nil, time.Time{}, err
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, err
 	}
 	type credentialRecord struct {
 		id               uuid.UUID
@@ -480,12 +492,18 @@ func (s *Service) AuthenticateWithKeyID(
 		tenantStatus     string
 		userStatus       string
 		membershipStatus string
+		// 插件身份（604）：绑定的安装与其当前状态；未绑定时全为 NULL。
+		pluginAuthorizationID *uuid.UUID
+		pluginInstallationID  *uuid.UUID
+		pluginID              *string
+		pluginStatus          *string
 	}
 	record := credentialRecord{principal: identity.Principal{Roles: []string{}, Permissions: []string{}}}
 	err := s.pool.QueryRow(ctx, `
 		SELECT k.id, k.status, k.expires_at, k.pending_expires_at, k.secret_digest, k.pepper_version,
 		       k.user_id, k.scope_id, scope.kind, scope.tenant_id, u.username, u.display_name,
 		       k.scopes, k.ip_allowlist, tenant.status, u.status, m.status,
+		       k.plugin_installation_authorization_id, k.plugin_installation_id, k.plugin_id, head.status,
 		       COALESCE(array_agg(DISTINCT roles.name) FILTER (WHERE roles.name IS NOT NULL), '{}'::text[]),
 		       COALESCE(array_agg(DISTINCT rp.permission_name) FILTER (WHERE rp.permission_name IS NOT NULL), '{}'::text[])
 		FROM api_keys k
@@ -493,25 +511,28 @@ func (s *Service) AuthenticateWithKeyID(
 		JOIN tenants tenant ON tenant.id=scope.tenant_id
 		JOIN users u ON u.id=k.user_id
 		JOIN memberships m ON m.scope_id=k.scope_id AND m.user_id=k.user_id
+		LEFT JOIN plugin_installation_heads head ON head.tenant_scope_id=k.scope_id AND
+		     head.authorization_id=k.plugin_installation_authorization_id
 		LEFT JOIN role_assignments ra ON ra.scope_id=k.scope_id AND ra.user_id=k.user_id
 		LEFT JOIN roles ON roles.id=ra.role_id
 		LEFT JOIN role_permissions rp ON rp.role_id=roles.id
 		WHERE k.key_id=$1
-		GROUP BY k.id, scope.kind, scope.tenant_id, tenant.status, u.username, u.display_name, u.status, m.status`, keyID,
+		GROUP BY k.id, scope.kind, scope.tenant_id, tenant.status, u.username, u.display_name, u.status, m.status, head.status`, keyID,
 	).Scan(
 		&record.id, &record.status, &record.expiresAt, &record.pendingExpiresAt, &record.digest, &record.pepperVersion,
 		&record.principal.UserID, &record.principal.ScopeID, &record.principal.ScopeKind,
 		&record.principal.TenantID, &record.principal.Username, &record.principal.DisplayName,
 		&record.keyScopes, &record.ipAllowlist, &record.tenantStatus, &record.userStatus, &record.membershipStatus,
+		&record.pluginAuthorizationID, &record.pluginInstallationID, &record.pluginID, &record.pluginStatus,
 		&record.principal.Roles, &record.principal.Permissions,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_, computed, _ := s.pepper.SignActive(digestDomain, []byte(keyID), []byte{0}, []byte(secret))
 		_ = hmac.Equal(computed[:], s.dummyDigest[:])
-		return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
 	}
 	if err != nil {
-		return identity.Principal{}, uuid.Nil, time.Time{}, fmt.Errorf("load API key credential: %w", err)
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, fmt.Errorf("load API key credential: %w", err)
 	}
 	computed, knownVersion := s.pepper.Sign(
 		record.pepperVersion, digestDomain, []byte(keyID), []byte{0}, []byte(secret),
@@ -520,13 +541,24 @@ func (s *Service) AuthenticateWithKeyID(
 		_, computed, _ = s.pepper.SignActive(digestDomain, []byte(keyID), []byte{0}, []byte(secret))
 	}
 	if !hmac.Equal(computed[:], record.digest) || !knownVersion {
-		return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
 	}
 	authenticatedAt := s.now().UTC()
 	if record.status != StatusActive || record.principal.ScopeKind != "tenant" || record.tenantStatus != "active" ||
 		record.userStatus != "active" || record.membershipStatus != "active" ||
 		(record.expiresAt != nil && !authenticatedAt.Before(*record.expiresAt)) {
-		return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
+	}
+	var binding *PluginBinding
+	if record.pluginAuthorizationID != nil {
+		if record.pluginInstallationID == nil || record.pluginID == nil ||
+			record.pluginStatus == nil || *record.pluginStatus != pluginInstallationEnabled {
+			return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
+		}
+		binding = &PluginBinding{
+			AuthorizationID: *record.pluginAuthorizationID, InstallationID: *record.pluginInstallationID,
+			PluginID: *record.pluginID,
+		}
 	}
 	current := make(map[string]struct{}, len(record.principal.Permissions))
 	for _, permission := range record.principal.Permissions {
@@ -539,7 +571,7 @@ func (s *Service) AuthenticateWithKeyID(
 		}
 	}
 	if len(effective) == 0 {
-		return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
 	}
 	clientIP, reasonCode := apikeycredential.EnforceIPAllowlist(ctx, record.ipAllowlist)
 	if reasonCode != "" {
@@ -550,10 +582,42 @@ func (s *Service) AuthenticateWithKeyID(
 				IPAllowlist: append([]string(nil), record.ipAllowlist...), ReasonCode: reasonCode,
 			})
 		}
-		return identity.Principal{}, uuid.Nil, time.Time{}, ErrInvalidCredential
+		return identity.Principal{}, uuid.Nil, time.Time{}, nil, ErrInvalidCredential
 	}
 	record.principal.Permissions = effective
-	return record.principal, record.id, authenticatedAt, nil
+	return record.principal, record.id, authenticatedAt, binding, nil
+}
+
+const pluginInstallationEnabled = "enabled"
+
+// lockedPluginBinding 锁定并核对要绑定的插件安装：必须是本租户 scope 下 enabled 的安装（迁移 604 触发器同样校验）。
+func lockedPluginBinding(
+	ctx context.Context,
+	tx pgx.Tx,
+	scopeID uuid.UUID,
+	authorizationID *uuid.UUID,
+) (*PluginBinding, error) {
+	if authorizationID == nil {
+		return nil, nil
+	}
+	if *authorizationID == uuid.Nil {
+		return nil, ErrInvalidInput
+	}
+	binding := PluginBinding{AuthorizationID: *authorizationID}
+	var status string
+	err := tx.QueryRow(ctx, `SELECT installation_id, plugin_id, status FROM plugin_installation_heads
+		WHERE tenant_scope_id=$1 AND authorization_id=$2 FOR SHARE`, scopeID, *authorizationID).Scan(
+		&binding.InstallationID, &binding.PluginID, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrPluginInstallationUnavailable
+	}
+	if err != nil {
+		return nil, err
+	}
+	if status != pluginInstallationEnabled {
+		return nil, ErrPluginInstallationUnavailable
+	}
+	return &binding, nil
 }
 
 func (s *Service) createActive(
@@ -599,23 +663,38 @@ func (s *Service) createActive(
 		if !ok {
 			return ErrUnavailable
 		}
-		result.Secret = secret
-		now := s.now().UTC()
-		err = scanKey(tx.QueryRow(ctx, `
-			INSERT INTO api_keys (
-				id, key_id, key_prefix, scope_id, tenant_id, user_id, name, scopes, ip_allowlist,
-				secret_digest, pepper_version, status, expires_at, activated_at, created_by_user_id, created_at, updated_at
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',$12,$13,$14,$13,$13)
-			RETURNING `+keyColumns,
-			id, keyID, keyID+".", targetScopeID, tenantID, targetUserID, input.Name,
-			input.Scopes, input.IPAllowlist, secretDigest[:], pepperVersion, input.ExpiresAt, now, principal.UserID), &result.Key)
+		binding, err := lockedPluginBinding(ctx, tx, targetScopeID, input.PluginInstallationAuthorizationID)
 		if err != nil {
 			return err
 		}
+		result.Secret = secret
+		now := s.now().UTC()
+		var bindingAuthorization, bindingInstallation *uuid.UUID
+		var bindingPlugin *string
+		if binding != nil {
+			bindingAuthorization, bindingInstallation, bindingPlugin =
+				&binding.AuthorizationID, &binding.InstallationID, &binding.PluginID
+		}
+		err = scanKey(tx.QueryRow(ctx, `
+			INSERT INTO api_keys (
+				id, key_id, key_prefix, scope_id, tenant_id, user_id, name, scopes, ip_allowlist,
+				secret_digest, pepper_version, status, expires_at, activated_at, created_by_user_id, created_at, updated_at,
+				plugin_installation_authorization_id, plugin_installation_id, plugin_id
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',$12,$13,$14,$13,$13,$15,$16,$17)
+			RETURNING `+keyColumns,
+			id, keyID, keyID+".", targetScopeID, tenantID, targetUserID, input.Name,
+			input.Scopes, input.IPAllowlist, secretDigest[:], pepperVersion, input.ExpiresAt, now, principal.UserID,
+			bindingAuthorization, bindingInstallation, bindingPlugin), &result.Key)
+		if err != nil {
+			return err
+		}
+		payload := map[string]any{"scopes": result.Key.Scopes, "ip_allowlist": result.Key.IPAllowlist}
+		if binding != nil {
+			payload["plugin_id"] = binding.PluginID
+			payload["installation_id"] = binding.InstallationID.String()
+		}
 		if err := s.appendAudit(ctx, tx, principal, targetScopeID, input.RequestID,
-			"api_key.self.create", result.Key, map[string]any{
-				"scopes": result.Key.Scopes, "ip_allowlist": result.Key.IPAllowlist,
-			}); err != nil {
+			"api_key.self.create", result.Key, payload); err != nil {
 			return err
 		}
 		return completeWrite(ctx, tx, principal, "api_key.self.create", input.IdempotencyKey, result.Key.ID, result.Key)
@@ -811,7 +890,8 @@ func (s *Service) revoke(
 
 const keyColumns = `id, key_id, key_prefix, scope_id, tenant_id, user_id, name, scopes, ip_allowlist,
 	status, pending_expires_at, expires_at, last_used_at, activated_at, revoked_at,
-	revision, created_at, updated_at`
+	revision, created_at, updated_at,
+	plugin_installation_authorization_id, plugin_installation_id, plugin_id`
 
 func (s *Service) listAllPages(ctx context.Context, audience string, scopeID, userID uuid.UUID) ([]Key, error) {
 	input := APIKeyListInput{Limit: maxListLimit}
@@ -1488,5 +1568,6 @@ func scanKey(row rowScanner, key *Key) error {
 		&key.Name, &key.Scopes, &key.IPAllowlist, &key.Status, &key.PendingExpiresAt, &key.ExpiresAt,
 		&key.LastUsedAt, &key.ActivatedAt, &key.RevokedAt, &key.Revision,
 		&key.CreatedAt, &key.UpdatedAt,
+		&key.PluginInstallationAuthorizationID, &key.PluginInstallationID, &key.PluginID,
 	)
 }

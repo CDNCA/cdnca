@@ -448,7 +448,7 @@ components:
             site: {$ref: '#/components/schemas/SiteReference'}
             migration_marker:
               type: string
-              enum: [cdnfly_type_a_md5, cdnfly_type_b_md5]
+              enum: [legacy_type_a_md5, legacy_type_b_md5]
               readOnly: true
               description: Migration provenance only; never selects the runtime algorithm.
             current_key: {$ref: '#/components/schemas/KeyMetadata'}

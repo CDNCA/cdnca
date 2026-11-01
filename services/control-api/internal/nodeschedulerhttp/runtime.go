@@ -10,6 +10,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
+	"github.com/cdnca/cdnca/services/control-api/internal/smartsched"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -44,7 +45,11 @@ func NewRuntimeHandler(dependencies RuntimeDependencies) (http.Handler, error) {
 	if dependencies.Publications != nil {
 		service.SetPublicationTrigger(dependencies.Publications)
 	}
-	return NewHandler(service, runtimeAuthenticator{identity: dependencies.Identity, apiKeys: dependencies.APIKeys})
+	handler, err := NewHandler(service, runtimeAuthenticator{identity: dependencies.Identity, apiKeys: dependencies.APIKeys})
+	if err != nil {
+		return nil, err
+	}
+	return handler.WithSmartSchedule(smartsched.Reader{Now: dependencies.Now}), nil
 }
 
 type runtimeAuthenticator struct {

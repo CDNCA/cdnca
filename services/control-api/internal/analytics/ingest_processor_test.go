@@ -236,7 +236,8 @@ func TestIngestProcessorDeduplicatesSameMessageAndTokenIsOrderIndependent(t *tes
 	if _, err := reverseProcessor.Process(context.Background(), []IngestDelivery{reverseSecond, reverseFirst}); err != nil {
 		t.Fatal(err)
 	}
-	if writer.accessTokens[0] != reverseWriter.accessTokens[1] || writer.accessTokens[1] != reverseWriter.accessTokens[0] {
+	// 处理器按 stream 序号写入，乱序到达的批次写入顺序与正序一致；令牌必须与周边投递无关。
+	if writer.accessTokens[0] != reverseWriter.accessTokens[0] || writer.accessTokens[1] != reverseWriter.accessTokens[1] {
 		t.Fatalf("per-message tokens changed with surrounding deliveries: %v != %v", writer.accessTokens, reverseWriter.accessTokens)
 	}
 	t.Run("terminal settlement failure naks for replay", func(t *testing.T) {
@@ -529,6 +530,25 @@ func TestIngestProcessorDoesNotLogPayloadOrWriterSecret(t *testing.T) {
 	}
 	if bytes.Contains(logs.Bytes(), []byte(secret)) {
 		t.Fatalf("logs leaked payload or writer error: %s", logs.String())
+	}
+}
+
+// demo-fill 11-01: 73 logged only "class=retryable" while ClickHouse refused
+// every insert with 403 (Code 497, a materialized view running as the ingest
+// identity). The status code names the storage-side cause without the body.
+func TestIngestProcessorLogsWriterHTTPStatus(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2099, 1, 1, 1, 0, 0, 0, time.UTC)
+	delivery := newFakeDelivery(t, "message", now, []AccessEvent{eventAt(validAccessEvent("event"), now.Add(-time.Minute))})
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	writer := &fakeIngestWriter{accessErrors: []error{&HTTPError{StatusCode: http.StatusForbidden}}}
+	processor := mustProcessor(t, now, writer, &memoryIsolationSink{}, IngestProcessorConfig{Logger: logger})
+	if _, err := processor.Process(context.Background(), []IngestDelivery{delivery}); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(logs.Bytes(), []byte("class=retryable")) || !bytes.Contains(logs.Bytes(), []byte("http_status=403")) {
+		t.Fatalf("write failure log lacks the storage status: %s", logs.String())
 	}
 }
 

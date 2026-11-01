@@ -307,6 +307,13 @@ enum CapabilityName {
   // it only when the OpenResty binary exports the patch's function; control
   // refuses to publish a site with it to a node without it.
   CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY = 77;
+  // SSH_ACCESS v1 (node-ssh-tab, number assigned by the main session): the
+  // node applies "only the controller may SSH" (SSHAccessCommand apply: its
+  // own nft table inet cdnca_ssh_access) with a 5 minute rollback timer,
+  // keeps it on SSHAccessCommand confirm, and answers SSHAccessReceipt
+  // (applied / confirmed / reverted / failed), also unprompted when the
+  // timer reverted it. Control sends commands only to nodes that declare it.
+  CAPABILITY_NAME_SSH_ACCESS = 78;
 }
 
 // Capability advertises the highest implementation version for one feature.
@@ -1849,6 +1856,7 @@ message ConnectRequest {
     SiteDropReceipt site_drop_receipt = 26;
     CacheControlCancelReceipt cache_control_cancel_receipt = 27;
     GatewayAddressChangeReceipt gateway_address_change_receipt = 28;
+    SSHAccessReceipt ssh_access_receipt = 29;
   }
 }
 
@@ -1886,6 +1894,7 @@ message ConnectResponse {
     SiteDropCommand site_drop_command = 29;
     CacheControlCancel cache_control_cancel = 30;
     GatewayAddressChangeCommand gateway_address_change_command = 31;
+    SSHAccessCommand ssh_access_command = 32;
   }
 }
 
@@ -2155,6 +2164,40 @@ message GatewayAddressChangeReceipt {
   // active_address / active_server_name: the endpoint the node uses now.
   string active_address = 8;
   string active_server_name = 9;
+}
+
+// SSHAccessCommand is the control plane's wanted "only the controller may
+// SSH" state for one node (CAPABILITY_NAME_SSH_ACCESS v1, node-ssh-tab).
+// operation "apply" carries the whole policy of revision (enabled, ssh_port
+// and the allowed networks: controller egress plus the operator allowlist);
+// the node applies it with a 5 minute rollback timer. operation "confirm"
+// (only revision is meaningful) keeps the applied revision: the control
+// plane reached sshd again through the new rules. The command stream keeps
+// each node's newest command and every session starts from it; a repeated
+// revision is answered with the node's current state, never applied twice.
+message SSHAccessCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  uint64 revision = 3;
+  // operation: apply | confirm (libs/edgeconfig/sshaccess.Operation*).
+  string operation = 4;
+  bool enabled = 5;
+  uint32 ssh_port = 6;
+  repeated string cidrs = 7;
+}
+
+// SSHAccessReceipt reports the node's state of revision. It answers a
+// command (command_event_id set) or, without one, reports the rollback timer
+// reverting an unconfirmed revision.
+message SSHAccessReceipt {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  uint64 revision = 4;
+  // state: applied | confirmed | reverted | failed (sshaccess.State*).
+  string state = 5;
+  // failure_code: empty unless failed or reverted ([a-z][a-z0-9_]{0,63}).
+  string failure_code = 6;
 }
 
 message SiteDropCommand {

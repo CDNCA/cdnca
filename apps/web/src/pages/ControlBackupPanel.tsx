@@ -394,9 +394,11 @@ function TargetFields({ index, form, canManage, bt, onProbe, onRemove }: {
 }
 
 function RecoveryKit({ accessToken, canManage, bt, failed }: { accessToken: string; canManage: boolean; bt: Translate; failed: (error: unknown) => void }) {
+  const [sealed, setSealed] = useState(false)
   const [passphrase, setPassphrase] = useState('')
+  const length = [...passphrase].length
   const exportKit = useMutation({
-    mutationFn: () => controlBackupApi.recoveryKit(accessToken, passphrase),
+    mutationFn: () => controlBackupApi.recoveryKit(accessToken, sealed ? passphrase : ''),
     onSuccess: (kit) => {
       setPassphrase('')
       const link = document.createElement('a')
@@ -410,10 +412,13 @@ function RecoveryKit({ accessToken, canManage, bt, failed }: { accessToken: stri
   return <div className="control-backup-recovery">
     <h4>{bt('recoveryKit')}</h4>
     <p>{bt('recoveryKitHint')}</p>
-    <Space.Compact block>
+    {!sealed && <Alert type="warning" showIcon message={bt('recoveryKitPlainWarning')} />}
+    <Checkbox checked={sealed} disabled={!canManage} onChange={(event) => { setSealed(event.target.checked); setPassphrase('') }}>{bt('recoveryKitAddPassphrase')}</Checkbox>
+    {sealed && <>
+      <p>{bt('recoveryKitSealedHint')}</p>
       <Input.Password aria-label={bt('passphrase')} placeholder={bt('passphrase')} value={passphrase} disabled={!canManage} autoComplete="new-password" onChange={(event) => setPassphrase(event.target.value)} />
-      <Button disabled={!canManage || [...passphrase].length < 12} loading={exportKit.isPending} onClick={() => exportKit.mutate()}>{bt('exportKit')}</Button>
-    </Space.Compact>
+    </>}
+    <Button disabled={!canManage || (sealed && (length < 12 || length > 1024))} loading={exportKit.isPending} onClick={() => exportKit.mutate()}>{bt('exportKit')}</Button>
   </div>
 }
 

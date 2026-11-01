@@ -300,6 +300,17 @@ export interface AnalyticsLogExport {
   downloadable: boolean
   /** LOG-02：申请时服务端冻结的原查询条件（字段同创建请求）；null 为存储版本不可识别。 */
   filter: AnalyticsLogExportFilter | null
+  /** 申请人与下载记录（下载 = 一次性下载授权被消费）。旧服务端缺省。 */
+  requested_by?: AnalyticsLogExportUser
+  download_count?: number
+  last_downloaded_at?: string | null
+  last_downloaded_by?: AnalyticsLogExportUser | null
+}
+
+export interface AnalyticsLogExportUser {
+  id: string
+  username: string
+  display_name: string
 }
 
 /** 导出申请的原查询条件，键与创建请求 body.filter 相同。 */
@@ -946,10 +957,20 @@ function isExportFilter(value: unknown): value is AnalyticsLogExportFilter {
     exportFilterCountKeys.every((key) => value[key] === undefined || isCount(value[key]))
 }
 
+function isExportUser(value: unknown): value is AnalyticsLogExportUser {
+  return isRecord(value) && hasExactKeys(value, ['id', 'username', 'display_name']) && isUUID(value.id) &&
+    isText(value.username, 128, false) && isText(value.display_name, 256, false)
+}
+
 function isAccessExport(value: unknown): value is AnalyticsLogExport {
   if (!isRecord(value) || !hasExactKeys(value,
-    ['id', 'status', 'reason', 'snapshot_at', 'row_count', 'byte_count', 'created_at', 'expires_at', 'downloadable', 'filter'], ['sha256'])) return false
+    ['id', 'status', 'reason', 'snapshot_at', 'row_count', 'byte_count', 'created_at', 'expires_at', 'downloadable', 'filter'],
+    ['sha256', 'requested_by', 'download_count', 'last_downloaded_at', 'last_downloaded_by'])) return false
   if (value.filter !== null && !isExportFilter(value.filter)) return false
+  if (value.requested_by !== undefined && !isExportUser(value.requested_by)) return false
+  if (value.download_count !== undefined && !isCount(value.download_count)) return false
+  if (value.last_downloaded_at !== undefined && value.last_downloaded_at !== null && !isDateTime(value.last_downloaded_at)) return false
+  if (value.last_downloaded_by !== undefined && value.last_downloaded_by !== null && !isExportUser(value.last_downloaded_by)) return false
   return isUUID(value.id) && ['pending', 'running', 'completed', 'failed'].includes(String(value.status)) &&
     isText(value.reason, 64, false) && (value.snapshot_at === null || isDateTime(value.snapshot_at)) &&
     (value.row_count === null || isCount(value.row_count)) && (value.byte_count === null || isCount(value.byte_count)) &&
@@ -1246,6 +1267,9 @@ async function releaseCCCoordinationState(
   )
   return parseCCCoordinationRelease(raw)
 }
+
+/** 拉黑状态接口 cidr 参数的同一校验（规范前缀，主机位为 0）。 */
+export const isBlockCIDR = (value: string): boolean => isCIDR(value)
 
 export const analyticsLogsApi = {
   listAccess,

@@ -625,6 +625,10 @@ func mapReceiptPGError(err error) error {
 	}
 	var pgError *pgconn.PgError
 	if errors.As(err, &pgError) && pgError.Code == "P9803" {
+		// 098 的 analytics_ingest_mark_prepared_098 对"不连号"与"身份不符"共用 P9803（已上线迁移不改），按固定文案区分。
+		if pgError.Message == "analytics ingest preparation sequence is not contiguous" {
+			return ErrIngestPreparationNotContiguous
+		}
 		return ErrIngestReceiptConflict
 	}
 	return mapHistoryPGError(err)

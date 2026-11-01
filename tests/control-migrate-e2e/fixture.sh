@@ -6,6 +6,7 @@
 set -Eeuo pipefail
 umask 077
 role=$1
+ip=${2:-}  # old: this host's address; the Gateway is published by IP (migrate-ip)
 root=/data/cdnca-native-root/cdnca
 release=$root/releases/e2e
 pg() { runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -54,10 +55,48 @@ CONTROL_INSTALLATION_NAME=control-e2e
 CONTROL_VERSION=1.0.35
 LICENSE_SERVICE_URL=https://license.example.invalid
 EOF
-printf 'CDNCA_GATEWAY_AGENT_PUBLIC_ENDPOINT=control.e2e.test:19444\n' >/etc/cdnca-control/gateway.env
+cat >>/etc/cdnca-control/control.env <<EOF
+CDNCA_GATEWAY_LOCAL_ADDRESS=${ip}:19444
+CDNCA_GATEWAY_LOCAL_SERVER_NAME=${ip}
+CDNCA_GATEWAY_LOCAL_ENROLLMENT_ADDRESS=${ip}:19443
+EOF
+printf 'CDNCA_GATEWAY_AGENT_PUBLIC_ENDPOINT=%s:19444\nCDNCA_GATEWAY_ENROLLMENT_ADDR=0.0.0.0:19443\n' "$ip" >/etc/cdnca-control/gateway.env
 printf 'node-ca-private-key-material\n' >/etc/cdnca-control/keys/pki/node-ca-key.pem
-printf 'window.__CDNCA_GATEWAY_ADDRESS__="control.e2e.test:19444";\n' >/var/lib/cdnca-control/runtime-config.js
+cat >/var/lib/cdnca-control/runtime-config.js <<EOF
+window.__CDNCA_GATEWAY_ADDRESS__ = "${ip}:19444";
+window.__CDNCA_GATEWAY_ENROLLMENT_ADDRESS__ = "${ip}:19443";
+window.__CDNCA_GATEWAY_SERVER_NAME__ = "${ip}";
+EOF
 chmod 0600 /etc/cdnca-control/*.env /etc/cdnca-control/keys/pki/node-ca-key.pem
+
+# Installation PKI as install-control.sh lays it out: the root signs the
+# Gateway server certificate (SAN = this host's IP) and the node client
+# certificates (one URI SAN spiffe://cdn-platform/node/<id>).
+pki=/etc/cdnca-control/keys/pki
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 -subj /CN=cdnca-e2e-root \
+  -keyout $pki/root-ca-key.pem -out $pki/root-ca-cert.pem 2>/dev/null
+issue() { # issue NAME SUBJECT EXTENSIONS
+  openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj "/CN=$2" -keyout "$pki/$1-key.pem" -out "/tmp/$1.csr" 2>/dev/null
+  printf '%s\n' "$3" >"/tmp/$1.ext"
+  openssl x509 -req -in "/tmp/$1.csr" -CA $pki/root-ca-cert.pem -CAkey $pki/root-ca-key.pem -CAcreateserial -days 825 \
+    -extfile "/tmp/$1.ext" -out "$pki/$1.pem" 2>/dev/null
+}
+issue gateway-server "$ip" "subjectAltName=IP:${ip},DNS:control.e2e.test
+extendedKeyUsage=serverAuth
+keyUsage=digitalSignature"
+chmod 0444 $pki/gateway-server.pem; chmod 0600 $pki/*-key.pem
+# Node identities leave with run.sh (they live on the nodes, not the control host).
+install -d -m 0700 /opt/fixture/nodes
+for node in 11111111-1111-4111-8111-111111111111 22222222-2222-4222-8222-222222222222; do
+  issue "node-$node" node "subjectAltName=URI:spiffe://cdn-platform/node/$node
+extendedKeyUsage=clientAuth
+keyUsage=digitalSignature"
+  install -d -m 0700 "/opt/fixture/nodes/$node/tls"
+  mv "$pki/node-$node.pem" "/opt/fixture/nodes/$node/tls/client.pem"
+  mv "$pki/node-$node-key.pem" "/opt/fixture/nodes/$node/tls/client-key.pem"
+  cp $pki/root-ca-cert.pem "/opt/fixture/nodes/$node/tls/ca.pem"
+done
+rm -f /tmp/*.csr /tmp/*.ext $pki/root-ca-cert.srl
 chmod 0644 /var/lib/cdnca-control/runtime-config.js
 
 pg --dbname postgres <<SQL
@@ -72,8 +111,18 @@ CREATE TABLE schema_migrations (version bigint PRIMARY KEY);
 INSERT INTO schema_migrations SELECT generate_series(1, 302);
 CREATE TABLE nodes (id uuid PRIMARY KEY, name text NOT NULL, admin_state text NOT NULL);
 CREATE TABLE node_presence (node_id uuid PRIMARY KEY REFERENCES nodes(id), status text NOT NULL, last_seen_at timestamptz);
-INSERT INTO nodes VALUES ('11111111-1111-4111-8111-111111111111', 'edge-a', 'active');
-INSERT INTO node_presence VALUES ('11111111-1111-4111-8111-111111111111', 'online', now());
+INSERT INTO nodes VALUES ('11111111-1111-4111-8111-111111111111', 'edge-a', 'active'),
+  ('22222222-2222-4222-8222-222222222222', 'edge-b', 'active');
+INSERT INTO node_presence SELECT id, 'offline', NULL FROM nodes;
+-- migration 448 shape: the Gateway settings page entry points.
+CREATE TABLE agent_gateway_entrypoints (
+    position integer PRIMARY KEY CHECK (position BETWEEN 1 AND 16),
+    address text NOT NULL UNIQUE CHECK (char_length(address) BETWEEN 3 AND 260),
+    server_name text NOT NULL CHECK (char_length(server_name) BETWEEN 1 AND 253 AND server_name = lower(server_name)),
+    transport text NOT NULL CHECK (transport IN ('grpc', 'ws')),
+    tunnel_host text NOT NULL DEFAULT '' CHECK (char_length(tunnel_host) <= 253 AND tunnel_host = lower(tunnel_host)),
+    CHECK (transport = 'ws' OR tunnel_host = '')
+);
 CREATE TABLE sites (id serial PRIMARY KEY, domain text NOT NULL);
 INSERT INTO sites (domain) SELECT 'site-' || g || '.example' FROM generate_series(1, 2000) g;
 CREATE TABLE writes (id bigserial PRIMARY KEY, writer text NOT NULL, at timestamptz NOT NULL DEFAULT now());
@@ -109,9 +158,12 @@ ExecStart=/bin/sleep infinity
 WantedBy=multi-user.target
 EOF
 
-# Writer stand-ins: control-api keeps writing PostgreSQL every 200 ms and
-# serves /health/ready; the gateway serves /health/ready and marks the node
-# online whenever an "agent" connects (tests the reconnect check).
+# Writer stand-in: control-api keeps writing PostgreSQL every 200 ms and
+# serves /health/ready. The Gateway is the production Connect service
+# (services/agent-gateway TestMigrateIPGatewayProcess, under the support
+# tree so the migration carries it): mTLS with the PKI above, the
+# GatewayHello endpoint list from control.env + agent_gateway_entrypoints,
+# node_presence updated on connect/disconnect.
 cat >/usr/local/cdnca-control/support/writer.py <<'EOF'
 import http.server, subprocess, sys, threading, time
 kind, port = sys.argv[1], int(sys.argv[2])
@@ -124,29 +176,35 @@ def write():
         time.sleep(0.2)
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/agent/connect":
-            sql("UPDATE node_presence SET status='online', last_seen_at=now()")
         self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
     def log_message(self, *args): pass
-if kind == "control-api":
-    threading.Thread(target=write, daemon=True).start()
-http.server.ThreadingHTTPServer(("0.0.0.0" if kind == "gateway" else "127.0.0.1", port), Handler).serve_forever()
+threading.Thread(target=write, daemon=True).start()
+http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
 EOF
 chmod 0755 /usr/local/cdnca-control/support/writer.py
-for unit in control-api:8080 agent-gateway:8082; do
-  name=${unit%%:*} port=${unit##*:}
-  kind=$name; [ "$name" = agent-gateway ] && kind=gateway
-  cat >"/etc/systemd/system/cdnca-$name.service" <<EOF
+cat >/etc/systemd/system/cdnca-control-api.service <<'EOF'
 [Unit]
-Description=Stand-in for cdnca-$name
+Description=Stand-in for cdnca-control-api
 After=postgresql.service cdnca-control-nats.service
 [Service]
-ExecStart=/usr/bin/python3 /usr/local/cdnca-control/support/writer.py $kind $port
+ExecStart=/usr/bin/python3 /usr/local/cdnca-control/support/writer.py control-api 8080
 Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-done
+install -m 0755 /opt/fixture/agent-gateway.test /usr/local/cdnca-control/support/agent-gateway.test
+cat >/etc/systemd/system/cdnca-agent-gateway.service <<'EOF'
+[Unit]
+Description=cdnca-agent-gateway (production Connect service, e2e build)
+After=postgresql.service
+[Service]
+Environment=MIGRATE_IP_E2E_CONFIG_DIR=/etc/cdnca-control
+ExecStart=/usr/local/cdnca-control/support/agent-gateway.test -test.run ^TestMigrateIPGatewayProcess$ -test.v -test.timeout 0
+Restart=on-failure
+RestartSec=1
+[Install]
+WantedBy=multi-user.target
+EOF
 systemctl daemon-reload
 systemctl enable --now cdnca-control-nats cdnca-objectstore cdnca-control-api cdnca-agent-gateway >/dev/null 2>&1
 for _ in $(seq 30); do curl -fsS http://127.0.0.1:8222/healthz >/dev/null 2>&1 && break; sleep 1; done

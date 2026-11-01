@@ -154,6 +154,7 @@ type daemonClient struct {
 	rateBans              firewallExpiryRunner
 	xdpFilter             *xdp.Manager
 	xdpWatch              firewallExpiryRunner
+	l4DNSRefresh          firewallExpiryRunner
 	cacheTasks            gatewayclient.CacheTaskManager
 	dynamicRouting        dynamicRoutingRunner
 	challengeVerifier     challengeVerifierRunner
@@ -327,6 +328,9 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if err != nil {
 		return nil, fmt.Errorf("configure L4 OpenResty runtime: %w", err)
 	}
+	// Same worker account as dynamic routing (native: cdnca-runtime), not the
+	// compiled-in nobody whose group Ubuntu calls nogroup.
+	l4OpenResty.ConfigureGlobals(dynamicRoutingGlobals(config))
 	l4Manager, err := l4runtime.NewDeploymentManager(l4StateRoot, l4OpenResty)
 	if err != nil {
 		return nil, fmt.Errorf("configure L4 runtime manager: %w", err)
@@ -689,6 +693,18 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		siteDrop = newSiteDropRuntime(nodeID, trust.Ed25519Key, dynamicRouting.RunningSites, xdpFilter.Running,
 			executor, time.Now)
 	}
+	// "only the controller may SSH" (SSH_ACCESS v1) needs nft
+	// on Linux; without it the capability is not declared and the console
+	// shows the node as not supporting it.
+	if firewallReady && runtime.GOOS == "linux" {
+		sshAccess, err := newSSHAccessRuntime(context.Background(), nodeID,
+			filepath.Join(filepath.Dir(config.JournalDir), "ssh-access"), exec.LookPath)
+		if err != nil {
+			slog.Warn("SSH access restriction unavailable", "error", err)
+		} else {
+			clientOptions = append(clientOptions, gatewayclient.WithSSHAccess(sshAccess))
+		}
+	}
 	if siteDrop != nil {
 		clientOptions = append(clientOptions, gatewayclient.WithSiteDrop(siteDrop))
 		if nodeMonitoringRuntime != nil {
@@ -754,7 +770,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	}
 	clientOptions = append(clientOptions, gatewayclient.WithDeploymentChecks(
 		combineDeploymentChecks(wafEngineChecks(wafEngine), http3RuntimeChecks(http3Readiness), siteCertificateChecks(dynamicRouting),
-			ddosProtectionChecks(ddosProtection))))
+			ddosProtectionChecks(ddosProtection), l4StreamChecks(l4Manager))))
 	{
 		errorPages, err := assembleErrorPages(config.OpenResty.Binary, config.DeploymentRoot, trust)
 		if err != nil {
@@ -931,7 +947,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 			withSiteDrop(siteDrop).withReady(runtimeReady),
 		cacheTasks: cacheTasks, challengeVerifier: challengeVerifier,
 		l4TOA: l4TOA, l4OpenResty: l4OpenResty, emptyConnections: emptyConnections, rateBans: rateBans,
-		xdpFilter: xdpFilter,
+		xdpFilter: xdpFilter, l4DNSRefresh: l4DNSRefresher{manager: l4Manager, dns: l4DNS},
 		endpointProbe: func(ctx context.Context) {
 			dialer.RunFallbackProbe(ctx, gatewayclient.FallbackProbeInterval, timeouts.Handshake)
 		},
@@ -1214,6 +1230,18 @@ func (bridge *l4DeploymentBridge) load(root string) (l4runtime.ConfigV2, bool, e
 		return l4runtime.ConfigV2{}, false, err
 	}
 	return config, true, nil
+}
+
+// l4DNSRefresher re-resolves the active L4 release's host forwards and
+// re-probes degraded ones in the background: a changed address
+// set reloads only the L4 runtime.
+type l4DNSRefresher struct {
+	manager *l4runtime.Manager
+	dns     *l4runtime.DNSCoordinator
+}
+
+func (refresher l4DNSRefresher) Run(ctx context.Context) error {
+	return refresher.manager.RunDNSRefresh(ctx, refresher.dns, time.Now, nil)
 }
 
 type daemonL4DNSResolver struct{}
@@ -1511,7 +1539,7 @@ func (daemon *daemonClient) Run(ctx context.Context) error {
 		go runInstallationBanTicks(ctx, daemon.installationBan)
 	}
 	if daemon.diskGuard == nil && daemon.logDiskGuard == nil && daemon.telemetry == nil && daemon.drain == nil && daemon.firewallExpiry == nil &&
-		daemon.l4KernelBans == nil && daemon.emptyConnections == nil && daemon.rateBans == nil && daemon.xdpWatch == nil && daemon.challengeVerifier == nil && daemon.runtimeStatus == nil &&
+		daemon.l4KernelBans == nil && daemon.emptyConnections == nil && daemon.rateBans == nil && daemon.xdpWatch == nil && daemon.l4DNSRefresh == nil && daemon.challengeVerifier == nil && daemon.runtimeStatus == nil &&
 		daemon.dynamicRouting == nil {
 		return daemon.client.Run(ctx)
 	}
@@ -1621,6 +1649,13 @@ func (daemon *daemonClient) Run(ctx context.Context) error {
 		go func() {
 			defer background.Done()
 			_ = daemon.xdpWatch.Run(backgroundContext)
+		}()
+	}
+	if daemon.l4DNSRefresh != nil {
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			_ = daemon.l4DNSRefresh.Run(backgroundContext)
 		}()
 	}
 	clientErr := daemon.client.Run(backgroundContext)

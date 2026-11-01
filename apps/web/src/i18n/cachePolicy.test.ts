@@ -78,6 +78,9 @@ function dialogKeys(messages: MessageTree): string[] {
       'varyHeaderOptions.accept-encoding', 'varyHeaderOptions.accept-language', 'varyHeaderOptions.user-agent',
       'varyHeaderOptions.accept', 'varyHeaderOptions.origin', 'varyHeaderOptions.sec-ch-ua-mobile',
       'units.kb', 'units.mb', 'units.gb', 'units.tb', 'units.unitOf',
+      // 设置行一句话简述与「了解更多」。
+      'actions.learnMore', 'brief.backgroundUpdate', 'brief.diskQuota', 'brief.maxObjectBytes',
+      'brief.minObjectBytes', 'brief.queryMode', 'brief.staleIfError', 'brief.varyHeaders',
     ].sort()
     expect(Object.keys(zh).sort()).toEqual(expectedKeys)
 

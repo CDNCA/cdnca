@@ -139,7 +139,23 @@ def certificate_extension(certificate, name):
     return ()
 
 
-def validate_options(installation_id, web_index_url):
+def validate_web_index_address(value):
+    """Loopback IP:port the runner dials for the console index (the local control-web)."""
+    host, separator, port = value.rpartition(":")
+    require(separator and re.fullmatch(r"[1-9][0-9]{0,4}", port) and int(port) <= 65535, "invalid web index address")
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+        require(":" in host, "invalid web index address")
+    else:
+        require(":" not in host, "invalid web index address")
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    require(address is not None and address.is_loopback and str(address) == host, "invalid web index address")
+
+
+def validate_options(installation_id, web_index_url, web_index_address=None):
     require(os.geteuid() == OWNER and platform.system() == "Linux" and platform.machine() == "x86_64" and
             supported_host(os_release()),
             "requires root amd64 Ubuntu 24.04/22.04/20.04, Debian 10-13 or Rocky/AlmaLinux/RHEL 8/9/10")
@@ -155,6 +171,8 @@ def validate_options(installation_id, web_index_url):
     except ValueError:
         require(len(parsed.hostname) <= 253 and all(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
                                                   for label in parsed.hostname.split(".")), "invalid index host")
+    if web_index_address is not None:
+        validate_web_index_address(web_index_address)
     secure_directory(CONFIG.parent)
     require(openssl_version() >= (1, 0, 2), "OpenSSL 1.0.2 or newer is required")
 
@@ -218,7 +236,7 @@ def decode_web_ca(data):
     return data
 
 
-def configurations(web_index_url, artifact_trust_file=None, web_ca_file=None):
+def configurations(web_index_url, artifact_trust_file=None, web_ca_file=None, web_index_address=None):
     runner = {
         "CONTROL_UPGRADE_TARGET": "native-standalone", "CONTROL_UPGRADE_ONESHOT": "false",
         "CONTROL_UPGRADE_STATE_DIR": "/var/lib/cdnca-upgrade", "CONTROL_UPGRADE_RELEASE_ROOT": "/data/cdnca-native-root/cdnca",
@@ -248,6 +266,10 @@ def configurations(web_index_url, artifact_trust_file=None, web_ca_file=None):
     if web_ca_file is not None:
         decode_web_ca(read_file(web_ca_file, private=False))
         runner["CDNCA_NATIVE_UPGRADE_WEB_CA_FILE"] = str(CONFIG / WEB_CA)
+    # The console index check dials the local control-web, never the public
+    # domain (which may be behind a CDN that rewrites the page); SNI/Host stay the URL host.
+    if web_index_address is not None:
+        runner["CDNCA_NATIVE_UPGRADE_WEB_INDEX_ADDRESS"] = web_index_address
     api = {"CDNCA_NATIVE_UPGRADE_ENABLED": "true", "CDNCA_NATIVE_UPGRADE_STATUS_FILE": runner["CDNCA_NATIVE_UPGRADE_STATUS_FILE"],
            "CDNCA_NATIVE_UPGRADE_STATE_FILE": runner["CDNCA_NATIVE_UPGRADE_STATUS_FILE"] + ".state.json",
            "CDNCA_NATIVE_UPGRADE_MAINTENANCE_FILE": runner["CDNCA_NATIVE_UPGRADE_MAINTENANCE_FILE"],
@@ -323,14 +345,14 @@ def validate_certificates():
         openssl(*arguments, certificate)
 
 
-def check(installation_id, web_index_url, artifact_trust_file=None, web_ca_file=None):
-    validate_options(installation_id, web_index_url)
+def check(installation_id, web_index_url, artifact_trust_file=None, web_ca_file=None, web_index_address=None):
+    validate_options(installation_id, web_index_url, web_index_address)
     secure_directory(CONFIG)
     require(stat.S_IMODE(CONFIG.stat().st_mode) == 0o700, "configuration directory must be private")
     require(read_file(CONFIG / "installation-id") == (installation_id + "\n").encode("ascii"), "installation binding mismatch")
     require(decode_trust(read_file(CONFIG / "trusted-keys.json")) == decode_trust(read_file(TRUST_SOURCE, private=False)), "trusted keys changed")
     require(re.fullmatch(rb"[0-9a-f]{64}\n", read_file(CONFIG / "plan-source-token")), "invalid plan source token")
-    for name, expected in configurations(web_index_url, artifact_trust_file, web_ca_file).items():
+    for name, expected in configurations(web_index_url, artifact_trust_file, web_ca_file, web_index_address).items():
         require(read_file(CONFIG / name) == expected, "configuration binding mismatch")
     if web_ca_file is not None:
         copied = read_file(CONFIG / WEB_CA, private=False)
@@ -342,11 +364,11 @@ def check(installation_id, web_index_url, artifact_trust_file=None, web_ca_file=
     return {"status": "configuration_checked"}
 
 
-def prepare(installation_id, web_index_url, artifact_trust_file=None, web_ca_file=None):
-    validate_options(installation_id, web_index_url)
+def prepare(installation_id, web_index_url, artifact_trust_file=None, web_ca_file=None, web_index_address=None):
+    validate_options(installation_id, web_index_url, web_index_address)
     require(not os.path.lexists(CONFIG), "existing configuration; fresh prepare refused")
     trust = decode_trust(read_file(TRUST_SOURCE, private=False))
-    prepared = configurations(web_index_url, artifact_trust_file, web_ca_file)
+    prepared = configurations(web_index_url, artifact_trust_file, web_ca_file, web_index_address)
     web_ca = None if web_ca_file is None else read_file(web_ca_file, private=False)
     CONFIG.mkdir(mode=0o700)
     os.chmod(CONFIG, 0o700)
@@ -385,7 +407,7 @@ def prepare(installation_id, web_index_url, artifact_trust_file=None, web_ca_fil
         write_file(CONFIG / name, body)
     if web_ca is not None:
         write_file(CONFIG / WEB_CA, web_ca, 0o444)
-    check(installation_id, web_index_url, artifact_trust_file, web_ca_file)
+    check(installation_id, web_index_url, artifact_trust_file, web_ca_file, web_index_address)
     descriptor = os.open(CONFIG.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         os.fsync(descriptor)
@@ -401,10 +423,11 @@ def main():
     parser.add_argument("--web-index-url", required=True)
     parser.add_argument("--artifact-trust-file", type=Path)
     parser.add_argument("--web-ca-file", type=Path)
+    parser.add_argument("--web-index-address")
     arguments = parser.parse_args()
     try:
         result = (prepare if arguments.action == "prepare" else check)(arguments.installation_id, arguments.web_index_url, arguments.artifact_trust_file,
-                                                                  arguments.web_ca_file)
+                                                                  arguments.web_ca_file, arguments.web_index_address)
         print(json.dumps(result))
     except Exception:
         print("native upgrade configuration rejected; no service was started; preserve any partial preparation", file=sys.stderr)

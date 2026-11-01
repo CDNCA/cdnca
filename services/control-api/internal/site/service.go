@@ -416,6 +416,13 @@ func normalizeFields(fields *SiteFields) error {
 	if fields.HTTPSEnabled && len(fields.HTTPSPorts) == 0 {
 		return fieldError("https_listen_ports", "required")
 	}
+	// a site with HTTPS off listens on no HTTPS port (the
+	// publication requires exactly that; transfer and import already clear
+	// them). Turning HTTPS off in the editor keeps the old ports in the draft,
+	// so they are dropped here instead of failing every publication later.
+	if !fields.HTTPSEnabled {
+		fields.HTTPSPorts, fields.HTTPSRedirectPort = []string{}, nil
+	}
 	if fields.ForceHTTPS != nil && *fields.ForceHTTPS && (!fields.HTTPSEnabled || len(fields.HTTPSPorts) == 0) {
 		return fieldError("force_https", "requires_https")
 	}

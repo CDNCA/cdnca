@@ -26,6 +26,8 @@ import { builtInBrandAsset, useThemeBrandName, useThemeRuntime } from '../theme/
 import MailProviderSection from './system/MailProviderSection'
 import { useFeedback, FeedbackWhen, InlineNotice, OutcomeUnknown, fieldReasonText, submitErrorFields } from '@cdnca/ui'
 import { ApprovalCenterSettings } from './ApprovalCenterSettings'
+import ControlHostBindCard from './system-settings/ControlHostBindCard'
+import '../i18n/controlHostBind'
 
 const NotificationSettingsPage = lazy(() => import('./NotificationSettingsPage'))
 
@@ -900,6 +902,7 @@ function FieldHelp({ name, text }: { name: string; text: string }) {
 
 function SystemPanel() {
   const { t, i18n } = useTranslation('systemGlobalSettings')
+  const { t: hostT } = useTranslation('controlHostBind')
   const { message } = App.useApp()
   // fix-ui1026 #4: an active theme that names the product overrides the
   // system name and console titles shown after sign-in.
@@ -1077,7 +1080,7 @@ function SystemPanel() {
   const retryBrandAssetUpload = () => { if (brandUploadAttempt && brandUploadUncertain && uploadingSlot === null) void runBrandAssetUpload(brandUploadAttempt) }
   const assetField = (key: 'favicon' | 'logo' | 'login_ad') => {
     const asset = brandAssets[key]
-    const previewPath = asset?.revision ? `/v1/brand-assets/${key}` : builtInBrandAsset(key)
+    const previewPath = asset?.revision ? `/v1/brand-assets/${key}` : builtInBrandAsset(key, i18n.resolvedLanguage)
     return <Upload accept={key === 'favicon' ? '.ico,.png,image/x-icon,image/png' : key === 'logo' ? '.png,image/png' : '.jpg,.jpeg,image/jpeg'} showUploadList={false} beforeUpload={(file) => { void uploadBrandAsset(key, file); return Upload.LIST_IGNORE }} disabled={!canManage || uploadingSlot !== null || brandUploadUncertain || brandBindingWrite.saving || brandBindingWrite.uncertain}>
       <span className={`system-settings-brand-asset-preview system-settings-brand-asset-preview--${key}`} role="button" tabIndex={canManage ? 0 : -1} aria-label={t(`fields.${key}`)}>
         <img src={previewPath} alt={t(`fields.${key}`)} />
@@ -1090,6 +1093,7 @@ function SystemPanel() {
     { id: 'system-brand', label: t('innerNav.brand') },
     { id: 'system-package', label: t('innerNav.package') },
     { id: 'system-maintenance', label: t('innerNav.maintenance') },
+    { id: 'system-host', label: hostT('title') },
   ]
   return <div data-testid="system-settings-baseline-system" className="system-settings-baseline-panel">
     <SaveState visible={write.saving || brandBindingWrite.saving || uploadingSlot !== null} label={t('states.saving')} />
@@ -1169,6 +1173,8 @@ function SystemPanel() {
       <Form.Item label={t('fields.maintenance_message')} {...fieldStatus('maintenance_message')}><Input value={draft.maintenance_message} disabled={!canManage} onChange={(event) => update('maintenance_message', event.target.value)} aria-label={t('fields.maintenance_message')} /></Form.Item>
       <Form.Item label={t('fields.auto_upgrade_node')}>{toggle('auto_upgrade_node')}</Form.Item>
       </section>
+      {/* 管理端地址/绑定域名：只显示现状并给出 root 执行的 control-host bind 命令。 */}
+      <ControlHostBindCard />
       {/* SET-002：后台 HTTPS 入口未接通（保存只存引用，不切换证书），按 10-25 "未接通不显示" 规则整段不渲染；
           certificate/private_key 仍随草稿原样回写，不丢已有引用。接通并能校验证书配对、切换入口后再恢复。 */}
     </Form>

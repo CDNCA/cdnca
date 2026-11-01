@@ -350,3 +350,91 @@ test('fz-x13: main recovers only on --resume with pending state and a registrati
   assert.match(main, /elif "\$RESUME" && \[ -d "\$\{IDENTITY_DIR\}\.enrolling" \] && \[ -n "\$REGISTRATION_KEY" \] && recover_registered_identity; then/)
   assert.match(main, /用一次性安装令牌安装的节点无法从主控取回已签发的身份[^\n]*请到管理端删除该节点后重装/)
 })
+
+// installer-hardening ih-node：首装已注册并取得身份、只因待初始化退出 3 时，
+// 续装不应再要求重新取注册密钥（原文：「--resume 仍要求注册密钥：重复 2.2 的取密钥管道」）。
+// 身份已在：--resume 不带 --registration-key-stdin（或 stdin 为空）也能续装；身份不在仍要密钥。
+function resumeDefaults(flags, input, withIdentity) {
+  const value = fixture()
+  try {
+    if (withIdentity) value.file('etc/cdnca-edge-agent/identity/identity.json', '{"version":1,"node_id":"n"}')
+    return value.run(`parse_args --control-plane https://ctl.example ${flags}
+read_enrollment_token <<<"$FX_INPUT"
+printf 'ok|%s|%s|%s' "\${REGISTRATION_KEY:-}" "\${ENROLLMENT_TOKEN:-}" "$RESUME_ENROLLED"`, { FX_INPUT: input })
+  } finally {
+    rmSync(value.root, { recursive: true, force: true })
+  }
+}
+
+test('ih-node: --resume of an enrolled host needs no registration key', () => {
+  for (const [flags, input] of [['--resume', ''], ['--resume --registration-key-stdin', '']]) {
+    const result = resumeDefaults(flags, input, true)
+    assert.equal(result.status, 0, `${flags}: ${result.stdout}${result.stderr}`)
+    assert.equal(result.stdout, 'ok|||true', flags)
+  }
+})
+
+test('ih-node: --resume without an identity still requires the key, with a clear message', () => {
+  const result = resumeDefaults('--resume', '', false)
+  assert.notEqual(result.status, 0)
+  assert.match(result.stdout + result.stderr, /--registration-key-stdin/)
+  const fresh = resumeDefaults('', '', true)
+  assert.notEqual(fresh.status, 0) // a first install always needs a credential
+  assert.match(fresh.stderr, /--registration-key-stdin/)
+  // A key given with --resume is still validated and used (identity recovery path).
+  const key = `nrk1.${'0123456789abcdef'.repeat(2)}.${'A'.repeat(43)}`
+  const keyed = resumeDefaults('--resume --registration-key-stdin', key, false)
+  assert.equal(keyed.status, 0, keyed.stderr)
+  assert.equal(keyed.stdout, `ok|${key}||false`)
+  // normalise_defaults accepts an enrolled resume without a credential.
+  assert.match(script, /\[ -n "\$ENROLLMENT_TOKEN" \] \|\| \[ -n "\$REGISTRATION_KEY" \] \|\| "\$RESUME_ENROLLED" \|\| fail/)
+})
+
+// 复制的命令在退出时删掉临时安装器；安装记录目录里留一份 root 0700 副本，供 check 与 --resume。
+test('ih-node: the install record keeps a root-only copy of this installer', () => {
+  const value = fixture()
+  try {
+    value.file('src/install-node.sh', '#!/usr/bin/env bash\nmain "$@"\n', 0o755)
+    mkdirSync(join(value.root, 'var/lib'), { recursive: true })
+    const result = value.run(`install_state_begin
+keep_installer_copy "$1/src/install-node.sh"
+keep_installer_copy "$1/src/install-node.sh"
+stat -c '%a' "$INSTALLER_COPY" 2>/dev/null || stat -f '%Lp' "$INSTALLER_COPY"
+cmp "$1/src/install-node.sh" "$INSTALLER_COPY" && echo same
+keep_installer_copy /dev/stdin; echo rc=$?`)
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /^700\nsame\nrc=0\n$/)
+  } finally {
+    rmSync(value.root, { recursive: true, force: true })
+  }
+  assert.match(script, /"\$RESUME" \|\| install_state_begin\n {2}keep_installer_copy "\$\{BASH_SOURCE\[0\]\}"\n/)
+})
+
+// ih3 83 实测：私有 CA 主控上首装（复制的命令带 CA 指纹）rc=3 后，按下一步清单 `bash <安装器> ... --resume </dev/null`
+// 不带 CA 参数续装，读 node-install-defaults 报 curl (60)。续装且命令没给 CA 时复用首装已校验并保存的控制面 CA。
+test('ih3: --resume without CA flags reuses the control-plane CA the first run saved', () => {
+  const value = fixture()
+  try {
+    const saved = value.file('etc/cdnca-edge-agent/tls/control-plane-ca.pem', 'saved-ca\n', 0o400)
+    const given = value.file('src/given-ca.pem', 'given-ca\n')
+    const show = 'parse_args --control-plane https://control.example --registration-key-stdin --resume "$@"; reuse_saved_control_plane_ca; printf "%s\\n" "$CONTROL_PLANE_CA_FILE"; [ -z "$CONTROL_PLANE_CA_FILE" ] || cat "$CONTROL_PLANE_CA_FILE"'
+    const resumed = value.run(`set --; ${show}`)
+    assert.equal(resumed.status, 0, resumed.stderr)
+    // 临时副本（不是保存路径本身：install_trust_material 会再装回该路径，同一文件 install 失败）。
+    const [path, body] = resumed.stdout.split('\n')
+    assert.notEqual(path, saved)
+    assert.equal(body, 'saved-ca')
+    // 命令自带 CA 文件或指纹时以命令为准（指纹仍走原下载+校验路径）。
+    const explicit = value.run(`set -- --control-plane-ca-file '${given}'; ${show}`)
+    assert.equal(explicit.stdout, `${given}\ngiven-ca\n`)
+    const pinned = value.run(`set -- --control-plane-ca-sha256 ${'b'.repeat(64)}; ${show}`)
+    assert.equal(pinned.stdout, '\n')
+    // 非续装不复用（全新安装不认残留文件）。
+    const fresh = value.run('parse_args --control-plane https://control.example --registration-key-stdin; reuse_saved_control_plane_ca; printf "%s\\n" "$CONTROL_PLANE_CA_FILE"')
+    assert.equal(fresh.stdout, '\n')
+  } finally {
+    rmSync(value.root, { recursive: true, force: true })
+  }
+  // 必须在第一次连主控（预检/load_console_defaults）之前。
+  assert.match(script, /read_enrollment_token\n {2}reuse_saved_control_plane_ca\n {2}progress_init\n/)
+})

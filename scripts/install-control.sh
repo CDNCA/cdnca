@@ -23,6 +23,8 @@ readonly WEB_ROOT="${NATIVE_ROOT}/current/static/web"
 readonly NGINX_RUNTIME_DIR="${DATA_DIR}/nginx-runtime"
 readonly GATEWAY_ENV_FILE="${CONFIG_DIR}/gateway.env"
 readonly NGINX_CONF="${CONFIG_DIR}/nginx.conf"
+# libnginx-mod-http-brotli-static (Debian/Ubuntu) installs the module here.
+readonly NGINX_BROTLI_STATIC_MODULE="/usr/lib/nginx/modules/ngx_http_brotli_static_module.so"
 readonly NATS_SERVER_BIN="/usr/local/bin/nats-server"
 readonly NATS_CLI_BIN="/usr/local/bin/nats"
 readonly UPGRADE_KEY_DIR="${KEY_DIR}/upgrade"
@@ -43,6 +45,11 @@ CONTROL_DOMAIN=""
 GATEWAY_HOST=""
 # Gateway enrollment,agent ports (ADR 0013 §3.5): empty = two random free ports in 20000-29999.
 GATEWAY_PORTS=""
+# 节点到网关的传输（Q20）：tcp = 直连两个网关端口（gRPC）；ws = 经管理端 HTTPS 端口（CDN 443）的 WebSocket 隧道，
+# 网关两端口作备用入口。空 = 自动：带 --origin-auth / --origin-auth-secret-file / --real-ip-header（套 CDN）时 ws，否则 tcp。
+GATEWAY_TRANSPORT=""
+GATEWAY_TUNNEL_HOST=""
+REAL_IP_HEADER_SET=false
 GATEWAY_ENROLLMENT_PORT=""
 GATEWAY_AGENT_PORT=""
 INSTALLATION_ID=""
@@ -117,6 +124,8 @@ readonly GATEWAY_ACCESS_FILE="${DATA_DIR}/gateway-access/allowed-ips"
 REDIS_DEFAULT_PASSWORD=""
 REDIS_GATEWAY_PASSWORD=""
 ASSUME_YES=false
+# --origin-auth-secret-file：导入既有回源暗号（与 CDN 规则同值），不再装完后手工换。
+ORIGIN_AUTH_IMPORT_FILE=""
 # 安装环境：auto 探测宝塔（/www/server/panel 或 bt 命令），bt 与宝塔共存，
 # plain 独占本机。宝塔模式不动宝塔的 nginx/MySQL/面板端口：管理端网页只监听
 # 127.0.0.1:WEB_PORT，由宝塔站点反向代理；被占的依赖端口换成空闲替代端口。
@@ -140,32 +149,204 @@ CH_MYSQL_PORT=9004
 CH_POSTGRESQL_PORT=9005
 CH_INTERSERVER_PORT=9009
 
+# >>> BEGIN install-i18n (generated from scripts/lib/install-i18n.sh; do not edit here)
+# shellcheck shell=bash
+# CDNCA 安装器界面语言（中文 / English），四个安装器共用。
+#
+# 唯一源文件：install-control.sh、install-node.sh、install-auth.sh、install-site.sh 在
+# “BEGIN/END install-i18n” 标记之间逐字嵌入本文件，修改后运行
+#   node scripts/sync-install-preflight.mjs
+# 语言选择顺序：--lang zh|en（或 --lang=…）> 环境变量 CDNCA_INSTALL_LANG >
+# LC_ALL / LC_MESSAGES / LANG（zh* 为中文，其余英文）。未显式指定且在终端交互时，
+# install_lang_prompt 第一屏让用户选择。
+# 文案写法：msg '中文' 'English'，原样输出对应语言（不追加换行）。未调用
+# install_lang_init 时按中文输出，单独抽取函数的测试不受影响。
+# 只影响屏幕提示；参数、默认值、安装步骤与日志里的英文技术串都不变。
+
+INSTALL_LANG=${INSTALL_LANG:-}
+INSTALL_LANG_AUTO=false
+INSTALL_ARGS=()
+
+install_lang_normalise() {
+  case "$1" in
+    zh | zh[-_]* | cn) printf 'zh' ;;
+    en | en[-_]*) printf 'en' ;;
+    *) return 1 ;;
+  esac
+}
+
+# install_lang_init "$@"：确定语言，并把去掉 --lang 后的参数放进 INSTALL_ARGS。
+install_lang_init() {
+  local arg chosen='' expect=false
+  INSTALL_ARGS=()
+  for arg in "$@"; do
+    if "$expect"; then chosen=$arg expect=false; continue; fi
+    case "$arg" in
+      --lang) expect=true ;;
+      --lang=*) chosen=${arg#--lang=} ;;
+      *) INSTALL_ARGS+=("$arg") ;;
+    esac
+  done
+  if "$expect"; then
+    printf '%s\n' 'error: missing value for --lang (zh or en)' >&2
+    exit 2
+  fi
+  [ -n "$chosen" ] || chosen=${CDNCA_INSTALL_LANG:-}
+  if [ -n "$chosen" ]; then
+    INSTALL_LANG=$(install_lang_normalise "$chosen") || {
+      printf '%s\n' 'error: --lang / CDNCA_INSTALL_LANG must be zh or en' >&2
+      exit 2
+    }
+    INSTALL_LANG_AUTO=false
+    return 0
+  fi
+  case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
+    zh*) INSTALL_LANG=zh ;;
+    *) INSTALL_LANG=en ;;
+  esac
+  INSTALL_LANG_AUTO=true
+}
+
+# 交互安装第一屏：语言是自动判断的、stdin 与 stderr 都是终端时询问一次，回车用自动结果。
+install_lang_prompt() {
+  "$INSTALL_LANG_AUTO" && [ -t 0 ] && [ -t 2 ] || return 0
+  local answer default=1
+  [ "$INSTALL_LANG" = en ] && default=2
+  printf 'Language / 语言:  1) 中文   2) English  [%s]: ' "$default" >&2
+  IFS= read -r answer || answer=''
+  case "${answer:-$default}" in
+    1 | zh*) INSTALL_LANG=zh ;;
+    2 | en*) INSTALL_LANG=en ;;
+  esac
+  INSTALL_LANG_AUTO=false
+}
+
+msg() {
+  if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi
+}
+# <<< END install-i18n
 log() { printf '[cdnca-control] %s\n' "$*"; }
 warn() { printf '[cdnca-control] warning: %s\n' "$*" >&2; }
 fail() { printf '[cdnca-control] error: %s\n' "$*" >&2; exit 1; }
-# 安装进度阶段（名称|最短秒|最长秒|标记），与 main 里的 progress_stage 一一对应。
+# 安装进度阶段（中文名^英文名|最短秒|最长秒|标记），与 main 里的 progress_stage 一一对应。
 PROGRESS_LABEL='[cdnca-control]'
 PROGRESS_ROLE=control
 PROGRESS_STAGES=(
-  '环境预检并填写管理端地址|10|120|interactive'
-  '安装基础工具|20|180|'
-  '确认激活凭据与管理员账号|0|90|interactive'
-  '下载并校验安装包|30|300|'
-  '安装依赖（PostgreSQL、ClickHouse、Redis、ClamAV、RustFS）|180|600|'
-  '生成主控身份与证书|20|150|'
-  '下载节点安装包与组件|20|180|'
-  '初始化数据库与消息服务|30|180|'
-  '初始化社区版|5|60|'
-  '初始化管理端数据|20|120|'
-  '启动服务并自检|30|180|'
-  '整理安装结果|2|15|'
+  '环境预检并填写管理端地址^Preflight checks and management address|10|120|interactive'
+  '安装基础工具^Install base tools|20|180|'
+  '确认激活凭据与管理员账号^Activation credential and administrator account|0|90|interactive'
+  '下载并校验安装包^Download and verify the package|30|300|'
+  '安装依赖（PostgreSQL、ClickHouse、Redis、ClamAV、RustFS）^Install dependencies (PostgreSQL, ClickHouse, Redis, ClamAV, RustFS)|180|600|'
+  '生成主控身份与证书^Create control identity and certificates|20|150|'
+  '下载节点安装包与组件^Download node packages and components|20|180|'
+  '初始化数据库与消息服务^Initialise database and messaging|30|180|'
+  '初始化社区版^Initialise the Community Edition|5|60|'
+  '初始化管理端数据^Initialise management data|20|120|'
+  '启动服务并自检^Start services and self-check|30|180|'
+  '整理安装结果^Finish installation|2|15|'
 )
 
 usage() {
+  if [ "${INSTALL_LANG:-zh}" = en ]; then
+    cat <<'EOF'
+CDNCA control-plane bundle installer (x86_64; Ubuntu 24.04 officially supported; Ubuntu 22.04, Debian 12/13 and
+Rocky/AlmaLinux/RHEL 9/10 compatible; fresh single control plane)
+
+Usage: install-control.sh [options]
+  --lang zh|en                     Screen language; default from CDNCA_INSTALL_LANG or LANG (zh* = Chinese, otherwise English)
+  --licensing-server URL          Licensing server HTTPS address
+  --licensing-server-fallback URL  Fallback licensing server HTTPS address
+  --activation-code-file FILE      Read the one-time activation credential from a root-only file; - means stdin
+  --master-host HOST               Public domain or IP of the management console; asked interactively when omitted
+  --master-port PORT               Management HTTPS port; default 443
+  --domain HOST                    Management domain; defaults to --master-host
+  --mode all|control|gateway       all (default) control plane + local Gateway; control = all and opens internal ports to
+                                   standalone Gateways; gateway installs only a Gateway
+  --gateway-host HOST              Gateway address nodes connect to; defaults to the management address (split setups only)
+  --gateway-ports ENROLL,AGENT     The two Gateway ports, 1024-65535; default two free random ports in 20000-29999,
+                                   reported at the end of the installation
+  --env auto|bt|plain              Install environment; auto (default) uses BaoTa mode when the BaoTa panel is found
+                                   (/www/server/panel or the bt command). BaoTa mode leaves BaoTa nginx/MySQL/panel alone,
+                                   the console web listens on 127.0.0.1 behind a BaoTa site reverse proxy, and busy
+                                   PostgreSQL/Redis/ClickHouse default ports are moved automatically
+  --web-port PORT                  BaoTa only: loopback port of the console web, default 18443 (next free if taken)
+  --bt-proxy                       BaoTa only: write the reverse proxy into the BaoTa site after installing (backed up first,
+                                   restored when nginx -t fails)
+  --server-cert FILE / --server-key FILE  --mode gateway only: public certificate chain and key for a Gateway behind a CDN
+                                   that verifies the origin certificate (outer TLS of the WebSocket tunnel only); default is a
+                                   certificate issued by the control root CA
+  --installation-name NAME         Installation name
+  --admin-username USER            First administrator user name; asked interactively when omitted
+  --admin-email EMAIL              First administrator email
+  --certificate-email EMAIL        Contact email for the certificate request; asked interactively when omitted
+  --admin-password-file FILE       Read the administrator password from a root-only file
+  --public-cert-file FILE          Public HTTPS certificate (paired with the key)
+  --public-key-file FILE           Public HTTPS certificate private key
+  --control-version VERSION        Must match the signed bundle and the compiled version
+  --native-package-url URL         Signed full package URL
+  --native-package-fallback-url URL
+  --native-sha256-url URL          Package SHA256SUMS URL
+  --native-sha256-fallback-url URL
+  --native-trust-url URL           Independent release public key list URL
+  --native-trust-fallback-url URL
+  --native-package-file FILE       Use a package uploaded privately over SSH (no public download)
+  --native-trust-file FILE         Matching independent, root-owned release public key file
+  --trusted-keys-url URL           License signing public key list URL
+  --trusted-keys-fallback-url URL
+  --signer-revocation-offline-root-key-id ID
+                                   Signing key compromise revocation: offline root key ID (all three enable revocation checks)
+  --signer-revocation-offline-root-generation N
+  --signer-revocation-offline-root-public-key BASE64URL
+                                   Offline root Ed25519 public key (32 bytes, unpadded base64url)
+  --edge-agent-url URL             Signed node package of the same release
+  --edge-agent-fallback-url URL
+  --edge-agent-sha256-url URL
+  --edge-agent-sha256-fallback-url URL
+  --edge-artifact-trust-url URL    Node release public key list URL
+  --edge-artifact-trust-fallback-url URL
+  --database-url URL              Prepared PostgreSQL database; default local
+  --redis-url URL                 Prepared Redis; default local
+  --nats-url URL                  Fixed local nats://127.0.0.1:4222
+  --telemetry-nats-url URL        Must equal the local NATS
+  --skip-dependencies             Do not install dependencies; the full dependency preflight must still pass
+  --skip-firewall                 Do not touch the firewall (by default it only reports the ports to open)
+  --keep-unattended-upgrades      Keep automatic system updates (default disables apt-daily/apt-daily-upgrade/
+                                  unattended-upgrades; packages stay and can be upgraded manually)
+  --ssh-guard-ignoreip "A B"     Addresses/CIDRs fail2ban never bans (your admin egress and platform hosts; space or comma)
+  --no-ssh-guard                  Do not install fail2ban SSH brute-force protection
+  --origin-auth                   Behind a CDN: create the origin key /etc/cdnca-control/origin-auth.secret (root 0600);
+                                  once the CDN sends it in X-Cdnca-Origin-Key the console nginx takes the client IP from
+                                  --real-ip-header; without it only the TCP peer is used (enable later with
+                                  install-control.sh origin-auth)
+  --real-ip-header H              Header the CDN writes the client IP to: CF-Connecting-IP / X-Forwarded-For (rightmost
+                                  hop) / True-Client-IP / X-Real-IP; default X-Forwarded-For (BaoTa needs a CDN-specific header)
+  --gateway-transport ws|tcp      How nodes reach the Gateway: ws = WebSocket tunnel through the console HTTPS port (CDN 443),
+                                  the two Gateway ports kept as fallback; tcp = the two Gateway ports directly. Default: ws with
+                                  --origin-auth/--origin-auth-secret-file/--real-ip-header (behind a CDN), otherwise tcp
+  --gateway-tunnel-host HOST      ws only: CDN host nodes dial (outer TLS/Host); default the Gateway host
+  --origin-auth-secret-file FILE  Like --origin-auth but imports an existing origin key (root 0600/0400, 32-256 chars of
+                                  [A-Za-z0-9_-]) so the CDN rule keeps its X-Cdnca-Origin-Key value
+  -y, --yes                       Continue without asking when the preflight only has warnings
+  -h, --help                      Show this help
+Clean up a fresh installation that failed half-way: install-control.sh --cleanup-failed [--yes]
+  Removes only what this installation created (directories, systemd units, cdnca database/roles, ClickHouse
+  database/users) and stops/disables the PostgreSQL/Redis/ClickHouse services it started to free their ports; lists
+  everything and asks you to type CLEANUP; only available while /var/lib/cdnca-control-install/state exists and is not
+  finished. Services, packages, data directories, certificates and logs that existed before are kept.
+Move a control plane to this (fresh) host: install-control.sh migrate-from root@old-control [--ssh-port 22] [--wait-nodes 10m]
+Enable CDN origin authentication on an installed control plane: install-control.sh origin-auth [--secret-file FILE] [--real-ip-header H]
+Verify an installed control plane (units, readiness, node install contract, permissions): install-control.sh check
+Open standalone Gateway access on an installed control plane (run on it; repeatable; restores on failure):
+  install-control.sh enable-gateway-access [--domain control-domain]
+The old separate API, Gateway, Web and node script URL options were retired to prevent mixed versions.
+EOF
+    return 0
+  fi
   cat <<'EOF'
 CDNCA 管理端整包安装器（x86_64；Ubuntu 24.04 正式支持，Ubuntu 22.04、Debian 12/13、Rocky/AlmaLinux/RHEL 9/10 兼容支持；全新单主控）
 
 用法: install-control.sh [选项]
+  --lang zh|en                     界面语言；默认按 CDNCA_INSTALL_LANG 或 LANG（zh* 为中文，其余英文）
   --release-server URL            社区版发布站 HTTPS 地址（下载整包、节点包、运行时归档；也可全部用本地文件）
   --release-server-fallback URL    发布站备用 HTTPS 地址
   --master-host HOST               管理端公网域名或 IP；未传入时交互填写
@@ -218,6 +399,17 @@ CDNCA 管理端整包安装器（x86_64；Ubuntu 24.04 正式支持，Ubuntu 22.
   --keep-unattended-upgrades      保留系统自动更新（默认停用 apt-daily/apt-daily-upgrade/unattended-upgrades，软件包保留可手动升级）
   --ssh-guard-ignoreip "A B"     fail2ban 不封禁的地址/CIDR（运维出口与本平台各机器，空格或逗号分隔）
   --no-ssh-guard                  不安装 fail2ban SSH 防爆破
+  --origin-auth                   套 CDN：生成回源密钥 /etc/cdnca-control/origin-auth.secret（root 0600），CDN 回源头
+                                  X-Cdnca-Origin-Key 填其内容后，管理端 nginx 按 --real-ip-header 取客户端 IP；
+                                  不给时只用 TCP 对端（之后可 install-control.sh origin-auth 补开）
+  --real-ip-header H              CDN 写客户端 IP 的头：CF-Connecting-IP / X-Forwarded-For（取最右一跳）/
+                                  True-Client-IP / X-Real-IP；默认 X-Forwarded-For（宝塔环境只能用前两种以外的 CDN 专用头）
+  --gateway-transport ws|tcp      节点连网关的方式：ws = 经管理端 HTTPS 端口（CDN 443）的 WebSocket 隧道，网关两端口作备用；
+                                  tcp = 直连网关两端口。默认：带 --origin-auth/--origin-auth-secret-file/--real-ip-header（套 CDN）
+                                  时 ws，否则 tcp
+  --gateway-tunnel-host HOST      仅 ws：节点拨号的 CDN 主机名（外层 TLS/Host）；默认网关主机名
+  --origin-auth-secret-file FILE  同 --origin-auth，但导入已有回源密钥（root 0600/0400，32–256 个 [A-Za-z0-9_-]），
+                                  CDN 规则里的 X-Cdnca-Origin-Key 不用改
   -y, --yes                       安装前检测只有“警告”时不再询问，直接继续
   -h, --help                      显示帮助
 清理半途失败的全新安装：install-control.sh --cleanup-failed [--yes]
@@ -226,6 +418,8 @@ CDNCA 管理端整包安装器（x86_64；Ubuntu 24.04 正式支持，Ubuntu 22.
   输入 CLEANUP 确认，只在安装记录 /var/lib/cdnca-control-install/state 存在且未完成时可用；安装前已有的软件包、服务与路径、
   证书与日志保留。清理后用原命令重装。
 迁移主控到本机（全新系统）：install-control.sh migrate-from root@旧主控 [--ssh-port 22] [--wait-nodes 10m]
+已安装的主控启用 CDN 回源鉴权：install-control.sh origin-auth [--secret-file FILE] [--real-ip-header H]
+核对已安装的主控（单元、就绪、节点安装合同、权限）：install-control.sh check
 已安装的主控开启独立网关接入（在主控机上执行，可重复执行，失败自动恢复）：install-control.sh enable-gateway-access [--domain 主控域名]
 旧的独立 API、Gateway、Web 和节点脚本地址参数已停止使用，以防混版。
 EOF
@@ -240,6 +434,8 @@ valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
 no_newlines() { [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]]; }
 
 parse_args() {
+  # install-control.sh check：已安装主控的核对子命令，不进入安装流程。
+  [ "${1:-}" != check ] || { shift; check_main "$@"; exit $?; }
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --release-server|--licensing-server) need_value "$@"; LICENSING_SERVER=$2; shift 2 ;;
@@ -289,11 +485,18 @@ parse_args() {
       --keep-unattended-upgrades) KEEP_UNATTENDED_UPGRADES=true; shift ;;
       --ssh-guard-ignoreip) need_value "$@"; SSH_GUARD_IGNOREIP=$2; shift 2 ;;
       --no-ssh-guard) SSH_GUARD_ENABLED=false; shift ;;
+      --origin-auth) ORIGIN_AUTH=true; shift ;;
+      --origin-auth-secret-file) need_value "$@"; ORIGIN_AUTH=true; ORIGIN_AUTH_IMPORT_FILE=$2; shift 2 ;;
+      --real-ip-header) need_value "$@"; REAL_IP_HEADER=$2; REAL_IP_HEADER_SET=true; shift 2 ;;
+      --gateway-transport) need_value "$@"; GATEWAY_TRANSPORT=$2; shift 2 ;;
+      --gateway-tunnel-host) need_value "$@"; GATEWAY_TUNNEL_HOST=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]'); shift 2 ;;
       -y|--yes) ASSUME_YES=true; shift ;;
       -h|--help) usage; exit 0 ;;
       *) fail "unsupported option: $1; use the signed full-package options shown in --help" ;;
     esac
   done
+  origin_auth_check_header false
+  [ -z "${ORIGIN_AUTH_IMPORT_FILE:-}" ] || origin_auth_check_import "$ORIGIN_AUTH_IMPORT_FILE"
 }
 require_commands() {
   local command
@@ -453,7 +656,7 @@ control_install_state_has() { grep -Fxq -- "$1" "$CONTROL_INSTALL_STATE_FILE" 2>
 
 control_install_failed_hint() {
   [ -f "$CONTROL_INSTALL_STATE_FILE" ] && ! control_install_state_has step=done || return 0
-  warn "安装未完成（记录 ${CONTROL_INSTALL_STATE_FILE}）：主控安装不支持续装。修复失败原因后，先执行 install-control.sh --cleanup-failed 清理本次安装创建的目录、服务与数据库（会列出清单并要求确认），再重新执行原安装命令"
+  warn "$(msg "安装未完成（记录 ${CONTROL_INSTALL_STATE_FILE}）：主控安装不支持续装。修复失败原因后，先执行 install-control.sh --cleanup-failed 清理本次安装创建的目录、服务与数据库（会列出清单并要求确认），再重新执行原安装命令" "installation not finished (record ${CONTROL_INSTALL_STATE_FILE}): the control installer cannot resume. Fix the cause, run install-control.sh --cleanup-failed to remove the directories, services and databases this installation created (it lists them and asks for confirmation), then rerun the original install command")"
 }
 
 CLEANUP_PATHS=()
@@ -548,42 +751,42 @@ cleanup_failed_plan() {
 
 cleanup_failed_report() {
   local item
-  printf '[cdnca-control] 将删除本次未完成安装创建的以下内容（安装记录 %s）：\n' "$CONTROL_INSTALL_STATE_FILE" >&2
-  for item in "${CLEANUP_UNITS[@]}"; do printf '  systemd 单元（停止、停用、删除）：%s\n' "$item" >&2; done
-  for item in "${CLEANUP_PATHS[@]}"; do printf '  路径：%s\n' "$item" >&2; done
+  printf "$(msg '[cdnca-control] 将删除本次未完成安装创建的以下内容（安装记录 %s）：' '[cdnca-control] the following, created by this unfinished installation, will be removed (record %s):')\n" "$CONTROL_INSTALL_STATE_FILE" >&2
+  for item in "${CLEANUP_UNITS[@]}"; do printf '  %s%s\n' "$(msg 'systemd 单元（停止、停用、删除）：' 'systemd unit (stop, disable, delete): ')" "$item" >&2; done
+  for item in "${CLEANUP_PATHS[@]}"; do printf '  %s%s\n' "$(msg '路径：' 'path: ')" "$item" >&2; done
   for item in ${CLEANUP_DEPENDENCY_PATHS[@]+"${CLEANUP_DEPENDENCY_PATHS[@]}"}; do
-    printf '  依赖安装写下的文件（依赖未装完，重装时会被拒）：%s\n' "$item" >&2
+    printf '  %s%s\n' "$(msg '依赖安装写下的文件（依赖未装完，重装时会被拒）：' 'file written by the dependency install (dependencies incomplete; a reinstall would refuse it): ')" "$item" >&2
   done
-  for item in ${CLEANUP_HASH_LINKS[@]+"${CLEANUP_HASH_LINKS[@]}"}; do printf '  RustFS 证书哈希链接：%s\n' "$item" >&2; done
+  for item in ${CLEANUP_HASH_LINKS[@]+"${CLEANUP_HASH_LINKS[@]}"}; do printf '  %s%s\n' "$(msg 'RustFS 证书哈希链接：' 'RustFS certificate hash link: ')" "$item" >&2; done
   for item in ${CLEANUP_PACKAGES[@]+"${CLEANUP_PACKAGES[@]}"}; do
-    printf '  依赖软件包（本次安装装上、依赖未装完；卸载并清除配置，重装时重新安装）：%s\n' "$item" >&2
+    printf '  %s%s\n' "$(msg '依赖软件包（本次安装装上、依赖未装完；卸载并清除配置，重装时重新安装）：' 'dependency package (installed by this installation, dependencies incomplete; purged, reinstalled on the next install): ')" "$item" >&2
   done
   for item in ${CLEANUP_DEPENDENCY_DATA[@]+"${CLEANUP_DEPENDENCY_DATA[@]}"}; do
-    printf '  依赖数据/配置目录（本次安装产生、依赖未装完，重装时会被拒）：%s\n' "$item" >&2
+    printf '  %s%s\n' "$(msg '依赖数据/配置目录（本次安装产生、依赖未装完，重装时会被拒）：' 'dependency data/config directory (created by this installation, dependencies incomplete; a reinstall would refuse it): ')" "$item" >&2
   done
-  for item in "${CLEANUP_REDIS_INCLUDES[@]}"; do printf '  Redis 配置中本安装追加的 include 行：%s\n' "$item" >&2; done
-  [ -z "$CLEANUP_PG" ] || printf '  PostgreSQL（端口 %s）：数据库 cdnca 与角色 cdnca、cdnca_control_app、cdnca_plugin_webhook_runtime、cdnca_control_runtime、cdnca_retention_cleanup\n' "$CLEANUP_PG" >&2
-  [ -z "$CLEANUP_CH" ] || printf '  ClickHouse（端口 %s）：数据库 cdnca_analytics 与用户 cdnca_analytics_query、cdnca_analytics_ingest、cdnca_analytics_rollup\n' "$CLEANUP_CH" >&2
-  ! "$CLEANUP_ACCOUNT" || printf '  系统账户：%s\n' "$CONTROL_INSTALL_ACCOUNT" >&2
-  ! "$CLEANUP_NFT" || printf '  nftables 表：inet cdnca_gateway_access\n' >&2
+  for item in "${CLEANUP_REDIS_INCLUDES[@]}"; do printf '  %s%s\n' "$(msg 'Redis 配置中本安装追加的 include 行：' 'include line this installation added to the Redis configuration: ')" "$item" >&2; done
+  [ -z "$CLEANUP_PG" ] || printf "  $(msg 'PostgreSQL（端口 %s）：数据库 cdnca 与角色' 'PostgreSQL (port %s): database cdnca and roles') cdnca$(msg 、 ', ')cdnca_control_app$(msg 、 ', ')cdnca_plugin_webhook_runtime$(msg 、 ', ')cdnca_control_runtime$(msg 、 ', ')cdnca_retention_cleanup\n" "$CLEANUP_PG" >&2
+  [ -z "$CLEANUP_CH" ] || printf "  $(msg 'ClickHouse（端口 %s）：数据库 cdnca_analytics 与用户' 'ClickHouse (port %s): database cdnca_analytics and users') cdnca_analytics_query$(msg 、 ', ')cdnca_analytics_ingest$(msg 、 ', ')cdnca_analytics_rollup\n" "$CLEANUP_CH" >&2
+  ! "$CLEANUP_ACCOUNT" || printf '  %s%s\n' "$(msg '系统账户：' 'system account: ')" "$CONTROL_INSTALL_ACCOUNT" >&2
+  ! "$CLEANUP_NFT" || printf '  %s\n' "$(msg 'nftables 表：inet cdnca_gateway_access' 'nftables table: inet cdnca_gateway_access')" >&2
   for item in ${CLEANUP_SERVICES[@]+"${CLEANUP_SERVICES[@]}"}; do
-    printf '  依赖服务（本次安装装上并启动；停止并停用以释放端口，软件包与数据目录保留）：%s\n' "$item" >&2
+    printf '  %s%s\n' "$(msg '依赖服务（本次安装装上并启动；停止并停用以释放端口，软件包与数据目录保留）：' 'dependency service (installed and started by this installation; stopped and disabled to free its ports, packages and data kept): ')" "$item" >&2
   done
-  printf '  安装记录：%s\n' "$CONTROL_INSTALL_STATE_DIR" >&2
-  printf '[cdnca-control] 保留：安装前已存在的软件包、服务与路径；依赖已装完时的 PostgreSQL/ClickHouse/Redis/ClamAV/nginx/fail2ban 软件包及其数据目录（重装直接复用）；Let'"'"'s Encrypt 证书、/var/log 下的安装日志。\n' >&2
+  printf '  %s%s\n' "$(msg '安装记录：' 'install record: ')" "$CONTROL_INSTALL_STATE_DIR" >&2
+  printf '[cdnca-control] %s\n' "$(msg "保留：安装前已存在的软件包、服务与路径；依赖已装完时的 PostgreSQL/ClickHouse/Redis/ClamAV/nginx/fail2ban 软件包及其数据目录（重装直接复用）；Let's Encrypt 证书、/var/log 下的安装日志。" "kept: packages, services and paths that existed before the install; PostgreSQL/ClickHouse/Redis/ClamAV/nginx/fail2ban packages and their data when the dependencies finished installing (reused by a reinstall); Let's Encrypt certificates and the install logs under /var/log.")" >&2
   for item in ${CLEANUP_SERVICES_MANUAL[@]+"${CLEANUP_SERVICES_MANUAL[@]}"}; do
-    printf '[cdnca-control] 无法判定是否由本次安装启动，不动，请人工处理（若占用安装所需端口，重装前自行停止）：%s\n' "$item" >&2
+    printf '[cdnca-control] %s%s\n' "$(msg '无法判定是否由本次安装启动，不动，请人工处理（若占用安装所需端口，重装前自行停止）：' 'cannot tell whether this installation started it; left alone, handle it manually (stop it before reinstalling if it holds a required port): ')" "$item" >&2
   done
 }
 
 cleanup_failed_confirm() {
   local answer
   if [ "$ASSUME_YES" = true ]; then
-    printf '[cdnca-control] 已指定 --yes，开始清理。\n' >&2
+    printf '[cdnca-control] %s\n' "$(msg '已指定 --yes，开始清理。' '--yes given, cleaning up.')" >&2
     return 0
   fi
   { : </dev/tty; } 2>/dev/null || fail 'cleanup needs confirmation: run it on a terminal, or add --yes after reviewing the list above'
-  printf '[cdnca-control] 此操作不可撤销。确认删除请输入 CLEANUP：' >&2
+  printf '[cdnca-control] %s' "$(msg '此操作不可撤销。确认删除请输入 CLEANUP：' 'This cannot be undone. Type CLEANUP to confirm: ')" >&2
   IFS= read -r answer </dev/tty || answer=''
   [ "$answer" = CLEANUP ] || fail 'cleanup cancelled; nothing was changed'
 }
@@ -665,7 +868,7 @@ cleanup_failed_run() {
   for unit in ${CLEANUP_SERVICES[@]+"${CLEANUP_SERVICES[@]}"}; do
     systemctl stop "$unit" >/dev/null 2>&1 || true
     systemctl disable "$unit" >/dev/null 2>&1 || true
-    ! systemctl is-active --quiet "$unit" || warn "依赖服务 $unit 未能停止，请人工停止后再重装"
+    ! systemctl is-active --quiet "$unit" || warn "$(msg "依赖服务 $unit 未能停止，请人工停止后再重装" "dependency service $unit did not stop; stop it manually before reinstalling")"
   done
   for config in "${CLEANUP_REDIS_INCLUDES[@]}"; do
     include="$(dirname "$config")/cdnca-gateway/redis-gateway.conf"
@@ -730,11 +933,11 @@ install_dependencies() {
   if [ "$(control_os_family)" = rhel ]; then
     # Minimal EL images ship curl-minimal/coreutils-single; asking for curl or
     # coreutils conflicts, and both already provide every command used here.
-    progress_run '安装基础工具' dnf -y -q install jq openssl ca-certificates vim-common util-linux file tar unzip python3 git iproute procps-ng
+    progress_run "$(msg 安装基础工具 'Install base tools')" dnf -y -q install jq openssl ca-certificates vim-common util-linux file tar unzip python3 git iproute procps-ng
     return
   fi
-  DEBIAN_FRONTEND=noninteractive progress_run '更新软件源' apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive progress_run '安装基础工具' apt-get install -y -qq --no-install-recommends \
+  DEBIAN_FRONTEND=noninteractive progress_run "$(msg 更新软件源 'Update package sources')" apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive progress_run "$(msg 安装基础工具 'Install base tools')" apt-get install -y -qq --no-install-recommends \
     curl jq openssl ca-certificates coreutils xxd uuid-runtime file tar unzip python3 git util-linux iproute2
 }
 
@@ -780,6 +983,8 @@ PREFLIGHT_STATUS=()
 PREFLIGHT_ITEM=()
 PREFLIGHT_DETAIL=()
 PREFLIGHT_HINT=()
+# 界面语言见 install-i18n；未嵌入它的安装器与单独加载时按中文。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 preflight_record() {
   PREFLIGHT_STATUS+=("$1")
@@ -802,7 +1007,7 @@ preflight_os_tier() {
   case "$id" in
     rocky|almalinux|rhel|centos)
       case "$id:$major" in
-        centos:7|centos:8) printf 'unsupported:CentOS %s 已停止维护；systemd、内核与 Python 版本低于当前安装器的要求\n' "$major"; return ;;
+        centos:7|centos:8) printf "unsupported:$(msg 'CentOS %s 已停止维护；systemd、内核与 Python 版本低于当前安装器的要求' 'CentOS %s is end-of-life; its systemd, kernel and Python are older than this installer requires')\n" "$major"; return ;;
         rocky:8|rocky:9|rocky:10|almalinux:8|almalinux:9|almalinux:10|rhel:8|rhel:9|rhel:10) printf 'compatible\n'; return ;;
       esac ;;
     ubuntu)
@@ -813,20 +1018,20 @@ preflight_os_tier() {
           # Node: setpriv package + a pidfd kernel (HWE 5.4). Control waits for the
           # musl ClamAV build (build-portable-clamav-musl.sh): glibc 2.27 < 2.28.
           if [ "$role" = control ]; then
-            printf 'unsupported:主控暂不支持 Ubuntu 18.04：glibc 2.27 低于官方 ClamAV 1.4 构建要求的 2.28，基于 musl 的 ClamAV 构建尚未发布；节点可以安装\n'
+            printf 'unsupported:%s\n' "$(msg '主控暂不支持 Ubuntu 18.04：glibc 2.27 低于官方 ClamAV 1.4 构建要求的 2.28，基于 musl 的 ClamAV 构建尚未发布；节点可以安装' 'the control plane does not support Ubuntu 18.04 yet: glibc 2.27 is older than the 2.28 the official ClamAV 1.4 build needs and the musl ClamAV build is not released; nodes can be installed')"
           else
             printf 'compatible\n'
           fi
           return ;;
-        16.04) printf 'unsupported:Ubuntu 16.04 的 Python 3.5 低于安装器要求的 3.6\n'; return ;;
+        16.04) printf 'unsupported:%s\n' "$(msg 'Ubuntu 16.04 的 Python 3.5 低于安装器要求的 3.6' 'Python 3.5 on Ubuntu 16.04 is older than the required 3.6')"; return ;;
       esac ;;
     debian)
       case "$major" in
         10|11|12|13) printf 'compatible\n'; return ;;
-        9) printf 'unsupported:Debian 9 的 Python 3.5 低于安装器要求的 3.6\n'; return ;;
+        9) printf 'unsupported:%s\n' "$(msg 'Debian 9 的 Python 3.5 低于安装器要求的 3.6' 'Python 3.5 on Debian 9 is older than the required 3.6')"; return ;;
       esac ;;
   esac
-  printf 'unsupported:未适配的发行版 %s %s\n' "${id:-unknown}" "${version:-unknown}"
+  printf "unsupported:$(msg '未适配的发行版 %s %s' 'unsupported distribution %s %s')\n" "${id:-unknown}" "${version:-unknown}"
 }
 
 preflight_check_os() {
@@ -835,16 +1040,16 @@ preflight_check_os() {
   PREFLIGHT_OS_VERSION=$(preflight_os_release_value VERSION_ID)
   name=$(preflight_os_release_value PRETTY_NAME)
   if [ -z "$PREFLIGHT_OS_ID" ]; then
-    preflight_record fail 操作系统 '无法读取 /etc/os-release' '请在受支持的 Linux 发行版上安装（见支持矩阵）'
+    preflight_record fail 操作系统 "$(msg '无法读取 /etc/os-release' 'cannot read /etc/os-release')" "$(msg '请在受支持的 Linux 发行版上安装（见支持矩阵）' 'install on a supported Linux distribution (see the support matrix)')"
     return
   fi
   tier=$(preflight_os_tier "$role" "$PREFLIGHT_OS_ID" "$PREFLIGHT_OS_VERSION")
   case "$tier" in
-    official) preflight_record pass 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}（正式支持）" ;;
-    compatible) preflight_record warn 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}（兼容支持：已在容器内验证依赖安装，整机安装未逐版本实测）" \
-      '生产环境建议使用 Ubuntu 24.04；继续安装请确认' ;;
-    *) preflight_record fail 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}：${tier#unsupported:}" \
-      '请改用 Ubuntu 24.04（推荐）、Ubuntu 22.04/20.04、Debian 10–13 或 Rocky/AlmaLinux/RHEL 8/9/10' ;;
+    official) preflight_record pass 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}$(msg '（正式支持）' ' (officially supported)')" ;;
+    compatible) preflight_record warn 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}$(msg '（兼容支持：已在容器内验证依赖安装，整机安装未逐版本实测）' ' (compatible: dependency installation verified in containers, full installs not tested on every release)')" \
+      "$(msg '生产环境建议使用 Ubuntu 24.04；继续安装请确认' 'Ubuntu 24.04 is recommended for production; confirm to continue')" ;;
+    *) preflight_record fail 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}$(msg '：' ': ')${tier#unsupported:}" \
+      "$(msg '请改用 Ubuntu 24.04（推荐）、Ubuntu 22.04/20.04、Debian 10–13 或 Rocky/AlmaLinux/RHEL 8/9/10' 'use Ubuntu 24.04 (recommended), Ubuntu 22.04/20.04, Debian 10–13 or Rocky/AlmaLinux/RHEL 8/9/10')" ;;
   esac
 }
 
@@ -852,12 +1057,12 @@ preflight_check_arch() {
   local role=$1 machine flags
   machine=$(uname -m)
   if [ "$machine" != x86_64 ]; then
-    preflight_record fail CPU架构 "$machine" '目前只提供 x86_64（amd64）安装包，请使用 x86_64 服务器'
+    preflight_record fail CPU架构 "$machine" "$(msg '目前只提供 x86_64（amd64）安装包，请使用 x86_64 服务器' 'only x86_64 (amd64) packages are provided; use an x86_64 server')"
     return
   fi
   flags=$(awk -F: '/^flags/ { print $2; exit }' "${PREFLIGHT_ROOT}/proc/cpuinfo" 2>/dev/null || true)
   if [ "$role" = control ] && [ -n "$flags" ] && ! printf '%s\n' "$flags" | grep -qw sse4_2; then
-    preflight_record fail CPU架构 'x86_64，但 CPU 不支持 SSE4.2' 'ClickHouse 需要 SSE4.2，请更换 CPU 型号或在虚拟化平台开启 CPU 直通（host-passthrough）'
+    preflight_record fail CPU架构 "$(msg 'x86_64，但 CPU 不支持 SSE4.2' 'x86_64, but the CPU lacks SSE4.2')" "$(msg 'ClickHouse 需要 SSE4.2，请更换 CPU 型号或在虚拟化平台开启 CPU 直通（host-passthrough）' 'ClickHouse needs SSE4.2; change the CPU model or enable CPU passthrough (host-passthrough) in the hypervisor')"
     return
   fi
   preflight_record pass CPU架构 x86_64
@@ -887,23 +1092,23 @@ preflight_check_kernel() {
   release=$(uname -r)
   major=${release%%.*}
   minor=${release#*.}; minor=${minor%%.*}
-  case "$major$minor" in *[!0-9]*|'') preflight_record warn 内核 "无法识别内核版本 $release"; return ;; esac
+  case "$major$minor" in *[!0-9]*|'') preflight_record warn 内核 "$(msg "无法识别内核版本 $release" "cannot parse kernel version $release")"; return ;; esac
   if [ "$role" = node ]; then
     # The Agent signals OpenResty only through pidfd (Linux 5.3+, or a vendor
     # backport): there is no PID-reuse-prone fallback.
     if [ "$major" -lt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -lt 3 ]; }; then
       preflight_pidfd_probe || probe=$?
       case "$probe" in
-        0) preflight_record warn 内核 "$release（低于 5.3，但内核提供了 pidfd_open）" '未在该内核上逐版本实测；建议升级到 5.10 以上' ;;
-        2) preflight_record fail 内核 "$release（低于 5.3），无法确认 pidfd 支持" '请安装 perl 后重试，或升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 用 HWE 内核）' ;;
-        *) preflight_record fail 内核 "$release 不支持 pidfd_open（节点重载 OpenResty 依赖它）" '请升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 16.04/18.04 用 HWE 内核，Debian 9/10 用 backports 内核）' ;;
+        0) preflight_record warn 内核 "$release$(msg '（低于 5.3，但内核提供了 pidfd_open）' ' (older than 5.3 but provides pidfd_open)')" "$(msg '未在该内核上逐版本实测；建议升级到 5.10 以上' 'not tested on this kernel; 5.10 or newer is recommended')" ;;
+        2) preflight_record fail 内核 "$release$(msg '（低于 5.3），无法确认 pidfd 支持' ' (older than 5.3); cannot confirm pidfd support')" "$(msg '请安装 perl 后重试，或升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 用 HWE 内核）' 'install perl and retry, or upgrade the kernel to 5.3+ (ELRepo kernel-lt/kernel-ml on CentOS 7, HWE kernel on Ubuntu)')" ;;
+        *) preflight_record fail 内核 "$release$(msg ' 不支持 pidfd_open（节点重载 OpenResty 依赖它）' ' lacks pidfd_open (needed to reload OpenResty on nodes)')" "$(msg '请升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 16.04/18.04 用 HWE 内核，Debian 9/10 用 backports 内核）' 'upgrade the kernel to 5.3+ (ELRepo kernel-lt/kernel-ml on CentOS 7, HWE kernel on Ubuntu 16.04/18.04, backports kernel on Debian 9/10)')" ;;
       esac
       [ "$probe" = 0 ] || return 0
     elif [ "$major" -eq 5 ] && [ "$minor" -lt 10 ]; then
-      preflight_record warn 内核 "$release（5.3–5.9 可用，未逐版本实测）" '建议使用 5.10 以上内核'
+      preflight_record warn 内核 "$release$(msg '（5.3–5.9 可用，未逐版本实测）' ' (5.3–5.9 works, not tested on every release)')" "$(msg '建议使用 5.10 以上内核' 'a 5.10+ kernel is recommended')"
     fi
     if [ ! -r "${PREFLIGHT_ROOT}/sys/fs/cgroup/cgroup.controllers" ]; then
-      preflight_record warn cgroup "未启用 cgroup v2（legacy/hybrid）" 'Agent 可在 cgroup v1 下运行；IPAddressDeny 等依赖 cgroup v2 的服务限制不会生效'
+      preflight_record warn cgroup "$(msg '未启用 cgroup v2（legacy/hybrid）' 'cgroup v2 is not enabled (legacy/hybrid)')" "$(msg 'Agent 可在 cgroup v1 下运行；IPAddressDeny 等依赖 cgroup v2 的服务限制不会生效' 'the Agent runs on cgroup v1, but service limits that need cgroup v2 (IPAddressDeny etc.) will not apply')"
     fi
     if [ "$major" -gt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -ge 10 ]; }; then
       preflight_record pass 内核 "$release"
@@ -911,7 +1116,7 @@ preflight_check_kernel() {
     return 0
   fi
   if [ "$major" -lt 4 ] || { [ "$major" -eq 4 ] && [ "$minor" -lt 18 ]; }; then
-    preflight_record warn 内核 "$release（低于 4.18，未验证）"
+    preflight_record warn 内核 "$release$(msg '（低于 4.18，未验证）' ' (older than 4.18, not verified)')"
     return
   fi
   preflight_record pass 内核 "$release"
@@ -923,13 +1128,13 @@ preflight_check_cpu() {
   [ -n "$cores" ] && [ "$cores" -gt 0 ] 2>/dev/null || cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 0)
   # 推荐配置：主控至少 4 核 16G，节点 4 核 8G 起；低于推荐只告警。
   if [ "$cores" -lt 1 ]; then
-    preflight_record warn CPU核数 '无法识别 CPU 核数'
+    preflight_record warn CPU核数 "$(msg '无法识别 CPU 核数' 'cannot detect the CPU count')"
   elif [ "$role" = control ] && [ "$cores" -lt 4 ]; then
-    preflight_record warn CPU核数 "$cores 核（主控推荐至少 4 核）" 'PostgreSQL、ClickHouse、ClamAV 与管理端同机运行，核数少时访问日志与统计会明显变慢'
+    preflight_record warn CPU核数 "$cores $(msg '核（主控推荐至少 4 核）' 'cores (4+ recommended for the control plane)')" "$(msg 'PostgreSQL、ClickHouse、ClamAV 与管理端同机运行，核数少时访问日志与统计会明显变慢' 'PostgreSQL, ClickHouse, ClamAV and the console share this host; with few cores access logs and statistics slow down noticeably')"
   elif [ "$role" = node ] && [ "$cores" -lt 4 ]; then
-    preflight_record warn CPU核数 "$cores 核（节点推荐至少 4 核）" 'OpenResty、WAF 与 TLS 握手按核扩展，核数少时高并发与 CC 防护能力下降'
+    preflight_record warn CPU核数 "$cores $(msg '核（节点推荐至少 4 核）' 'cores (4+ recommended for nodes)')" "$(msg 'OpenResty、WAF 与 TLS 握手按核扩展，核数少时高并发与 CC 防护能力下降' 'OpenResty, WAF and TLS handshakes scale per core; few cores reduce concurrency and CC protection')"
   else
-    preflight_record pass CPU核数 "$cores 核"
+    preflight_record pass CPU核数 "$cores $(msg '核' 'cores')"
   fi
 }
 
@@ -946,18 +1151,18 @@ preflight_check_memory() {
   # 低于 fail 不能安装；低于 warn（推荐：主控 16G、节点 8G，按标称约 90%）告警。
   if [ "$role" = control ]; then fail_mib=3500 warn_mib=14700; else fail_mib=900 warn_mib=7300; fi
   if [ "$total" -le 0 ]; then
-    preflight_record warn 内存 '无法读取 /proc/meminfo'
+    preflight_record warn 内存 "$(msg '无法读取 /proc/meminfo' 'cannot read /proc/meminfo')"
   elif [ "$total" -lt "$fail_mib" ]; then
     if [ "$role" = node ] && [ $((total + swap)) -ge 2800 ]; then
-      preflight_record warn 内存 "${total} MiB + Swap ${swap} MiB（节点建议 2G 以上）" '内存不足 2G 时需保留至少 2G Swap'
+      preflight_record warn 内存 "${total} MiB + Swap ${swap} MiB$(msg '（节点建议 2G 以上）' ' (2G+ recommended for nodes)')" "$(msg '内存不足 2G 时需保留至少 2G Swap' 'keep at least 2G of swap when memory is below 2G')"
     else
-      preflight_record fail 内存 "${total} MiB（$(if [ "$role" = control ]; then printf '主控最低 4G'; else printf '节点最低 1G，且需 2G Swap'; fi)）" \
-        "$(if [ "$role" = control ]; then printf '请升级到 4G 以上内存（推荐 16G）'; else printf '请升级到 2G 以上内存，或 1G 内存加 2G Swap（推荐 8G）'; fi)"
+      preflight_record fail 内存 "${total} MiB（$(if [ "$role" = control ]; then msg '主控最低 4G' 'control plane minimum 4G'; else msg '节点最低 1G，且需 2G Swap' 'node minimum 1G plus 2G swap'; fi)）" \
+        "$(if [ "$role" = control ]; then msg '请升级到 4G 以上内存（推荐 16G）' 'upgrade to 4G+ memory (16G recommended)'; else msg '请升级到 2G 以上内存，或 1G 内存加 2G Swap（推荐 8G）' 'upgrade to 2G+ memory, or 1G plus 2G swap (8G recommended)'; fi)"
     fi
   elif [ "$total" -lt "$warn_mib" ]; then
     swap_note=''; [ "$swap" -le 0 ] || swap_note=" + Swap ${swap} MiB"
-    preflight_record warn 内存 "${total} MiB${swap_note}（$(if [ "$role" = control ]; then printf '主控推荐 16G 以上'; else printf '节点推荐 8G 以上'; fi)）" \
-      "$(if [ "$role" = control ]; then printf '可以安装，但访问日志多时 ClickHouse 与 ClamAV 可能内存紧张；规模大建议 8 核 32G'; else printf '可以安装；大缓存或高并发建议 4 核 16G，内存不足 2G 时需加 2G Swap'; fi)"
+    preflight_record warn 内存 "${total} MiB${swap_note}$(msg '（' ' (')$(if [ "$role" = control ]; then msg '主控推荐 16G 以上' '16G+ recommended for the control plane'; else msg '节点推荐 8G 以上' '8G+ recommended for nodes'; fi)$(msg '）' ')')" \
+      "$(if [ "$role" = control ]; then msg '可以安装，但访问日志多时 ClickHouse 与 ClamAV 可能内存紧张；规模大建议 8 核 32G' 'installable, but ClickHouse and ClamAV may run short with heavy access logs; 8 cores / 32G for large deployments'; else msg '可以安装；大缓存或高并发建议 4 核 16G，内存不足 2G 时需加 2G Swap' 'installable; 4 cores / 16G for large caches or high concurrency, add 2G swap below 2G memory'; fi)"
   else
     preflight_record pass 内存 "${total} MiB"
   fi
@@ -983,17 +1188,17 @@ preflight_check_disk() {
   for path in "${paths[@]}"; do
     existing=$(preflight_existing_parent "$path")
     line=$(df -Pm "$existing" 2>/dev/null | awk 'NR == 2 { print $6 " " $4 }') || line=''
-    [ -n "$line" ] || { preflight_record warn 磁盘空间 "无法读取 $path 所在分区的可用空间"; continue; }
+    [ -n "$line" ] || { preflight_record warn 磁盘空间 "$(msg "无法读取 $path 所在分区的可用空间" "cannot read free space of the partition holding $path")"; continue; }
     mount=${line% *}; avail_mib=${line##* }
     case "$seen" in *" $mount "*) continue ;; esac
     seen="$seen$mount "
     if [ "$avail_mib" -lt "$fail_mib" ]; then
-      preflight_record fail 磁盘空间 "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "请清理或扩容 $mount 分区"
+      preflight_record fail 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free, below $((fail_mib / 1024)) GiB")" "$(msg "请清理或扩容 $mount 分区" "free up or grow the $mount partition")"
     elif [ "$avail_mib" -lt "$warn_mib" ]; then
-      preflight_record warn 磁盘空间 "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" \
-        "$(if [ "$role" = control ]; then printf '日志、分析数据和对象存储会持续增长，建议使用 100G 以上 SSD'; else printf '缓存会占用磁盘，按缓存规模预留空间'; fi)"
+      preflight_record warn 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" "$path (partition $mount) has $((avail_mib / 1024)) GiB free; $((warn_mib / 1024)) GiB+ recommended")" \
+        "$(if [ "$role" = control ]; then msg '日志、分析数据和对象存储会持续增长，建议使用 100G 以上 SSD' 'logs, analytics and object storage keep growing; a 100G+ SSD is recommended'; else msg '缓存会占用磁盘，按缓存规模预留空间' 'the cache uses disk; reserve space for its size'; fi)"
     else
-      preflight_record pass 磁盘空间 "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB"
+      preflight_record pass 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free")"
     fi
   done
 }
@@ -1023,16 +1228,16 @@ PREFLIGHT_SANDBOX_DIRECTIVES=(Service.ProtectSystem Service.ReadWritePaths Servi
 preflight_check_systemd() {
   local version minimum directive missing='' groups=''
   if [ ! -d "${PREFLIGHT_ROOT}/run/systemd/system" ] || ! command -v systemctl >/dev/null 2>&1; then
-    preflight_record fail systemd '本机未以 systemd 作为 init 运行（容器或 OpenVZ/LXC 精简环境常见）' '请在以 systemd 启动的完整虚拟机或物理机上安装'
+    preflight_record fail systemd "$(msg '本机未以 systemd 作为 init 运行（容器或 OpenVZ/LXC 精简环境常见）' 'this host does not run systemd as init (common in containers or minimal OpenVZ/LXC)')" "$(msg '请在以 systemd 启动的完整虚拟机或物理机上安装' 'install on a full VM or bare-metal host booted with systemd')"
     return
   fi
   version=$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 }')
   version=${version%%[!0-9]*}
   minimum=$(preflight_systemd_minimum)
   if [ -z "$version" ]; then
-    preflight_record fail systemd '无法识别 systemd 版本'
+    preflight_record fail systemd "$(msg '无法识别 systemd 版本' 'cannot detect the systemd version')"
   elif [ "$version" -lt 219 ]; then
-    preflight_record fail systemd "版本 $version，低于 219" '请升级系统'
+    preflight_record fail systemd "$(msg "版本 $version，低于 219" "version $version is older than 219")" "$(msg '请升级系统' 'upgrade the system')"
   elif [ "$version" -lt "$minimum" ]; then
     # Older systemd: units get a compatibility drop-in (systemd-compat.sh) and
     # unknown hardening directives are ignored by systemd itself.
@@ -1044,18 +1249,18 @@ preflight_check_systemd() {
         systemd_compat_knows "$directive" || groups="$groups $directive"
       done
     fi
-    preflight_record warn systemd "版本 $version（低于 $minimum）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:$groups，将不启用系统调用过滤}" \
-      '服务可以运行，但上述隔离措施不会生效；建议使用 systemd 249 以上的系统'
+    preflight_record warn systemd "$(msg "版本 $version（低于 $minimum）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:$groups，将不启用系统调用过滤}" "version $version (older than $minimum): reduced sandboxing${missing:+, unsupported:$missing}${groups:+; missing syscall filter groups:$groups, syscall filtering disabled}")" \
+      "$(msg '服务可以运行，但上述隔离措施不会生效；建议使用 systemd 249 以上的系统' 'services run, but the isolation above does not apply; systemd 249+ is recommended')"
   else
-    preflight_record pass systemd "版本 $version"
+    preflight_record pass systemd "$(msg "版本 $version" "version $version")"
   fi
 }
 
 preflight_check_root() {
   if [ "$(id -u)" -eq 0 ]; then
-    preflight_record pass root权限 '以 root 运行'
+    preflight_record pass root权限 "$(msg '以 root 运行' 'running as root')"
   else
-    preflight_record fail root权限 "当前用户 $(id -un 2>/dev/null || id -u)" '请使用 root 运行，或在命令前加 sudo'
+    preflight_record fail root权限 "$(msg '当前用户' 'current user') $(id -un 2>/dev/null || id -u)" "$(msg '请使用 root 运行，或在命令前加 sudo' 'run as root or prefix the command with sudo')"
   fi
 }
 
@@ -1074,12 +1279,12 @@ preflight_check_ports() {
   listening=" $(preflight_listening_ports | tr '\n' ' ') "
   for entry in "$@"; do
     port=${entry%%:*}; label=${entry#*:}
-    case "$listening" in *" $port "*) busy="$busy${busy:+、}$port（$label）" ;; esac
+    case "$listening" in *" $port "*) busy="$busy${busy:+$(msg '、' ', ')}$port$(msg '（' ' (')$(preflight_label "$label")$(msg '）' ')')" ;; esac
   done
   if [ -n "$busy" ]; then
-    preflight_record fail 端口占用 "已被占用：$busy" '用 ss -ltnp 查看占用进程；请在干净的系统上安装，或停止占用这些端口的服务'
+    preflight_record fail 端口占用 "$(msg '已被占用：' 'in use: ')$busy" "$(msg '用 ss -ltnp 查看占用进程；请在干净的系统上安装，或停止占用这些端口的服务' 'find the owners with ss -ltnp; install on a clean system or stop those services')"
   else
-    preflight_record pass 端口占用 "所需端口均空闲（$(printf '%s\n' "$@" | cut -d: -f1 | paste -sd, -)）"
+    preflight_record pass 端口占用 "$(msg '所需端口均空闲（' 'required ports are free (')$(printf '%s\n' "$@" | cut -d: -f1 | paste -sd, -)$(msg '）' ')')"
   fi
 }
 
@@ -1093,15 +1298,15 @@ preflight_check_commands() {
       if command -v "$alternative" >/dev/null 2>&1; then found=true; break; fi
     done
     [ "$found" = false ] || continue
-    command=${command//|/ 或 }
+    command=${command//|/ $(msg 或 or) }
     if [ "$mode" = required ]; then missing="$missing $command"; else auto="$auto $command"; fi
   done
   if [ -n "$missing" ]; then
-    preflight_record fail 必需命令 "缺少:$missing" '请先用系统包管理器安装这些基础工具'
+    preflight_record fail 必需命令 "$(msg '缺少:' 'missing:')$missing" "$(msg '请先用系统包管理器安装这些基础工具' 'install these base tools with the system package manager first')"
   elif [ -n "$auto" ]; then
-    preflight_record pass 必需命令 "基础命令齐全；将自动安装:$auto"
+    preflight_record pass 必需命令 "$(msg '基础命令齐全；将自动安装:' 'base commands present; will install automatically:')$auto"
   else
-    preflight_record pass 必需命令 '全部已安装'
+    preflight_record pass 必需命令 "$(msg '全部已安装' 'all installed')"
   fi
 }
 
@@ -1115,7 +1320,7 @@ preflight_check_remote() {
   local label=$1 url='' headers='' local_epoch remote_date remote_epoch skew untrusted=false candidate rc
   shift
   if ! command -v curl >/dev/null 2>&1; then
-    preflight_record warn "连通性（$label）" '未安装 curl，跳过检测'
+    preflight_record warn "连通性（$label）" "$(msg '未安装 curl，跳过检测' 'curl is not installed; check skipped')"
     return
   fi
   for candidate in "$@"; do
@@ -1127,29 +1332,29 @@ preflight_check_remote() {
     headers=''
   done
   if [ -z "$url" ]; then
-    preflight_record fail "连通性（$label）" "无法连接 $*" '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址'
+    preflight_record fail "连通性（$label）" "$(msg '无法连接' 'cannot connect to') $*" "$(msg '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址' 'check DNS, outbound firewall and proxy settings so this host can reach that HTTPS address')"
     return
   fi
   if [ "$untrusted" = true ]; then
-    preflight_record pass "连通性（$label）" "$url 可连接（证书不受系统信任，安装时用固定指纹校验）"
-    preflight_record warn 时间偏差 "证书不受系统信任，无法在检测阶段读取 $label 的服务器时间" '请确认已开启 NTP 时间同步（timedatectl set-ntp true）'
+    preflight_record pass "连通性（$label）" "$url $(msg '可连接（证书不受系统信任，安装时用固定指纹校验）' 'reachable (certificate not trusted by the system; the install pins its fingerprint)')"
+    preflight_record warn 时间偏差 "$(msg "证书不受系统信任，无法在检测阶段读取 $label 的服务器时间" "untrusted certificate: cannot read the server time of $label during the checks")" "$(msg '请确认已开启 NTP 时间同步（timedatectl set-ntp true）' 'make sure NTP time sync is on (timedatectl set-ntp true)')"
     return
   fi
-  preflight_record pass "连通性（$label）" "$url 可连接"
+  preflight_record pass "连通性（$label）" "$url $(msg '可连接' 'reachable')"
   remote_date=$(printf '%s\n' "$headers" | tr -d '\r' | awk 'tolower($1) == "date:" { sub(/^[^:]*: */, ""); print; exit }')
   remote_epoch=$(preflight_date_epoch "$remote_date")
   local_epoch=$(date -u +%s)
   if [ -z "$remote_epoch" ]; then
-    preflight_record warn 时间偏差 "无法从 $label 读取服务器时间" '请确认已开启 NTP 时间同步（timedatectl set-ntp true）'
+    preflight_record warn 时间偏差 "$(msg "无法从 $label 读取服务器时间" "cannot read the server time from $label")" "$(msg '请确认已开启 NTP 时间同步（timedatectl set-ntp true）' 'make sure NTP time sync is on (timedatectl set-ntp true)')"
     return
   fi
   skew=$((local_epoch - remote_epoch)); [ "$skew" -ge 0 ] || skew=$((-skew))
   if [ "$skew" -gt 300 ]; then
-    preflight_record fail 时间偏差 "本机与 $label 相差 ${skew} 秒（超过 300 秒，激活与签名校验会被拒绝）" '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试'
+    preflight_record fail 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒（超过 300 秒，激活与签名校验会被拒绝）" "clock differs from $label by ${skew} s (over 300 s; activation and signature checks will be refused)")" "$(msg '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试' 'enable NTP: timedatectl set-ntp true, or install chrony and retry')"
   elif [ "$skew" -gt 60 ]; then
-    preflight_record warn 时间偏差 "本机与 $label 相差 ${skew} 秒" '建议开启 NTP 同步：timedatectl set-ntp true'
+    preflight_record warn 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒" "clock differs from $label by ${skew} s")" "$(msg '建议开启 NTP 同步：timedatectl set-ntp true' 'enabling NTP is recommended: timedatectl set-ntp true')"
   else
-    preflight_record pass 时间偏差 "${skew} 秒"
+    preflight_record pass 时间偏差 "${skew} $(msg 秒 s)"
   fi
 }
 
@@ -1157,16 +1362,16 @@ preflight_check_remote() {
 preflight_check_tcp() {
   local label=$1 host=$2 port=$3
   if timeout 6 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
-    preflight_record pass "连通性（$label）" "$host:$port 可连接"
+    preflight_record pass "连通性（$label）" "$host:$port $(msg '可连接' 'reachable')"
   else
-    preflight_record warn "连通性（$label）" "$host:$port 无法连接" "请确认主控已放行 TCP $port，且本机出站未被拦截"
+    preflight_record warn "连通性（$label）" "$host:$port $(msg '无法连接' 'unreachable')" "$(msg "请确认主控已放行 TCP $port，且本机出站未被拦截" "make sure the control plane allows TCP $port and outbound traffic from here is not blocked")"
   fi
 }
 
 preflight_check_selinux() {
   if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null)" = Enforcing ]; then
-    preflight_record warn SELinux '处于 Enforcing 模式（未在 Enforcing 下做整机实测）' \
-      '安装器会对安装目录执行 restorecon；若服务无法启动，用 ausearch -m avc -ts recent 查看拒绝记录'
+    preflight_record warn SELinux "$(msg '处于 Enforcing 模式（未在 Enforcing 下做整机实测）' 'Enforcing mode (full installs not tested under Enforcing)')" \
+      "$(msg '安装器会对安装目录执行 restorecon；若服务无法启动，用 ausearch -m avc -ts recent 查看拒绝记录' 'the installer runs restorecon on its directories; if a service fails to start, check denials with ausearch -m avc -ts recent')"
   fi
 }
 
@@ -1175,15 +1380,15 @@ preflight_check_firewall() {
   local ports="$*" commands=''
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
     commands=$(for port in $ports; do printf 'ufw allow %s/tcp; ' "$port"; done)
-    preflight_record warn 防火墙 "ufw 已启用，安装器不会修改规则" "请放行：$commands"
+    preflight_record warn 防火墙 "$(msg 'ufw 已启用，安装器不会修改规则' 'ufw is active; the installer does not change its rules')" "$(msg '请放行：' 'allow: ')$commands"
   elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
     commands=$(for port in $ports; do printf 'firewall-cmd --permanent --add-port=%s/tcp; ' "$port"; done)
-    preflight_record warn 防火墙 "firewalld 正在运行，安装器不会修改规则" "请放行：${commands}firewall-cmd --reload"
+    preflight_record warn 防火墙 "$(msg 'firewalld 正在运行，安装器不会修改规则' 'firewalld is running; the installer does not change its rules')" "$(msg '请放行：' 'allow: ')${commands}firewall-cmd --reload"
   elif command -v iptables >/dev/null 2>&1 && iptables -S INPUT 2>/dev/null | grep -q '^-P INPUT DROP'; then
     commands=$(for port in $ports; do printf 'iptables -I INPUT -p tcp --dport %s -j ACCEPT; ' "$port"; done)
-    preflight_record warn 防火墙 'iptables INPUT 默认策略为 DROP' "请放行：$commands"
+    preflight_record warn 防火墙 "$(msg 'iptables INPUT 默认策略为 DROP' 'iptables INPUT policy is DROP')" "$(msg '请放行：' 'allow: ')$commands"
   else
-    preflight_record pass 防火墙 "未检测到启用的主机防火墙；云安全组需放行 TCP ${ports// /, }"
+    preflight_record pass 防火墙 "$(msg "未检测到启用的主机防火墙；云安全组需放行 TCP ${ports// /, }" "no active host firewall; allow TCP ${ports// /, } in the cloud security group")"
   fi
 }
 
@@ -1193,56 +1398,83 @@ preflight_check_coexistence() {
   if [ "$role" = node ]; then
     for path in /etc/cdnca-control /usr/local/cdnca-control /data/cdnca-native-root; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 主控共存 "本机已安装主控（$path）" '节点不能与主控装在同一台机器上，请使用另一台服务器'
+        preflight_record fail 主控共存 "$(msg "本机已安装主控（$path）" "a control plane is installed here ($path)")" "$(msg '节点不能与主控装在同一台机器上，请使用另一台服务器' 'a node cannot share a host with the control plane; use another server')"
         return
       fi
     done
   else
     for path in /etc/cdnca-edge-agent /opt/cdnca-node /usr/lib/cdnca-edge-agent; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 节点共存 "本机已安装节点（$path）" '主控不能与节点装在同一台机器上，请使用另一台服务器'
+        preflight_record fail 节点共存 "$(msg "本机已安装节点（$path）" "a node is installed here ($path)")" "$(msg '主控不能与节点装在同一台机器上，请使用另一台服务器' 'the control plane cannot share a host with a node; use another server')"
         return
       fi
     done
   fi
 }
 
+# 检测项与端口用途在记录里保持中文（测试与调用方按中文匹配），报告时按界面语言显示。
+preflight_label() {
+  [ "${INSTALL_LANG:-zh}" = en ] || { printf '%s' "$1"; return 0; }
+  case "$1" in
+    连通性（*）) local inner=${1#连通性（}; printf 'Connectivity (%s)' "$(preflight_label "${inner%）}")" ;;
+    '管理端网页（本机回环）') printf 'management web (loopback)' ;;
+    *）) printf '%s' "$1" | sed 's/）$//' ;;
+    操作系统) printf 'Operating system' ;; CPU架构) printf 'CPU architecture' ;; CPU核数) printf 'CPU cores' ;;
+    内核) printf 'Kernel' ;; 内存) printf 'Memory' ;; 磁盘空间) printf 'Disk space' ;; root权限) printf 'Root' ;;
+    端口占用) printf 'Ports' ;; 必需命令) printf 'Required commands' ;; 时间偏差) printf 'Clock skew' ;;
+    防火墙) printf 'Firewall' ;; 主控共存) printf 'Control plane on this host' ;; 节点共存) printf 'Node on this host' ;;
+    主控) printf 'control plane' ;; 授权端) printf 'licensing server' ;; 端口规划) printf 'Port plan' ;; 端口调整) printf 'Port changes' ;;
+    管理端域名) printf 'Management domain' ;; 管理端网页) printf 'Management web' ;; 管理端HTTPS) printf 'management HTTPS' ;;
+    节点升级下载) printf 'node upgrade downloads' ;;
+    宝塔环境) printf 'BaoTa environment' ;; 宝塔站点证书) printf 'BaoTa site certificate' ;; 宝塔防火墙) printf 'BaoTa firewall' ;;
+    宝塔手工步骤) printf 'BaoTa manual steps' ;; 宝塔nginx) printf 'BaoTa nginx' ;; 宝塔Apache) printf 'BaoTa Apache' ;;
+    宝塔OpenLiteSpeed) printf 'BaoTa OpenLiteSpeed' ;;
+    证书签发与依赖安装) printf 'certificate issuance and package installation' ;; 节点注册) printf 'node enrollment' ;;
+    节点通道) printf 'node channel' ;; NATS监控) printf 'NATS monitoring' ;; Gateway健康检查) printf 'Gateway health check' ;;
+    内部gRPC) printf 'internal gRPC' ;; 升级源) printf 'upgrade source' ;; 对象存储) printf 'object storage' ;;
+    ClickHouse-复制) printf 'ClickHouse-replication' ;; 网关内部gRPC) printf 'Gateway internal gRPC' ;;
+    网关NATS) printf 'Gateway NATS' ;; 网关Redis) printf 'Gateway Redis' ;; 网站HTTP) printf 'website HTTP' ;;
+    网站HTTPS) printf 'website HTTPS' ;; 本机健康检查) printf 'local health check' ;; 本机证书服务) printf 'local certificate service' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 preflight_tag() {
-  case "$1" in pass) printf '通过' ;; warn) printf '警告' ;; *) printf '不通过' ;; esac
+  case "$1" in pass) msg '通过' 'PASS' ;; warn) msg '警告' 'WARN' ;; *) msg '不通过' 'FAIL' ;; esac
 }
 
 # 返回 0 继续安装；有“不通过”或用户拒绝时返回 1。
 preflight_report() {
   local prefix=$1 index fails=0 warns=0 answer
-  printf '%s 安装前检测\n' "$prefix" >&2
+  printf '%s %s\n' "$prefix" "$(msg '安装前检测' 'Pre-installation checks')" >&2
   for index in "${!PREFLIGHT_STATUS[@]}"; do
-    printf '%s   [%s] %s：%s\n' "$prefix" "$(preflight_tag "${PREFLIGHT_STATUS[$index]}")" "${PREFLIGHT_ITEM[$index]}" "${PREFLIGHT_DETAIL[$index]}" >&2
+    printf "%s   [%s] %s$(msg '：' ': ')%s\n" "$prefix" "$(preflight_tag "${PREFLIGHT_STATUS[$index]}")" "$(preflight_label "${PREFLIGHT_ITEM[$index]}")" "${PREFLIGHT_DETAIL[$index]}" >&2
     if [ "${PREFLIGHT_STATUS[$index]}" != pass ] && [ -n "${PREFLIGHT_HINT[$index]}" ]; then
-      printf '%s          建议：%s\n' "$prefix" "${PREFLIGHT_HINT[$index]}" >&2
+      printf "%s          $(msg '建议：' 'Hint: ')%s\n" "$prefix" "${PREFLIGHT_HINT[$index]}" >&2
     fi
     case "${PREFLIGHT_STATUS[$index]}" in fail) fails=$((fails + 1)) ;; warn) warns=$((warns + 1)) ;; esac
   done
   if [ "$fails" -gt 0 ]; then
-    printf '%s 检测结果：%d 项不通过、%d 项警告。请按上面的建议处理后重新执行安装命令；本机未做任何修改。\n' "$prefix" "$fails" "$warns" >&2
+    printf "%s $(msg '检测结果：%d 项不通过、%d 项警告。请按上面的建议处理后重新执行安装命令；本机未做任何修改。' 'Result: %d failed, %d warnings. Fix them as suggested above and run the install command again; nothing on this host was changed.')\n" "$prefix" "$fails" "$warns" >&2
     return 1
   fi
   if [ "$warns" -eq 0 ]; then
-    printf '%s 检测结果：全部通过。\n' "$prefix" >&2
+    printf '%s %s\n' "$prefix" "$(msg '检测结果：全部通过。' 'Result: all checks passed.')" >&2
     return 0
   fi
   if [ "$PREFLIGHT_ASSUME_YES" = true ]; then
-    printf '%s 检测结果：%d 项警告，已指定 --yes，继续安装。\n' "$prefix" "$warns" >&2
+    printf "%s $(msg '检测结果：%d 项警告，已指定 --yes，继续安装。' 'Result: %d warnings; --yes given, continuing.')\n" "$prefix" "$warns" >&2
     return 0
   fi
   if { : </dev/tty; } 2>/dev/null && [ -t 2 ]; then
-    printf '%s 检测结果：%d 项警告。确认继续安装？[y/N] ' "$prefix" "$warns" >&2
+    printf "%s $(msg '检测结果：%d 项警告。确认继续安装？[y/N] ' 'Result: %d warnings. Continue the installation? [y/N] ')" "$prefix" "$warns" >&2
     IFS= read -r answer </dev/tty || answer=''
     case "$answer" in
       y|Y|yes|YES) return 0 ;;
-      *) printf '%s 已取消安装；本机未做任何修改。如需跳过确认，请在命令末尾加 --yes。\n' "$prefix" >&2; return 1 ;;
+      *) printf '%s %s\n' "$prefix" "$(msg '已取消安装；本机未做任何修改。如需跳过确认，请在命令末尾加 --yes。' 'Installation cancelled; nothing was changed. Add --yes to the command to skip this question.')" >&2; return 1 ;;
     esac
   fi
-  printf '%s 检测结果：%d 项警告；非交互运行，继续安装（加 --yes 可省略本提示）。\n' "$prefix" "$warns" >&2
+  printf "%s $(msg '检测结果：%d 项警告；非交互运行，继续安装（加 --yes 可省略本提示）。' 'Result: %d warnings; non-interactive run, continuing (--yes hides this note).')\n" "$prefix" "$warns" >&2
   return 0
 }
 # <<< END install-preflight
@@ -1261,6 +1493,8 @@ SSH_GUARD_ROOT=${SSH_GUARD_ROOT:-}
 SSH_GUARD_JAIL=${SSH_GUARD_ROOT}/etc/fail2ban/jail.d/cdnca-sshd.local
 
 ssh_guard_log() { printf '[cdnca-ssh-guard] %s\n' "$*" >&2; }
+# 未嵌 install-i18n 的安装器按中文输出。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 # 地址列表：空格或逗号分隔的 IPv4/IPv6 地址或 CIDR；非法项返回 1。
 ssh_guard_validate_ignoreip() {
@@ -1293,24 +1527,24 @@ ssh_guard_install_package() {
 
 # 安装并启用；失败只告警不中断安装（防爆破不是业务前置）。
 ssh_guard_setup() {
-  [ "$SSH_GUARD_ENABLED" = true ] || { ssh_guard_log '已按 --no-ssh-guard 跳过 fail2ban'; return 0; }
-  ssh_guard_validate_ignoreip "$SSH_GUARD_IGNOREIP" || { ssh_guard_log "--ssh-guard-ignoreip 含非法地址：$SSH_GUARD_IGNOREIP"; return 1; }
+  [ "$SSH_GUARD_ENABLED" = true ] || { ssh_guard_log "$(msg '已按 --no-ssh-guard 跳过 fail2ban' 'fail2ban skipped (--no-ssh-guard)')"; return 0; }
+  ssh_guard_validate_ignoreip "$SSH_GUARD_IGNOREIP" || { ssh_guard_log "$(msg "--ssh-guard-ignoreip 含非法地址：$SSH_GUARD_IGNOREIP" "--ssh-guard-ignoreip contains an invalid address: $SSH_GUARD_IGNOREIP")"; return 1; }
   [ -n "$SSH_GUARD_IGNOREIP" ] ||
-    ssh_guard_log '提示：未给 --ssh-guard-ignoreip，只放行回环；建议加上运维出口与本平台各机器地址，避免误封'
+    ssh_guard_log "$(msg '提示：未给 --ssh-guard-ignoreip，只放行回环；建议加上运维出口与本平台各机器地址，避免误封' 'note: no --ssh-guard-ignoreip given, only loopback is exempt; add your admin egress and platform host addresses to avoid being banned')"
   if ! ssh_guard_install_package; then
-    ssh_guard_log '警告：无法安装 fail2ban（无 apt-get/dnf 或安装失败），SSH 防爆破未启用'
+    ssh_guard_log "$(msg '警告：无法安装 fail2ban（无 apt-get/dnf 或安装失败），SSH 防爆破未启用' 'warning: cannot install fail2ban (no apt-get/dnf or the install failed); SSH brute-force protection is off')"
     return 0
   fi
   install -d -m 0755 "${SSH_GUARD_JAIL%/*}"
   ssh_guard_render >"${SSH_GUARD_JAIL}.new"
   mv -f -- "${SSH_GUARD_JAIL}.new" "$SSH_GUARD_JAIL"
   if ! fail2ban-client -t >/dev/null 2>&1; then
-    ssh_guard_log "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）"
+    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
     return 0
   fi
   systemctl enable fail2ban >/dev/null 2>&1 || true
-  systemctl restart fail2ban >/dev/null 2>&1 || { ssh_guard_log '警告：fail2ban 启动失败，SSH 防爆破未启用'; return 0; }
-  ssh_guard_log "fail2ban sshd 已启用（5 次失败/10 分钟封 1 小时；ignoreip：127.0.0.1/8 ::1${SSH_GUARD_IGNOREIP:+ ${SSH_GUARD_IGNOREIP//,/ }}）"
+  systemctl restart fail2ban >/dev/null 2>&1 || { ssh_guard_log "$(msg '警告：fail2ban 启动失败，SSH 防爆破未启用' 'warning: fail2ban failed to start; SSH brute-force protection is off')"; return 0; }
+  ssh_guard_log "$(msg "fail2ban sshd 已启用（5 次失败/10 分钟封 1 小时；ignoreip：" 'fail2ban sshd enabled (5 failures in 10 minutes ban for 1 hour; ignoreip: ')127.0.0.1/8 ::1${SSH_GUARD_IGNOREIP:+ ${SSH_GUARD_IGNOREIP//,/ }}$(msg '）' ')')"
 }
 # <<< END ssh-guard
 
@@ -1333,6 +1567,9 @@ ssh_guard_setup() {
 # NO_COLOR 非空时不输出颜色。完整原始输出写入 PROGRESS_LOG_DIR 下的安装日志。
 
 PROGRESS_LOG_DIR=${PROGRESS_LOG_DIR:-/var/log}
+# 界面语言见 install-i18n；单独加载本库（测试）时按中文。阶段名写成“中文^English”。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
+progress_name() { case "$1" in *^*) msg "${1%%^*}" "${1#*^}" ;; *) printf '%s' "$1" ;; esac; }
 PROGRESS_LOG=''
 PROGRESS_PREFIX=''
 PROGRESS_TTY=false
@@ -1357,14 +1594,14 @@ progress_clock() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
 progress_span() {
   local low=$1 high=$2 low_minutes high_minutes
   if [ "$high" -lt 60 ]; then
-    if [ "$low" -eq "$high" ]; then printf '约 %d 秒' "$high"; else printf '约 %d–%d 秒' "$low" "$high"; fi
+    if [ "$low" -eq "$high" ]; then printf "$(msg '约 %d 秒' '~%d s')" "$high"; else printf "$(msg '约 %d–%d 秒' '~%d–%d s')" "$low" "$high"; fi
     return
   fi
   low_minutes=$((low / 60)) high_minutes=$(((high + 59) / 60))
   [ "$low_minutes" -gt 0 ] || [ "$low" -lt 15 ] || low_minutes=1
-  if [ "$low_minutes" -eq 0 ]; then printf '约 %d 分钟内' "$high_minutes"
-  elif [ "$low_minutes" -ge "$high_minutes" ]; then printf '约 %d 分钟' "$high_minutes"
-  else printf '约 %d–%d 分钟' "$low_minutes" "$high_minutes"; fi
+  if [ "$low_minutes" -eq 0 ]; then printf "$(msg '约 %d 分钟内' 'under %d min')" "$high_minutes"
+  elif [ "$low_minutes" -ge "$high_minutes" ]; then printf "$(msg '约 %d 分钟' '~%d min')" "$high_minutes"
+  else printf "$(msg '约 %d–%d 分钟' '~%d–%d min')" "$low_minutes" "$high_minutes"; fi
 }
 
 progress_bar() {
@@ -1408,17 +1645,18 @@ progress_init() {
     IFS='|' read -r _ low high _ <<<"$entry"
     total_low=$((total_low + low)) total_high=$((total_high + high))
   done
-  progress_line "共 ${#PROGRESS_STAGES[@]} 个步骤，预计$(progress_span "$total_low" "$total_high")${PROGRESS_LOG:+；完整输出写入 ${PROGRESS_LOG}}"
+  progress_line "$(msg "共 ${#PROGRESS_STAGES[@]} 个步骤，预计" "${#PROGRESS_STAGES[@]} steps, expected ")$(progress_span "$total_low" "$total_high")${PROGRESS_LOG:+$(msg "；完整输出写入 ${PROGRESS_LOG}" "; full output in ${PROGRESS_LOG}")}"
 }
 
 progress_close_stage() {
   [ "$PROGRESS_CURRENT" -gt 0 ] || return 0
   local spent=$((SECONDS - PROGRESS_STAGE_START)) name low high flag
   IFS='|' read -r name low high flag <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
+  name=$(progress_name "$name")
   if [ "$flag" != interactive ]; then
     PROGRESS_ACTUAL=$((PROGRESS_ACTUAL + spent)) PROGRESS_NOMINAL=$((PROGRESS_NOMINAL + (low + high) / 2))
   fi
-  progress_line "✓ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} 完成（用时 $(progress_clock "$spent")）" 32
+  progress_line "✓ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "完成（用时 $(progress_clock "$spent")）" "done ($(progress_clock "$spent"))")" 32
   PROGRESS_PASSED=$PROGRESS_CURRENT PROGRESS_CURRENT=0
 }
 
@@ -1443,14 +1681,15 @@ progress_stage() {
     factor=$((PROGRESS_ACTUAL * 100 / PROGRESS_NOMINAL))
   fi
   IFS='|' read -r name low high flag <<<"${PROGRESS_STAGES[$((stage - 1))]}"
-  progress_line "[${stage}/${#PROGRESS_STAGES[@]}] ${name}（$(progress_span "$low" "$high")）……" 1
-  progress_line "$(progress_bar $((done_mid * 100 / total_mid)))  已用 $(progress_clock $((SECONDS - PROGRESS_START)))  预计剩余$(progress_span $((rest_low * factor / 100)) $((rest_high * factor / 100)))"
+  name=$(progress_name "$name")
+  progress_line "[${stage}/${#PROGRESS_STAGES[@]}] ${name}$(msg "（$(progress_span "$low" "$high")）……" " ($(progress_span "$low" "$high")) ...")" 1
+  progress_line "$(progress_bar $((done_mid * 100 / total_mid)))  $(msg '已用' 'elapsed') $(progress_clock $((SECONDS - PROGRESS_START)))  $(msg '预计剩余' 'remaining ')$(progress_span $((rest_low * factor / 100)) $((rest_high * factor / 100)))"
 }
 
 progress_done() {
   [ -n "$PROGRESS_PREFIX" ] || return 0
   progress_close_stage
-  progress_line "$(progress_bar 100)  全部 ${#PROGRESS_STAGES[@]} 个步骤完成，总用时 $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+。安装日志：${PROGRESS_LOG}}" 32
+  progress_line "$(progress_bar 100)  $(msg "全部 ${#PROGRESS_STAGES[@]} 个步骤完成，总用时 $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+。安装日志：${PROGRESS_LOG}}" "all ${#PROGRESS_STAGES[@]} steps done in $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+. Install log: ${PROGRESS_LOG}}")" 32
 }
 
 # 由安装器的 EXIT 清理调用：中途失败时标出失败阶段、版本与日志位置。原因与下一步
@@ -1460,7 +1699,8 @@ progress_on_exit() {
   progress_stop_heartbeat
   if [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ]; then
     IFS='|' read -r name _ <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
-    progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} 失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" 31
+    name=$(progress_name "$name")
+    progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" "failed (${PROGRESS_VERSION:+version ${PROGRESS_VERSION}, }$(progress_clock $((SECONDS - PROGRESS_STAGE_START))) in this step, exit ${status}). The cause and fix are in the error line above${PROGRESS_LOG:+; full output: ${PROGRESS_LOG}}")" 31
     PROGRESS_CURRENT=0
   fi
   return 0
@@ -1473,11 +1713,11 @@ progress_on_exit() {
 progress_keep_output() {
   local file=$1 label=$2
   if [ -n "$PROGRESS_LOG" ] && [ -f "$PROGRESS_LOG" ] &&
-    { printf '>>> %s（失败输出）\n' "$label"; cat -- "$file" 2>/dev/null; } >>"$PROGRESS_LOG" 2>/dev/null; then
+    { printf '>>> %s%s\n' "$label" "$(msg '（失败输出）' ' (failed output)')"; cat -- "$file" 2>/dev/null; } >>"$PROGRESS_LOG" 2>/dev/null; then
     printf "inspect '>>> %s' in %s before retrying" "$label" "$PROGRESS_LOG"
     return 0
   fi
-  printf '%s %s 的输出无法写入安装日志，最后 30 行：\n' "${PROGRESS_LABEL:-}" "$label" >&2
+  printf "$(msg '%s %s 的输出无法写入安装日志，最后 30 行：' '%s output of %s could not be added to the install log; last 30 lines:')\n" "${PROGRESS_LABEL:-}" "$label" >&2
   tail -n 30 -- "$file" 2>/dev/null | sed 's/^/    /' >&2 || true
   printf 'its output is printed above'
   return 0
@@ -1492,21 +1732,21 @@ progress_tick() {
     PROGRESS_WAIT_LABEL=$label PROGRESS_WAIT_START=$SECONDS PROGRESS_WAIT_NEXT=10
   fi
   waited=$((SECONDS - PROGRESS_WAIT_START))
-  text="  等待${label}……已等 $(progress_clock "$waited")，最长 $(progress_clock "$limit")"
+  text="  $(msg "等待${label}……已等 $(progress_clock "$waited")，最长 $(progress_clock "$limit")" "waiting:${label} ... $(progress_clock "$waited") of up to $(progress_clock "$limit")")"
   if "$PROGRESS_TTY"; then progress_inline "$text"
   elif [ "$waited" -ge "$PROGRESS_WAIT_NEXT" ]; then PROGRESS_WAIT_NEXT=$((PROGRESS_WAIT_NEXT + 10)); progress_line "$text"; fi
 }
 
 # apt 输出里的 “N/M：包名”；看不出时输出为空。
 progress_apt_detail() {
-  awk '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
+  awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
     /^Get:[0-9]+ / { got++ }
     /^Unpacking / { name = $2 }
     /^Setting up / { done++; name = $3 }
     END {
       if (total <= 0) exit
-      if (name != "") printf "  正在安装 %d/%d：%s", done, total, name
-      else if (got > 0) printf "  正在下载软件包 %d/%d", got, total
+      if (name != "") printf (en ? "  installing %d/%d: %s" : "  正在安装 %d/%d：%s"), done, total, name
+      else if (got > 0) printf (en ? "  downloading packages %d/%d" : "  正在下载软件包 %d/%d"), got, total
     }' "$1" 2>/dev/null || true
 }
 
@@ -1515,7 +1755,7 @@ progress_heartbeat() {
   local label=$1 output=$2 started=$SECONDS next=15 elapsed text
   while sleep 1 && kill -0 "$$" 2>/dev/null; do
     elapsed=$((SECONDS - started))
-    text="  仍在${label}……已用 $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
+    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
     if "$PROGRESS_TTY"; then progress_inline "$text"
     elif [ "$elapsed" -ge "$next" ]; then next=$((next + 15)); progress_line "$text"; fi
   done
@@ -1552,7 +1792,7 @@ progress_run() {
   if [ "$output" != "$PROGRESS_LOG" ]; then
     [ -z "$PROGRESS_LOG" ] || cat "$output" >>"$PROGRESS_LOG" 2>/dev/null || true
   elif [ "$status" -ne 0 ]; then
-    printf '%s %s失败（退出码 %s），输出最后 30 行：\n' "$PROGRESS_PREFIX" "$label" "$status" >&2
+    printf "$(msg '%s %s失败（退出码 %s），输出最后 30 行：' '%s %s failed (exit %s); last 30 lines of output:')\n" "$PROGRESS_PREFIX" "$label" "$status" >&2
     tail -n "+$from" "$PROGRESS_LOG" | tail -n 30 | sed 's/^/    /' >&2
   fi
   return "$status"
@@ -1564,11 +1804,11 @@ progress_download() {
   local label=$1
   shift
   [ -n "$PROGRESS_PREFIX" ] || { "$@"; return; }
-  { "$@" 2>&1 1>&3 3>&- | awk -v prefix="$PROGRESS_PREFIX" -v label="$label" -v tty="$PROGRESS_TTY" '
+  { "$@" 2>&1 1>&3 3>&- | awk -v prefix="$PROGRESS_PREFIX" -v label="$label" -v tty="$PROGRESS_TTY" -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '
     BEGIN { RS = "[\r\n]"; last = -10 }
     NF == 12 && $1 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ {
       pct = $3 + 0
-      text = sprintf("   下载 %s：%d%%（%s/%s，%s/s）", label, pct, $4, $2, $12)
+      text = sprintf(en ? "   downloading %s: %d%% (%s/%s, %s/s)" : "   下载 %s：%d%%（%s/%s，%s/s）", label, pct, $4, $2, $12)
       if (tty == "true") { printf "\r\033[K%s%s", prefix, text; inline = 1; next }
       if ($2 !~ /[MG]$/) next
       if (pct < last) last = -10
@@ -1734,7 +1974,7 @@ run_preflight() {
   if [ -n "$LICENSING_SERVER" ]; then
     preflight_check_remote 授权端 "${LICENSING_SERVER%/}/" "${LICENSING_SERVER_FALLBACK:+${LICENSING_SERVER_FALLBACK%/}/}"
   else
-    preflight_record fail 授权端 '未提供 --licensing-server' '请从授权门户复制完整的安装命令'
+    preflight_record fail 授权端 "$(msg '未提供 --licensing-server' 'no --licensing-server given')" "$(msg '请从授权门户复制完整的安装命令' 'copy the complete install command from the license portal')"
   fi
   preflight_check_selinux
   if [ "$INSTALL_ENV" = bt ]; then
@@ -1829,6 +2069,8 @@ resolve_install_env() {
   esac
   [ "$INSTALL_ENV" = bt ] || { [ -z "$WEB_PORT" ] && [ "${BT_PROXY:-false}" = false ]; } ||
     fail '--web-port and --bt-proxy are only used with the BaoTa environment (--env bt)'
+  # --宝塔站点反代覆盖 X-Real-IP/X-Forwarded-For，安装前就拒绝这两个头。
+  [ "${ORIGIN_AUTH:-false}" = false ] || [ "$INSTALL_ENV" != bt ] || origin_auth_check_header true
 }
 
 # 宝塔模式的替代端口：不在本机监听、不是主控固定端口、不是网关端口、本次未分配过。
@@ -1865,13 +2107,13 @@ plan_install_ports() {
     ! preflight_listening_ports | grep -qx -- "$WEB_PORT" || fail "--web-port $WEB_PORT is already in use"
   else
     WEB_PORT=$(bt_pick_port 18443 'the management web')
-    [ "$WEB_PORT" = 18443 ] || BT_PORT_CHANGES+=("管理端网页 18443 已被占用，改用 $WEB_PORT")
+    [ "$WEB_PORT" = 18443 ] || BT_PORT_CHANGES+=("$(msg "管理端网页 18443 已被占用，改用 $WEB_PORT" "management web 18443 is in use, using $WEB_PORT")")
   fi
   BT_TAKEN=$WEB_PORT
   # 默认 19445：避开节点安装器与 agent 的网关默认端口 19443/19444（常见的 --gateway-ports 19443,19444）；
   # bt_port_free 另外避开本次实际网关端口、已监听端口与已分配端口，冲突即顺延。
   NODE_DOWNLOAD_PORT=$(bt_pick_port 19445 'node upgrade downloads')
-  [ "$NODE_DOWNLOAD_PORT" = 19445 ] || BT_PORT_CHANGES+=("节点升级下载 19445 已被占用或与网关端口冲突，改用 $NODE_DOWNLOAD_PORT")
+  [ "$NODE_DOWNLOAD_PORT" = 19445 ] || BT_PORT_CHANGES+=("$(msg "节点升级下载 19445 已被占用或与网关端口冲突，改用 $NODE_DOWNLOAD_PORT" "node upgrade downloads 19445 is in use or conflicts with a Gateway port, using $NODE_DOWNLOAD_PORT")")
   BT_TAKEN="$BT_TAKEN $NODE_DOWNLOAD_PORT"
   WEB_LISTEN="127.0.0.1:$WEB_PORT"
   # 宝塔站点从回环转发，X-Real-IP 是浏览器地址；只信任回环来的这个头。
@@ -1884,7 +2126,7 @@ plan_install_ports() {
     port=$default
     if preflight_listening_ports | grep -qx -- "$default"; then
       port=$(bt_pick_port "$preferred" "$label")
-      BT_PORT_CHANGES+=("$label $default 已被占用，改用 $port")
+      BT_PORT_CHANGES+=("$(preflight_label "$label") $default $(msg "已被占用，改用 $port" "is in use, using $port")")
     fi
     BT_TAKEN="$BT_TAKEN $port"
     printf -v "$variable" '%s' "$port"
@@ -1921,74 +2163,77 @@ control_preflight_ports() {
 # 安装命令经该站点访问；节点升级下载走直连端口，不受影响。站点多在安装后才建，所以只警告。
 bt_check_site_certificate() {
   local site=$1 cert="${BT_ROOT}/www/server/panel/vhost/cert/$1/fullchain.pem" bundle=${BT_CA_BUNDLE:-} hint
-  hint="浏览器访问管理端与节点安装命令都经这个站点，需要受信证书：请在宝塔站点「SSL」申请 Let's Encrypt 证书或部署受信证书（含完整中间证书）；节点升级下载走直连端口 ${NODE_DOWNLOAD_PORT}（主控自带 CA），不受站点证书影响"
+  hint="$(msg "浏览器访问管理端与节点安装命令都经这个站点，需要受信证书：请在宝塔站点「SSL」申请 Let's Encrypt 证书或部署受信证书（含完整中间证书）；节点升级下载走直连端口 ${NODE_DOWNLOAD_PORT}（主控自带 CA），不受站点证书影响" "browsers and node install commands reach the console through this site, so it needs a trusted certificate: request a Let's Encrypt certificate under the BaoTa site SSL tab or deploy a trusted one (with the full intermediate chain); node upgrade downloads use the direct port ${NODE_DOWNLOAD_PORT} (control CA) and are not affected")"
   if [ -z "$bundle" ]; then
     for bundle in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt; do [ ! -r "$bundle" ] || break; done
   fi
   if [ ! -s "$cert" ]; then
-    preflight_record warn 宝塔站点证书 "站点 ${site} 还没有证书（站点未建或未开启 SSL）" "$hint"
+    preflight_record warn 宝塔站点证书 "$(msg "站点 ${site} 还没有证书（站点未建或未开启 SSL）" "site ${site} has no certificate yet (site not created or SSL not enabled)")" "$hint"
   elif ! command -v openssl >/dev/null 2>&1 || [ ! -r "$bundle" ]; then
-    preflight_record warn 宝塔站点证书 "无法检查站点 ${site} 的证书（缺少 openssl 或系统 CA 证书库）" "$hint"
+    preflight_record warn 宝塔站点证书 "$(msg "无法检查站点 ${site} 的证书（缺少 openssl 或系统 CA 证书库）" "cannot check the certificate of site ${site} (openssl or the system CA bundle is missing)")" "$hint"
   elif openssl verify -CAfile "$bundle" -untrusted "$cert" -purpose sslserver -verify_hostname "$site" "$cert" >/dev/null 2>&1; then
-    preflight_record pass 宝塔站点证书 "站点 ${site} 的证书受系统信任"
+    preflight_record pass 宝塔站点证书 "$(msg "站点 ${site} 的证书受系统信任" "the certificate of site ${site} is trusted by the system")"
   else
-    preflight_record warn 宝塔站点证书 "站点 ${site} 的证书不受系统信任（自签、证书链不完整、已过期或域名不符）" "$hint"
+    preflight_record warn 宝塔站点证书 "$(msg "站点 ${site} 的证书不受系统信任（自签、证书链不完整、已过期或域名不符）" "the certificate of site ${site} is not trusted (self-signed, incomplete chain, expired or wrong name)")" "$hint"
   fi
 }
 
 # 宝塔环境的中文预检清单：版本与面板端口、宝塔 nginx、端口调整、手工步骤、防火墙。
 bt_preflight_records() {
   [ "$INSTALL_ENV" = bt ] || return 0
-  local site=${CONTROL_DOMAIN:-${MASTER_HOST:-<管理端域名>}} change open plan server
+  local unset_site site change open plan server
+  unset_site=$(msg '<管理端域名>' '<management-domain>')
+  site=${CONTROL_DOMAIN:-${MASTER_HOST:-$unset_site}}
   if [ -d "${BT_ROOT}/www/server/panel" ]; then
-    preflight_record pass 宝塔环境 "检测到宝塔面板 ${BT_VERSION:-（版本未知）}，面板端口 ${BT_PANEL_PORT:-未知}（不改动宝塔的 nginx、MySQL 与面板）"
+    preflight_record pass 宝塔环境 "$(msg "检测到宝塔面板 ${BT_VERSION:-（版本未知）}，面板端口 ${BT_PANEL_PORT:-未知}（不改动宝塔的 nginx、MySQL 与面板）" "BaoTa panel ${BT_VERSION:-(unknown version)} found, panel port ${BT_PANEL_PORT:-unknown} (BaoTa nginx, MySQL and panel are left alone)")"
   else
-    preflight_record warn 宝塔环境 '未找到宝塔面板目录 /www/server/panel，按 --env bt 继续' '确认本机确实装了宝塔；否则改用 --env plain'
+    preflight_record warn 宝塔环境 "$(msg '未找到宝塔面板目录 /www/server/panel，按 --env bt 继续' 'BaoTa panel directory /www/server/panel not found; continuing because of --env bt')" "$(msg '确认本机确实装了宝塔；否则改用 --env plain' 'make sure BaoTa is installed here; otherwise use --env plain')"
   fi
   server=$(bt_web_server)
   if [ "$server" = nginx ]; then
-    preflight_record pass 宝塔nginx '已安装，用于站点反向代理；管理端网页另起独立实例（独立配置、只监听回环，不改宝塔的 nginx 配置）'
+    preflight_record pass 宝塔nginx "$(msg '已安装，用于站点反向代理；管理端网页另起独立实例（独立配置、只监听回环，不改宝塔的 nginx 配置）' 'installed, used for the site reverse proxy; the console web runs its own instance (own configuration, loopback only, BaoTa nginx configuration untouched)')"
   elif [ "${BT_PROXY:-false}" = true ]; then
-    preflight_record fail 宝塔nginx '未找到 /www/server/nginx/sbin/nginx，--bt-proxy 只支持宝塔 nginx' '在宝塔「软件商店」安装 Nginx，或去掉 --bt-proxy 手工配置反向代理'
+    preflight_record fail 宝塔nginx "$(msg '未找到 /www/server/nginx/sbin/nginx，--bt-proxy 只支持宝塔 nginx' '/www/server/nginx/sbin/nginx not found; --bt-proxy only supports BaoTa nginx')" "$(msg '在宝塔「软件商店」安装 Nginx，或去掉 --bt-proxy 手工配置反向代理' 'install Nginx from the BaoTa App Store, or drop --bt-proxy and configure the reverse proxy by hand')"
   elif [ "$server" = apache ]; then
-    preflight_record warn 宝塔Apache '宝塔使用 Apache，安装器不会自动写入反向代理' \
-      "在站点「配置文件」的 <VirtualHost *:443> 内加入下面的片段（安装结束会保存到 ${CONFIG_DIR}/bt-proxy-apache.conf）：
+    preflight_record warn 宝塔Apache "$(msg '宝塔使用 Apache，安装器不会自动写入反向代理' 'BaoTa uses Apache; the installer will not write the reverse proxy')" \
+      "$(msg "在站点「配置文件」的 <VirtualHost *:443> 内加入下面的片段（安装结束会保存到 ${CONFIG_DIR}/bt-proxy-apache.conf）：" "add this snippet inside <VirtualHost *:443> in the site configuration file (saved to ${CONFIG_DIR}/bt-proxy-apache.conf at the end of the installation): ")
 $(bt_proxy_apache_config)"
   elif [ "$server" = openlitespeed ]; then
-    preflight_record warn 宝塔OpenLiteSpeed '宝塔使用 OpenLiteSpeed，安装器不会自动写入反向代理' \
-      "在站点「配置文件」（/www/server/panel/vhost/openlitespeed/${site}.conf）加入下面的片段后重启 OpenLiteSpeed（安装结束会保存到 ${CONFIG_DIR}/bt-proxy-openlitespeed.conf）：
+    preflight_record warn 宝塔OpenLiteSpeed "$(msg '宝塔使用 OpenLiteSpeed，安装器不会自动写入反向代理' 'BaoTa uses OpenLiteSpeed; the installer will not write the reverse proxy')" \
+      "$(msg "在站点「配置文件」（/www/server/panel/vhost/openlitespeed/${site}.conf）加入下面的片段后重启 OpenLiteSpeed（安装结束会保存到 ${CONFIG_DIR}/bt-proxy-openlitespeed.conf）：" "add this snippet to the site configuration file (/www/server/panel/vhost/openlitespeed/${site}.conf) and restart OpenLiteSpeed (saved to ${CONFIG_DIR}/bt-proxy-openlitespeed.conf at the end of the installation): ")
 $(bt_proxy_openlitespeed_config)"
   else
-    preflight_record warn 宝塔nginx '未找到宝塔 nginx、Apache 或 OpenLiteSpeed' '请先在宝塔「软件商店」安装 Nginx（推荐），再按安装结束时打印的步骤配置反向代理'
+    preflight_record warn 宝塔nginx "$(msg '未找到宝塔 nginx、Apache 或 OpenLiteSpeed' 'no BaoTa nginx, Apache or OpenLiteSpeed found')" "$(msg '请先在宝塔「软件商店」安装 Nginx（推荐），再按安装结束时打印的步骤配置反向代理' 'install Nginx from the BaoTa App Store first (recommended), then configure the reverse proxy with the steps printed at the end')"
   fi
   if [[ "$site" =~ ^[0-9.]+$ || "$site" == *:* ]]; then
-    preflight_record fail 管理端域名 "宝塔模式需要域名（当前为 $site）" '宝塔站点按域名反向代理；请用已解析到本机的域名作为 --master-host'
-  elif [ "$site" != '<管理端域名>' ]; then
+    preflight_record fail 管理端域名 "$(msg "宝塔模式需要域名（当前为 $site）" "BaoTa mode needs a domain (got $site)")" "$(msg '宝塔站点按域名反向代理；请用已解析到本机的域名作为 --master-host' 'BaoTa sites proxy by domain; use a domain resolving to this host as --master-host')"
+  elif [ "$site" != "$unset_site" ]; then
     bt_check_site_certificate "$site"
   fi
   for change in ${BT_PORT_CHANGES[@]+"${BT_PORT_CHANGES[@]}"}; do preflight_record pass 端口调整 "$change"; done
-  plan="管理端网页 127.0.0.1:${WEB_PORT}、节点升级下载 ${NODE_DOWNLOAD_PORT}"
+  plan="$(msg "管理端网页 127.0.0.1:${WEB_PORT}、节点升级下载 ${NODE_DOWNLOAD_PORT}" "management web 127.0.0.1:${WEB_PORT}, node upgrade downloads ${NODE_DOWNLOAD_PORT}")"
   [ "${SKIP_DEPENDENCIES:-false}" = true ] ||
-    plan="$plan、PostgreSQL ${PG_PORT}、Redis ${REDIS_PORT}、ClickHouse-HTTP ${CH_HTTP_PORT}、ClickHouse ${CH_TCP_PORT}、ClickHouse-MySQL ${CH_MYSQL_PORT}、ClickHouse-PostgreSQL ${CH_POSTGRESQL_PORT}、ClickHouse-复制 ${CH_INTERSERVER_PORT}"
-  preflight_record pass 端口规划 "$plan（写入 ${DEPENDENCY_PORTS_FILE:-/etc/cdnca-native-dependencies/runtime.env}）"
-  preflight_record pass 管理端网页 "本机 127.0.0.1:${WEB_PORT}（只监听回环，由宝塔站点反向代理）"
-  preflight_record pass 节点升级下载 "直连端口 ${NODE_DOWNLOAD_PORT}（我方 nginx，主控自带 CA 签发的证书，节点已信任；不经宝塔站点）"
-  preflight_record warn 宝塔手工步骤 '安装完成后需要在宝塔里为管理端配置站点' \
-    "① 在宝塔「网站」添加站点 ${site}（纯静态、不建数据库），在站点「SSL」申请 Let's Encrypt 证书并开启强制 HTTPS；② $(
-      [ "${BT_PROXY:-false}" = true ] && printf '安装器会自动写入反向代理（已指定 --bt-proxy）' ||
-        printf '在站点「反向代理」里反向代理到 https://127.0.0.1:%s，发送域名 $host（或加 --bt-proxy 由安装器自动写入）' "$WEB_PORT"
-    )；③ 安装结束时会打印可复制的反向代理配置，并保存到 /etc/cdnca-control/bt-proxy.conf"
+    plan="$plan$(msg "、PostgreSQL ${PG_PORT}、Redis ${REDIS_PORT}、ClickHouse-HTTP ${CH_HTTP_PORT}、ClickHouse ${CH_TCP_PORT}、ClickHouse-MySQL ${CH_MYSQL_PORT}、ClickHouse-PostgreSQL ${CH_POSTGRESQL_PORT}、ClickHouse-复制 ${CH_INTERSERVER_PORT}" ", PostgreSQL ${PG_PORT}, Redis ${REDIS_PORT}, ClickHouse-HTTP ${CH_HTTP_PORT}, ClickHouse ${CH_TCP_PORT}, ClickHouse-MySQL ${CH_MYSQL_PORT}, ClickHouse-PostgreSQL ${CH_POSTGRESQL_PORT}, ClickHouse-replication ${CH_INTERSERVER_PORT}")"
+  preflight_record pass 端口规划 "$plan$(msg "（写入 ${DEPENDENCY_PORTS_FILE:-/etc/cdnca-native-dependencies/runtime.env}）" " (written to ${DEPENDENCY_PORTS_FILE:-/etc/cdnca-native-dependencies/runtime.env})")"
+  preflight_record pass 管理端网页 "$(msg "本机 127.0.0.1:${WEB_PORT}（只监听回环，由宝塔站点反向代理）" "local 127.0.0.1:${WEB_PORT} (loopback only, behind the BaoTa site reverse proxy)")"
+  preflight_record pass 节点升级下载 "$(msg "直连端口 ${NODE_DOWNLOAD_PORT}（我方 nginx，主控自带 CA 签发的证书，节点已信任；不经宝塔站点）" "direct port ${NODE_DOWNLOAD_PORT} (our nginx with a certificate from the control CA that nodes already trust; not through the BaoTa site)")"
+  preflight_record warn 宝塔手工步骤 "$(msg '安装完成后需要在宝塔里为管理端配置站点' 'after the installation, set up a BaoTa site for the console')" \
+    "$(msg "① 在宝塔「网站」添加站点 ${site}（纯静态、不建数据库），在站点「SSL」申请 Let's Encrypt 证书并开启强制 HTTPS；② " "1) add site ${site} under BaoTa Websites (static, no database), request a Let's Encrypt certificate under its SSL tab and force HTTPS; 2) ")$(
+      [ "${BT_PROXY:-false}" = true ] && msg '安装器会自动写入反向代理（已指定 --bt-proxy）' 'the installer writes the reverse proxy (--bt-proxy given)' ||
+        printf "$(msg '在站点「反向代理」里反向代理到 https://127.0.0.1:%s，发送域名 $host（或加 --bt-proxy 由安装器自动写入）' 'add a reverse proxy to https://127.0.0.1:%s with sent domain $host under the site Reverse proxy tab (or add --bt-proxy to let the installer write it)')" "$WEB_PORT"
+    )$(msg '；③ 安装结束时会打印可复制的反向代理配置，并保存到 /etc/cdnca-control/bt-proxy.conf' '; 3) the end of the installation prints a copyable reverse proxy configuration, also saved to /etc/cdnca-control/bt-proxy.conf')"
   open="${MASTER_PORT:-443}、${GATEWAY_ENROLLMENT_PORT}、${GATEWAY_AGENT_PORT}"
   [ "${INSTALL_MODE:-all}" != control ] || open="$open、$CONTROL_INTERNAL_REMOTE_PORT、$NATS_GATEWAY_WS_PORT、$REDIS_GATEWAY_TLS_PORT"
-  open="$open、${NODE_DOWNLOAD_PORT}（节点升级下载）"
-  preflight_record warn 宝塔防火墙 "需在宝塔「安全」放行 TCP ${open}" \
-    "云服务器安全组同样放行；回环端口 ${WEB_PORT}、${PG_PORT}、${REDIS_PORT} 不要对外放行"
+  open="$open、${NODE_DOWNLOAD_PORT}$(msg '（节点升级下载）' ' (node upgrade downloads)')"
+  [ "${INSTALL_LANG:-zh}" != en ] || open=${open//、/, }
+  preflight_record warn 宝塔防火墙 "$(msg "需在宝塔「安全」放行 TCP ${open}" "allow TCP ${open} under BaoTa Security")" \
+    "$(msg "云服务器安全组同样放行；回环端口 ${WEB_PORT}、${PG_PORT}、${REDIS_PORT} 不要对外放行" "allow them in the cloud security group too; never expose the loopback ports ${WEB_PORT}, ${PG_PORT}, ${REDIS_PORT}")"
 }
 
 # 宝塔站点的反向代理配置（与宝塔自带反向代理同为 location ^~ /；/.well-known 证书验证仍由宝塔处理）。
 bt_proxy_config() {
   cat <<EOF
-  # CDNCA 管理端（install-control.sh 生成）：宝塔站点 ${CONTROL_DOMAIN} 反向代理到本机管理端网页
+  # $(msg 'CDNCA 管理端（install-control.sh 生成）：宝塔站点' 'CDNCA console (written by install-control.sh): BaoTa site') ${CONTROL_DOMAIN} $(msg '反向代理到本机管理端网页' 'reverse proxy to the local console web')
   location ^~ / {
     proxy_pass https://127.0.0.1:${WEB_PORT};
     proxy_http_version 1.1;
@@ -2019,7 +2264,7 @@ bt_web_server() {
 # upgrade=websocket 需要 Apache 2.4.47+；/.well-known/ 留给宝塔续签证书。
 bt_proxy_apache_config() {
   cat <<EOF
-    # CDNCA 管理端（install-control.sh 生成）：宝塔 Apache 站点 ${CONTROL_DOMAIN} 反向代理到本机管理端网页
+    # $(msg 'CDNCA 管理端（install-control.sh 生成）：宝塔 Apache 站点' 'CDNCA console (written by install-control.sh): BaoTa Apache site') ${CONTROL_DOMAIN} $(msg '反向代理到本机管理端网页' 'reverse proxy to the local console web')
     SSLProxyEngine On
     SSLProxyVerify require
     SSLProxyCheckPeerName On
@@ -2039,7 +2284,7 @@ EOF
 # 需要真实来源 IP 时请在宝塔改用 Nginx。
 bt_proxy_openlitespeed_config() {
   cat <<EOF
-  # CDNCA 管理端（install-control.sh 生成）：宝塔 OpenLiteSpeed 站点 ${CONTROL_DOMAIN} 反向代理到本机管理端网页
+  # $(msg 'CDNCA 管理端（install-control.sh 生成）：宝塔 OpenLiteSpeed 站点' 'CDNCA console (written by install-control.sh): BaoTa OpenLiteSpeed site') ${CONTROL_DOMAIN} $(msg '反向代理到本机管理端网页' 'reverse proxy to the local console web')
   extprocessor cdnca-control {
     type                    proxy
     address                 https://127.0.0.1:${WEB_PORT}
@@ -2066,14 +2311,14 @@ bt_install_proxy() {
   file="$dir/cdnca-control.conf" backup="$dir/cdnca-control.conf.bak"
   nginx="${BT_ROOT}/www/server/nginx/sbin/nginx"
   if [ ! -f "$vhost" ]; then
-    warn "宝塔里没有站点 ${site}（${vhost#"$BT_ROOT"} 不存在）；请先在宝塔「网站」添加该站点"
+    warn "$(msg "宝塔里没有站点 ${site}（${vhost#"$BT_ROOT"} 不存在）；请先在宝塔「网站」添加该站点" "BaoTa has no site ${site} (${vhost#"$BT_ROOT"} does not exist); add it under BaoTa Websites first")"
     return 1
   fi
   if ! grep -Fq "/www/server/panel/vhost/nginx/proxy/${site}/" "$vhost"; then
-    warn "站点配置没有引用 proxy 目录（include /www/server/panel/vhost/nginx/proxy/${site}/*.conf），可能被手工改过；未改动任何文件"
+    warn "$(msg "站点配置没有引用 proxy 目录（include /www/server/panel/vhost/nginx/proxy/${site}/*.conf），可能被手工改过；未改动任何文件" "the site configuration does not include the proxy directory (include /www/server/panel/vhost/nginx/proxy/${site}/*.conf); it may have been edited by hand; no files were changed")"
     return 1
   fi
-  [ -x "$nginx" ] || { warn '未找到宝塔 nginx（/www/server/nginx/sbin/nginx）；未改动任何文件'; return 1; }
+  [ -x "$nginx" ] || { warn "$(msg '未找到宝塔 nginx（/www/server/nginx/sbin/nginx）；未改动任何文件' 'BaoTa nginx (/www/server/nginx/sbin/nginx) not found; no files were changed')"; return 1; }
   [ -d "$dir" ] || { install -d -m 0755 "$dir"; created_dir=true; }
   if [ -e "$file" ]; then cp -p "$file" "$backup"; had_file=true; fi
   bt_proxy_config >"$file.tmp" && chmod 0644 "$file.tmp" && mv -f "$file.tmp" "$file"
@@ -2083,17 +2328,17 @@ bt_install_proxy() {
   }
   if ! output=$("$nginx" -t 2>&1); then
     bt_restore_proxy
-    warn "宝塔 nginx 配置检查未通过，已恢复原配置：$(printf '%s\n' "$output" | tail -n 3 | tr '\n' ' ')"
+    warn "$(msg '宝塔 nginx 配置检查未通过，已恢复原配置：' 'BaoTa nginx configuration test failed, previous configuration restored: ')$(printf '%s\n' "$output" | tail -n 3 | tr '\n' ' ')"
     return 1
   fi
   if ! output=$("$nginx" -s reload 2>&1); then
     bt_restore_proxy
     "$nginx" -s reload >/dev/null 2>&1 || true
-    warn "宝塔 nginx 重新加载失败，已恢复原配置：$(printf '%s\n' "$output" | tail -n 3 | tr '\n' ' ')"
+    warn "$(msg '宝塔 nginx 重新加载失败，已恢复原配置：' 'BaoTa nginx reload failed, previous configuration restored: ')$(printf '%s\n' "$output" | tail -n 3 | tr '\n' ' ')"
     return 1
   fi
-  log "已写入宝塔站点 ${site} 的反向代理：${file#"$BT_ROOT"}"
-  [ "$had_file" = false ] || log "原文件备份为 ${backup#"$BT_ROOT"}"
+  log "$(msg "已写入宝塔站点 ${site} 的反向代理：" "reverse proxy written for BaoTa site ${site}: ")${file#"$BT_ROOT"}"
+  [ "$had_file" = false ] || log "$(msg 原文件备份为 'previous file backed up to') ${backup#"$BT_ROOT"}"
 }
 
 # 安装结束：宝塔模式保存可复制的反向代理配置，按 --bt-proxy 自动写入或打印手工步骤。
@@ -2107,6 +2352,17 @@ bt_report() {
     if [ "$server" = apache ]; then label=Apache file="${CONFIG_DIR}/bt-proxy-apache.conf"; bt_proxy_apache_config >"$file"
     else label=OpenLiteSpeed file="${CONFIG_DIR}/bt-proxy-openlitespeed.conf"; bt_proxy_openlitespeed_config >"$file"; fi
     chmod 0644 "$file"
+    if [ "${INSTALL_LANG:-zh}" = en ]; then
+      cat >&2 <<EOF
+
+BaoTa environment (${label}): the console web listens only on 127.0.0.1:${WEB_PORT}; the installer does not touch the ${label} configuration. Finish in BaoTa:
+  1. Websites: add site ${CONTROL_DOMAIN} (static, no database); under its SSL tab request a certificate and force HTTPS.
+  2. Add the snippet below to the site configuration file (saved to ${file}); BaoTa reloads ${label} on save:
+$(sed 's/^/     /' "$file")
+  3. BaoTa Security: allow TCP ${MASTER_PORT}, ${GATEWAY_ENROLLMENT_PORT}, ${GATEWAY_AGENT_PORT}, ${NODE_DOWNLOAD_PORT} (direct node upgrade downloads); do the same in the cloud security group.
+EOF
+      return 0
+    fi
     cat >&2 <<EOF
 
 宝塔环境（${label}）：管理端网页只监听 127.0.0.1:${WEB_PORT}，安装器不会改动 ${label} 配置，请在宝塔里完成：
@@ -2118,7 +2374,21 @@ EOF
     return 0
   fi
   if [ "$BT_PROXY" = true ] && bt_install_proxy; then
-    log "宝塔反向代理已就绪；确认站点 ${CONTROL_DOMAIN} 已开启 SSL 后即可访问 https://${CONTROL_DOMAIN}/dashboard/"
+    log "$(msg "宝塔反向代理已就绪；确认站点 ${CONTROL_DOMAIN} 已开启 SSL 后即可访问 https://${CONTROL_DOMAIN}/dashboard/" "BaoTa reverse proxy ready; once site ${CONTROL_DOMAIN} has SSL enabled open https://${CONTROL_DOMAIN}/dashboard/")"
+    return 0
+  fi
+  if [ "${INSTALL_LANG:-zh}" = en ]; then
+    cat >&2 <<EOF
+
+BaoTa environment: the console web listens only on 127.0.0.1:${WEB_PORT}. Finish these steps in BaoTa:
+  1. Websites: add site ${CONTROL_DOMAIN} (static, no database); under its SSL tab request a certificate and force HTTPS.
+  2. Site Reverse proxy -> Add: target URL https://127.0.0.1:${WEB_PORT}, sent domain \$host;
+     or add the configuration below to the server block of the site configuration file (saved to ${CONFIG_DIR}/bt-proxy.conf):
+$(bt_proxy_config | sed 's/^/     /')
+  3. BaoTa Security: allow TCP ${MASTER_PORT}, ${GATEWAY_ENROLLMENT_PORT}, ${GATEWAY_AGENT_PORT}, ${NODE_DOWNLOAD_PORT} (direct node upgrade downloads); do the same in the cloud security group.
+  Once the site exists you can also copy it directly: install -D -m 0644 ${CONFIG_DIR}/bt-proxy.conf /www/server/panel/vhost/nginx/proxy/${CONTROL_DOMAIN}/cdnca-control.conf
+    && /www/server/nginx/sbin/nginx -t && /www/server/nginx/sbin/nginx -s reload
+EOF
     return 0
   fi
   cat >&2 <<EOF
@@ -2137,14 +2407,14 @@ EOF
 prompt_public_endpoints() {
   if [ -z "$MASTER_HOST" ]; then
     [ -t 0 ] || fail '--master-host is required for a non-interactive installation'
-    printf '管理端公网域名或 IP: ' >&2
+    printf '%s' "$(msg '管理端公网域名或 IP: ' 'Public domain or IP of the management console: ')" >&2
     IFS= read -r MASTER_HOST
   fi
   MASTER_HOST=$(printf '%s' "$MASTER_HOST" | tr '[:upper:]' '[:lower:]')
   valid_host "$MASTER_HOST" || fail 'invalid public control-plane host'
   if [ -z "$MASTER_PORT" ]; then
     if [ -t 0 ]; then
-      printf '管理端 HTTPS 端口 [443]: ' >&2
+      printf '%s' "$(msg '管理端 HTTPS 端口 [443]: ' 'Management HTTPS port [443]: ')" >&2
       IFS= read -r MASTER_PORT
     fi
     MASTER_PORT=${MASTER_PORT:-443}
@@ -2158,7 +2428,7 @@ prompt_public_endpoints() {
   CONTROL_DOMAIN=$(printf '%s' "${CONTROL_DOMAIN:-$MASTER_HOST}" | tr '[:upper:]' '[:lower:]')
   valid_host "$CONTROL_DOMAIN" || fail 'invalid public control-plane domain'
   if [ -z "$PUBLIC_CERT_FILE" ] && control_domain_is_ip; then
-    warn '管理端使用 IP 访问：Let'"'"'s Encrypt 不为 IP 签发证书，将使用本机私有 CA 证书，浏览器会提示“不安全”。如需正式 HTTPS，请改用已解析到本机的域名重新安装，或传入 --public-cert-file/--public-key-file。'
+    warn "$(msg '管理端使用 IP 访问：Let'"'"'s Encrypt 不为 IP 签发证书，将使用本机私有 CA 证书，浏览器会提示“不安全”。如需正式 HTTPS，安装后无需重装：域名解析到本机后执行 control-api control-host bind --domain <域名>（系统设置 → 系统 → 管理端地址/绑定域名）。' 'the console is reached by IP: Let'"'"'s Encrypt does not issue IP certificates, so the private CA certificate is used and browsers will warn. For trusted HTTPS later, no reinstall is needed: point a domain here and run control-api control-host bind --domain <domain> (System settings > System > Console address).')"
   fi
 }
 
@@ -2256,6 +2526,7 @@ normalise_defaults() {
   fi
   [[ "$INSTALLATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || fail 'installation ID must be a canonical UUID'
   [ ${#INSTALLATION_NAME} -le 200 ] || fail 'installation name is too long'
+  gateway_transport_resolve
 }
 read_owner_only_value() {
   local file=$1 label=$2 destination=$3
@@ -2286,6 +2557,7 @@ TEMP_DIR=$(mktemp -d -t cdnca-control-install.XXXXXX)
 # 调用方提供 log/fail/progress_line/progress_tick，并在 EXIT 时启动 PAUSED_APT_TIMERS 里的定时器。
 KEEP_UNATTENDED_UPGRADES=false
 PAUSED_APT_TIMERS=()
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 # apt-get update 不理会 DPkg::Lock::Timeout 就去拿 lists 锁：先停定时器，再等正在跑的自动更新结束
 # （不打断正在写 dpkg 的进程），最后按开关停用或只暂停。
@@ -2301,12 +2573,12 @@ quiesce_package_automation() {
     pgrep -f '/usr/bin/unattended-upgrade( |$)' >/dev/null; do
     [ "$SECONDS" -lt "$deadline" ] || fail 'package automation (apt-daily/unattended-upgrades) is still running after 15 minutes'
     [ -n "$waiting" ] || { log 'waiting for the running automatic package update to finish'; waiting=1; }
-    progress_tick '系统自动更新（apt-daily/unattended-upgrades）结束' 900
+    progress_tick "$(msg '系统自动更新（apt-daily/unattended-upgrades）结束' ' the automatic package update (apt-daily/unattended-upgrades) to finish')" 900
     sleep 5
   done
   if [ "$KEEP_UNATTENDED_UPGRADES" = true ]; then
     [ "${#PAUSED_APT_TIMERS[@]}" -eq 0 ] ||
-      progress_line "已按 --keep-unattended-upgrades 保留系统自动更新：安装期间暂停 ${PAUSED_APT_TIMERS[*]}，结束后恢复"
+      progress_line "$(msg "已按 --keep-unattended-upgrades 保留系统自动更新：安装期间暂停 ${PAUSED_APT_TIMERS[*]}，结束后恢复" "automatic system updates kept (--keep-unattended-upgrades): ${PAUSED_APT_TIMERS[*]} paused during the installation and restored afterwards")"
   else
     # 只处理存在且启用（或正在运行）的单元；未安装、已停用或被 mask 的不动。
     for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service; do
@@ -2317,7 +2589,7 @@ quiesce_package_automation() {
     # 已停用的定时器退出时不再恢复。
     PAUSED_APT_TIMERS=()
     [ -z "$disabled" ] ||
-      progress_line "已停用系统自动更新（${disabled# }）：生产机默认关闭，避免无人值守升级在运行中替换并重启依赖服务；软件包保留，可手动 apt-get update && apt-get upgrade；恢复系统默认：systemctl enable --now${disabled}"
+      progress_line "$(msg "已停用系统自动更新（${disabled# }）：生产机默认关闭，避免无人值守升级在运行中替换并重启依赖服务；软件包保留，可手动 apt-get update && apt-get upgrade；恢复系统默认：systemctl enable --now${disabled}" "automatic system updates disabled (${disabled# }): off by default on production hosts so unattended upgrades cannot replace and restart dependencies while running; the packages stay, upgrade manually with apt-get update && apt-get upgrade; restore the system default: systemctl enable --now${disabled}")"
   fi
   # dnf waits on the rpm lock itself; only pause the cache timer for the install.
   if command -v dnf >/dev/null 2>&1 && systemctl is-active --quiet dnf-makecache.timer; then
@@ -2806,9 +3078,9 @@ check_master_download_authorization() {
     fi
   done
   [ "$denied" -eq "$total" ] || return 0
-  printf '[cdnca-control] 错误：授权服务器拒绝向本机下载主控安装包（HTTP 403）。\n' >&2
-  [ -z "$observed" ] || printf '[cdnca-control] 授权服务器看到的本机公网 IP：%s\n' "$observed" >&2
-  printf '[cdnca-control] 请在授权门户“我的授权”确认主控 IP 与本机出口 IP 一致；迁移或换机时在“授权IP下载文件”填写本机 IP 后重试。\n' >&2
+  printf '[cdnca-control] %s\n' "$(msg '错误：授权服务器拒绝向本机下载主控安装包（HTTP 403）。' 'error: the licensing server refused to serve the control package to this host (HTTP 403).')" >&2
+  [ -z "$observed" ] || printf '[cdnca-control] %s%s\n' "$(msg '授权服务器看到的本机公网 IP：' 'public IP of this host as seen by the licensing server: ')" "$observed" >&2
+  printf '[cdnca-control] %s\n' "$(msg '请在授权门户“我的授权”确认主控 IP 与本机出口 IP 一致；迁移或换机时在“授权IP下载文件”填写本机 IP 后重试。' 'Make sure the control IP under "My licenses" in the license portal matches the egress IP of this host; when moving hosts enter this host IP under "Licensed IP download file", then retry.')" >&2
   fail 'master_download_ip_not_registered'
 }
 
@@ -2877,7 +3149,7 @@ configure_runtime_dependencies() {
     done < <(bash "$runtime/install-ubuntu-dependencies.sh" requirements)
   fi
   # ${inputs[@]+...}: bash 4.2 (CentOS 7) treats an empty array as unset under set -u.
-  progress_run '安装 PostgreSQL、ClickHouse、Redis、ClamAV、nginx 等依赖（约 3–8 分钟）' \
+  progress_run "$(msg '安装 PostgreSQL、ClickHouse、Redis、ClamAV、nginx 等依赖（约 3–8 分钟）' 'Install PostgreSQL, ClickHouse, Redis, ClamAV, nginx and other dependencies (about 3-8 minutes)')" \
     bash "$runtime/install-ubuntu-dependencies.sh" "$action" ${inputs[@]+"${inputs[@]}"}
   # 依赖已装完并就绪：之后失败时 --cleanup-failed 保留依赖软件包与配置，重装走 helper 的已装分支。
   control_install_state_add step=dependencies_ready
@@ -2888,7 +3160,7 @@ configure_runtime_dependencies() {
   else
     # The helper refuses an existing cdnca_analytics database or users; from here they belong to this install.
     control_install_state_add "created=clickhouse:${CH_TCP_PORT}"
-    progress_run '初始化 ClickHouse' python3 -I -B "$runtime/configure-clickhouse.py" install --migrations "$NATIVE_SUPPORT/infra/clickhouse/migrations"
+    progress_run "$(msg '初始化 ClickHouse' 'Initialise ClickHouse')" python3 -I -B "$runtime/configure-clickhouse.py" install --migrations "$NATIVE_SUPPORT/infra/clickhouse/migrations"
   fi
   url=$(jq -er '.archive_url | select(startswith("https://"))' "$runtime/rustfs-1.0.1.json")
   progress_download RustFS curl --proto '=https' --proto-redir '=https' -fL --connect-timeout 10 --max-time 600 --max-filesize 300000000 \
@@ -2897,7 +3169,7 @@ configure_runtime_dependencies() {
   if [ -e /etc/cdnca-objectstore ] || [ -L /etc/cdnca-objectstore ]; then
     python3 -I -B "$runtime/install-rustfs.py" preflight --archive "$archive"
   else
-    progress_run '安装 RustFS 对象存储' python3 -I -B "$runtime/install-rustfs.py" install --archive "$archive"
+    progress_run "$(msg '安装 RustFS 对象存储' 'Install RustFS object storage')" python3 -I -B "$runtime/install-rustfs.py" install --archive "$archive"
   fi
   bash "$runtime/install-ubuntu-dependencies.sh" check
 }
@@ -2943,7 +3215,7 @@ prepare_native_baseline() {
   [ -z "$CONTROL_VERSION" ] || [ "$CONTROL_VERSION" = "$version" ] || fail '--control-version differs from the signed package'
   CONTROL_VERSION=$version
   PROGRESS_VERSION=$version
-  progress_line "安装版本 ${version}"
+  progress_line "$(msg 安装版本 'Installing version') ${version}"
 }
 
 configure_control_runtime() {
@@ -2965,18 +3237,28 @@ setup_native_upgrade() {
     install -m 0600 "$NATIVE_ARTIFACT_TRUST_FILE" "${RESPONSE_DIR}/native-artifact-trust.json"
     artifact_options=(--artifact-trust-file "${RESPONSE_DIR}/native-artifact-trust.json")
   fi
-  # An operator certificate the system store cannot verify (same rule as the
-  # local self-checks) becomes the runner's console-index CA; otherwise the
-  # runner keeps the system roots and never trusts the private CA for it.
-  if [ -n "$PUBLIC_CERT_FILE" ] && [ -n "$(public_https_trust_args)" ]; then
+  # The console index must verify with the same anchor as the local self-checks
+  # (public_https_trust_args): an operator certificate the system store cannot
+  # verify is its own CA; with no operator certificate (IP master host) nginx
+  # serves the local private CA's leaf, so that root is the console-index CA.
+  # The runner uses WebCAFile only for the console index URL; a publicly
+  # trusted certificate keeps the system roots.
+  if [ -z "$PUBLIC_CERT_FILE" ]; then
+    artifact_options+=(--web-ca-file "${PKI_DIR}/root-ca-cert.pem")
+  elif [ -n "$(public_https_trust_args)" ]; then
     artifact_options+=(--web-ca-file "$PUBLIC_CERT_PATH")
   elif [ -z "$PUBLIC_CERT_FILE" ] && control_domain_is_ip; then
     # An IP-literal console is served with the private root CA's certificate
     # (issue_public_certificate): the runner's console-index check trusts it.
     artifact_options+=(--web-ca-file "${PKI_DIR}/root-ca-cert.pem")
   fi
+  # The index check dials the local control-web (nginx listens on WEB_PORT: all
+  # addresses normally, loopback under BT), never the public domain: a CDN in
+  # front rewrites the page (10-30 73: injected beacon, console_index_mismatch).
+  # SNI/Host and certificate checks still use CONTROL_ORIGIN.
   python3 -I -B "$NATIVE_SUPPORT/scripts/native-runtime/configure-native-upgrade.py" prepare \
-    --installation-id "$INSTALLATION_ID" --web-index-url "$CONTROL_ORIGIN/dashboard/" "${artifact_options[@]}"
+    --installation-id "$INSTALLATION_ID" --web-index-url "$CONTROL_ORIGIN/dashboard/" \
+    --web-index-address "127.0.0.1:$WEB_PORT" "${artifact_options[@]}"
   python3 -I -B "$NATIVE_SUPPORT/scripts/native-runtime/install-native-baseline.py" install --inputs "$TEMP_DIR/native-baseline-input.json"
   bash "$NATIVE_SUPPORT/deploy/systemd/install-native-control-upgrade-runner.sh" --install \
     --binary "$NATIVE_SUPPORT/control-upgrade-runner" \
@@ -3053,7 +3335,7 @@ download_node_assets() {
 # download policy are published as cdnca.edge-upgrade-trust/v1; the copied node
 # command pins its SHA-256, so the document needs no signature of its own. It
 # also carries the signer revocation offline root pin (signer_trust_root) when
-# one was given, so nodes verify signer-trust.json against it, and the
+# control.env has one, so nodes verify signer-trust.json against it, and the
 # artifacts.json keys as they stand once configure_control_runtime has added
 # the publisher key (artifact_trust): nodes accept no artifact key outside it
 # or the offline-root-verified signer trust document, so it runs after that step.
@@ -3081,7 +3363,7 @@ publish_upgrade_trust() {
   install -d -m 0755 "${DOWNLOAD_DIR}/edge-agent/upgrades" "${DOWNLOAD_DIR}/edge-agent/upgrades/sha256"
   # artifact_trust pins artifacts.json after configure_control_runtime added
   # the publisher key; the signer revocation offline root comes from control.env
-  # (signer_revocation_environment, --signer-revocation-offline-root-*).
+  # (signer_revocation_environment, only when --signer-revocation-offline-root-* was given).
   UPGRADE_TRUST_SHA256=$("$CONTROL_BINARY" native-backup publish-node-install-trust) ||
     fail 'failed to build the node upgrade trust document (control-plane domain resolution, root CA or artifact keys)'
   [[ "$UPGRADE_TRUST_SHA256" =~ ^[0-9a-f]{64}$ ]] || fail 'node upgrade trust was not published'
@@ -3100,8 +3382,17 @@ generate_plugin_webhook_attestation_key() {
   "$ED25519_TOOL" pubkey "$key" >/dev/null || fail 'generated plugin webhook attestation key is invalid'
 }
 
+# SHA-256 of /downloads/gateway-ca.pem when the console HTTPS (443) is served
+# by the installer-generated root (no public certificate, not BaoTa); empty for
+# a public or operator-supplied certificate. The copied node install command
+# fetches that root once unverified and uses it only when this digest matches.
+control_ca_sha256() {
+  [ "${INSTALL_ENV:-}" != bt ] && [ -z "$PUBLIC_CERT_FILE" ] || return 0
+  sha256sum "${DOWNLOAD_DIR}/gateway-ca.pem" | awk '{print $1}'
+}
+
 write_web_runtime_config() {
-  local gateway_address gateway_enrollment server_name licensing licensing_fallback
+  local gateway_address gateway_enrollment server_name licensing licensing_fallback control_ca
   grep -Fq '/runtime-config.js' "${WEB_ROOT}/index.html" || fail 'control web release does not load runtime configuration'
   [[ "$UPGRADE_TRUST_SHA256" =~ ^[0-9a-f]{64}$ ]] || fail 'node upgrade trust was not published'
   gateway_address=$(jq -Rn --arg value "${GATEWAY_HOST}:${GATEWAY_AGENT_PORT}" '$value')
@@ -3109,6 +3400,8 @@ write_web_runtime_config() {
   server_name=$(jq -Rn --arg value "$GATEWAY_HOST" '$value')
   licensing=$(jq -Rn --arg value "$LICENSING_SERVER" '$value')
   licensing_fallback=$(jq -Rn --arg value "$LICENSING_SERVER_FALLBACK" '$value')
+  control_ca=$(control_ca_sha256) || fail 'cannot hash the control-plane root CA'
+  [ -z "$control_ca" ] || [[ "$control_ca" =~ ^[0-9a-f]{64}$ ]] || fail 'cannot hash the control-plane root CA'
   cat >"${DATA_DIR}/runtime-config.js" <<EOF
 window.__CDNCA_GATEWAY_ADDRESS__ = ${gateway_address};
 window.__CDNCA_GATEWAY_ENROLLMENT_ADDRESS__ = ${gateway_enrollment};
@@ -3117,6 +3410,7 @@ window.__CDNCA_LICENSING_SERVER__ = ${licensing};
 window.__CDNCA_LICENSING_SERVER_FALLBACK__ = ${licensing_fallback};
 window.__CDNCA_DOWNLOAD_FALLBACK_ORIGIN__ = ${licensing};
 window.__CDNCA_NODE_UPGRADE_TRUST_SHA256__ = "${UPGRADE_TRUST_SHA256}";
+window.__CDNCA_CONTROL_CA_SHA256__ = "${control_ca}";
 EOF
   chmod 0644 "${DATA_DIR}/runtime-config.js"
   write_node_install_defaults
@@ -3124,18 +3418,75 @@ EOF
 
 # Read by install-node.sh for the short copied command
 # (`curl ... | bash -s -- --control-plane <console> --token <token>`).
+# 解析节点传输（parse_args 之后、写节点默认值之前）。ws 时节点首选入口为 <隧道主机>:<管理端 HTTPS 端口>，
+# 内层 TLS 服务名仍是网关主机名（网关证书 SAN）。
+gateway_transport_resolve() {
+  if [ -z "$GATEWAY_TRANSPORT" ]; then
+    GATEWAY_TRANSPORT=tcp
+    { [ "${ORIGIN_AUTH:-false}" = true ] || [ "${REAL_IP_HEADER_SET:-false}" = true ]; } && GATEWAY_TRANSPORT=ws
+  fi
+  case "$GATEWAY_TRANSPORT" in tcp|ws) ;; *) fail '--gateway-transport must be ws or tcp' ;; esac
+  [ -z "$GATEWAY_TUNNEL_HOST" ] || [ "$GATEWAY_TRANSPORT" = ws ] || fail '--gateway-tunnel-host requires --gateway-transport ws'
+  [ -z "$GATEWAY_TUNNEL_HOST" ] || [[ "$GATEWAY_TUNNEL_HOST" =~ ^[a-z0-9][a-z0-9.-]{0,252}$ ]] || fail 'invalid --gateway-tunnel-host'
+  return 0
+}
+
+# ws 入口地址（节点视角）：<隧道主机或网关主机>:<管理端 HTTPS 端口，默认 443>。
+gateway_ws_entry_address() {
+  local host=${GATEWAY_TUNNEL_HOST:-$GATEWAY_HOST}
+  case "$host" in *:*) host="[$host]" ;; esac
+  printf '%s:%s' "$host" "${MASTER_PORT:-443}"
+}
+
+# Read by install-node.sh for the short copied command
+# (`curl ... | bash -s -- --control-plane <console> --token <token>`).
+# 网关段的格式与 control-api gatewayregistry.NodeGatewayDefaults.Lines 一致：安装时写出，之后由 control-api
+# 按发布的入口列表（网关管理页、独立网关、control-host bind）唯一地重写。
 write_node_install_defaults() {
-  local gateway_host=$GATEWAY_HOST fallback=""
+  local gateway_host=$GATEWAY_HOST fallback="" ws
   case "$gateway_host" in *:*) gateway_host="[$gateway_host]" ;; esac
   [[ "$LICENSING_SERVER" =~ ^https://[^/?#@[:space:]]+$ ]] && fallback=$LICENSING_SERVER
   {
     printf 'upgrade_trust_sha256=%s\n' "$UPGRADE_TRUST_SHA256"
-    printf 'gateway_enrollment_address=%s:%s\n' "$gateway_host" "$GATEWAY_ENROLLMENT_PORT"
-    printf 'gateway_address=%s:%s\n' "$gateway_host" "$GATEWAY_AGENT_PORT"
-    printf 'gateway_server_name=%s\n' "$GATEWAY_HOST"
+    if [ "${GATEWAY_TRANSPORT:-tcp}" = ws ]; then
+      ws=$(gateway_ws_entry_address)
+      printf 'gateway_enrollment_address=%s\n' "$ws"
+      printf 'gateway_address=%s\n' "$ws"
+      printf 'gateway_server_name=%s\n' "$GATEWAY_HOST"
+      printf 'gateway_transport=ws\n'
+      printf 'gateway_tunnel_host=%s\n' "${GATEWAY_TUNNEL_HOST:-$GATEWAY_HOST}"
+      printf 'gateway_endpoints=%s:%s|%s|grpc\n' "$gateway_host" "$GATEWAY_AGENT_PORT" "$GATEWAY_HOST"
+    else
+      printf 'gateway_enrollment_address=%s:%s\n' "$gateway_host" "$GATEWAY_ENROLLMENT_PORT"
+      printf 'gateway_address=%s:%s\n' "$gateway_host" "$GATEWAY_AGENT_PORT"
+      printf 'gateway_server_name=%s\n' "$GATEWAY_HOST"
+    fi
     [ -z "$fallback" ] || printf 'download_fallback_origin=%s\n' "$fallback"
   } >"$TEMP_DIR/node-install-defaults"
   install -m 0644 "$TEMP_DIR/node-install-defaults" "${DOWNLOAD_DIR}/node-install-defaults"
+}
+
+# 安装器比签名包新时（例如新安装器配旧签名包），ws 安装第 10 步才会因 control-api 缺
+# gateway-entrypoint 子命令失败。在激活（消耗激活码）之前用无参调用探测：新版报该子命令自己的用法，
+# 旧版只报总用法。探测不连数据库。
+assert_control_binary_matches_installer() {
+  [ "${GATEWAY_TRANSPORT:-tcp}" = ws ] || return 0
+  local output
+  output=$("$CONTROL_BINARY" gateway-entrypoint 2>&1 || true)
+  case "$output" in
+    *'gateway-entrypoint ensure'*) return 0 ;;
+  esac
+  fail "$(msg '安装器与安装包版本不配套，请用同一版本的安装命令（安装包内的 control-api 没有 gateway-entrypoint 子命令）' 'installer and package versions do not match; use the install command of the same version (control-api in the package has no gateway-entrypoint subcommand)')"
+}
+
+# ws 安装把同一入口登记进网关管理（control-api 据此维护 node-install-defaults，页面可见可改）；
+# 本机 nginx 是 127.0.0.1 回环代理，按 X-Real-IP 信任它报的节点真实 IP。
+seed_gateway_ws_entrypoint() {
+  [ "${GATEWAY_TRANSPORT:-tcp}" = ws ] || return 0
+  DATABASE_URL="$DATABASE_URL" "$CONTROL_BINARY" gateway-entrypoint ensure --address "$(gateway_ws_entry_address)" \
+    --server-name "$GATEWAY_HOST" --transport ws --tunnel-host "${GATEWAY_TUNNEL_HOST:-$GATEWAY_HOST}" \
+    --trust-loopback-header X-Real-IP >"${TEMP_DIR}/gateway-entrypoint.log" 2>&1 ||
+    fail "Gateway WebSocket entry point could not be registered; $(progress_keep_output "${TEMP_DIR}/gateway-entrypoint.log" 'control-api gateway-entrypoint ensure')"
 }
 
 # Signer-revocation consumer (签名密钥泄露吊销). The offline-root pin must be
@@ -3147,7 +3498,7 @@ signer_revocation_environment() {
   local id=${SIGNER_REVOCATION_OFFLINE_ROOT_KEY_ID:-} generation=${SIGNER_REVOCATION_OFFLINE_ROOT_GENERATION:-}
   local key=${SIGNER_REVOCATION_OFFLINE_ROOT_PUBLIC_KEY:-}
   if [ -z "$id$generation$key" ]; then
-    printf '[cdnca-control] warning: %s\n' '未提供签名密钥泄露吊销的离线根公钥，主控吊销判定保持关闭；如需启用，请用 --signer-revocation-offline-root-* 重新安装或在 control.env 中补齐。' >&2
+    printf '[cdnca-control] warning: %s\n' "$(msg '未提供签名密钥泄露吊销的离线根公钥，主控吊销判定保持关闭；如需启用，请用 --signer-revocation-offline-root-* 重新安装或在 control.env 中补齐。' 'no offline root public key for signing key compromise revocation; control revocation checks stay off. To enable them reinstall with --signer-revocation-offline-root-* or complete control.env.')" >&2
     printf 'SIGNER_REVOCATION_CONSUMER_ENABLED=false\n'
     # Node signer trust shares the offline-root pin; =true without it stops control-api.
     printf 'EDGE_SIGNER_TRUST_ENABLED=false\n'
@@ -3168,6 +3519,10 @@ signer_revocation_environment() {
   printf 'EDGE_SIGNER_TRUST_ENABLED=true\n'
   printf 'EDGE_SIGNER_TRUST_DOWNLOADS_DIR=%s\n' "${DOWNLOAD_DIR}/edge-agent"
 }
+
+
+
+
 
 write_environment() {
   [ -n "$API_KEY_PEPPER_BASE64" ] || fail 'runtime secrets were not generated'
@@ -3465,7 +3820,7 @@ prepare_database() {
   fi
   for _ in $(seq 1 30); do
     pg_isready -h 127.0.0.1 -p "$PG_PORT" -U postgres -d postgres >/dev/null 2>&1 && break
-    progress_tick ' PostgreSQL 就绪' 30
+    progress_tick "$(msg ' PostgreSQL 就绪' ' PostgreSQL to become ready')" 30
     sleep 1
   done
   pg_isready -h 127.0.0.1 -p "$PG_PORT" -U postgres -d postgres >/dev/null 2>&1 || fail 'PostgreSQL did not become ready'
@@ -3530,7 +3885,7 @@ setup_redis() {
     if "$cli" -u "$REDIS_URL" ping 2>/dev/null | grep -qx PONG; then
       return 0
     fi
-    progress_tick ' Redis 就绪' 30
+    progress_tick "$(msg ' Redis 就绪' ' Redis to become ready')" 30
     sleep 1
   done
   fail 'Redis did not become ready'
@@ -3573,7 +3928,7 @@ EOF
       "$NATS_CLI_BIN" --server "$NATS_URL" server check jetstream >/dev/null 2>&1; then
       return 0
     fi
-    progress_tick ' NATS JetStream 就绪' 30
+    progress_tick "$(msg ' NATS JetStream 就绪' ' NATS JetStream to become ready')" 30
     sleep 1
   done
   journalctl -u "$NATS_SERVICE_NAME" -n 80 --no-pager >&2 || true
@@ -3956,16 +4311,16 @@ gateway_access_wait() {
 }
 
 gateway_access_rollback() {
-  warn '开启独立网关接入失败，正在恢复原配置并重启主控服务'
+  warn "$(msg '开启独立网关接入失败，正在恢复原配置并重启主控服务' 'enabling standalone Gateway access failed; restoring the previous configuration and restarting the control services')"
   if [ "$GATEWAY_ACCESS_FIREWALL_NEW" = true ]; then
     systemctl disable --now cdnca-gateway-access.path cdnca-gateway-access.service >/dev/null 2>&1 || true
     nft delete table inet cdnca_gateway_access >/dev/null 2>&1 || true
   fi
   gateway_access_restore
   if gateway_access_restart && gateway_access_wait gateway_access_services_ready; then
-    warn '已恢复原配置，本机网关与节点连接照旧；请按上面的错误处理后重试'
+    warn "$(msg '已恢复原配置，本机网关与节点连接照旧；请按上面的错误处理后重试' 'the previous configuration was restored and the local Gateway and node connections are unchanged; fix the error above and retry')"
   else
-    warn '原配置文件已恢复，但服务没有全部就绪：请执行 systemctl status cdnca-control-api cdnca-agent-gateway 查看'
+    warn "$(msg '原配置文件已恢复，但服务没有全部就绪：请执行 systemctl status cdnca-control-api cdnca-agent-gateway 查看' 'the previous configuration was restored but not every service is ready: run systemctl status cdnca-control-api cdnca-agent-gateway')"
   fi
 }
 
@@ -3986,7 +4341,7 @@ gateway_access_main() {
   [ "$EUID" -eq 0 ] || fail 'run this installer as root'
   [ -f "${CONFIG_DIR}/control.env" ] || fail 'no installed control plane on this host (control.env is missing)'
   if grep -q '^CDNCA_CONTROL_INTERNAL_REMOTE_ADDR=' "${CONFIG_DIR}/control.env"; then
-    log '本主控安装时已开放独立网关接入（--mode control），无需再开启'
+    log "$(msg '本主控安装时已开放独立网关接入（--mode control），无需再开启' 'standalone Gateway access was opened at install time (--mode control); nothing to do')"
     return 0
   fi
   # A BaoTa host may run our Redis on a moved loopback port.
@@ -4021,14 +4376,14 @@ gateway_access_main() {
   gateway_access_write
   if ! gateway_access_changed && gateway_access_ready; then
     GATEWAY_ACCESS_TOUCHED=false
-    log '独立网关接入已经开启，配置没有变化，未重启任何服务'
+    log "$(msg '独立网关接入已经开启，配置没有变化，未重启任何服务' 'standalone Gateway access is already open; nothing changed and no service was restarted')"
     return 0
   fi
-  log '正在重启 Redis、NATS、主控与本机网关（节点会自动重连）'
+  log "$(msg '正在重启 Redis、NATS、主控与本机网关（节点会自动重连）' 'restarting Redis, NATS, the control plane and the local Gateway (nodes reconnect automatically)')"
   gateway_access_restart || fail 'services could not be restarted with Gateway access'
   gateway_access_wait gateway_access_ready || fail 'services did not become ready with Gateway access (journalctl -u cdnca-control-api)'
   GATEWAY_ACCESS_TOUCHED=false
-  log "已开启独立网关接入。刷新主控「系统 → 网关管理」即可添加网关；请在云安全组放行 TCP ${CONTROL_INTERNAL_REMOTE_PORT},${NATS_GATEWAY_WS_PORT},${REDIS_GATEWAY_TLS_PORT}（本机防火墙只放行已绑定的网关）"
+  log "$(msg "已开启独立网关接入。刷新主控「系统 → 网关管理」即可添加网关；请在云安全组放行 TCP ${CONTROL_INTERNAL_REMOTE_PORT},${NATS_GATEWAY_WS_PORT},${REDIS_GATEWAY_TLS_PORT}（本机防火墙只放行已绑定的网关）" "standalone Gateway access enabled. Refresh System -> Gateways in the console to add Gateways; allow TCP ${CONTROL_INTERNAL_REMOTE_PORT},${NATS_GATEWAY_WS_PORT},${REDIS_GATEWAY_TLS_PORT} in the cloud security group (the host firewall only admits bound Gateways)")"
 }
 
 # ---- Standalone Gateway package and --mode gateway (ADR 0013 §3.1/§3.2, GW-10) ----
@@ -4081,7 +4436,7 @@ gateway_read_token() {
     if [ "$GATEWAY_TOKEN_FILE" = - ]; then IFS= read -r GATEWAY_TOKEN || true
     else read_owner_only_value "$GATEWAY_TOKEN_FILE" 'Gateway binding token' GATEWAY_TOKEN; fi
   elif [ -t 0 ]; then
-    printf '网关绑定令牌（主控“系统 → 网关管理”生成，输入不回显）: ' >&2
+    printf '%s' "$(msg '网关绑定令牌（主控“系统 → 网关管理”生成，输入不回显）: ' 'Gateway binding token (created in the console under System → Gateways; hidden): ')" >&2
     IFS= read -rs GATEWAY_TOKEN; printf '\n' >&2
   else
     IFS= read -r GATEWAY_TOKEN || true
@@ -4204,7 +4559,7 @@ UNIT
       curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8082/health/ready >/dev/null; then
       return 0
     fi
-    progress_tick ' Agent Gateway 就绪' 60
+    progress_tick "$(msg ' Agent Gateway 就绪' ' Agent Gateway to become ready')" 60
     sleep 2
   done
   journalctl -u "$GATEWAY_SERVICE_NAME" -n 80 --no-pager >&2 || true
@@ -4313,20 +4668,198 @@ EOF
       curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8082/health/ready >/dev/null; then
       return 0
     fi
-    progress_tick ' Agent Gateway 就绪' 60
+    progress_tick "$(msg ' Agent Gateway 就绪' ' Agent Gateway to become ready')" 60
     sleep 2
   done
   journalctl -u "$GATEWAY_SERVICE_NAME" -n 80 --no-pager >&2 || true
   fail 'Agent Gateway did not become ready'
 }
 
+# ---- CDN 回源鉴权（c3 F4，与 install-auth.sh origin-auth 同语义）----
+# 套 CDN 后 TCP 对端是 CDN 边缘。回源请求带 X-Cdnca-Origin-Key: <密钥> 时才信 --real-ip-header 里的客户端 IP，
+# 否则仍用 TCP 对端。密钥只写进 root 0600 的 origin-auth.conf（nginx map，主进程以 root 读配置），nginx.conf 只
+# include 它；各反代 location 的 X-Real-IP/X-Forwarded-For 由 $remote_addr 改为 $cdnca_client_ip，并丢弃回源密钥头。
+# control-api 仍只信本机 nginx（API_KEY_TRUSTED_PROXY_CIDRS 不变），controlbackuphttp/accountrecovery 照旧读 X-Real-IP。
+# 密钥用正则 ~^密钥$ 比较（nginx map 的字符串键不区分大小写，正则区分），所以只允许 [A-Za-z0-9_-]。
+readonly ORIGIN_AUTH_CONF="${CONFIG_DIR}/origin-auth.conf"
+ORIGIN_AUTH=false
+ORIGIN_AUTH_SECRET_FILE="${CONFIG_DIR}/origin-auth.secret"
+REAL_IP_HEADER=X-Forwarded-For
+
+origin_auth_valid_header() {
+  case "$1" in CF-Connecting-IP|X-Forwarded-For|True-Client-IP|X-Real-IP) return 0 ;; *) return 1 ;; esac
+}
+
+# <宝塔 true|false>：宝塔站点反代把 X-Real-IP/X-Forwarded-For 覆盖成 CDN 边缘地址，只能用 CDN 专用头。
+origin_auth_check_header() {
+  origin_auth_valid_header "$REAL_IP_HEADER" ||
+    fail "$(msg "--real-ip-header 只支持 CF-Connecting-IP、X-Forwarded-For、True-Client-IP、X-Real-IP：$REAL_IP_HEADER" "--real-ip-header supports only CF-Connecting-IP, X-Forwarded-For, True-Client-IP, X-Real-IP: $REAL_IP_HEADER")"
+  if [ "$1" = true ]; then
+    case "$REAL_IP_HEADER" in X-Forwarded-For|X-Real-IP)
+      fail "$(msg "宝塔环境的站点反代会把 $REAL_IP_HEADER 覆盖成 CDN 边缘地址；--real-ip-header 改用 CF-Connecting-IP 或 True-Client-IP" "the BaoTa site proxy overwrites $REAL_IP_HEADER with the CDN edge address; use CF-Connecting-IP or True-Client-IP for --real-ip-header")" ;;
+    esac
+  fi
+  return 0
+}
+
+# 密钥文件：不存在就生成（32 字节随机 → 64 位十六进制，root 0600）；存在就读出并校验。输出密钥（不进日志）。
+origin_auth_secret() {
+  local secret
+  ! declare -F origin_auth_import >/dev/null || origin_auth_import
+  if [ ! -e "$ORIGIN_AUTH_SECRET_FILE" ]; then
+    (umask 077; openssl rand -hex 32 >"$ORIGIN_AUTH_SECRET_FILE.next")
+    mv -f "$ORIGIN_AUTH_SECRET_FILE.next" "$ORIGIN_AUTH_SECRET_FILE"
+    log "$(msg "已生成 CDN 回源密钥 $ORIGIN_AUTH_SECRET_FILE（root 0600）" "CDN origin key created: $ORIGIN_AUTH_SECRET_FILE (root 0600)")" >&2
+  fi
+  [ -f "$ORIGIN_AUTH_SECRET_FILE" ] && [ ! -L "$ORIGIN_AUTH_SECRET_FILE" ] || fail "$ORIGIN_AUTH_SECRET_FILE $(msg "不是普通文件" "is not a regular file")"
+  secret=$(tr -d '\r\n' <"$ORIGIN_AUTH_SECRET_FILE")
+  [[ "$secret" =~ ^[A-Za-z0-9_-]+$ ]] && [ "${#secret}" -ge 32 ] && [ "${#secret}" -le 256 ] || fail "$ORIGIN_AUTH_SECRET_FILE $(msg "应为 32–256 个 [A-Za-z0-9_-] 字符" "must be 32-256 characters of [A-Za-z0-9_-]")"
+  printf '%s' "$secret"
+}
+
+# --origin-auth-secret-file：安装前校验（root 所有、不对组/其他可读写、内容合法），不打印内容。
+origin_auth_check_import() {
+  local file=$1 mode secret
+  [ -f "$file" ] && [ ! -L "$file" ] || fail "$(msg "--origin-auth-secret-file 不是普通文件：$file" "--origin-auth-secret-file is not a regular file: $file")"
+  [ "$(stat -c '%u' "$file" 2>/dev/null)" = 0 ] || fail "$(msg "--origin-auth-secret-file 必须属 root：$file" "--origin-auth-secret-file must be owned by root: $file")"
+  mode=$(stat -c '%a' "$file" 2>/dev/null)
+  case "$mode" in 400|600) ;; *) fail "$(msg "--origin-auth-secret-file 权限应为 0600 或 0400：$file" "--origin-auth-secret-file must be mode 0600 or 0400: $file")" ;; esac
+  secret=$(tr -d '\r\n' <"$file")
+  [[ "$secret" =~ ^[A-Za-z0-9_-]+$ ]] && [ "${#secret}" -ge 32 ] && [ "${#secret}" -le 256 ] ||
+    fail "$(msg "--origin-auth-secret-file 应为 32–256 个 [A-Za-z0-9_-] 字符" "--origin-auth-secret-file must hold 32-256 characters of [A-Za-z0-9_-]")"
+}
+
+# 导入既有暗号到 ORIGIN_AUTH_SECRET_FILE（root 0600），之后 origin_auth_secret 读它而不是新生成。
+origin_auth_import() {
+  [ -n "${ORIGIN_AUTH_IMPORT_FILE:-}" ] || return 0
+  [ "$ORIGIN_AUTH_IMPORT_FILE" -ef "$ORIGIN_AUTH_SECRET_FILE" ] 2>/dev/null && return 0
+  (umask 077; tr -d '\r\n' <"$ORIGIN_AUTH_IMPORT_FILE" >"$ORIGIN_AUTH_SECRET_FILE.next")
+  chmod 0600 "$ORIGIN_AUTH_SECRET_FILE.next"
+  mv -f "$ORIGIN_AUTH_SECRET_FILE.next" "$ORIGIN_AUTH_SECRET_FILE"
+  log "$(msg "已导入 CDN 回源密钥到 $ORIGIN_AUTH_SECRET_FILE（root 0600）" "CDN origin key imported to $ORIGIN_AUTH_SECRET_FILE (root 0600)")" >&2
+}
+
+# 写 origin-auth.conf（root 0600）：回源密钥匹配且 real-ip 头是单个合法 IP（X-Forwarded-For 取最右一跳）时
+# $cdnca_client_ip 取该 IP，否则取 $remote_addr。
+origin_auth_write_conf() {
+  local secret variable pattern ipv4 ipv6 ip
+  secret=$(origin_auth_secret)
+  variable=http_$(printf '%s' "$REAL_IP_HEADER" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
+  ipv4='(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
+  ipv6='[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}'
+  ip="(?<cdnca_ip>${ipv4}|${ipv6})"
+  if [ "$REAL_IP_HEADER" = X-Forwarded-For ]; then pattern="~(?:^|,)\\s*${ip}\\s*\$"; else pattern="~^\\s*${ip}\\s*\$"; fi
+  (umask 077; {
+    printf '# 由 install-control.sh 生成（CDN 回源鉴权）。含回源密钥：root 0600，勿复制到别处。\n'
+    printf '# real-ip-header: %s\n' "$REAL_IP_HEADER"
+    printf 'map $http_x_cdnca_origin_key $cdnca_origin_ok {\n    default 0;\n    "~^%s$" 1;\n}\n' "$secret"
+    printf 'map $%s $cdnca_origin_peer {\n    default "";\n    "%s" $cdnca_ip;\n}\n' "$variable" "$pattern"
+    printf 'map "$cdnca_origin_ok:$cdnca_origin_peer" $cdnca_client_ip {\n    default $remote_addr;\n    "~^1:(?<cdnca_cip>.+)$" $cdnca_cip;\n}\n'
+    # 没写 proxy_set_header 的反代（/health/*）继承这一条：回源密钥不转给 control-api。
+    printf 'proxy_set_header X-Cdnca-Origin-Key "";\n'
+  } >"$ORIGIN_AUTH_CONF.next")
+  chmod 0600 "$ORIGIN_AUTH_CONF.next"
+  mv -f "$ORIGIN_AUTH_CONF.next" "$ORIGIN_AUTH_CONF"
+}
+
+# 改写 nginx.conf（幂等）：http 里 include origin-auth.conf；反代 location 的 X-Real-IP/X-Forwarded-For 改用
+# $cdnca_client_ip，并丢弃回源密钥头。
+origin_auth_apply_nginx() { # <nginx.conf>
+  local conf=$1 include="    include ${ORIGIN_AUTH_CONF};" has_include=0
+  grep -qxF -- "$include" "$conf" && has_include=1
+  grep -qxF -- '    include /etc/cdnca-upgrade/plan-source-nginx.conf;' "$conf" || fail "$conf $(msg "不是安装器生成的管理端 nginx 配置" "is not a console nginx configuration written by the installer")"
+  # awk 变量不能叫 include：gawk（Ubuntu 24.04 默认 awk）里 include/load/namespace 等是保留字，-v include= 直接退出 2。
+  awk -v include_line="$include" -v has_include="$has_include" '
+    $0 == "    include /etc/cdnca-upgrade/plan-source-nginx.conf;" { print; if (!has_include) print include_line; next }
+    $0 == "            proxy_set_header X-Real-IP $remote_addr;" { print "            proxy_set_header X-Real-IP $cdnca_client_ip;"; next }
+    $0 == "            proxy_set_header X-Forwarded-For $remote_addr;" {
+      print "            proxy_set_header X-Forwarded-For $cdnca_client_ip;"
+      print "            proxy_set_header X-Cdnca-Origin-Key \"\";"
+      next
+    }
+    { print }' "$conf" >"$conf.next"
+  chmod --reference="$conf" "$conf.next" 2>/dev/null || chmod 0644 "$conf.next"
+  mv -f "$conf.next" "$conf"
+}
+
+origin_auth_usage() {
+  if [ "${INSTALL_LANG:-zh}" = en ]; then
+    cat <<'EOF'
+Usage: install-control.sh origin-auth [--secret-file FILE] [--real-ip-header H]
+  Enable CDN origin authentication on an installed control plane: once the CDN sends the key file content in the
+  X-Cdnca-Origin-Key origin header, the console nginx takes the client IP from header H.
+  --secret-file FILE   Origin key file (32-256 chars of [A-Za-z0-9_-], may be shared with the licensing server);
+                       default /etc/cdnca-control/origin-auth.secret, created (root 0600) when missing
+  --real-ip-header H   CF-Connecting-IP / X-Forwarded-For (rightmost hop) / True-Client-IP / X-Real-IP; default
+                       X-Forwarded-For. BaoTa mode accepts only CF-Connecting-IP or True-Client-IP
+  Repeatable (to change the key or header); restores the previous configuration when nginx -t or the reload fails.
+EOF
+    return 0
+  fi
+  cat <<'EOF'
+用法: install-control.sh origin-auth [--secret-file FILE] [--real-ip-header H]
+  给已安装的主控启用 CDN 回源鉴权：CDN 回源头 X-Cdnca-Origin-Key 填密钥文件内容后，管理端 nginx 按 H 取客户端 IP。
+  --secret-file FILE   回源密钥文件（32–256 个 [A-Za-z0-9_-]，可与授权端共用）；默认 /etc/cdnca-control/origin-auth.secret，
+                       不存在时生成（root 0600）
+  --real-ip-header H   CF-Connecting-IP / X-Forwarded-For（取最右一跳）/ True-Client-IP / X-Real-IP；默认 X-Forwarded-For
+                       宝塔环境只能用 CF-Connecting-IP 或 True-Client-IP
+  可重复执行（换密钥或头）；nginx -t 或重载失败时恢复原配置。
+EOF
+}
+
+# install-control.sh origin-auth：改写已装主控的 nginx.conf 与 origin-auth.conf，nginx -t 后重载；失败恢复。
+origin_auth_main() {
+  local backup nginx_bin bt=false unit="/etc/systemd/system/${WEB_SERVICE_NAME}.service" had_conf=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --secret-file) need_value "$@"; ORIGIN_AUTH_SECRET_FILE=$2; shift 2 ;;
+      --real-ip-header) need_value "$@"; REAL_IP_HEADER=$2; shift 2 ;;
+      -h|--help) origin_auth_usage; exit 0 ;;
+      *) fail "unsupported option for origin-auth: $1" ;;
+    esac
+  done
+  [ "$EUID" -eq 0 ] || fail 'run this installer as root'
+  [ -f "$NGINX_CONF" ] || fail "$(msg "没有 $NGINX_CONF：本机未安装主控" "$NGINX_CONF missing: no control plane is installed here")"
+  ! grep -qxF '        set_real_ip_from 127.0.0.1;' "$NGINX_CONF" || bt=true
+  origin_auth_check_header "$bt"
+  nginx_bin=$(awk '/^ExecStart=/{sub(/^ExecStart=/, ""); print $1; exit}' "$unit" 2>/dev/null)
+  [ -n "$nginx_bin" ] && [ -x "$nginx_bin" ] || nginx_bin=$(command -v nginx) || fail "$(msg '找不到 nginx' 'nginx not found')"
+  backup=$(mktemp -d "${TEMP_DIR:-/tmp}/origin-auth.XXXXXX")
+  cp -p "$NGINX_CONF" "$backup/nginx.conf"
+  [ ! -e "$ORIGIN_AUTH_CONF" ] || { cp -p "$ORIGIN_AUTH_CONF" "$backup/origin-auth.conf"; had_conf=true; }
+  origin_auth_restore() {
+    cp -p "$backup/nginx.conf" "$NGINX_CONF"
+    if $had_conf; then cp -p "$backup/origin-auth.conf" "$ORIGIN_AUTH_CONF"; else rm -f "$ORIGIN_AUTH_CONF"; fi
+  }
+  origin_auth_write_conf
+  origin_auth_apply_nginx "$NGINX_CONF"
+  if ! "$nginx_bin" -t -c "$NGINX_CONF" -p "$NGINX_RUNTIME_DIR" >"$backup/nginx-t.log" 2>&1; then
+    sed 's/^/    | /' "$backup/nginx-t.log" >&2
+    origin_auth_restore
+    fail "$(msg 'nginx 配置检查失败，已恢复原配置' 'nginx configuration check failed; the previous configuration was restored')"
+  fi
+  if ! systemctl reload "$WEB_SERVICE_NAME"; then
+    origin_auth_restore
+    systemctl reload "$WEB_SERVICE_NAME" || true
+    fail "$(msg "重载 $WEB_SERVICE_NAME 失败，已恢复原配置" "reloading $WEB_SERVICE_NAME failed, previous configuration restored")"
+  fi
+  log "$(msg "CDN 回源鉴权已启用：回源头 X-Cdnca-Origin-Key 填 $ORIGIN_AUTH_SECRET_FILE 的内容，客户端 IP 取 $REAL_IP_HEADER" "CDN origin authentication enabled: set the X-Cdnca-Origin-Key origin header to the content of $ORIGIN_AUTH_SECRET_FILE; the client IP is taken from $REAL_IP_HEADER")"
+}
+
 write_nginx_config() {
-  local nginx_bin
+  local nginx_bin brotli_load='' brotli_static=''
   nginx_bin=$(control_nginx_bin)
+  # The website build ships <file>.br (apps/control-site precompress): served
+  # only where ensure_brotli_static installed the module; otherwise both are
+  # empty and assets go out as the precompressed .gz.
+  if control_brotli_static_available; then
+    brotli_load="load_module ${NGINX_BROTLI_STATIC_MODULE};"$'\n'
+    brotli_static=$'\n            brotli_static on;'
+  fi
   mkdir -p "$NGINX_RUNTIME_DIR" "$NGINX_RUNTIME_DIR"/{client_temp,proxy_temp,fastcgi_temp,uwsgi_temp,scgi_temp}
   chmod 0755 "$NGINX_RUNTIME_DIR"
   cat >"$NGINX_CONF" <<EOF
-pid ${NGINX_RUNTIME_DIR}/nginx.pid;
+${brotli_load}pid ${NGINX_RUNTIME_DIR}/nginx.pid;
 error_log stderr warn;
 
 events { worker_connections 1024; }
@@ -4455,6 +4988,23 @@ http {
             try_files \$uri =404;
             default_type application/zip;
         }
+        # 节点 WebSocket 隧道（Q20，套 CDN 时节点经此 443 入口）：原样转给本机网关的通道端口，网关在同一端口
+        # 区分 /agent/v1/tunnel 与 /agent/v1/enroll（ADR 0013 §4.2）。直连安装也开着，网关管理页可随时切 ws。
+        location ^~ /agent/v1/ {
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$remote_addr;
+            proxy_ssl_server_name on;
+            proxy_ssl_name ${GATEWAY_HOST:-localhost};
+            proxy_ssl_verify off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_buffering off;
+            proxy_pass https://127.0.0.1:${GATEWAY_AGENT_PORT:-20407};
+        }
         location ^~ /downloads/ {
             root ${DATA_DIR};
             try_files \$uri =404;
@@ -4475,6 +5025,16 @@ http {
             proxy_pass http://127.0.0.1:8080;
         }
         location ^~ /v1/ {
+            # Log/list reads and the public website content are the only compressed
+            # API JSON: they stream nothing and carry no credential or CSRF token (API
+            # auth is a Bearer header, so BREACH has no secret to recover). The logs
+            # send no ETag; the website content's ETag, weakened by gzip, still
+            # revalidates (control-api compares If-None-Match weakly, RFC 9110).
+            # Exact GET-only routes; exports, grants and POST actions stay plain.
+            location ~ ^/v1/(?:(?:admin/)?(?:analytics/(?:logs/(?:access|block-events|blocks/(?:current|current-count|history)|cc-bans|cc-coordination|[a-z-]+/geo-evidence/[^/]+)|l4-session-logs)|audit-logs(?:/categories)?|observability/logs|billing-bridge/logs)|control-site/content)\$ {
+                gzip_types application/json;
+                proxy_pass http://127.0.0.1:8080;
+            }
             proxy_http_version 1.1;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
@@ -4484,7 +5044,7 @@ http {
         }
         location ~* ^/(?:dashboard/)?(?:assets/.*|.*\.(?:css|js|mjs|map|json|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf))\$ {
             rewrite ^/dashboard/(.*)\$ /\$1 break;
-            try_files \$uri =404;
+            try_files \$uri =404;${brotli_static}
         }
         # /dashboard without a trailing slash is the console entry too; otherwise it
         # falls to location / -> @website and serves the public website shell.
@@ -4540,6 +5100,11 @@ http {
 $(node_download_server)
 }
 EOF
+  if [ "${ORIGIN_AUTH:-false}" = true ]; then
+    origin_auth_check_header "$([ "${INSTALL_ENV:-}" = bt ] && echo true || echo false)"
+    origin_auth_write_conf
+    origin_auth_apply_nginx "$NGINX_CONF"
+  fi
   "$nginx_bin" -t -c "$NGINX_CONF" -p "$NGINX_RUNTIME_DIR" >/dev/null
 }
 
@@ -4571,7 +5136,7 @@ node_download_server() {
   [ "${INSTALL_ENV:-}" = bt ] || return 0
   cat <<EOF
 
-    # 宝塔环境节点升级下载直连端口：证书由本机私有根 CA 签发，节点已信任。
+    # 宝塔环境节点升级下载直连端口（fix-btenv2）：证书由本机私有根 CA 签发，节点已信任。
     server {
         listen ${NODE_DOWNLOAD_PORT} ssl;
         server_name _;
@@ -4611,6 +5176,24 @@ control_nginx_mime_types() {
   fi
 }
 
+# 官网构建产出 <文件>.br（apps/control-site 预压缩插件）：装发行版 brotli_static 模块直接发 .br。
+# 主控 nginx 用独立配置（-c），不 include modules-enabled，由 write_nginx_config 写 load_module。
+# 宝塔用宝塔自带 nginx，加载不了发行版模块，不装。
+control_brotli_static_available() {
+  [ "${INSTALL_ENV:-}" != bt ] && [ -n "${NGINX_BROTLI_STATIC_MODULE:-}" ] && [ -f "$NGINX_BROTLI_STATIC_MODULE" ]
+}
+# 装不上（非 apt、源里没有）只告警，官网退回预压缩 .gz。
+ensure_brotli_static() {
+  [ "${INSTALL_ENV:-}" != bt ] || return 0
+  ! control_brotli_static_available || return 0
+  if [ "$(control_os_family)" != debian ]; then
+    log "$(msg '提示：非 apt 系统，未安装 brotli_static 模块，官网只发预压缩 .gz' 'note: not an apt system, the brotli_static module was not installed; the website serves only precompressed .gz')"
+    return 0
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libnginx-mod-http-brotli-static >/dev/null 2>&1 ||
+    log "$(msg '提示：libnginx-mod-http-brotli-static 安装失败，官网只发预压缩 .gz' 'note: installing libnginx-mod-http-brotli-static failed; the website serves only precompressed .gz')"
+}
+
 # 本机自检地址：管理端网页实际监听端口（宝塔环境是回环 WEB_PORT，普通环境即 MASTER_PORT）。
 local_web_origin() {
   local host=$CONTROL_DOMAIN
@@ -4633,6 +5216,7 @@ setup_web() {
   while IFS= read -r option; do trust_args+=("$option"); done < <(public_https_trust_args)
   nginx_bin=$(control_nginx_bin)
   log 'starting control web'
+  ensure_brotli_static
   write_nginx_config
   cat >"/etc/systemd/system/${WEB_SERVICE_NAME}.service" <<EOF
 [Unit]
@@ -4668,7 +5252,7 @@ EOF
         --resolve "${CONTROL_DOMAIN}:${WEB_PORT}:127.0.0.1" "$(local_web_origin)/healthz" >/dev/null; then
       return 0
     fi
-    progress_tick '管理端网页就绪' 60
+    progress_tick "$(msg '管理端网页就绪' ' the management web to become ready')" 60
     sleep 2
   done
   journalctl -u "$WEB_SERVICE_NAME" -n 80 --no-pager >&2 || true
@@ -4722,7 +5306,7 @@ verify_native_plan_source() {
         --source-commit "$commit" --source-tree "$tree" --artifact-sha256 "$artifact" --runner-sha256 "$runner" >/dev/null 2>&1; then
       return 0
     fi
-    progress_tick '升级执行器就绪' 60
+    progress_tick "$(msg '升级执行器就绪' ' the upgrade runner to become ready')" 60
     sleep 2
   done
   fail 'native upgrade runner could not prove live readiness for the installed release'
@@ -4749,7 +5333,7 @@ install_community() {
 prompt_admin_username() {
   if [ -z "$ADMIN_USERNAME" ]; then
     [ -t 0 ] || fail '--admin-username is required for a non-interactive installation'
-    printf '管理员用户名（小写字母开头，3-128 位）: ' >&2
+    printf '%s' "$(msg '管理员用户名（小写字母开头，3-128 位）: ' 'Administrator user name (starts with a lowercase letter, 3-128 chars): ')" >&2
     IFS= read -r ADMIN_USERNAME
   fi
   ADMIN_USERNAME=$(printf '%s' "$ADMIN_USERNAME" | tr '[:upper:]' '[:lower:]')
@@ -4790,9 +5374,9 @@ prompt_admin_password() {
   else
     [ -t 0 ] || fail '--admin-password-file is required for a non-interactive installation'
     local confirmation
-    printf '管理员密码（8-1024 位，至少包含大写字母、小写字母、数字、符号中的两种，不能含空格或中文；输入不回显）: ' >&2
+    printf '%s' "$(msg '管理员密码（8-1024 位，至少包含大写字母、小写字母、数字、符号中的两种，不能含空格或中文；输入不回显）: ' 'Administrator password (8-1024 chars, at least two of upper case, lower case, digits and symbols, no spaces or non-ASCII; hidden): ')" >&2
     IFS= read -r -s ADMIN_PASSWORD
-    printf '\n再次输入管理员密码: ' >&2
+    printf '\n%s' "$(msg '再次输入管理员密码: ' 'Repeat the administrator password: ')" >&2
     IFS= read -r -s confirmation
     printf '\n' >&2
     [ "$ADMIN_PASSWORD" = "$confirmation" ] || fail 'administrator password confirmation did not match'
@@ -4804,7 +5388,7 @@ prompt_admin_password() {
 prompt_certificate_email() {
   if [ -z "$CERTIFICATE_EMAIL" ]; then
     [ -t 0 ] || fail '--certificate-email is required for a non-interactive installation'
-    printf '证书联系邮箱（用于管理端与网站 HTTPS 证书自动申请，需真实可用）: ' >&2
+    printf '%s' "$(msg '证书联系邮箱（用于管理端与网站 HTTPS 证书自动申请，需真实可用）: ' 'Certificate contact email (used to request HTTPS certificates for the console and websites; must be real): ')" >&2
     IFS= read -r CERTIFICATE_EMAIL
   fi
   [[ "$CERTIFICATE_EMAIL" =~ ^[A-Za-z0-9_%+.-]+@[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$ ]] || fail 'invalid certificate contact email'
@@ -4854,7 +5438,7 @@ EOF
     if systemctl is-active --quiet "$SERVICE_NAME" && curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:8080/health/ready >/dev/null; then
       return 0
     fi
-    progress_tick ' control-api 就绪' 60
+    progress_tick "$(msg ' control-api 就绪' ' control-api to become ready')" 60
     sleep 2
   done
   journalctl -u "$SERVICE_NAME" -n 80 --no-pager >&2 || true
@@ -4963,11 +5547,11 @@ issue_public_certificate() {
     if [ "$(control_os_family)" = rhel ]; then
       dnf -y -q install certbot >/dev/null
     else
-      DEBIAN_FRONTEND=noninteractive progress_run '安装 certbot' apt-get install -y -qq --no-install-recommends certbot >/dev/null
+      DEBIAN_FRONTEND=noninteractive progress_run "$(msg '安装 certbot' 'Install certbot')" apt-get install -y -qq --no-install-recommends certbot >/dev/null
     fi
   fi
   ss -H -ltn | awk '$4 ~ /:80$/ { exit 1 }' || fail 'port 80 is in use; free it or pass --public-cert-file/--public-key-file'
-  PROGRESS_RUN_OUTPUT="$TEMP_DIR/certbot.log" progress_run '向 Let'"'"'s Encrypt 申请证书' \
+  PROGRESS_RUN_OUTPUT="$TEMP_DIR/certbot.log" progress_run "$(msg "向 Let's Encrypt 申请证书" "Request a Let's Encrypt certificate")" \
     certbot certonly --standalone --non-interactive --agree-tos --email "$CERTIFICATE_EMAIL" \
     --cert-name "$CONTROL_DOMAIN" "${domains[@]}" ${renew[@]+"${renew[@]}"} || {
     tail -n 20 "$TEMP_DIR/certbot.log" >&2
@@ -4984,9 +5568,9 @@ report_public_certificate_renewal() {
   local not_after
   [ -n "$PUBLIC_CERT_FILE" ] && [ -z "$(public_certificate_lineage)" ] || return 0
   not_after=$(openssl x509 -in "$PUBLIC_CERT_PATH" -noout -enddate 2>/dev/null | sed 's/^notAfter=//') || true
-  warn "管理端公网证书由你提供（${PUBLIC_CERT_FILE}），安装器不会自动续期；到期时间：${not_after:-无法读取}。"
-  warn "续期后替换证书：install -m 0444 <新证书链> ${PKI_DIR}/public-cert.pem && install -m 0600 <新私钥> ${PKI_DIR}/public-key.pem && systemctl reload ${WEB_SERVICE_NAME}"
-  warn '证书由 certbot 签发时，安装参数直接指向 /etc/letsencrypt/live/<名>/ 下的文件，安装器会装续期 hook 自动替换。'
+  warn "$(msg "管理端公网证书由你提供（${PUBLIC_CERT_FILE}），安装器不会自动续期；到期时间：${not_after:-无法读取}。" "the public console certificate is yours (${PUBLIC_CERT_FILE}) and is not renewed by the installer; expires: ${not_after:-unknown}.")"
+  warn "$(msg '续期后替换证书：' 'after renewing, replace it: ')install -m 0444 <$(msg 新证书链 new-chain)> ${PKI_DIR}/public-cert.pem && install -m 0600 <$(msg 新私钥 new-key)> ${PKI_DIR}/public-key.pem && systemctl reload ${WEB_SERVICE_NAME}"
+  warn "$(msg '证书由 certbot 签发时，安装参数直接指向 /etc/letsencrypt/live/<名>/ 下的文件，安装器会装续期 hook 自动替换。' 'for certbot certificates, point the options at the files under /etc/letsencrypt/live/<name>/ and the installer adds a renewal hook.')"
 }
 
 # RHEL family with SELinux enabled (Debian/Ubuntu: no-op). Stock nginx stays
@@ -5032,8 +5616,130 @@ configure_firewall() {
     warn "standalone Gateways reach TCP ${CONTROL_INTERNAL_REMOTE_PORT},${NATS_GATEWAY_WS_PORT},${REDIS_GATEWAY_TLS_PORT}; nftables already limits them to bound Gateways, open them in the cloud security group as well"
 }
 
+# 本机地址：公网取出口路由源地址里不是私网的那个（没有就“未检测到”），内网取所有私网 IPv4。
+summary_host_addresses() {
+  local all public='' private=''
+  all=$(ip -o -4 addr show scope global 2>/dev/null | awk '{ sub(/\/.*/, "", $4); print $4 }') || all=''
+  local address
+  for address in $all; do
+    case "$address" in
+      10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[01].* | 100.6[4-9].* | 100.[7-9][0-9].* | 100.1[01][0-9].* | 100.12[0-7].*)
+        private="${private:+$private, }$address" ;;
+      *) [ -n "$public" ] || public=$address ;;
+    esac
+  done
+  printf '%s|%s' "$public" "$private"
+}
+
+# 证书方式与到期时间（屏幕与摘要文件共用）。
+summary_certificate() {
+  local kind not_after
+  if [ "$INSTALL_ENV" = bt ]; then
+    msg '宝塔站点证书（在宝塔站点「SSL」申请/部署）；本机回环网页用主控私有 CA' 'BaoTa site certificate (issued in the BaoTa site SSL panel); the loopback web uses the private control CA'
+    return 0
+  fi
+  if [ -n "$PUBLIC_CERT_FILE" ] && [ -n "$(public_certificate_lineage)" ]; then
+    kind=$(msg "Let's Encrypt（自动续期）" "Let's Encrypt (renewed automatically)")
+  elif [ -n "$PUBLIC_CERT_FILE" ]; then
+    kind=$(msg '自带证书（不会自动续期）' 'Your own certificate (not renewed automatically)')
+  else
+    kind=$(msg '主控私有 CA 自签（浏览器会提示不安全）' 'Self-signed by the private control CA (browsers show a warning)')
+  fi
+  not_after=$(openssl x509 -in "$PUBLIC_CERT_PATH" -noout -enddate 2>/dev/null | sed 's/^notAfter=//') || not_after=''
+  printf '%s; %s %s' "$kind" "$(msg '到期' 'expires')" "${not_after:-$(msg '无法读取' 'unknown')}"
+}
+
+# 安装完成摘要：屏幕打印一次，同样内容写 /root/cdnca-install-summary.txt（0600）。
+# 口令只来自交互输入或 --admin-password-file，安装器从不生成口令，所以摘要只提示
+# “使用你设置的口令”，口令、激活凭据、令牌一律不进屏幕摘要、文件与日志。
+CONTROL_SUMMARY_FILE=${CONTROL_SUMMARY_FILE:-/root/cdnca-install-summary.txt}
+control_install_summary() {
+  local addresses public_ip private_ip url node_page web_line
+  addresses=$(summary_host_addresses)
+  public_ip=${addresses%%|*} private_ip=${addresses#*|}
+  url=$CONTROL_ORIGIN/dashboard/
+  node_page=$(msg '「节点管理 → 节点列表 → 安装节点」' '"Nodes → Node list → Install node"')
+  if [ "$INSTALL_ENV" = bt ]; then
+    web_line="TCP ${MASTER_PORT}  $(msg '管理端网页（宝塔站点 HTTPS，本机网页 127.0.0.1:' 'management web (BaoTa site HTTPS; local web 127.0.0.1:')${WEB_PORT})"
+  else
+    web_line="TCP ${MASTER_PORT}  $(msg '管理端网页 HTTPS' 'management web HTTPS')"
+  fi
+  {
+    printf '%s\n' '================================================================'
+    printf '  %s\n' "$(msg 'CDNCA 主控安装完成，请记录以下信息' 'CDNCA control plane installed - keep this information')"
+    printf '%s\n' '================================================================'
+    printf '%s %s\n' "$(msg '版本：' 'Version:')" "${CONTROL_VERSION:-${PROGRESS_VERSION:-?}}"
+    printf '%s %s\n' "$(msg '实例 ID：' 'Installation ID:')" "$INSTALLATION_ID"
+    printf '%s %s\n' "$(msg '实例名称：' 'Installation name:')" "$INSTALLATION_NAME"
+    printf '%s %s %s\n' "$(msg '安装目录：' 'Install paths:')" "$NATIVE_ROOT/current" "$CONFIG_DIR $DATA_DIR"
+    printf '\n%s %s\n' "$(msg '管理端地址：' 'Management URL:')" "$url"
+    printf '%s %s\n' "$(msg '用户端地址：' 'User console URL:')" "$url $(msg '（与管理端同一入口，登录后按账号角色进入）' '(same entry; the account role decides the view)')"
+    printf '%s %s\n' "$(msg '管理端域名/IP：' 'Management host:')" "$CONTROL_DOMAIN"
+    printf '%s %s\n' "$(msg '节点网关地址：' 'Node Gateway host:')" "$GATEWAY_HOST"
+    printf '%s %s\n' "$(msg '本机公网 IP：' 'Public IP:')" "${public_ip:-$(msg '未检测到（可能在 NAT 后）' 'not detected (behind NAT?)')}"
+    printf '%s %s\n' "$(msg '本机内网 IP：' 'Private IP:')" "${private_ip:-$(msg '无' 'none')}"
+    printf '\n%s %s\n' "$(msg '管理员账号：' 'Administrator:')" "$ADMIN_USERNAME"
+    printf '%s %s\n' "$(msg '管理员口令：' 'Password:')" "$(msg '使用你在安装时设置的口令（安装器不保存、不显示）' 'the password you set during installation (never stored or shown by the installer)')"
+    printf '\n%s\n' "$(msg '需要在防火墙/云安全组放行的端口：' 'Open these ports in the host firewall / cloud security group:')"
+    printf '  %s\n' "$web_line"
+    printf '  TCP %-5s %s\n' "$GATEWAY_ENROLLMENT_PORT" "$(msg '节点网关注册' 'node Gateway enrollment')"
+    printf '  TCP %-5s %s\n' "$GATEWAY_AGENT_PORT" "$(msg '节点网关通道' 'node Gateway agent channel')"
+    [ "$INSTALL_ENV" != bt ] || printf '  TCP %-5s %s\n' "$NODE_DOWNLOAD_PORT" "$(msg '节点升级下载（直连）' 'node upgrade downloads (direct)')"
+    if [ -n "$PUBLIC_CERT_FILE" ] && [ -n "$(public_certificate_lineage)" ] && [ "$INSTALL_ENV" != bt ]; then
+      printf '  TCP 80    %s\n' "$(msg "Let's Encrypt 续期验证（certbot 续期时临时占用）" "Let's Encrypt renewal (used by certbot while renewing)")"
+    fi
+    if remote_gateway_access; then
+      printf '  TCP %s,%s,%s  %s\n' "$CONTROL_INTERNAL_REMOTE_PORT" "$NATS_GATEWAY_WS_PORT" "$REDIS_GATEWAY_TLS_PORT" \
+        "$(msg '独立网关接入（只对已绑定网关开放）' 'standalone Gateways (bound Gateways only)')"
+    fi
+    printf '  %s\n' "$(msg '其余端口（数据库、消息、缓存等）只监听本机，不要对外开放。' 'Everything else (database, messaging, cache) listens locally only; do not open it.')"
+    printf '\n%s %s\n' "$(msg '证书：' 'Certificate:')" "$(summary_certificate)"
+    printf '\n%s\n' "$(msg '下一步：' 'Next steps:')"
+    printf '  1. %s %s\n' "$(msg '浏览器打开' 'Open')" "$url $(msg '用管理员账号登录。' 'and sign in as the administrator.')"
+    printf '  2. %s %s %s\n' "$(msg '添加节点：在' 'Add a node: copy the command from')" "$node_page" "$(msg '复制安装命令，到节点服务器上以 root 执行。' 'and run it as root on the node server.')"
+    printf '  3. %s %s\n' "$(msg '备份：' 'Backup:')" "$NATIVE_ROOT/current/bin/control-api native-backup create $(msg '（定时备份已启用；查看状态：native-backup status）' '(scheduled backups are on; status: native-backup status)')"
+    printf '  4. %s %s\n' "$(msg '卸载/迁移：' 'Uninstall / move:')" "$(msg '主控不提供一键卸载（避免误删数据）；换机用 install-control.sh migrate-from，重装请重装系统。' 'there is no one-step uninstall (to protect data); move with install-control.sh migrate-from, reinstall on a fresh system.')"
+    printf '  5. %s %s\n' "$(msg '日志：' 'Logs:')" "${PROGRESS_LOG:-/var/log}$(msg '；服务日志：' '; services: ')journalctl -u $SERVICE_NAME -u $GATEWAY_SERVICE_NAME -u $WEB_SERVICE_NAME"
+    printf '  6. %s %s\n' "$(msg '核对：' 'Verify:')" "install-control.sh check $(msg '（单元、就绪、节点安装合同、权限；全新安装应全部 OK）' '(units, readiness, node install contract, permissions; all OK on a fresh install)')"
+    ! declare -F control_install_followups >/dev/null || control_install_followups
+    printf '%s\n' '================================================================'
+  } >"${TEMP_DIR}/install-summary.txt"
+  install -m 0600 "${TEMP_DIR}/install-summary.txt" "$CONTROL_SUMMARY_FILE" 2>/dev/null ||
+    warn "$(msg "无法写入 ${CONTROL_SUMMARY_FILE}" "cannot write ${CONTROL_SUMMARY_FILE}")"
+  printf '\n' >&2
+  cat "${TEMP_DIR}/install-summary.txt" >&2
+  [ ! -f "$CONTROL_SUMMARY_FILE" ] || printf '%s %s\n' "$(msg '以上信息已保存到' 'Saved to')" "$CONTROL_SUMMARY_FILE (0600)" >&2
+}
+
+# 安装器做不了、需要人工处理的项：只在对应条件成立时列出，每条给出确切位置或命令。
+control_install_followups() {
+  local -a items=()
+  if [ "$(check_env_value "${CONFIG_DIR}/control.env" EDGE_SIGNER_TRUST_ENABLED)" = true ] && [ ! -s "${DOWNLOAD_DIR}/edge-agent/signer-trust.json" ]; then
+    items+=("$(msg '节点签名信任文档尚未同步：授权运营后台「签名密钥泄露吊销」发布含 usage=installation-ban 公钥的信任文档后，主控约 10 分钟内同步（之前节点安装会被拒）' 'the node signer trust document has not synced yet: publish one with a usage=installation-ban key under "Signing key compromise revocation" in the licensing operator console; the control plane syncs it within about 10 minutes (node installs are refused until then)')")
+  fi
+  if [ "${ORIGIN_AUTH:-false}" = true ] && [ -z "$ORIGIN_AUTH_IMPORT_FILE" ]; then
+    items+=("$(msg "CDN 回源头 X-Cdnca-Origin-Key 填 ${ORIGIN_AUTH_SECRET_FILE} 的内容（本次新生成；要沿用已有暗号，装前传 --origin-auth-secret-file，装后 install-control.sh origin-auth --secret-file）" "set the CDN origin header X-Cdnca-Origin-Key to the content of ${ORIGIN_AUTH_SECRET_FILE} (generated now; to keep an existing key pass --origin-auth-secret-file, or run install-control.sh origin-auth --secret-file afterwards)")")
+  fi
+  [ "${#items[@]}" -gt 0 ] || return 0
+  printf '\n%s\n' "$(msg '还需人工处理：' 'Still to do by hand:')"
+  local item n=0
+  for item in "${items[@]}"; do n=$((n + 1)); printf '  %s. %s\n' "$n" "$item"; done
+}
+
 # Shown at the end of the installation (ADR 0013 §3.5; same text as the Gateway page).
 print_gateway_ports() {
+  if [ "${INSTALL_LANG:-zh}" = en ]; then
+    cat >&2 <<EOF
+
+Node channel (Gateway) ports: enrollment ${GATEWAY_ENROLLMENT_PORT}, agent channel ${GATEWAY_AGENT_PORT}; allow them in the firewall / security group.
+Without a CDN: nodes connect to these two ports directly; nothing else to configure.
+With a CDN: add the Gateway domain on the CDN, enable WebSocket, origin protocol HTTPS, origin port ${GATEWAY_ENROLLMENT_PORT},
+       no caching and no WAF challenge on /agent/v1/*; then switch that entry to WebSocket under "Gateways"
+       and add the CDN origin IP ranges to "Trusted CDN origin ranges".
+Alibaba Cloud classic CDN has no WebSocket support and cannot be used; on Baidu Cloud CDN raise the origin timeout to 60 s or more.
+EOF
+    return 0
+  fi
   cat >&2 <<EOF
 
 节点通道（网关）端口：注册 ${GATEWAY_ENROLLMENT_PORT}，通道 ${GATEWAY_AGENT_PORT}，请在防火墙/安全组放行。
@@ -5052,7 +5758,7 @@ bootstrap_admin() {
     >"${TEMP_DIR}/bootstrap.log" 2>&1 || fail "administrator bootstrap failed; $(progress_keep_output "${TEMP_DIR}/bootstrap.log" 'control-api bootstrap-user')"
   unset ADMIN_PASSWORD
   printf '\nControl plane URL: https://%s\nAdministrator: %s (%s)\n' "$CONTROL_DOMAIN" "$ADMIN_USERNAME" "$ADMIN_EMAIL"
-  printf '忘记管理员密码且没有其他管理员时，按本机手册以 root 恢复：%s\n' "${NATIVE_ROOT}/current/docs/platform-admin-recovery.md"
+  printf '%s%s\n' "$(msg '忘记管理员密码且没有其他管理员时，按本机手册以 root 恢复：' 'If the administrator password is lost and there is no other administrator, recover as root with the local guide: ')" "${NATIVE_ROOT}/current/docs/platform-admin-recovery.md"
 }
 
 bootstrap_node_ca() {
@@ -5152,6 +5858,144 @@ EOF
   systemctl enable --now cdnca-community-identity-refresh.timer >/dev/null
 }
 
+# ---- install-control.sh check：已安装主控的「对外可用」合同，全新装完必须全过 ----
+UPGRADE_STATUS_FILE=${UPGRADE_STATUS_FILE:-/run/cdnca-upgrade/status.json}
+CHECK_OWNER_UID=${CHECK_OWNER_UID:-0}
+
+file_owner_mode() { stat -c '%u:%a' "$1" 2>/dev/null || stat -f '%u:%Lp' "$1" 2>/dev/null; }
+# <env 文件> <键>：最后一次赋值（与 systemd EnvironmentFile 同语义），不存在输出空。
+check_env_value() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tail -n 1 | sed -e "s/^'\(.*\)'$/\1/" -e 's/^"\(.*\)"$/\1/'; }
+# <URL>：经本机 nginx 取对外文件（调用方 --resolve 到 127.0.0.1）。只核内容与状态码，证书有效期/信任链不在此项
+# （-k；私有 CA 的 IP 主控同样可查），失败返回非 0。
+check_fetch() { curl -fsS --connect-timeout 3 --max-time 10 -k "$@"; }
+
+# install-node.sh load_console_defaults 同款逐行校验（键与值格式一致；未知键 install-node.sh 直接拒绝）。
+# gateway_endpoints：空格分隔的 地址|服务名|grpc或ws[|隧道主机]，最多 8 项。
+check_gateway_endpoints_value() {
+  local entry address server transport tunnel extra n=0
+  for entry in $1; do
+    n=$((n + 1))
+    IFS='|' read -r address server transport tunnel extra <<<"$entry"
+    [ -z "$extra" ] && [[ "$address" =~ ^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$ ]] &&
+      [[ "$server" =~ ^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$ ]] && [[ "${transport:-grpc}" =~ ^(grpc|ws)$ ]] &&
+      { [ -z "$tunnel" ] || [[ "$tunnel" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]]; } || return 1
+  done
+  [ "$n" -le 8 ]
+}
+
+check_node_install_defaults_lines() {
+  local key value
+  while IFS='=' read -r key value; do
+    case "$key" in
+      upgrade_trust_sha256) [[ "$value" =~ ^[0-9a-f]{64}$ ]] || return 1 ;;
+      gateway_enrollment_address|gateway_address) [[ "$value" =~ ^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$ ]] || return 1 ;;
+      gateway_server_name) [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$ ]] || return 1 ;;
+      gateway_transport) [[ "$value" =~ ^(grpc|ws)$ ]] || return 1 ;;
+      gateway_tunnel_host) [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || return 1 ;;
+      # install-node.sh 的同名正则在 bash 5 上被拆成两段 alternation、几乎不校验（交 ih-node）；这里用可移植写法逐项校验。
+      gateway_endpoints) check_gateway_endpoints_value "$value" || return 1 ;;
+      download_fallback_origin) [[ "$value" =~ ^https://[^/?#@[:space:]]+$ ]] || return 1 ;;
+      ''|'#'*) ;;
+      *) return 1 ;;
+    esac
+  done
+}
+
+# 节点可用网关入口（Q20）：node-install-defaults 的首选入口要真能到网关。ws：本机管理端 nginx 的 /agent/v1/enroll
+# 转到网关（非 WebSocket 请求网关答 400 "websocket upgrade required"；404/502 = 没转到）；grpc：入口端口在本机监听。
+# 备用 grpc 入口同样核端口。经 CDN 的外层（DNS、CDN 回源）本机核不到，汇总里提示。
+check_port_listening() { ss -Hltn "sport = :$1" 2>/dev/null | grep -q .; }
+check_gateway_entry() { # <node-install-defaults 内容> <管理端 nginx 端口>
+  local body=$1 web_port=$2 transport address tunnel entry endpoint_address endpoint_transport code
+  transport=$(sed -n 's/^gateway_transport=//p' <<<"$body"); transport=${transport:-grpc}
+  address=$(sed -n 's/^gateway_address=//p' <<<"$body")
+  tunnel=$(sed -n 's/^gateway_tunnel_host=//p' <<<"$body")
+  if [ "$transport" = ws ]; then
+    code=$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 -H "Host: ${tunnel:-${address%:*}}" \
+      "https://127.0.0.1:${web_port}/agent/v1/enroll" 2>/dev/null) || code=000
+    [ "$code" = 400 ] || { printf 'ws %s /agent/v1/enroll HTTP %s' "$address" "$code"; return 1; }
+  else
+    check_port_listening "${address##*:}" || { printf 'grpc %s not listening' "$address"; return 1; }
+  fi
+  for entry in $(sed -n 's/^gateway_endpoints=//p' <<<"$body"); do
+    IFS='|' read -r endpoint_address _ endpoint_transport _ <<<"$entry"
+    [ "${endpoint_transport:-grpc}" = grpc ] || continue
+    case "${endpoint_address%:*}" in "$(sed -n 's/^gateway_server_name=//p' <<<"$body")"|127.0.0.1|localhost) ;; *) continue ;; esac
+    check_port_listening "${endpoint_address##*:}" || { printf 'fallback grpc %s not listening' "$endpoint_address"; return 1; }
+  done
+  printf '%s %s' "$transport" "$address"
+}
+
+check_main() {
+  local unit origin port body trust_digest defaults_digest key value missing env_files
+  CHECK_FAILED=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h|--help) printf '%s\n' "$(msg '用法: install-control.sh check —— 核对已安装主控（单元、就绪、节点安装合同、权限），有失败项时退出码 1' 'Usage: install-control.sh check - verify an installed control plane (units, readiness, node install contract, permissions); exits 1 on any failure')"; return 0 ;;
+      *) fail "unsupported option for check: $1" ;;
+    esac
+  done
+  ok() { printf 'OK   %s\n' "$*"; }
+  bad() { printf 'FAIL %s\n' "$*"; CHECK_FAILED=$((CHECK_FAILED + 1)); }
+  [ -f "${CONFIG_DIR}/control.env" ] || fail "$(msg "没有 ${CONFIG_DIR}/control.env：本机未安装主控" "${CONFIG_DIR}/control.env missing: no control plane is installed here")"
+  for unit in "$SERVICE_NAME" "$GATEWAY_SERVICE_NAME" "$NATS_SERVICE_NAME" "$WEB_SERVICE_NAME" cdnca-native-control-upgrade-runner cdnca-control-backup.timer; do
+    if systemctl is-active --quiet "$unit"; then ok "$unit active"; else bad "$unit $(msg '不是 active' 'is not active')"; fi
+  done
+  if check_fetch http://127.0.0.1:8080/health/ready >/dev/null; then ok 'control-api /health/ready'; else bad 'control-api /health/ready'; fi
+  if check_fetch http://127.0.0.1:8082/health/ready >/dev/null; then ok 'agent-gateway /health/ready'; else bad 'agent-gateway /health/ready'; fi
+  if [ "$(jq -r '"\(.ready) \(.reason)"' "$UPGRADE_STATUS_FILE" 2>/dev/null)" = 'true ready' ]; then ok "$(msg '升级 runner 就绪' 'upgrade runner ready')"
+  else bad "$(msg "升级 runner 未就绪（$UPGRADE_STATUS_FILE）" "upgrade runner not ready ($UPGRADE_STATUS_FILE)")"; fi
+  if grep -Fxq step=done "$CONTROL_INSTALL_STATE_FILE" 2>/dev/null; then ok "$(msg '安装记录已完成' 'install record finished')"
+  else bad "$(msg "安装记录未完成（$CONTROL_INSTALL_STATE_FILE 无 step=done）：安装没有走完" "install record unfinished ($CONTROL_INSTALL_STATE_FILE has no step=done): the installation did not complete")"; fi
+  # 对外合同经本机 nginx 取（与节点、浏览器同一路径）：管理端源站来自 control.env。
+  origin=$(check_env_value "${CONFIG_DIR}/control.env" PAYMENT_CHANNELS_NOTIFY_BASE)
+  port=$(sed -n 's/^ *listen \([0-9.:]*\) ssl.*/\1/p' "$NGINX_CONF" 2>/dev/null | head -n 1)
+  port=${port##*:}
+  local -a via=()
+  if [[ "$origin" =~ ^https://([^/:]+|\[[^]]+\])(:[0-9]+)?$ ]] && [ -n "$port" ]; then
+    via=(--resolve "${BASH_REMATCH[1]//[\[\]]/}:${port}:127.0.0.1")
+    origin="https://${BASH_REMATCH[1]}:${port}"
+  fi
+  trust_digest=$(sha256sum "${DOWNLOAD_DIR}/edge-agent/upgrade-trust.json" 2>/dev/null | awk '{print $1}')
+  if [ "$(check_env_value "${CONFIG_DIR}/control.env" EDGE_SIGNER_TRUST_ENABLED)" = true ]; then
+    if body=$(check_fetch ${via[@]+"${via[@]}"} "$origin/downloads/edge-agent/signer-trust.json"); then
+      if jq -e '.document.trusted_keys | any(.[]; (.usage // "installation-ban") == "installation-ban")' <<<"$body" >/dev/null 2>&1; then
+        ok "$(msg 'signer-trust.json 200，含 installation-ban 公钥' 'signer-trust.json 200 with an installation-ban key')"
+      else bad "$(msg 'signer-trust.json 不含 usage=installation-ban 的公钥（节点安装会被拒）' 'signer-trust.json has no usage=installation-ban key (node installs are refused)')"; fi
+    else bad "$(msg 'signer-trust.json 取不到：授权端尚未发布签名者信任文档，或主控未同步（control-api signer-revocation import-edge-trust）' 'signer-trust.json unavailable: the licensing server has not published the signer trust document, or the control plane has not synced it')"; fi
+  else ok "$(msg 'signer-trust.json 不适用（社区版，EDGE_SIGNER_TRUST_ENABLED 未开）' 'signer-trust.json not applicable (community build)')"; fi
+  local defaults_body=''
+  if body=$(check_fetch ${via[@]+"${via[@]}"} "$origin/downloads/node-install-defaults"); then
+    defaults_body=$body
+    missing=''
+    for key in upgrade_trust_sha256 gateway_enrollment_address gateway_address gateway_server_name; do grep -q "^$key=" <<<"$body" || missing="$missing $key"; done
+    defaults_digest=$(sed -n 's/^upgrade_trust_sha256=//p' <<<"$body")
+    if [ -n "$missing" ]; then bad "node-install-defaults $(msg '缺' 'lacks')$missing"
+    elif ! check_node_install_defaults_lines <<<"$body"; then
+      bad "$(msg 'node-install-defaults 有 install-node.sh 不认的行' 'node-install-defaults has lines install-node.sh rejects')"
+    elif [ "$defaults_digest" != "$trust_digest" ]; then bad "$(msg 'node-install-defaults 的 upgrade_trust_sha256 与 upgrade-trust.json 不一致' 'node-install-defaults upgrade_trust_sha256 does not match upgrade-trust.json')"
+    else ok "$(msg 'node-install-defaults 200，字段合法且与 upgrade-trust.json 一致' 'node-install-defaults 200, valid and pinned to upgrade-trust.json')"; fi
+  else bad "$(msg 'node-install-defaults 取不到（节点复制命令会失败）' 'node-install-defaults unavailable (copied node commands fail)')"; fi
+  if [ -n "${defaults_body:-}" ]; then
+    if value=$(check_gateway_entry "$defaults_body" "${port:-443}"); then ok "$(msg "节点网关入口可用：$value" "node Gateway entry reachable: $value")"
+    else bad "$(msg "节点网关入口不可用：$value" "node Gateway entry unreachable: $value")"; fi
+  else bad "$(msg '节点网关入口无法核对（node-install-defaults 取不到）' 'node Gateway entry not verified (node-install-defaults unavailable)')"; fi
+  if body=$(check_fetch ${via[@]+"${via[@]}"} "$origin/runtime-config.js") && grep -q '^window.__CDNCA_GATEWAY_ADDRESS__ = ' <<<"$body" &&
+    [ "$(sed -n 's/^window.__CDNCA_NODE_UPGRADE_TRUST_SHA256__ = "\([0-9a-f]\{64\}\)";$/\1/p' <<<"$body")" = "$trust_digest" ]; then
+    ok "$(msg 'runtime-config.js 200，节点升级信任摘要一致' 'runtime-config.js 200, node upgrade trust digest matches')"
+  else bad "$(msg 'runtime-config.js 取不到或节点升级信任摘要不一致' 'runtime-config.js unavailable or its node upgrade trust digest differs')"; fi
+  if [ "$(file_owner_mode "$CONTROL_SUMMARY_FILE")" = "$CHECK_OWNER_UID:600" ]; then ok "$(msg "安装汇总 $CONTROL_SUMMARY_FILE（root 0600）" "install summary $CONTROL_SUMMARY_FILE (root 0600)")"
+  else bad "$(msg "安装汇总 $CONTROL_SUMMARY_FILE 不存在或不是 root 0600" "install summary $CONTROL_SUMMARY_FILE missing or not root 0600")"; fi
+  if [ -e "$ORIGIN_AUTH_SECRET_FILE" ] || [ -e "$ORIGIN_AUTH_CONF" ]; then
+    if [ "$(file_owner_mode "$ORIGIN_AUTH_SECRET_FILE")" != "$CHECK_OWNER_UID:600" ]; then bad "$ORIGIN_AUTH_SECRET_FILE $(msg '不存在或不是 root 0600' 'missing or not root 0600')"
+    elif [ "$(file_owner_mode "$ORIGIN_AUTH_CONF")" != "$CHECK_OWNER_UID:600" ]; then bad "$ORIGIN_AUTH_CONF $(msg '不存在或不是 root 0600' 'missing or not root 0600')"
+    elif ! grep -qxF "    include ${ORIGIN_AUTH_CONF};" "$NGINX_CONF" 2>/dev/null; then bad "$NGINX_CONF $(msg '未 include origin-auth.conf' 'does not include origin-auth.conf')"
+    else ok "$(msg 'CDN 回源鉴权文件 root 0600 且已生效' 'CDN origin authentication files root 0600 and active')"; fi
+  else ok "$(msg 'CDN 回源鉴权未启用（只用 TCP 对端）' 'CDN origin authentication off (TCP peer only)')"; fi
+  printf '%s\n' "$(msg "核对完成：失败 ${CHECK_FAILED} 项" "check finished: ${CHECK_FAILED} failed")"
+  [ "$CHECK_FAILED" -eq 0 ]
+}
+
 setup_backup_agent() {
   install -d -m 0755 "${INSTALL_ROOT}/support"
   install -m 0700 "$NATIVE_SUPPORT/scripts/native-runtime/install-ubuntu-dependencies.sh" \
@@ -5167,10 +6011,30 @@ MIGRATE_SSH_PORT=22
 MIGRATE_SSH_KEY=""
 MIGRATE_DEPENDENCIES_SCRIPT=""
 MIGRATE_WAIT_NODES=0s
+MIGRATE_GATEWAY_HOST=""
 MIGRATE_STAGE=/var/lib/cdnca-control-backup/migrate-in
 MIGRATE_SSH=()
 
 migrate_usage() {
+  if [ "${INSTALL_LANG:-zh}" = en ]; then
+    cat <<'EOF'
+Usage: install-control.sh migrate-from root@old-control [options]
+  Run on the fresh new control host: freeze the old control plane -> encrypted backup -> transfer -> install the same
+  dependency versions -> restore -> verify.
+  The old control plane stays frozen (control-api/Gateway stopped and disabled); to switch back run on it
+  /data/cdnca-native-root/cdnca/current/bin/control-api native-backup unfreeze
+  --ssh-port PORT                 Old control SSH port, default 22
+  --ssh-key FILE                  Private key for the old control host (default ssh-agent / ~/.ssh)
+  --dependencies-script FILE      install-ubuntu-dependencies.sh from the same signed release when the old host did not keep it
+  --wait-nodes DURATION           Wait for nodes to reconnect after the restore (e.g. 10m); default no wait
+  --gateway-host HOST             This host's IP or name as nodes reach it; needed only when the old Gateway is
+                                  published by IP (default: this host's public IP when the old Gateway is an IP)
+  --env auto|bt|plain             Environment of this (new) host; auto (default) uses BaoTa mode when the panel is found
+  --keep-unattended-upgrades      Keep automatic system updates (default disables them, as in a fresh install)
+  -y, --yes                       Continue without asking when the preflight only has warnings
+EOF
+    return 0
+  fi
   cat <<'EOF'
 用法: install-control.sh migrate-from root@旧主控 [选项]
   在全新的新主控上执行：冻结旧主控 → 加密备份 → 传输 → 安装同版本依赖 → 恢复 → 校验。
@@ -5180,6 +6044,8 @@ migrate_usage() {
   --ssh-key FILE                  登录旧主控的私钥（默认使用 ssh-agent / ~/.ssh）
   --dependencies-script FILE      旧主控没有保存依赖安装脚本时，提供同版本签名包里的 install-ubuntu-dependencies.sh
   --wait-nodes DURATION           恢复后等待节点重连（如 10m），默认不等待
+  --gateway-host HOST             节点访问本机网关用的 IP 或域名；仅旧网关按 IP 发布时需要
+                                  （默认：旧网关是 IP 时取本机公网 IP）
   --env auto|bt|plain             本机（新主控）环境；auto（默认）检测到宝塔面板即按宝塔环境预检与安装依赖
   --keep-unattended-upgrades      保留系统自动更新（默认停用，同全新安装）
   -y, --yes                       安装前检测只有“警告”时不再询问
@@ -5198,6 +6064,7 @@ migrate_parse_args() {
       --ssh-key) need_value "$@"; MIGRATE_SSH_KEY=$2; shift 2 ;;
       --dependencies-script) need_value "$@"; MIGRATE_DEPENDENCIES_SCRIPT=$2; shift 2 ;;
       --wait-nodes) need_value "$@"; MIGRATE_WAIT_NODES=$2; shift 2 ;;
+      --gateway-host) need_value "$@"; MIGRATE_GATEWAY_HOST=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]'); shift 2 ;;
       --env) need_value "$@"; INSTALL_ENV=$2; shift 2 ;;
       --keep-unattended-upgrades) KEEP_UNATTENDED_UPGRADES=true; shift ;;
       -y|--yes) ASSUME_YES=true; shift ;;
@@ -5207,6 +6074,24 @@ migrate_parse_args() {
   done
   valid_port "$MIGRATE_SSH_PORT" || fail 'invalid --ssh-port'
   [[ "$MIGRATE_WAIT_NODES" =~ ^[0-9]+[smh]$ ]] || fail 'invalid --wait-nodes'
+  [ -z "$MIGRATE_GATEWAY_HOST" ] || valid_host "$MIGRATE_GATEWAY_HOST" || fail 'invalid --gateway-host'
+}
+
+# migrate_gateway_host decides whether nodes must be moved to a new Gateway
+# address (migrate-ip): only when the old Gateway is published by IP (a
+# domain follows the DNS switch). Prints the new host or nothing.
+migrate_gateway_host() {
+  local old_endpoint old_host
+  old_endpoint=$(migrate_remote "awk -F= '\$1==\"CDNCA_GATEWAY_AGENT_PUBLIC_ENDPOINT\"{print \$2}' /etc/cdnca-control/gateway.env") || return 0
+  old_host=${old_endpoint%:*}
+  old_host=${old_host#[}
+  old_host=${old_host%]}
+  [[ "$old_host" =~ ^[0-9]+(\.[0-9]+){3}$ || "$old_host" == *:* ]] || return 0
+  local new_host=$MIGRATE_GATEWAY_HOST
+  [ -n "$new_host" ] || new_host=$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || true)
+  valid_host "$new_host" || return 1
+  [ "$new_host" != "$old_host" ] || return 0
+  printf '%s' "$new_host"
 }
 
 migrate_main() {
@@ -5256,6 +6141,17 @@ migrate_main() {
   local recipient backup_id
   rm -f "$MIGRATE_STAGE/identity"
   recipient=$("$MIGRATE_STAGE/control-api" native-backup new-identity --file "$MIGRATE_STAGE/identity") || fail 'cannot create the receive identity'
+  local gateway_host gateway_args=()
+  gateway_host=$(migrate_gateway_host) ||
+    fail "$(msg '旧网关按 IP 发布，无法确定本机公网 IP：请加 --gateway-host <本机IP>' 'the old Gateway is published by IP and the public IP of this host is unknown: pass --gateway-host <this host IP>')"
+  if [ -n "$gateway_host" ]; then
+    # Before the freeze: online nodes learn the new address from the old
+    # Gateway and follow it once the old host stops.
+    log "$(msg "旧网关按 IP 发布：先让在线节点学到新网关地址 ${gateway_host}" "the old Gateway is published by IP: online nodes learn the new Gateway address ${gateway_host} first")"
+    migrate_remote "$old_binary native-backup announce-gateway --host $gateway_host --wait 2m" ||
+      fail 'announcing the new Gateway address on the old control plane failed; nothing was frozen'
+    gateway_args=(--gateway-host "$gateway_host")
+  fi
   log 'freezing the old control plane and taking the migration backup (the old console stops now)'
   backup_id=$(migrate_remote "$old_binary native-backup create --reason migration --hold --recipient $recipient" | jq -er .backup_id) ||
     fail 'migration backup on the old control plane failed; it was restarted'
@@ -5268,7 +6164,7 @@ migrate_main() {
     tar -C "/var/lib/cdnca-control-backup/bundles/$backup_id" -xf - || { migrate_rollback; fail 'bundle transfer failed'; }
   log "restoring ${backup_id}"
   if ! "$MIGRATE_STAGE/control-api" native-backup restore --bundle "/var/lib/cdnca-control-backup/bundles/$backup_id" \
-    --signer "$signer" --identity "$MIGRATE_STAGE/identity"; then
+    --signer "$signer" --identity "$MIGRATE_STAGE/identity" ${gateway_args[@]+"${gateway_args[@]}"}; then
     migrate_rollback
     fail 'restore failed and was compensated on this host'
   fi
@@ -5277,21 +6173,25 @@ migrate_main() {
     --bundle "/var/lib/cdnca-control-backup/bundles/$backup_id" --wait-nodes "$MIGRATE_WAIT_NODES"; then
     fail 'restored, but verification failed; the old control plane stays frozen - inspect journalctl -u cdnca-control-api'
   fi
-  log '迁移完成。下一步：把管理端与 Gateway 域名的 DNS 改到本机，节点会自动重连；在授权门户把主控 IP 改为本机。'
-  log "切换 DNS 后最长 10 分钟，本机 control-api 自动按新地址重新发布节点安装信任文档（控制台节点安装命令随之更新）；也可立即执行 /data/cdnca-native-root/cdnca/current/bin/control-api native-backup verify-migration --bundle /var/lib/cdnca-control-backup/bundles/$backup_id"
+  log "$(msg '迁移完成。下一步：把管理端与 Gateway 域名的 DNS 改到本机，节点会自动重连；在授权门户把主控 IP 改为本机。' 'migration finished. Next: point the console and Gateway DNS names at this host (nodes reconnect automatically) and change the control IP to this host in the license portal.')"
+  log "$(msg '切换 DNS 后最长 10 分钟，本机 control-api 自动按新地址重新发布节点安装信任文档（控制台节点安装命令随之更新）；也可立即执行' 'within 10 minutes of the DNS switch control-api republishes the node install trust document for the new address (the console node install command follows); or run now:') /data/cdnca-native-root/cdnca/current/bin/control-api native-backup verify-migration --bundle /var/lib/cdnca-control-backup/bundles/$backup_id"
   if [ "$INSTALL_ENV" = bt ]; then
     # 恢复时 control-api 已按端口档案写好 bt-proxy.conf（与全新安装同文）。
-    log "宝塔环境：管理端网页只监听 127.0.0.1:${WEB_PORT}；请在宝塔为管理端域名建站点并配置反向代理，配置见 ${CONFIG_DIR}/bt-proxy.conf"
+    log "$(msg "宝塔环境：管理端网页只监听 127.0.0.1:${WEB_PORT}；请在宝塔为管理端域名建站点并配置反向代理，配置见 ${CONFIG_DIR}/bt-proxy.conf" "BaoTa environment: the console web listens only on 127.0.0.1:${WEB_PORT}; create a BaoTa site for the console domain and configure the reverse proxy, see ${CONFIG_DIR}/bt-proxy.conf")"
   fi
-  log "确认无误前旧主控保持冻结；回切：在旧主控管理端“回退到本机”（或执行 $old_binary native-backup unfreeze），再在本机执行 $MIGRATE_STAGE/control-api native-backup clean-target --bundle /var/lib/cdnca-control-backup/bundles/$backup_id --signer <旧主控签名指纹>"
+  log "$(msg "确认无误前旧主控保持冻结；回切：在旧主控管理端“回退到本机”（或执行 $old_binary native-backup unfreeze），再在本机执行 $MIGRATE_STAGE/control-api native-backup clean-target --bundle /var/lib/cdnca-control-backup/bundles/$backup_id --signer <旧主控签名指纹>" "the old control plane stays frozen until you confirm; to switch back use \"Fall back to this host\" in the old console (or run $old_binary native-backup unfreeze), then run here $MIGRATE_STAGE/control-api native-backup clean-target --bundle /var/lib/cdnca-control-backup/bundles/$backup_id --signer <old control signing fingerprint>")"
 }
 
 main() {
+  install_lang_init "$@"
+  set -- ${INSTALL_ARGS[@]+"${INSTALL_ARGS[@]}"}
+  [ "${1:-}" != origin-auth ] || { shift; origin_auth_main "$@"; return; }
   [ "${1:-}" != migrate-from ] || { shift; migrate_main "$@"; return; }
   [ "${1:-}" != enable-gateway-access ] || { shift; gateway_access_main "$@"; return; }
   [ "${1:-}" != --cleanup-failed ] || { shift; cleanup_failed_main "$@"; return; }
   ! gateway_mode_requested "$@" || { INSTALL_MODE=gateway; gateway_main "$@"; return; }
   parse_args "$@"
+  install_lang_prompt
   # Validate the values that do not require host utilities before attempting
   # dependency installation.  normalise_defaults intentionally runs only
   # after openssl/uuidgen/etc. are available.
@@ -5324,6 +6224,7 @@ main() {
   configure_runtime_dependencies
   progress_stage
   prepare_native_baseline
+  assert_control_binary_matches_installer
   generate_identity
   issue_public_certificate
   generate_pki
@@ -5352,6 +6253,7 @@ main() {
   bootstrap_admin
   bootstrap_node_ca
   bootstrap_system_configuration
+  seed_gateway_ws_entrypoint
   progress_stage
   configure_selinux
   setup_gateway_access_firewall
@@ -5370,6 +6272,7 @@ main() {
   control_install_state_done
   log 'cdnca community edition installed and ready'
   log "to buy on the node/plugin market, register once (free portal account): ${CONTROL_BINARY} community-register --account <portal account> --password-stdin"
+  control_install_summary
   progress_done
 }
 

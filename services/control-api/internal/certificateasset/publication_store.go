@@ -5,6 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strings"
 	"time"
@@ -111,7 +112,8 @@ func (store *PublicationIntentStore) ClaimPublicationIntent(
 			  AND state.binding_revision=intent.binding_revision
 			ORDER BY sequence DESC LIMIT 1
 		) latest ON true
-		WHERE ((latest.state IN ('pending','retry_wait') AND latest.attempt<$1
+		WHERE ((latest.state IN ('pending','retry_wait')
+		         AND latest.attempt-(`+publicationDeferredAttemptsSQL+`)<$1
 		         AND latest.next_attempt_at<=transaction_timestamp())
 		    OR (latest.state='leased' AND latest.lease_expires_at<=transaction_timestamp()))
 		  AND NOT EXISTS (
@@ -177,7 +179,8 @@ func (store *PublicationIntentStore) CompletePublicationIntent(
 	lease PublicationIntentLease,
 	result PublicationResult,
 ) error {
-	if !validPublicationResult(result) || result.Outcome != PublicationAck {
+	if !validPublicationResult(result) || result.Outcome != PublicationAck ||
+		(result.NoopReason != "" && lease.Operation != "unpublish") {
 		return ErrInvalidInput
 	}
 	return store.settlePublicationIntent(ctx, lease, "succeeded", "", 0, result)
@@ -188,19 +191,78 @@ func (store *PublicationIntentStore) FailPublicationIntent(
 	lease PublicationIntentLease,
 	failureCode string,
 ) error {
-	if store == nil || !validPublicationFailureCode(failureCode) {
+	if store == nil || store.pool == nil || ctx == nil || !validPublicationFailureCode(failureCode) ||
+		!validPublicationIntentLease(lease) {
 		return ErrInvalidInput
 	}
+	// Attempts deferred because a node was busy with another deployment are
+	// not failures (demo-fill 11-01: a certificate publication racing the
+	// site's own publication spent its retries on "node already has an
+	// active deployment"). Only the rest count toward MaxAttempts.
+	var deferred int
+	var databaseNow time.Time
+	if err := store.pool.QueryRow(ctx, `SELECT (`+publicationDeferredAttemptsSQL+`),transaction_timestamp()
+		FROM (SELECT $1::uuid AS tenant_scope_id,$2::uuid AS site_id,$3::bigint AS binding_revision) intent`,
+		lease.TenantScopeID, lease.SiteID, lease.BindingRevision).Scan(&deferred, &databaseNow); err != nil {
+		return fmt.Errorf("count deferred certificate publication attempts: %w", err)
+	}
 	state := "retry_wait"
-	delay, err := publicationIntentRetryDelay(store.config, lease.Attempt, store.config.Jitter)
-	if err != nil {
+	var delay time.Duration
+	var err error
+	if failureCode == PublicationFailureNodeBusy {
+		// its own short backoff, bounded by the intent's deadline instead of
+		// the attempt limit: past it, the wait ends with this cause
+		delay, err = publicationIntentRetryDelay(publicationBusyRetryConfig(store.config), deferred+1, store.config.Jitter)
+		if err != nil {
+			return err
+		}
+		if !lease.Deadline.After(databaseNow.Add(delay)) {
+			state, delay = "permanent_failed", 0
+		}
+	} else {
+		counted := lease.Attempt - deferred
+		delay, err = publicationIntentRetryDelay(store.config, max(counted, 1), store.config.Jitter)
+		if err != nil {
+			return err
+		}
+		if counted >= store.config.MaxAttempts {
+			state, delay = "permanent_failed", 0
+		}
+	}
+	if err := store.settlePublicationIntent(ctx, lease, state, failureCode, delay, PublicationResult{}); err != nil {
 		return err
 	}
-	if lease.Attempt >= store.config.MaxAttempts {
-		state = "permanent_failed"
-		delay = 0
+	if state == "permanent_failed" {
+		// the retry limit (or, for a busy node, the deadline) is reached: the
+		// intent fails with the last cause
+		slog.Error("certificate publication retries exhausted", "event", "certificate_publication_retries_exhausted",
+			"failure_code", failureCode, "attempt", lease.Attempt, "deferred_attempts", deferred,
+			"max_attempts", store.config.MaxAttempts, "tenant_scope_id", lease.TenantScopeID.String(),
+			"site_id", lease.SiteID.String(), "binding_revision", lease.BindingRevision)
 	}
-	return store.settlePublicationIntent(ctx, lease, state, failureCode, delay, PublicationResult{})
+	return nil
+}
+
+// PublicationFailureNodeBusy: a target node runs another deployment of the
+// scope (edgedeployment.ErrNodeDeploymentActive). The intent waits for it;
+// the attempt does not count toward MaxAttempts.
+const PublicationFailureNodeBusy = "publication_node_busy"
+
+// publicationBusyRetryMaximum bounds the wait between busy-node attempts:
+// the other deployment usually settles within the activation timeout.
+const publicationBusyRetryMaximum = 30 * time.Second
+
+// publicationDeferredAttemptsSQL counts the intent row aliased `intent`'s
+// attempts that ended deferred on a busy node.
+const publicationDeferredAttemptsSQL = `SELECT count(*) FROM certificate_publication_intent_state_facts deferred
+	WHERE deferred.tenant_scope_id=intent.tenant_scope_id AND deferred.site_id=intent.site_id
+	  AND deferred.binding_revision=intent.binding_revision AND deferred.state='retry_wait'
+	  AND deferred.failure_code='` + PublicationFailureNodeBusy + `'`
+
+func publicationBusyRetryConfig(config PublicationIntentStoreConfig) PublicationIntentStoreConfig {
+	config.RetryMaximum = min(config.RetryMaximum, publicationBusyRetryMaximum)
+	config.RetryBase = min(config.RetryBase, config.RetryMaximum)
+	return config
 }
 
 func (store *PublicationIntentStore) PermanentlyFailPublicationIntent(
@@ -275,14 +337,14 @@ func (store *PublicationIntentStore) settlePublicationIntent(
 		_, err = tx.Exec(ctx, `INSERT INTO certificate_publication_intent_state_facts(
 			tenant_scope_id,site_id,binding_revision,sequence,state,attempt,idempotency_key,
 			lease_owner,lease_token,lease_expires_at,next_attempt_at,failure_code,occurred_at,
-			publication_id,publication_revision,config_version_id,rollout_id,rollout_revision
-		) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+			publication_id,publication_revision,config_version_id,rollout_id,rollout_revision,noop_reason
+		) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
 			lease.TenantScopeID, lease.SiteID, lease.BindingRevision, stored.StateSequence+1,
 			state, lease.Attempt, lease.IdempotencyKey, lease.WorkerID, lease.Token,
 			lease.ExpiresAt, nextAttemptAt, nullablePublicationFailureCode(failureCode), databaseNow,
 			nullablePublicationUUID(result.PublicationID), nullablePublicationRevision(result.PublicationRevision),
 			nullablePublicationUUID(result.ConfigVersionID), nullablePublicationUUID(result.RolloutID),
-			nullablePublicationRevision(result.RolloutRevision),
+			nullablePublicationRevision(result.RolloutRevision), nullablePublicationFailureCode(result.NoopReason),
 		)
 		if err != nil || state == "retry_wait" {
 			return err
@@ -333,6 +395,9 @@ func appendPublicationCompleteAudit(
 	if state == "permanent_failed" {
 		outcome = "failure"
 		payload["reason_code"] = failureCode
+	} else if result.NoopReason != "" {
+		// completed without a rollout: nothing was on the nodes to remove
+		payload["noop_reason"] = result.NoopReason
 	} else {
 		payload["rollout_id"] = result.RolloutID.String()
 		payload["rollout_revision"] = result.RolloutRevision

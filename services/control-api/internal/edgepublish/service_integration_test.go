@@ -13,8 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,7 +28,6 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/apikeycredential"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/cachecontrol"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish/capabilitytest"
@@ -1961,55 +1958,8 @@ func sameRuntimeOrigins(published []siteRuntimeV2Origin, expected []fixtureOrigi
 // the release head (a clone of TEST_DATABASE_TEMPLATE when it is set).
 func openPublishTestDatabase(t *testing.T, migrate bool) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
 	if migrate {
-		if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-			return pool
-		}
+		return databasetest.MigratedPool(t, nil)
 	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := admin.Ping(ctx); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	schema := "edge_publish_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^edge_publish_test_[a-f0-9]{32}$`).MatchString(schema) {
-		t.Fatalf("unsafe schema name %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop edge publish schema: %v", err)
-		}
-		admin.Close()
-	})
-	if migrate {
-		if err := database.Migrate(ctx, pool, "up"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return pool
+	return databasetest.FreshSchemaPool(t, "edge_publish_test", nil, nil)
 }

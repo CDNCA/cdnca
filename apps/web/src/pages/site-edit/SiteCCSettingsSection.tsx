@@ -91,8 +91,10 @@ function durationFromDraft(mode: DurationMode, seconds: number): SecurityPolicyC
  * fix-siteautodef: `part` shows only 自动切换 (the site's 自动防御 tab) or only the advanced settings (CC防护 tab);
  * either part still saves the whole cc_settings built from its draft, as before.
  */
-export function SiteCCSettingsSection({ policy, accessToken, isAdmin, canManage, onPublish, publish, part }: {
+export function SiteCCSettingsSection({ policy, accessToken, isAdmin, canManage, onPublish, publish, part, onOpenDefault }: {
   policy: SecurityPolicy | undefined
+  /** 无规则集时「去选择 CC 默认防护」（自动防御标签用，切到 CC防护 标签并定位）。 */
+  onOpenDefault?: () => void
   accessToken: string
   isAdmin: boolean
   canManage: boolean
@@ -197,7 +199,8 @@ export function SiteCCSettingsSection({ policy, accessToken, isAdmin, canManage,
         ? t('crawlers.needVerify', { name: crawler.name.trim() }) : null).find(Boolean)
   }
 
-  if (!policy) return <Alert type="info" showIcon message={t(part === 'autoSwitch' ? 'noPolicyAutoSwitch' : 'noPolicy')} />
+  if (!policy) return <Alert type="info" showIcon message={t(part === 'autoSwitch' ? 'noPolicyAutoSwitch' : 'noPolicy')}
+    action={part === 'autoSwitch' && onOpenDefault ? <Button size="small" type="primary" onClick={onOpenDefault}>{t('openDefaultProtection')}</Button> : undefined} />
   const showAutoSwitch = part !== 'advanced'
   const showAdvanced = part !== 'autoSwitch'
   const stored = policy.cc_settings

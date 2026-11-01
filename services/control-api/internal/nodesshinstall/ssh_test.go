@@ -8,7 +8,7 @@ import (
 
 func TestInstallCommandQuotesAndSudo(t *testing.T) {
 	const key = "nrk1.0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	root, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge 'a'", true, false)
+	root, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge 'a'", true, false, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,12 +26,12 @@ func TestInstallCommandQuotesAndSudo(t *testing.T) {
 	if strings.Contains(root, "--node-region") {
 		t.Fatalf("the node takes its region from the control plane (fz-x12): %s", root)
 	}
-	sudo, _ := InstallCommand("https://console.example.com", key, "edge.example.net", "", false, true)
+	sudo, _ := InstallCommand("https://console.example.com", key, "edge.example.net", "", false, true, "", "")
 	if !strings.Contains(sudo, "&& sudo -S -p '' -v && printf '%s\\n' \"$k\" | sudo -n bash \"$d/install-node.sh\"") ||
 		strings.Contains(sudo, "--public-ip") {
 		t.Fatalf("sudo command: %s", sudo)
 	}
-	keyOnly, _ := InstallCommand("https://console.example.com", key, "203.0.113.7", "", false, false)
+	keyOnly, _ := InstallCommand("https://console.example.com", key, "203.0.113.7", "", false, false, "", "")
 	if strings.Contains(keyOnly, "sudo -S") || !strings.Contains(keyOnly, "| sudo -n bash") {
 		t.Fatalf("key login command: %s", keyOnly)
 	}
@@ -42,12 +42,12 @@ func TestInstallCommandQuotesAndSudo(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"http://console.example.com", "https://console.example.com/path", "https://a@b.example.com"} {
-		if _, err := InstallCommand(bad, key, "203.0.113.7", "", true, false); !errors.Is(err, ErrInvalidInput) {
+		if _, err := InstallCommand(bad, key, "203.0.113.7", "", true, false, "", ""); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("control plane %q accepted", bad)
 		}
 	}
 	for _, bad := range []string{"", key + "\n", "x'y"} {
-		if _, err := InstallCommand("https://console.example.com", bad, "203.0.113.7", "", true, false); !errors.Is(err, ErrInvalidInput) {
+		if _, err := InstallCommand("https://console.example.com", bad, "203.0.113.7", "", true, false, "", ""); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("registration key %q accepted", bad)
 		}
 	}

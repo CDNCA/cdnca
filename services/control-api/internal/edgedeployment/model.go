@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/google/uuid"
@@ -233,11 +235,14 @@ type DeploymentSnapshot struct {
 	MaxAttempts uint32
 	State       string
 	ErrorCode   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	CanRetry    bool
-	Cohort      int
-	Released    bool
+	// ErrorMessage is the node's failure text beside ErrorCode
+	// (DeploymentErrorMessage), "" without one.
+	ErrorMessage string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	CanRetry     bool
+	Cohort       int
+	Released     bool
 	// Superseded: the node ignored this old release (DeploymentSuperseded).
 	Superseded bool
 	// Frozen: the node refused it while frozen; redelivered once it unfreezes.
@@ -256,6 +261,10 @@ const (
 	// WarningDDoSProtection: the node DDoS protection table failed to apply
 	// or the node cannot run one (PJ-E03/E04).
 	WarningDDoSProtection = "ddos_protection_fault"
+	// WarningL4StreamDegraded: some L4 forwards of the release run degraded,
+	// their origin unreachable or unresolved; the release and
+	// the other forwards run.
+	WarningL4StreamDegraded = "l4_stream_degraded"
 )
 
 // Protocol error codes of an APPLY the node refused before activation, its
@@ -341,10 +350,59 @@ func DeploymentStatusError(payload []byte) (string, bool) {
 	return status.Error.Code.String(), status.RunningConfigUnchanged
 }
 
+// MaxDeploymentErrorMessageBytes bounds the node's failure text shown with a
+// deployment (the agent sends at most 512 bytes already).
+const MaxDeploymentErrorMessageBytes = 512
+
+// DeploymentErrorMessage is the node's own failure text of a failed status
+// payload: the protocol error's message, else the first failed
+// check's summary; control characters become spaces and the text is bounded
+// to MaxDeploymentErrorMessageBytes on a UTF-8 boundary. "" for a payload
+// without a failure or an undecodable one.
+func DeploymentErrorMessage(payload []byte) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	status := new(agentv1.DeploymentStatus)
+	if err := proto.Unmarshal(payload, status); err != nil {
+		return ""
+	}
+	message := status.GetError().GetMessage()
+	if message == "" && status.Error != nil {
+		for _, check := range status.Checks {
+			if check != nil && !check.Succeeded && check.Summary != "" {
+				message = check.Summary
+				break
+			}
+		}
+	}
+	return BoundedDeploymentMessage(message)
+}
+
+// BoundedDeploymentMessage collapses control characters and whitespace runs
+// to one space and cuts value to MaxDeploymentErrorMessageBytes.
+func BoundedDeploymentMessage(value string) string {
+	value = strings.Join(strings.Fields(strings.Map(func(character rune) rune {
+		if unicode.IsControl(character) || character == '\u2028' || character == '\u2029' {
+			return ' '
+		}
+		return character
+	}, strings.ToValidUTF8(value, ""))), " ")
+	if len(value) <= MaxDeploymentErrorMessageBytes {
+		return value
+	}
+	value = value[:MaxDeploymentErrorMessageBytes]
+	for !utf8.ValidString(value) {
+		value = value[:len(value)-1]
+	}
+	return value
+}
+
 // deploymentWarningChecks maps the failed agent checks to warnings.
 var deploymentWarningChecks = map[string]string{
 	"edge_post_activation_maintenance": WarningPostActivationMaintenance,
 	"edge_ddos_protection":             WarningDDoSProtection,
+	"edge_l4_streams":                  WarningL4StreamDegraded,
 }
 
 // DeploymentWarnings are the warnings of a deployment status payload (a

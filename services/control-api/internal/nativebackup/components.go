@@ -252,10 +252,13 @@ func (component postgresComponent) Preflight(ctx context.Context, host *Host, re
 	if err != nil {
 		return fmt.Errorf("restore_postgresql_unavailable: %w", err)
 	}
-	have, _ := strconv.Atoi(version)
-	want, _ := strconv.Atoi(record.Detail["server_version_num"])
-	if have/10000 != want/10000 || have < want {
-		return fmt.Errorf("restore_postgresql_version_mismatch:%s<%s", version, record.Detail["server_version_num"])
+	// pg_restore reads dumps of older servers, so a newer target (a later
+	// major included) restores the logical dump; an older one cannot.
+	have, haveErr := strconv.Atoi(version)
+	want, wantErr := strconv.Atoi(record.Detail["server_version_num"])
+	if haveErr != nil || wantErr != nil || have < want {
+		return fmt.Errorf("restore_postgresql_version_mismatch:%s<%s: the target PostgreSQL is older than the backup's; install PostgreSQL %d or later",
+			version, record.Detail["server_version_num"], want/10000)
 	}
 	occupied, err := component.psql(ctx, host, "postgres", "SELECT (SELECT count(*) FROM pg_database WHERE datname = '"+
 		target.Name+"') + (SELECT count(*) FROM pg_roles WHERE rolname LIKE '"+target.RolePrefix+"%')")

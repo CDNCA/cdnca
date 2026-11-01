@@ -189,7 +189,7 @@ func canonicalUUID(value string) bool {
 
 type ClickHouseFactWriter struct {
 	source *ClickHouseSource
-	// sessionLogs: l4_session_logs_v1 exists (NewClickHouseFactWriterWithSessionLogs).
+	// sessionLogs: also write l4_session_logs_v1 (NewClickHouseFactWriterWithSessionLogs).
 	sessionLogs bool
 }
 

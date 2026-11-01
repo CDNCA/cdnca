@@ -34,6 +34,9 @@ readonly NATIVE_ROOT="/opt/cdnca-node"
 readonly INSTALL_STATE_DIR="/var/lib/cdnca-node-install"
 readonly INSTALL_STATE_FILE="${INSTALL_STATE_DIR}/state"
 readonly INSTALL_STATE_SCHEMA="schema=cdnca.node-install-state/v1"
+# A root-only copy of this installer kept with the install record, so
+# `check` and --resume work after the copied command removed its temp file.
+readonly INSTALLER_COPY="${INSTALL_STATE_DIR}/install-node.sh"
 RESUME=false
 # Static Ed25519 tool (tools/ed25519-tool); same pin as install-control.sh. All
 # Ed25519 verification here and in packaging lib.sh uses it, not host OpenSSL.
@@ -107,21 +110,97 @@ INSTALL_KEEP=false
 PUBLIC_IP=''
 PUBLIC_IP_SOURCES=${CDNCA_PUBLIC_IP_SOURCES-'https://api.ipify.org https://ipv4.icanhazip.com https://ifconfig.me/ip https://4.ipw.cn'}
 
+# >>> BEGIN install-i18n (generated from scripts/lib/install-i18n.sh; do not edit here)
+# shellcheck shell=bash
+# CDNCA 安装器界面语言（中文 / English），四个安装器共用。
+#
+# 唯一源文件：install-control.sh、install-node.sh、install-auth.sh、install-site.sh 在
+# “BEGIN/END install-i18n” 标记之间逐字嵌入本文件，修改后运行
+#   node scripts/sync-install-preflight.mjs
+# 语言选择顺序：--lang zh|en（或 --lang=…）> 环境变量 CDNCA_INSTALL_LANG >
+# LC_ALL / LC_MESSAGES / LANG（zh* 为中文，其余英文）。未显式指定且在终端交互时，
+# install_lang_prompt 第一屏让用户选择。
+# 文案写法：msg '中文' 'English'，原样输出对应语言（不追加换行）。未调用
+# install_lang_init 时按中文输出，单独抽取函数的测试不受影响。
+# 只影响屏幕提示；参数、默认值、安装步骤与日志里的英文技术串都不变。
+
+INSTALL_LANG=${INSTALL_LANG:-}
+INSTALL_LANG_AUTO=false
+INSTALL_ARGS=()
+
+install_lang_normalise() {
+  case "$1" in
+    zh | zh[-_]* | cn) printf 'zh' ;;
+    en | en[-_]*) printf 'en' ;;
+    *) return 1 ;;
+  esac
+}
+
+# install_lang_init "$@"：确定语言，并把去掉 --lang 后的参数放进 INSTALL_ARGS。
+install_lang_init() {
+  local arg chosen='' expect=false
+  INSTALL_ARGS=()
+  for arg in "$@"; do
+    if "$expect"; then chosen=$arg expect=false; continue; fi
+    case "$arg" in
+      --lang) expect=true ;;
+      --lang=*) chosen=${arg#--lang=} ;;
+      *) INSTALL_ARGS+=("$arg") ;;
+    esac
+  done
+  if "$expect"; then
+    printf '%s\n' 'error: missing value for --lang (zh or en)' >&2
+    exit 2
+  fi
+  [ -n "$chosen" ] || chosen=${CDNCA_INSTALL_LANG:-}
+  if [ -n "$chosen" ]; then
+    INSTALL_LANG=$(install_lang_normalise "$chosen") || {
+      printf '%s\n' 'error: --lang / CDNCA_INSTALL_LANG must be zh or en' >&2
+      exit 2
+    }
+    INSTALL_LANG_AUTO=false
+    return 0
+  fi
+  case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
+    zh*) INSTALL_LANG=zh ;;
+    *) INSTALL_LANG=en ;;
+  esac
+  INSTALL_LANG_AUTO=true
+}
+
+# 交互安装第一屏：语言是自动判断的、stdin 与 stderr 都是终端时询问一次，回车用自动结果。
+install_lang_prompt() {
+  "$INSTALL_LANG_AUTO" && [ -t 0 ] && [ -t 2 ] || return 0
+  local answer default=1
+  [ "$INSTALL_LANG" = en ] && default=2
+  printf 'Language / 语言:  1) 中文   2) English  [%s]: ' "$default" >&2
+  IFS= read -r answer || answer=''
+  case "${answer:-$default}" in
+    1 | zh*) INSTALL_LANG=zh ;;
+    2 | en*) INSTALL_LANG=en ;;
+  esac
+  INSTALL_LANG_AUTO=false
+}
+
+msg() {
+  if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi
+}
+# <<< END install-i18n
 log() { printf '[cdnca-edge] %s\n' "$*"; }
 warn() { printf '[cdnca-edge] warning: %s\n' "$*" >&2; }
 fail() { printf '[cdnca-edge] error: %s\n' "$*" >&2; exit 1; }
-# 安装进度阶段（名称|最短秒|最长秒|标记），与 main 里的 progress_stage 一一对应。
+# 安装进度阶段（中文名^英文名|最短秒|最长秒|标记），与 main 里的 progress_stage 一一对应。
 PROGRESS_LABEL='[cdnca-edge]'
 PROGRESS_ROLE=node
 PROGRESS_STAGES=(
-  '环境预检并连接管理端|5|90|interactive'
-  '安装基础工具|10|150|'
-  '获取管理端证书与信任材料|5|60|'
-  '下载并校验节点安装包|20|240|'
-  '安装节点运行时|20|120|'
-  '注册节点并写入配置|5|60|'
-  '配置防火墙与内核参数|5|60|'
-  '启动服务并自检|15|100|'
+  '环境预检并连接管理端^Preflight checks and connect to management|5|90|interactive'
+  '安装基础工具^Install base tools|10|150|'
+  '获取管理端证书与信任材料^Fetch management certificate and trust material|5|60|'
+  '下载并校验节点安装包^Download and verify the node package|20|240|'
+  '安装节点运行时^Install the node runtime|20|120|'
+  '注册节点并写入配置^Enroll the node and write configuration|5|60|'
+  '配置防火墙与内核参数^Configure firewall and kernel parameters|5|60|'
+  '启动服务并自检^Start services and self-check|15|100|'
 )
 
 usage() {
@@ -130,13 +209,18 @@ CDNCA edge-agent installer (x86_64; Ubuntu 24.04 official; Ubuntu 22.04,
 Debian 12/13 and Rocky/AlmaLinux/RHEL 9/10 compatible)
 
 Usage: printf '%s\n' KEY | install-node.sh --control-plane URL --registration-key-stdin [options]
+       install-node.sh check [--lang zh|en]
+                               Read-only contract check of this installed node
+                               (services, KillMode, Gateway session, serving,
+                               OpenResty, signer trust); exit 1 on any failure
 
 Required:
   --control-plane URL          Management URL used for downloads and defaults
+  (optional) --lang zh|en      Screen language; default from CDNCA_INSTALL_LANG or LANG
   --registration-key-stdin     Read the reusable node registration key (one
                                line) from standard input, never from process
                                arguments; the host registers itself as a
-                               pending (待初始化) node and is initialized later
+                               pending node and is initialized later
   --enrollment-token-stdin     Read the one-time token from standard input
   --token TOKEN                One-time token from the copied short command
   --enrollment-token TOKEN     Same as --token (visible in process arguments)
@@ -253,14 +337,21 @@ parse_args() {
   done
 }
 
+# Resuming a host that already holds its Gateway identity (first run ended
+# installed_pending_initialization, RC 3) skips registration, so it needs no
+# credential: the same command plus --resume works with an empty stdin.
+RESUME_ENROLLED=false
 read_enrollment_token() {
+  local enrolled=false
+  if "$RESUME" && [ -f "${IDENTITY_DIR}/identity.json" ] && [ -z "$ENROLLMENT_TOKEN" ] && ! "$ENROLLMENT_TOKEN_STDIN"; then enrolled=true; fi
   if "$REGISTRATION_KEY_STDIN"; then
     { [ -z "$ENROLLMENT_TOKEN" ] && ! "$ENROLLMENT_TOKEN_STDIN"; } || fail 'choose either --registration-key-stdin or an enrollment token'
     local extra=""
-    IFS= read -r REGISTRATION_KEY || [ -n "$REGISTRATION_KEY" ] || fail 'registration key input is empty'
+    IFS= read -r REGISTRATION_KEY || true
+    if [ -z "$REGISTRATION_KEY" ]; then "$enrolled" && { RESUME_ENROLLED=true; return 0; }; fail 'registration key input is empty'; fi
     if IFS= read -r extra || [ -n "$extra" ]; then fail 'registration key input must contain one line'; fi
     [[ "$REGISTRATION_KEY" =~ ^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$ ]] ||
-      fail '节点注册凭据格式无效，请从管理端「节点安装命令」重新复制命令'
+      fail "$(msg '节点注册凭据格式无效，请从管理端「节点安装命令」重新复制命令' 'the node registration credential is malformed; copy the command again from "Install node" in the console')"
     return 0
   fi
   if "$ENROLLMENT_TOKEN_STDIN"; then
@@ -268,6 +359,10 @@ read_enrollment_token() {
     local extra=""
     IFS= read -r ENROLLMENT_TOKEN || [ -n "$ENROLLMENT_TOKEN" ] || fail 'enrollment token input is empty'
     if IFS= read -r extra || [ -n "$extra" ]; then fail 'enrollment token input must contain one line'; fi
+  fi
+  if [ -z "$ENROLLMENT_TOKEN" ] && ! "$ENROLLMENT_TOKEN_STDIN"; then
+    "$enrolled" && { RESUME_ENROLLED=true; return 0; }
+    fail "$(msg '缺少节点注册凭据：用 --registration-key-stdin 从标准输入传入（从管理端「节点安装命令」复制完整命令）' 'no node credential: pass it on standard input with --registration-key-stdin (copy the full command from "Install node" in the console)')"
   fi
   [[ "$ENROLLMENT_TOKEN" =~ ^[A-Za-z0-9._-]+$ ]] && [ "${#ENROLLMENT_TOKEN}" -le 512 ] || fail 'enrollment token input is invalid'
 }
@@ -301,7 +396,10 @@ load_console_defaults() {
         GATEWAY_TRANSPORT=${GATEWAY_TRANSPORT:-$value} ;;
       gateway_tunnel_host) [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || fail 'console node install defaults are invalid'
         GATEWAY_TUNNEL_HOST=${GATEWAY_TUNNEL_HOST:-$value} ;;
-      gateway_endpoints) [[ "$value" =~ ^[A-Za-z0-9.:\[\]|\ -]{0,2048}$ ]] || fail 'console node install defaults are invalid'
+      # Bracket list in a variable: an inline '\[\]' made bash close the list early and accept ';' etc.
+      gateway_endpoints) local endpoints_re='^[]A-Za-z0-9.:[| -]*$'
+        # 长度单独判：musl/BSD regex 不接受 {0,2048} 这类超过 255 的重复次数。
+        [ "${#value}" -le 2048 ] && [[ "$value" =~ $endpoints_re ]] || fail 'console node install defaults are invalid'
         GATEWAY_ENDPOINTS=${GATEWAY_ENDPOINTS:-$value} ;;
       download_fallback_origin) [[ "$value" =~ ^https://[^/?#@[:space:]]+$ ]] || fail 'console node install defaults are invalid'
         # Signed artifacts may come from the authorization server when the
@@ -331,17 +429,17 @@ require_commands() {
 
 install_dependencies() {
   if command -v apt-get >/dev/null 2>&1; then
-    DEBIAN_FRONTEND=noninteractive progress_run '更新软件源' apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive progress_run '安装基础工具' apt-get install -y -qq curl jq openssl ca-certificates coreutils file python3 util-linux passwd libc-bin iproute2 perl systemd nftables
+    DEBIAN_FRONTEND=noninteractive progress_run "$(msg 更新软件源 'Update package sources')" apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive progress_run "$(msg 安装基础工具 'Install base tools')" apt-get install -y -qq curl jq openssl ca-certificates coreutils file python3 util-linux passwd libc-bin iproute2 perl systemd nftables
     # Ubuntu 18.04 ships setpriv as its own package; later util-linux includes it.
-    command -v setpriv >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive progress_run '安装 setpriv' apt-get install -y -qq setpriv
+    command -v setpriv >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive progress_run "$(msg '安装 setpriv' 'Install setpriv')" apt-get install -y -qq setpriv
   elif command -v dnf >/dev/null 2>&1; then
     # Minimal EL images ship curl-minimal/coreutils-single; requesting curl or
     # coreutils would conflict, and both already provide the needed commands.
-    progress_run '安装基础工具' dnf -y -q install jq openssl ca-certificates file python3 util-linux passwd shadow-utils hostname iproute \
+    progress_run "$(msg 安装基础工具 'Install base tools')" dnf -y -q install jq openssl ca-certificates file python3 util-linux passwd shadow-utils hostname iproute \
       perl-interpreter perl-Digest-SHA systemd procps-ng nftables
   elif command -v yum >/dev/null 2>&1; then
-    progress_run '安装基础工具' yum -y -q install jq openssl ca-certificates file python3 util-linux passwd shadow-utils hostname iproute \
+    progress_run "$(msg 安装基础工具 'Install base tools')" yum -y -q install jq openssl ca-certificates file python3 util-linux passwd shadow-utils hostname iproute \
       perl-interpreter perl-Digest-SHA systemd procps-ng nftables
   else
     fail 'no supported package manager (apt-get, dnf or yum) was found'
@@ -354,7 +452,7 @@ install_dependencies() {
 
 normalise_defaults() {
   valid_url "$CONTROL_PLANE" || fail '--control-plane must be an HTTPS URL'
-  [ -n "$ENROLLMENT_TOKEN" ] || [ -n "$REGISTRATION_KEY" ] || fail '--registration-key-stdin or --enrollment-token is required'
+  [ -n "$ENROLLMENT_TOKEN" ] || [ -n "$REGISTRATION_KEY" ] || "$RESUME_ENROLLED" || fail '--registration-key-stdin or --enrollment-token is required'
   [ "$EUID" -eq 0 ] || fail 'run this installer as root'
   CONTROL_PLANE=${CONTROL_PLANE%/}
   CONTROL_PLANE_ORIGIN=$(printf '%s' "$CONTROL_PLANE" | sed -E 's#^(https?://[^/]+).*#\1#')
@@ -450,6 +548,7 @@ CREATED_TARGETS=()
 # 调用方提供 log/fail/progress_line/progress_tick，并在 EXIT 时启动 PAUSED_APT_TIMERS 里的定时器。
 KEEP_UNATTENDED_UPGRADES=false
 PAUSED_APT_TIMERS=()
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 # apt-get update 不理会 DPkg::Lock::Timeout 就去拿 lists 锁：先停定时器，再等正在跑的自动更新结束
 # （不打断正在写 dpkg 的进程），最后按开关停用或只暂停。
@@ -465,12 +564,12 @@ quiesce_package_automation() {
     pgrep -f '/usr/bin/unattended-upgrade( |$)' >/dev/null; do
     [ "$SECONDS" -lt "$deadline" ] || fail 'package automation (apt-daily/unattended-upgrades) is still running after 15 minutes'
     [ -n "$waiting" ] || { log 'waiting for the running automatic package update to finish'; waiting=1; }
-    progress_tick '系统自动更新（apt-daily/unattended-upgrades）结束' 900
+    progress_tick "$(msg '系统自动更新（apt-daily/unattended-upgrades）结束' ' the automatic package update (apt-daily/unattended-upgrades) to finish')" 900
     sleep 5
   done
   if [ "$KEEP_UNATTENDED_UPGRADES" = true ]; then
     [ "${#PAUSED_APT_TIMERS[@]}" -eq 0 ] ||
-      progress_line "已按 --keep-unattended-upgrades 保留系统自动更新：安装期间暂停 ${PAUSED_APT_TIMERS[*]}，结束后恢复"
+      progress_line "$(msg "已按 --keep-unattended-upgrades 保留系统自动更新：安装期间暂停 ${PAUSED_APT_TIMERS[*]}，结束后恢复" "automatic system updates kept (--keep-unattended-upgrades): ${PAUSED_APT_TIMERS[*]} paused during the installation and restored afterwards")"
   else
     # 只处理存在且启用（或正在运行）的单元；未安装、已停用或被 mask 的不动。
     for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service; do
@@ -481,7 +580,7 @@ quiesce_package_automation() {
     # 已停用的定时器退出时不再恢复。
     PAUSED_APT_TIMERS=()
     [ -z "$disabled" ] ||
-      progress_line "已停用系统自动更新（${disabled# }）：生产机默认关闭，避免无人值守升级在运行中替换并重启依赖服务；软件包保留，可手动 apt-get update && apt-get upgrade；恢复系统默认：systemctl enable --now${disabled}"
+      progress_line "$(msg "已停用系统自动更新（${disabled# }）：生产机默认关闭，避免无人值守升级在运行中替换并重启依赖服务；软件包保留，可手动 apt-get update && apt-get upgrade；恢复系统默认：systemctl enable --now${disabled}" "automatic system updates disabled (${disabled# }): off by default on production hosts so unattended upgrades cannot replace and restart dependencies while running; the packages stay, upgrade manually with apt-get update && apt-get upgrade; restore the system default: systemctl enable --now${disabled}")"
   fi
   # dnf waits on the rpm lock itself; only pause the cache timer for the install.
   if command -v dnf >/dev/null 2>&1 && systemctl is-active --quiet dnf-makecache.timer; then
@@ -525,7 +624,7 @@ cleanup() {
     if [ -n "$NATIVE_RELEASE" ]; then warn "first installation rolled back; verified release retained at ${NATIVE_RELEASE}"; fi
     if "$PACKAGING_INSTALLED"; then warn "the signed Agent package remains under ${PACKAGE_RELEASE_ROOT} and ${PACKAGING_LIBEXEC}; its service is stopped and disabled"; fi
     if "$ENROLLMENT_ATTEMPTED"; then warn 'enrollment was attempted; identity/recovery state is retained and the one-time token may already be consumed'; fi
-    if [ -f "$INSTALL_STATE_FILE" ]; then warn '安装未完成：修复上面的错误后，在原安装命令末尾加 --resume 续装（已完成的步骤会跳过）'; fi
+    if [ -f "$INSTALL_STATE_FILE" ]; then warn "$(msg '安装未完成：修复上面的错误后，在原安装命令末尾加 --resume 续装（已完成的步骤会跳过）' 'installation not finished: fix the error above and rerun the original command with --resume (finished steps are skipped)')"; fi
   fi
   if [ -n "$NATIVE_STAGE_PARENT" ] && [ -d "$NATIVE_STAGE_PARENT" ]; then rm -rf -- "$NATIVE_STAGE_PARENT"; fi
   if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then rm -rf -- "$TEMP_DIR"; fi
@@ -556,6 +655,8 @@ PREFLIGHT_STATUS=()
 PREFLIGHT_ITEM=()
 PREFLIGHT_DETAIL=()
 PREFLIGHT_HINT=()
+# 界面语言见 install-i18n；未嵌入它的安装器与单独加载时按中文。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 preflight_record() {
   PREFLIGHT_STATUS+=("$1")
@@ -578,7 +679,7 @@ preflight_os_tier() {
   case "$id" in
     rocky|almalinux|rhel|centos)
       case "$id:$major" in
-        centos:7|centos:8) printf 'unsupported:CentOS %s 已停止维护；systemd、内核与 Python 版本低于当前安装器的要求\n' "$major"; return ;;
+        centos:7|centos:8) printf "unsupported:$(msg 'CentOS %s 已停止维护；systemd、内核与 Python 版本低于当前安装器的要求' 'CentOS %s is end-of-life; its systemd, kernel and Python are older than this installer requires')\n" "$major"; return ;;
         rocky:8|rocky:9|rocky:10|almalinux:8|almalinux:9|almalinux:10|rhel:8|rhel:9|rhel:10) printf 'compatible\n'; return ;;
       esac ;;
     ubuntu)
@@ -589,20 +690,20 @@ preflight_os_tier() {
           # Node: setpriv package + a pidfd kernel (HWE 5.4). Control waits for the
           # musl ClamAV build (build-portable-clamav-musl.sh): glibc 2.27 < 2.28.
           if [ "$role" = control ]; then
-            printf 'unsupported:主控暂不支持 Ubuntu 18.04：glibc 2.27 低于官方 ClamAV 1.4 构建要求的 2.28，基于 musl 的 ClamAV 构建尚未发布；节点可以安装\n'
+            printf 'unsupported:%s\n' "$(msg '主控暂不支持 Ubuntu 18.04：glibc 2.27 低于官方 ClamAV 1.4 构建要求的 2.28，基于 musl 的 ClamAV 构建尚未发布；节点可以安装' 'the control plane does not support Ubuntu 18.04 yet: glibc 2.27 is older than the 2.28 the official ClamAV 1.4 build needs and the musl ClamAV build is not released; nodes can be installed')"
           else
             printf 'compatible\n'
           fi
           return ;;
-        16.04) printf 'unsupported:Ubuntu 16.04 的 Python 3.5 低于安装器要求的 3.6\n'; return ;;
+        16.04) printf 'unsupported:%s\n' "$(msg 'Ubuntu 16.04 的 Python 3.5 低于安装器要求的 3.6' 'Python 3.5 on Ubuntu 16.04 is older than the required 3.6')"; return ;;
       esac ;;
     debian)
       case "$major" in
         10|11|12|13) printf 'compatible\n'; return ;;
-        9) printf 'unsupported:Debian 9 的 Python 3.5 低于安装器要求的 3.6\n'; return ;;
+        9) printf 'unsupported:%s\n' "$(msg 'Debian 9 的 Python 3.5 低于安装器要求的 3.6' 'Python 3.5 on Debian 9 is older than the required 3.6')"; return ;;
       esac ;;
   esac
-  printf 'unsupported:未适配的发行版 %s %s\n' "${id:-unknown}" "${version:-unknown}"
+  printf "unsupported:$(msg '未适配的发行版 %s %s' 'unsupported distribution %s %s')\n" "${id:-unknown}" "${version:-unknown}"
 }
 
 preflight_check_os() {
@@ -611,16 +712,16 @@ preflight_check_os() {
   PREFLIGHT_OS_VERSION=$(preflight_os_release_value VERSION_ID)
   name=$(preflight_os_release_value PRETTY_NAME)
   if [ -z "$PREFLIGHT_OS_ID" ]; then
-    preflight_record fail 操作系统 '无法读取 /etc/os-release' '请在受支持的 Linux 发行版上安装（见支持矩阵）'
+    preflight_record fail 操作系统 "$(msg '无法读取 /etc/os-release' 'cannot read /etc/os-release')" "$(msg '请在受支持的 Linux 发行版上安装（见支持矩阵）' 'install on a supported Linux distribution (see the support matrix)')"
     return
   fi
   tier=$(preflight_os_tier "$role" "$PREFLIGHT_OS_ID" "$PREFLIGHT_OS_VERSION")
   case "$tier" in
-    official) preflight_record pass 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}（正式支持）" ;;
-    compatible) preflight_record warn 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}（兼容支持：已在容器内验证依赖安装，整机安装未逐版本实测）" \
-      '生产环境建议使用 Ubuntu 24.04；继续安装请确认' ;;
-    *) preflight_record fail 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}：${tier#unsupported:}" \
-      '请改用 Ubuntu 24.04（推荐）、Ubuntu 22.04/20.04、Debian 10–13 或 Rocky/AlmaLinux/RHEL 8/9/10' ;;
+    official) preflight_record pass 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}$(msg '（正式支持）' ' (officially supported)')" ;;
+    compatible) preflight_record warn 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}$(msg '（兼容支持：已在容器内验证依赖安装，整机安装未逐版本实测）' ' (compatible: dependency installation verified in containers, full installs not tested on every release)')" \
+      "$(msg '生产环境建议使用 Ubuntu 24.04；继续安装请确认' 'Ubuntu 24.04 is recommended for production; confirm to continue')" ;;
+    *) preflight_record fail 操作系统 "${name:-$PREFLIGHT_OS_ID $PREFLIGHT_OS_VERSION}$(msg '：' ': ')${tier#unsupported:}" \
+      "$(msg '请改用 Ubuntu 24.04（推荐）、Ubuntu 22.04/20.04、Debian 10–13 或 Rocky/AlmaLinux/RHEL 8/9/10' 'use Ubuntu 24.04 (recommended), Ubuntu 22.04/20.04, Debian 10–13 or Rocky/AlmaLinux/RHEL 8/9/10')" ;;
   esac
 }
 
@@ -628,12 +729,12 @@ preflight_check_arch() {
   local role=$1 machine flags
   machine=$(uname -m)
   if [ "$machine" != x86_64 ]; then
-    preflight_record fail CPU架构 "$machine" '目前只提供 x86_64（amd64）安装包，请使用 x86_64 服务器'
+    preflight_record fail CPU架构 "$machine" "$(msg '目前只提供 x86_64（amd64）安装包，请使用 x86_64 服务器' 'only x86_64 (amd64) packages are provided; use an x86_64 server')"
     return
   fi
   flags=$(awk -F: '/^flags/ { print $2; exit }' "${PREFLIGHT_ROOT}/proc/cpuinfo" 2>/dev/null || true)
   if [ "$role" = control ] && [ -n "$flags" ] && ! printf '%s\n' "$flags" | grep -qw sse4_2; then
-    preflight_record fail CPU架构 'x86_64，但 CPU 不支持 SSE4.2' 'ClickHouse 需要 SSE4.2，请更换 CPU 型号或在虚拟化平台开启 CPU 直通（host-passthrough）'
+    preflight_record fail CPU架构 "$(msg 'x86_64，但 CPU 不支持 SSE4.2' 'x86_64, but the CPU lacks SSE4.2')" "$(msg 'ClickHouse 需要 SSE4.2，请更换 CPU 型号或在虚拟化平台开启 CPU 直通（host-passthrough）' 'ClickHouse needs SSE4.2; change the CPU model or enable CPU passthrough (host-passthrough) in the hypervisor')"
     return
   fi
   preflight_record pass CPU架构 x86_64
@@ -663,23 +764,23 @@ preflight_check_kernel() {
   release=$(uname -r)
   major=${release%%.*}
   minor=${release#*.}; minor=${minor%%.*}
-  case "$major$minor" in *[!0-9]*|'') preflight_record warn 内核 "无法识别内核版本 $release"; return ;; esac
+  case "$major$minor" in *[!0-9]*|'') preflight_record warn 内核 "$(msg "无法识别内核版本 $release" "cannot parse kernel version $release")"; return ;; esac
   if [ "$role" = node ]; then
     # The Agent signals OpenResty only through pidfd (Linux 5.3+, or a vendor
     # backport): there is no PID-reuse-prone fallback.
     if [ "$major" -lt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -lt 3 ]; }; then
       preflight_pidfd_probe || probe=$?
       case "$probe" in
-        0) preflight_record warn 内核 "$release（低于 5.3，但内核提供了 pidfd_open）" '未在该内核上逐版本实测；建议升级到 5.10 以上' ;;
-        2) preflight_record fail 内核 "$release（低于 5.3），无法确认 pidfd 支持" '请安装 perl 后重试，或升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 用 HWE 内核）' ;;
-        *) preflight_record fail 内核 "$release 不支持 pidfd_open（节点重载 OpenResty 依赖它）" '请升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 16.04/18.04 用 HWE 内核，Debian 9/10 用 backports 内核）' ;;
+        0) preflight_record warn 内核 "$release$(msg '（低于 5.3，但内核提供了 pidfd_open）' ' (older than 5.3 but provides pidfd_open)')" "$(msg '未在该内核上逐版本实测；建议升级到 5.10 以上' 'not tested on this kernel; 5.10 or newer is recommended')" ;;
+        2) preflight_record fail 内核 "$release$(msg '（低于 5.3），无法确认 pidfd 支持' ' (older than 5.3); cannot confirm pidfd support')" "$(msg '请安装 perl 后重试，或升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 用 HWE 内核）' 'install perl and retry, or upgrade the kernel to 5.3+ (ELRepo kernel-lt/kernel-ml on CentOS 7, HWE kernel on Ubuntu)')" ;;
+        *) preflight_record fail 内核 "$release$(msg ' 不支持 pidfd_open（节点重载 OpenResty 依赖它）' ' lacks pidfd_open (needed to reload OpenResty on nodes)')" "$(msg '请升级内核到 5.3 以上（CentOS 7 可用 ELRepo kernel-lt/kernel-ml，Ubuntu 16.04/18.04 用 HWE 内核，Debian 9/10 用 backports 内核）' 'upgrade the kernel to 5.3+ (ELRepo kernel-lt/kernel-ml on CentOS 7, HWE kernel on Ubuntu 16.04/18.04, backports kernel on Debian 9/10)')" ;;
       esac
       [ "$probe" = 0 ] || return 0
     elif [ "$major" -eq 5 ] && [ "$minor" -lt 10 ]; then
-      preflight_record warn 内核 "$release（5.3–5.9 可用，未逐版本实测）" '建议使用 5.10 以上内核'
+      preflight_record warn 内核 "$release$(msg '（5.3–5.9 可用，未逐版本实测）' ' (5.3–5.9 works, not tested on every release)')" "$(msg '建议使用 5.10 以上内核' 'a 5.10+ kernel is recommended')"
     fi
     if [ ! -r "${PREFLIGHT_ROOT}/sys/fs/cgroup/cgroup.controllers" ]; then
-      preflight_record warn cgroup "未启用 cgroup v2（legacy/hybrid）" 'Agent 可在 cgroup v1 下运行；IPAddressDeny 等依赖 cgroup v2 的服务限制不会生效'
+      preflight_record warn cgroup "$(msg '未启用 cgroup v2（legacy/hybrid）' 'cgroup v2 is not enabled (legacy/hybrid)')" "$(msg 'Agent 可在 cgroup v1 下运行；IPAddressDeny 等依赖 cgroup v2 的服务限制不会生效' 'the Agent runs on cgroup v1, but service limits that need cgroup v2 (IPAddressDeny etc.) will not apply')"
     fi
     if [ "$major" -gt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -ge 10 ]; }; then
       preflight_record pass 内核 "$release"
@@ -687,7 +788,7 @@ preflight_check_kernel() {
     return 0
   fi
   if [ "$major" -lt 4 ] || { [ "$major" -eq 4 ] && [ "$minor" -lt 18 ]; }; then
-    preflight_record warn 内核 "$release（低于 4.18，未验证）"
+    preflight_record warn 内核 "$release$(msg '（低于 4.18，未验证）' ' (older than 4.18, not verified)')"
     return
   fi
   preflight_record pass 内核 "$release"
@@ -699,13 +800,13 @@ preflight_check_cpu() {
   [ -n "$cores" ] && [ "$cores" -gt 0 ] 2>/dev/null || cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 0)
   # 推荐配置：主控至少 4 核 16G，节点 4 核 8G 起；低于推荐只告警。
   if [ "$cores" -lt 1 ]; then
-    preflight_record warn CPU核数 '无法识别 CPU 核数'
+    preflight_record warn CPU核数 "$(msg '无法识别 CPU 核数' 'cannot detect the CPU count')"
   elif [ "$role" = control ] && [ "$cores" -lt 4 ]; then
-    preflight_record warn CPU核数 "$cores 核（主控推荐至少 4 核）" 'PostgreSQL、ClickHouse、ClamAV 与管理端同机运行，核数少时访问日志与统计会明显变慢'
+    preflight_record warn CPU核数 "$cores $(msg '核（主控推荐至少 4 核）' 'cores (4+ recommended for the control plane)')" "$(msg 'PostgreSQL、ClickHouse、ClamAV 与管理端同机运行，核数少时访问日志与统计会明显变慢' 'PostgreSQL, ClickHouse, ClamAV and the console share this host; with few cores access logs and statistics slow down noticeably')"
   elif [ "$role" = node ] && [ "$cores" -lt 4 ]; then
-    preflight_record warn CPU核数 "$cores 核（节点推荐至少 4 核）" 'OpenResty、WAF 与 TLS 握手按核扩展，核数少时高并发与 CC 防护能力下降'
+    preflight_record warn CPU核数 "$cores $(msg '核（节点推荐至少 4 核）' 'cores (4+ recommended for nodes)')" "$(msg 'OpenResty、WAF 与 TLS 握手按核扩展，核数少时高并发与 CC 防护能力下降' 'OpenResty, WAF and TLS handshakes scale per core; few cores reduce concurrency and CC protection')"
   else
-    preflight_record pass CPU核数 "$cores 核"
+    preflight_record pass CPU核数 "$cores $(msg '核' 'cores')"
   fi
 }
 
@@ -722,18 +823,18 @@ preflight_check_memory() {
   # 低于 fail 不能安装；低于 warn（推荐：主控 16G、节点 8G，按标称约 90%）告警。
   if [ "$role" = control ]; then fail_mib=3500 warn_mib=14700; else fail_mib=900 warn_mib=7300; fi
   if [ "$total" -le 0 ]; then
-    preflight_record warn 内存 '无法读取 /proc/meminfo'
+    preflight_record warn 内存 "$(msg '无法读取 /proc/meminfo' 'cannot read /proc/meminfo')"
   elif [ "$total" -lt "$fail_mib" ]; then
     if [ "$role" = node ] && [ $((total + swap)) -ge 2800 ]; then
-      preflight_record warn 内存 "${total} MiB + Swap ${swap} MiB（节点建议 2G 以上）" '内存不足 2G 时需保留至少 2G Swap'
+      preflight_record warn 内存 "${total} MiB + Swap ${swap} MiB$(msg '（节点建议 2G 以上）' ' (2G+ recommended for nodes)')" "$(msg '内存不足 2G 时需保留至少 2G Swap' 'keep at least 2G of swap when memory is below 2G')"
     else
-      preflight_record fail 内存 "${total} MiB（$(if [ "$role" = control ]; then printf '主控最低 4G'; else printf '节点最低 1G，且需 2G Swap'; fi)）" \
-        "$(if [ "$role" = control ]; then printf '请升级到 4G 以上内存（推荐 16G）'; else printf '请升级到 2G 以上内存，或 1G 内存加 2G Swap（推荐 8G）'; fi)"
+      preflight_record fail 内存 "${total} MiB（$(if [ "$role" = control ]; then msg '主控最低 4G' 'control plane minimum 4G'; else msg '节点最低 1G，且需 2G Swap' 'node minimum 1G plus 2G swap'; fi)）" \
+        "$(if [ "$role" = control ]; then msg '请升级到 4G 以上内存（推荐 16G）' 'upgrade to 4G+ memory (16G recommended)'; else msg '请升级到 2G 以上内存，或 1G 内存加 2G Swap（推荐 8G）' 'upgrade to 2G+ memory, or 1G plus 2G swap (8G recommended)'; fi)"
     fi
   elif [ "$total" -lt "$warn_mib" ]; then
     swap_note=''; [ "$swap" -le 0 ] || swap_note=" + Swap ${swap} MiB"
-    preflight_record warn 内存 "${total} MiB${swap_note}（$(if [ "$role" = control ]; then printf '主控推荐 16G 以上'; else printf '节点推荐 8G 以上'; fi)）" \
-      "$(if [ "$role" = control ]; then printf '可以安装，但访问日志多时 ClickHouse 与 ClamAV 可能内存紧张；规模大建议 8 核 32G'; else printf '可以安装；大缓存或高并发建议 4 核 16G，内存不足 2G 时需加 2G Swap'; fi)"
+    preflight_record warn 内存 "${total} MiB${swap_note}$(msg '（' ' (')$(if [ "$role" = control ]; then msg '主控推荐 16G 以上' '16G+ recommended for the control plane'; else msg '节点推荐 8G 以上' '8G+ recommended for nodes'; fi)$(msg '）' ')')" \
+      "$(if [ "$role" = control ]; then msg '可以安装，但访问日志多时 ClickHouse 与 ClamAV 可能内存紧张；规模大建议 8 核 32G' 'installable, but ClickHouse and ClamAV may run short with heavy access logs; 8 cores / 32G for large deployments'; else msg '可以安装；大缓存或高并发建议 4 核 16G，内存不足 2G 时需加 2G Swap' 'installable; 4 cores / 16G for large caches or high concurrency, add 2G swap below 2G memory'; fi)"
   else
     preflight_record pass 内存 "${total} MiB"
   fi
@@ -759,17 +860,17 @@ preflight_check_disk() {
   for path in "${paths[@]}"; do
     existing=$(preflight_existing_parent "$path")
     line=$(df -Pm "$existing" 2>/dev/null | awk 'NR == 2 { print $6 " " $4 }') || line=''
-    [ -n "$line" ] || { preflight_record warn 磁盘空间 "无法读取 $path 所在分区的可用空间"; continue; }
+    [ -n "$line" ] || { preflight_record warn 磁盘空间 "$(msg "无法读取 $path 所在分区的可用空间" "cannot read free space of the partition holding $path")"; continue; }
     mount=${line% *}; avail_mib=${line##* }
     case "$seen" in *" $mount "*) continue ;; esac
     seen="$seen$mount "
     if [ "$avail_mib" -lt "$fail_mib" ]; then
-      preflight_record fail 磁盘空间 "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "请清理或扩容 $mount 分区"
+      preflight_record fail 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free, below $((fail_mib / 1024)) GiB")" "$(msg "请清理或扩容 $mount 分区" "free up or grow the $mount partition")"
     elif [ "$avail_mib" -lt "$warn_mib" ]; then
-      preflight_record warn 磁盘空间 "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" \
-        "$(if [ "$role" = control ]; then printf '日志、分析数据和对象存储会持续增长，建议使用 100G 以上 SSD'; else printf '缓存会占用磁盘，按缓存规模预留空间'; fi)"
+      preflight_record warn 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" "$path (partition $mount) has $((avail_mib / 1024)) GiB free; $((warn_mib / 1024)) GiB+ recommended")" \
+        "$(if [ "$role" = control ]; then msg '日志、分析数据和对象存储会持续增长，建议使用 100G 以上 SSD' 'logs, analytics and object storage keep growing; a 100G+ SSD is recommended'; else msg '缓存会占用磁盘，按缓存规模预留空间' 'the cache uses disk; reserve space for its size'; fi)"
     else
-      preflight_record pass 磁盘空间 "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB"
+      preflight_record pass 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free")"
     fi
   done
 }
@@ -799,16 +900,16 @@ PREFLIGHT_SANDBOX_DIRECTIVES=(Service.ProtectSystem Service.ReadWritePaths Servi
 preflight_check_systemd() {
   local version minimum directive missing='' groups=''
   if [ ! -d "${PREFLIGHT_ROOT}/run/systemd/system" ] || ! command -v systemctl >/dev/null 2>&1; then
-    preflight_record fail systemd '本机未以 systemd 作为 init 运行（容器或 OpenVZ/LXC 精简环境常见）' '请在以 systemd 启动的完整虚拟机或物理机上安装'
+    preflight_record fail systemd "$(msg '本机未以 systemd 作为 init 运行（容器或 OpenVZ/LXC 精简环境常见）' 'this host does not run systemd as init (common in containers or minimal OpenVZ/LXC)')" "$(msg '请在以 systemd 启动的完整虚拟机或物理机上安装' 'install on a full VM or bare-metal host booted with systemd')"
     return
   fi
   version=$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 }')
   version=${version%%[!0-9]*}
   minimum=$(preflight_systemd_minimum)
   if [ -z "$version" ]; then
-    preflight_record fail systemd '无法识别 systemd 版本'
+    preflight_record fail systemd "$(msg '无法识别 systemd 版本' 'cannot detect the systemd version')"
   elif [ "$version" -lt 219 ]; then
-    preflight_record fail systemd "版本 $version，低于 219" '请升级系统'
+    preflight_record fail systemd "$(msg "版本 $version，低于 219" "version $version is older than 219")" "$(msg '请升级系统' 'upgrade the system')"
   elif [ "$version" -lt "$minimum" ]; then
     # Older systemd: units get a compatibility drop-in (systemd-compat.sh) and
     # unknown hardening directives are ignored by systemd itself.
@@ -820,18 +921,18 @@ preflight_check_systemd() {
         systemd_compat_knows "$directive" || groups="$groups $directive"
       done
     fi
-    preflight_record warn systemd "版本 $version（低于 $minimum）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:$groups，将不启用系统调用过滤}" \
-      '服务可以运行，但上述隔离措施不会生效；建议使用 systemd 249 以上的系统'
+    preflight_record warn systemd "$(msg "版本 $version（低于 $minimum）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:$groups，将不启用系统调用过滤}" "version $version (older than $minimum): reduced sandboxing${missing:+, unsupported:$missing}${groups:+; missing syscall filter groups:$groups, syscall filtering disabled}")" \
+      "$(msg '服务可以运行，但上述隔离措施不会生效；建议使用 systemd 249 以上的系统' 'services run, but the isolation above does not apply; systemd 249+ is recommended')"
   else
-    preflight_record pass systemd "版本 $version"
+    preflight_record pass systemd "$(msg "版本 $version" "version $version")"
   fi
 }
 
 preflight_check_root() {
   if [ "$(id -u)" -eq 0 ]; then
-    preflight_record pass root权限 '以 root 运行'
+    preflight_record pass root权限 "$(msg '以 root 运行' 'running as root')"
   else
-    preflight_record fail root权限 "当前用户 $(id -un 2>/dev/null || id -u)" '请使用 root 运行，或在命令前加 sudo'
+    preflight_record fail root权限 "$(msg '当前用户' 'current user') $(id -un 2>/dev/null || id -u)" "$(msg '请使用 root 运行，或在命令前加 sudo' 'run as root or prefix the command with sudo')"
   fi
 }
 
@@ -850,12 +951,12 @@ preflight_check_ports() {
   listening=" $(preflight_listening_ports | tr '\n' ' ') "
   for entry in "$@"; do
     port=${entry%%:*}; label=${entry#*:}
-    case "$listening" in *" $port "*) busy="$busy${busy:+、}$port（$label）" ;; esac
+    case "$listening" in *" $port "*) busy="$busy${busy:+$(msg '、' ', ')}$port$(msg '（' ' (')$(preflight_label "$label")$(msg '）' ')')" ;; esac
   done
   if [ -n "$busy" ]; then
-    preflight_record fail 端口占用 "已被占用：$busy" '用 ss -ltnp 查看占用进程；请在干净的系统上安装，或停止占用这些端口的服务'
+    preflight_record fail 端口占用 "$(msg '已被占用：' 'in use: ')$busy" "$(msg '用 ss -ltnp 查看占用进程；请在干净的系统上安装，或停止占用这些端口的服务' 'find the owners with ss -ltnp; install on a clean system or stop those services')"
   else
-    preflight_record pass 端口占用 "所需端口均空闲（$(printf '%s\n' "$@" | cut -d: -f1 | paste -sd, -)）"
+    preflight_record pass 端口占用 "$(msg '所需端口均空闲（' 'required ports are free (')$(printf '%s\n' "$@" | cut -d: -f1 | paste -sd, -)$(msg '）' ')')"
   fi
 }
 
@@ -869,15 +970,15 @@ preflight_check_commands() {
       if command -v "$alternative" >/dev/null 2>&1; then found=true; break; fi
     done
     [ "$found" = false ] || continue
-    command=${command//|/ 或 }
+    command=${command//|/ $(msg 或 or) }
     if [ "$mode" = required ]; then missing="$missing $command"; else auto="$auto $command"; fi
   done
   if [ -n "$missing" ]; then
-    preflight_record fail 必需命令 "缺少:$missing" '请先用系统包管理器安装这些基础工具'
+    preflight_record fail 必需命令 "$(msg '缺少:' 'missing:')$missing" "$(msg '请先用系统包管理器安装这些基础工具' 'install these base tools with the system package manager first')"
   elif [ -n "$auto" ]; then
-    preflight_record pass 必需命令 "基础命令齐全；将自动安装:$auto"
+    preflight_record pass 必需命令 "$(msg '基础命令齐全；将自动安装:' 'base commands present; will install automatically:')$auto"
   else
-    preflight_record pass 必需命令 '全部已安装'
+    preflight_record pass 必需命令 "$(msg '全部已安装' 'all installed')"
   fi
 }
 
@@ -891,7 +992,7 @@ preflight_check_remote() {
   local label=$1 url='' headers='' local_epoch remote_date remote_epoch skew untrusted=false candidate rc
   shift
   if ! command -v curl >/dev/null 2>&1; then
-    preflight_record warn "连通性（$label）" '未安装 curl，跳过检测'
+    preflight_record warn "连通性（$label）" "$(msg '未安装 curl，跳过检测' 'curl is not installed; check skipped')"
     return
   fi
   for candidate in "$@"; do
@@ -903,29 +1004,29 @@ preflight_check_remote() {
     headers=''
   done
   if [ -z "$url" ]; then
-    preflight_record fail "连通性（$label）" "无法连接 $*" '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址'
+    preflight_record fail "连通性（$label）" "$(msg '无法连接' 'cannot connect to') $*" "$(msg '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址' 'check DNS, outbound firewall and proxy settings so this host can reach that HTTPS address')"
     return
   fi
   if [ "$untrusted" = true ]; then
-    preflight_record pass "连通性（$label）" "$url 可连接（证书不受系统信任，安装时用固定指纹校验）"
-    preflight_record warn 时间偏差 "证书不受系统信任，无法在检测阶段读取 $label 的服务器时间" '请确认已开启 NTP 时间同步（timedatectl set-ntp true）'
+    preflight_record pass "连通性（$label）" "$url $(msg '可连接（证书不受系统信任，安装时用固定指纹校验）' 'reachable (certificate not trusted by the system; the install pins its fingerprint)')"
+    preflight_record warn 时间偏差 "$(msg "证书不受系统信任，无法在检测阶段读取 $label 的服务器时间" "untrusted certificate: cannot read the server time of $label during the checks")" "$(msg '请确认已开启 NTP 时间同步（timedatectl set-ntp true）' 'make sure NTP time sync is on (timedatectl set-ntp true)')"
     return
   fi
-  preflight_record pass "连通性（$label）" "$url 可连接"
+  preflight_record pass "连通性（$label）" "$url $(msg '可连接' 'reachable')"
   remote_date=$(printf '%s\n' "$headers" | tr -d '\r' | awk 'tolower($1) == "date:" { sub(/^[^:]*: */, ""); print; exit }')
   remote_epoch=$(preflight_date_epoch "$remote_date")
   local_epoch=$(date -u +%s)
   if [ -z "$remote_epoch" ]; then
-    preflight_record warn 时间偏差 "无法从 $label 读取服务器时间" '请确认已开启 NTP 时间同步（timedatectl set-ntp true）'
+    preflight_record warn 时间偏差 "$(msg "无法从 $label 读取服务器时间" "cannot read the server time from $label")" "$(msg '请确认已开启 NTP 时间同步（timedatectl set-ntp true）' 'make sure NTP time sync is on (timedatectl set-ntp true)')"
     return
   fi
   skew=$((local_epoch - remote_epoch)); [ "$skew" -ge 0 ] || skew=$((-skew))
   if [ "$skew" -gt 300 ]; then
-    preflight_record fail 时间偏差 "本机与 $label 相差 ${skew} 秒（超过 300 秒，激活与签名校验会被拒绝）" '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试'
+    preflight_record fail 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒（超过 300 秒，激活与签名校验会被拒绝）" "clock differs from $label by ${skew} s (over 300 s; activation and signature checks will be refused)")" "$(msg '请开启 NTP 同步：timedatectl set-ntp true，或安装 chrony 后重试' 'enable NTP: timedatectl set-ntp true, or install chrony and retry')"
   elif [ "$skew" -gt 60 ]; then
-    preflight_record warn 时间偏差 "本机与 $label 相差 ${skew} 秒" '建议开启 NTP 同步：timedatectl set-ntp true'
+    preflight_record warn 时间偏差 "$(msg "本机与 $label 相差 ${skew} 秒" "clock differs from $label by ${skew} s")" "$(msg '建议开启 NTP 同步：timedatectl set-ntp true' 'enabling NTP is recommended: timedatectl set-ntp true')"
   else
-    preflight_record pass 时间偏差 "${skew} 秒"
+    preflight_record pass 时间偏差 "${skew} $(msg 秒 s)"
   fi
 }
 
@@ -933,16 +1034,16 @@ preflight_check_remote() {
 preflight_check_tcp() {
   local label=$1 host=$2 port=$3
   if timeout 6 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
-    preflight_record pass "连通性（$label）" "$host:$port 可连接"
+    preflight_record pass "连通性（$label）" "$host:$port $(msg '可连接' 'reachable')"
   else
-    preflight_record warn "连通性（$label）" "$host:$port 无法连接" "请确认主控已放行 TCP $port，且本机出站未被拦截"
+    preflight_record warn "连通性（$label）" "$host:$port $(msg '无法连接' 'unreachable')" "$(msg "请确认主控已放行 TCP $port，且本机出站未被拦截" "make sure the control plane allows TCP $port and outbound traffic from here is not blocked")"
   fi
 }
 
 preflight_check_selinux() {
   if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null)" = Enforcing ]; then
-    preflight_record warn SELinux '处于 Enforcing 模式（未在 Enforcing 下做整机实测）' \
-      '安装器会对安装目录执行 restorecon；若服务无法启动，用 ausearch -m avc -ts recent 查看拒绝记录'
+    preflight_record warn SELinux "$(msg '处于 Enforcing 模式（未在 Enforcing 下做整机实测）' 'Enforcing mode (full installs not tested under Enforcing)')" \
+      "$(msg '安装器会对安装目录执行 restorecon；若服务无法启动，用 ausearch -m avc -ts recent 查看拒绝记录' 'the installer runs restorecon on its directories; if a service fails to start, check denials with ausearch -m avc -ts recent')"
   fi
 }
 
@@ -951,15 +1052,15 @@ preflight_check_firewall() {
   local ports="$*" commands=''
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
     commands=$(for port in $ports; do printf 'ufw allow %s/tcp; ' "$port"; done)
-    preflight_record warn 防火墙 "ufw 已启用，安装器不会修改规则" "请放行：$commands"
+    preflight_record warn 防火墙 "$(msg 'ufw 已启用，安装器不会修改规则' 'ufw is active; the installer does not change its rules')" "$(msg '请放行：' 'allow: ')$commands"
   elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
     commands=$(for port in $ports; do printf 'firewall-cmd --permanent --add-port=%s/tcp; ' "$port"; done)
-    preflight_record warn 防火墙 "firewalld 正在运行，安装器不会修改规则" "请放行：${commands}firewall-cmd --reload"
+    preflight_record warn 防火墙 "$(msg 'firewalld 正在运行，安装器不会修改规则' 'firewalld is running; the installer does not change its rules')" "$(msg '请放行：' 'allow: ')${commands}firewall-cmd --reload"
   elif command -v iptables >/dev/null 2>&1 && iptables -S INPUT 2>/dev/null | grep -q '^-P INPUT DROP'; then
     commands=$(for port in $ports; do printf 'iptables -I INPUT -p tcp --dport %s -j ACCEPT; ' "$port"; done)
-    preflight_record warn 防火墙 'iptables INPUT 默认策略为 DROP' "请放行：$commands"
+    preflight_record warn 防火墙 "$(msg 'iptables INPUT 默认策略为 DROP' 'iptables INPUT policy is DROP')" "$(msg '请放行：' 'allow: ')$commands"
   else
-    preflight_record pass 防火墙 "未检测到启用的主机防火墙；云安全组需放行 TCP ${ports// /, }"
+    preflight_record pass 防火墙 "$(msg "未检测到启用的主机防火墙；云安全组需放行 TCP ${ports// /, }" "no active host firewall; allow TCP ${ports// /, } in the cloud security group")"
   fi
 }
 
@@ -969,56 +1070,83 @@ preflight_check_coexistence() {
   if [ "$role" = node ]; then
     for path in /etc/cdnca-control /usr/local/cdnca-control /data/cdnca-native-root; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 主控共存 "本机已安装主控（$path）" '节点不能与主控装在同一台机器上，请使用另一台服务器'
+        preflight_record fail 主控共存 "$(msg "本机已安装主控（$path）" "a control plane is installed here ($path)")" "$(msg '节点不能与主控装在同一台机器上，请使用另一台服务器' 'a node cannot share a host with the control plane; use another server')"
         return
       fi
     done
   else
     for path in /etc/cdnca-edge-agent /opt/cdnca-node /usr/lib/cdnca-edge-agent; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 节点共存 "本机已安装节点（$path）" '主控不能与节点装在同一台机器上，请使用另一台服务器'
+        preflight_record fail 节点共存 "$(msg "本机已安装节点（$path）" "a node is installed here ($path)")" "$(msg '主控不能与节点装在同一台机器上，请使用另一台服务器' 'the control plane cannot share a host with a node; use another server')"
         return
       fi
     done
   fi
 }
 
+# 检测项与端口用途在记录里保持中文（测试与调用方按中文匹配），报告时按界面语言显示。
+preflight_label() {
+  [ "${INSTALL_LANG:-zh}" = en ] || { printf '%s' "$1"; return 0; }
+  case "$1" in
+    连通性（*）) local inner=${1#连通性（}; printf 'Connectivity (%s)' "$(preflight_label "${inner%）}")" ;;
+    '管理端网页（本机回环）') printf 'management web (loopback)' ;;
+    *）) printf '%s' "$1" | sed 's/）$//' ;;
+    操作系统) printf 'Operating system' ;; CPU架构) printf 'CPU architecture' ;; CPU核数) printf 'CPU cores' ;;
+    内核) printf 'Kernel' ;; 内存) printf 'Memory' ;; 磁盘空间) printf 'Disk space' ;; root权限) printf 'Root' ;;
+    端口占用) printf 'Ports' ;; 必需命令) printf 'Required commands' ;; 时间偏差) printf 'Clock skew' ;;
+    防火墙) printf 'Firewall' ;; 主控共存) printf 'Control plane on this host' ;; 节点共存) printf 'Node on this host' ;;
+    主控) printf 'control plane' ;; 授权端) printf 'licensing server' ;; 端口规划) printf 'Port plan' ;; 端口调整) printf 'Port changes' ;;
+    管理端域名) printf 'Management domain' ;; 管理端网页) printf 'Management web' ;; 管理端HTTPS) printf 'management HTTPS' ;;
+    节点升级下载) printf 'node upgrade downloads' ;;
+    宝塔环境) printf 'BaoTa environment' ;; 宝塔站点证书) printf 'BaoTa site certificate' ;; 宝塔防火墙) printf 'BaoTa firewall' ;;
+    宝塔手工步骤) printf 'BaoTa manual steps' ;; 宝塔nginx) printf 'BaoTa nginx' ;; 宝塔Apache) printf 'BaoTa Apache' ;;
+    宝塔OpenLiteSpeed) printf 'BaoTa OpenLiteSpeed' ;;
+    证书签发与依赖安装) printf 'certificate issuance and package installation' ;; 节点注册) printf 'node enrollment' ;;
+    节点通道) printf 'node channel' ;; NATS监控) printf 'NATS monitoring' ;; Gateway健康检查) printf 'Gateway health check' ;;
+    内部gRPC) printf 'internal gRPC' ;; 升级源) printf 'upgrade source' ;; 对象存储) printf 'object storage' ;;
+    ClickHouse-复制) printf 'ClickHouse-replication' ;; 网关内部gRPC) printf 'Gateway internal gRPC' ;;
+    网关NATS) printf 'Gateway NATS' ;; 网关Redis) printf 'Gateway Redis' ;; 网站HTTP) printf 'website HTTP' ;;
+    网站HTTPS) printf 'website HTTPS' ;; 本机健康检查) printf 'local health check' ;; 本机证书服务) printf 'local certificate service' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 preflight_tag() {
-  case "$1" in pass) printf '通过' ;; warn) printf '警告' ;; *) printf '不通过' ;; esac
+  case "$1" in pass) msg '通过' 'PASS' ;; warn) msg '警告' 'WARN' ;; *) msg '不通过' 'FAIL' ;; esac
 }
 
 # 返回 0 继续安装；有“不通过”或用户拒绝时返回 1。
 preflight_report() {
   local prefix=$1 index fails=0 warns=0 answer
-  printf '%s 安装前检测\n' "$prefix" >&2
+  printf '%s %s\n' "$prefix" "$(msg '安装前检测' 'Pre-installation checks')" >&2
   for index in "${!PREFLIGHT_STATUS[@]}"; do
-    printf '%s   [%s] %s：%s\n' "$prefix" "$(preflight_tag "${PREFLIGHT_STATUS[$index]}")" "${PREFLIGHT_ITEM[$index]}" "${PREFLIGHT_DETAIL[$index]}" >&2
+    printf "%s   [%s] %s$(msg '：' ': ')%s\n" "$prefix" "$(preflight_tag "${PREFLIGHT_STATUS[$index]}")" "$(preflight_label "${PREFLIGHT_ITEM[$index]}")" "${PREFLIGHT_DETAIL[$index]}" >&2
     if [ "${PREFLIGHT_STATUS[$index]}" != pass ] && [ -n "${PREFLIGHT_HINT[$index]}" ]; then
-      printf '%s          建议：%s\n' "$prefix" "${PREFLIGHT_HINT[$index]}" >&2
+      printf "%s          $(msg '建议：' 'Hint: ')%s\n" "$prefix" "${PREFLIGHT_HINT[$index]}" >&2
     fi
     case "${PREFLIGHT_STATUS[$index]}" in fail) fails=$((fails + 1)) ;; warn) warns=$((warns + 1)) ;; esac
   done
   if [ "$fails" -gt 0 ]; then
-    printf '%s 检测结果：%d 项不通过、%d 项警告。请按上面的建议处理后重新执行安装命令；本机未做任何修改。\n' "$prefix" "$fails" "$warns" >&2
+    printf "%s $(msg '检测结果：%d 项不通过、%d 项警告。请按上面的建议处理后重新执行安装命令；本机未做任何修改。' 'Result: %d failed, %d warnings. Fix them as suggested above and run the install command again; nothing on this host was changed.')\n" "$prefix" "$fails" "$warns" >&2
     return 1
   fi
   if [ "$warns" -eq 0 ]; then
-    printf '%s 检测结果：全部通过。\n' "$prefix" >&2
+    printf '%s %s\n' "$prefix" "$(msg '检测结果：全部通过。' 'Result: all checks passed.')" >&2
     return 0
   fi
   if [ "$PREFLIGHT_ASSUME_YES" = true ]; then
-    printf '%s 检测结果：%d 项警告，已指定 --yes，继续安装。\n' "$prefix" "$warns" >&2
+    printf "%s $(msg '检测结果：%d 项警告，已指定 --yes，继续安装。' 'Result: %d warnings; --yes given, continuing.')\n" "$prefix" "$warns" >&2
     return 0
   fi
   if { : </dev/tty; } 2>/dev/null && [ -t 2 ]; then
-    printf '%s 检测结果：%d 项警告。确认继续安装？[y/N] ' "$prefix" "$warns" >&2
+    printf "%s $(msg '检测结果：%d 项警告。确认继续安装？[y/N] ' 'Result: %d warnings. Continue the installation? [y/N] ')" "$prefix" "$warns" >&2
     IFS= read -r answer </dev/tty || answer=''
     case "$answer" in
       y|Y|yes|YES) return 0 ;;
-      *) printf '%s 已取消安装；本机未做任何修改。如需跳过确认，请在命令末尾加 --yes。\n' "$prefix" >&2; return 1 ;;
+      *) printf '%s %s\n' "$prefix" "$(msg '已取消安装；本机未做任何修改。如需跳过确认，请在命令末尾加 --yes。' 'Installation cancelled; nothing was changed. Add --yes to the command to skip this question.')" >&2; return 1 ;;
     esac
   fi
-  printf '%s 检测结果：%d 项警告；非交互运行，继续安装（加 --yes 可省略本提示）。\n' "$prefix" "$warns" >&2
+  printf "%s $(msg '检测结果：%d 项警告；非交互运行，继续安装（加 --yes 可省略本提示）。' 'Result: %d warnings; non-interactive run, continuing (--yes hides this note).')\n" "$prefix" "$warns" >&2
   return 0
 }
 # <<< END install-preflight
@@ -1037,6 +1165,8 @@ SSH_GUARD_ROOT=${SSH_GUARD_ROOT:-}
 SSH_GUARD_JAIL=${SSH_GUARD_ROOT}/etc/fail2ban/jail.d/cdnca-sshd.local
 
 ssh_guard_log() { printf '[cdnca-ssh-guard] %s\n' "$*" >&2; }
+# 未嵌 install-i18n 的安装器按中文输出。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 # 地址列表：空格或逗号分隔的 IPv4/IPv6 地址或 CIDR；非法项返回 1。
 ssh_guard_validate_ignoreip() {
@@ -1069,24 +1199,24 @@ ssh_guard_install_package() {
 
 # 安装并启用；失败只告警不中断安装（防爆破不是业务前置）。
 ssh_guard_setup() {
-  [ "$SSH_GUARD_ENABLED" = true ] || { ssh_guard_log '已按 --no-ssh-guard 跳过 fail2ban'; return 0; }
-  ssh_guard_validate_ignoreip "$SSH_GUARD_IGNOREIP" || { ssh_guard_log "--ssh-guard-ignoreip 含非法地址：$SSH_GUARD_IGNOREIP"; return 1; }
+  [ "$SSH_GUARD_ENABLED" = true ] || { ssh_guard_log "$(msg '已按 --no-ssh-guard 跳过 fail2ban' 'fail2ban skipped (--no-ssh-guard)')"; return 0; }
+  ssh_guard_validate_ignoreip "$SSH_GUARD_IGNOREIP" || { ssh_guard_log "$(msg "--ssh-guard-ignoreip 含非法地址：$SSH_GUARD_IGNOREIP" "--ssh-guard-ignoreip contains an invalid address: $SSH_GUARD_IGNOREIP")"; return 1; }
   [ -n "$SSH_GUARD_IGNOREIP" ] ||
-    ssh_guard_log '提示：未给 --ssh-guard-ignoreip，只放行回环；建议加上运维出口与本平台各机器地址，避免误封'
+    ssh_guard_log "$(msg '提示：未给 --ssh-guard-ignoreip，只放行回环；建议加上运维出口与本平台各机器地址，避免误封' 'note: no --ssh-guard-ignoreip given, only loopback is exempt; add your admin egress and platform host addresses to avoid being banned')"
   if ! ssh_guard_install_package; then
-    ssh_guard_log '警告：无法安装 fail2ban（无 apt-get/dnf 或安装失败），SSH 防爆破未启用'
+    ssh_guard_log "$(msg '警告：无法安装 fail2ban（无 apt-get/dnf 或安装失败），SSH 防爆破未启用' 'warning: cannot install fail2ban (no apt-get/dnf or the install failed); SSH brute-force protection is off')"
     return 0
   fi
   install -d -m 0755 "${SSH_GUARD_JAIL%/*}"
   ssh_guard_render >"${SSH_GUARD_JAIL}.new"
   mv -f -- "${SSH_GUARD_JAIL}.new" "$SSH_GUARD_JAIL"
   if ! fail2ban-client -t >/dev/null 2>&1; then
-    ssh_guard_log "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）"
+    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
     return 0
   fi
   systemctl enable fail2ban >/dev/null 2>&1 || true
-  systemctl restart fail2ban >/dev/null 2>&1 || { ssh_guard_log '警告：fail2ban 启动失败，SSH 防爆破未启用'; return 0; }
-  ssh_guard_log "fail2ban sshd 已启用（5 次失败/10 分钟封 1 小时；ignoreip：127.0.0.1/8 ::1${SSH_GUARD_IGNOREIP:+ ${SSH_GUARD_IGNOREIP//,/ }}）"
+  systemctl restart fail2ban >/dev/null 2>&1 || { ssh_guard_log "$(msg '警告：fail2ban 启动失败，SSH 防爆破未启用' 'warning: fail2ban failed to start; SSH brute-force protection is off')"; return 0; }
+  ssh_guard_log "$(msg "fail2ban sshd 已启用（5 次失败/10 分钟封 1 小时；ignoreip：" 'fail2ban sshd enabled (5 failures in 10 minutes ban for 1 hour; ignoreip: ')127.0.0.1/8 ::1${SSH_GUARD_IGNOREIP:+ ${SSH_GUARD_IGNOREIP//,/ }}$(msg '）' ')')"
 }
 # <<< END ssh-guard
 
@@ -1109,6 +1239,9 @@ ssh_guard_setup() {
 # NO_COLOR 非空时不输出颜色。完整原始输出写入 PROGRESS_LOG_DIR 下的安装日志。
 
 PROGRESS_LOG_DIR=${PROGRESS_LOG_DIR:-/var/log}
+# 界面语言见 install-i18n；单独加载本库（测试）时按中文。阶段名写成“中文^English”。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
+progress_name() { case "$1" in *^*) msg "${1%%^*}" "${1#*^}" ;; *) printf '%s' "$1" ;; esac; }
 PROGRESS_LOG=''
 PROGRESS_PREFIX=''
 PROGRESS_TTY=false
@@ -1133,14 +1266,14 @@ progress_clock() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
 progress_span() {
   local low=$1 high=$2 low_minutes high_minutes
   if [ "$high" -lt 60 ]; then
-    if [ "$low" -eq "$high" ]; then printf '约 %d 秒' "$high"; else printf '约 %d–%d 秒' "$low" "$high"; fi
+    if [ "$low" -eq "$high" ]; then printf "$(msg '约 %d 秒' '~%d s')" "$high"; else printf "$(msg '约 %d–%d 秒' '~%d–%d s')" "$low" "$high"; fi
     return
   fi
   low_minutes=$((low / 60)) high_minutes=$(((high + 59) / 60))
   [ "$low_minutes" -gt 0 ] || [ "$low" -lt 15 ] || low_minutes=1
-  if [ "$low_minutes" -eq 0 ]; then printf '约 %d 分钟内' "$high_minutes"
-  elif [ "$low_minutes" -ge "$high_minutes" ]; then printf '约 %d 分钟' "$high_minutes"
-  else printf '约 %d–%d 分钟' "$low_minutes" "$high_minutes"; fi
+  if [ "$low_minutes" -eq 0 ]; then printf "$(msg '约 %d 分钟内' 'under %d min')" "$high_minutes"
+  elif [ "$low_minutes" -ge "$high_minutes" ]; then printf "$(msg '约 %d 分钟' '~%d min')" "$high_minutes"
+  else printf "$(msg '约 %d–%d 分钟' '~%d–%d min')" "$low_minutes" "$high_minutes"; fi
 }
 
 progress_bar() {
@@ -1184,17 +1317,18 @@ progress_init() {
     IFS='|' read -r _ low high _ <<<"$entry"
     total_low=$((total_low + low)) total_high=$((total_high + high))
   done
-  progress_line "共 ${#PROGRESS_STAGES[@]} 个步骤，预计$(progress_span "$total_low" "$total_high")${PROGRESS_LOG:+；完整输出写入 ${PROGRESS_LOG}}"
+  progress_line "$(msg "共 ${#PROGRESS_STAGES[@]} 个步骤，预计" "${#PROGRESS_STAGES[@]} steps, expected ")$(progress_span "$total_low" "$total_high")${PROGRESS_LOG:+$(msg "；完整输出写入 ${PROGRESS_LOG}" "; full output in ${PROGRESS_LOG}")}"
 }
 
 progress_close_stage() {
   [ "$PROGRESS_CURRENT" -gt 0 ] || return 0
   local spent=$((SECONDS - PROGRESS_STAGE_START)) name low high flag
   IFS='|' read -r name low high flag <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
+  name=$(progress_name "$name")
   if [ "$flag" != interactive ]; then
     PROGRESS_ACTUAL=$((PROGRESS_ACTUAL + spent)) PROGRESS_NOMINAL=$((PROGRESS_NOMINAL + (low + high) / 2))
   fi
-  progress_line "✓ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} 完成（用时 $(progress_clock "$spent")）" 32
+  progress_line "✓ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "完成（用时 $(progress_clock "$spent")）" "done ($(progress_clock "$spent"))")" 32
   PROGRESS_PASSED=$PROGRESS_CURRENT PROGRESS_CURRENT=0
 }
 
@@ -1219,14 +1353,15 @@ progress_stage() {
     factor=$((PROGRESS_ACTUAL * 100 / PROGRESS_NOMINAL))
   fi
   IFS='|' read -r name low high flag <<<"${PROGRESS_STAGES[$((stage - 1))]}"
-  progress_line "[${stage}/${#PROGRESS_STAGES[@]}] ${name}（$(progress_span "$low" "$high")）……" 1
-  progress_line "$(progress_bar $((done_mid * 100 / total_mid)))  已用 $(progress_clock $((SECONDS - PROGRESS_START)))  预计剩余$(progress_span $((rest_low * factor / 100)) $((rest_high * factor / 100)))"
+  name=$(progress_name "$name")
+  progress_line "[${stage}/${#PROGRESS_STAGES[@]}] ${name}$(msg "（$(progress_span "$low" "$high")）……" " ($(progress_span "$low" "$high")) ...")" 1
+  progress_line "$(progress_bar $((done_mid * 100 / total_mid)))  $(msg '已用' 'elapsed') $(progress_clock $((SECONDS - PROGRESS_START)))  $(msg '预计剩余' 'remaining ')$(progress_span $((rest_low * factor / 100)) $((rest_high * factor / 100)))"
 }
 
 progress_done() {
   [ -n "$PROGRESS_PREFIX" ] || return 0
   progress_close_stage
-  progress_line "$(progress_bar 100)  全部 ${#PROGRESS_STAGES[@]} 个步骤完成，总用时 $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+。安装日志：${PROGRESS_LOG}}" 32
+  progress_line "$(progress_bar 100)  $(msg "全部 ${#PROGRESS_STAGES[@]} 个步骤完成，总用时 $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+。安装日志：${PROGRESS_LOG}}" "all ${#PROGRESS_STAGES[@]} steps done in $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+. Install log: ${PROGRESS_LOG}}")" 32
 }
 
 # 由安装器的 EXIT 清理调用：中途失败时标出失败阶段、版本与日志位置。原因与下一步
@@ -1236,7 +1371,8 @@ progress_on_exit() {
   progress_stop_heartbeat
   if [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ]; then
     IFS='|' read -r name _ <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
-    progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} 失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" 31
+    name=$(progress_name "$name")
+    progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" "failed (${PROGRESS_VERSION:+version ${PROGRESS_VERSION}, }$(progress_clock $((SECONDS - PROGRESS_STAGE_START))) in this step, exit ${status}). The cause and fix are in the error line above${PROGRESS_LOG:+; full output: ${PROGRESS_LOG}}")" 31
     PROGRESS_CURRENT=0
   fi
   return 0
@@ -1249,11 +1385,11 @@ progress_on_exit() {
 progress_keep_output() {
   local file=$1 label=$2
   if [ -n "$PROGRESS_LOG" ] && [ -f "$PROGRESS_LOG" ] &&
-    { printf '>>> %s（失败输出）\n' "$label"; cat -- "$file" 2>/dev/null; } >>"$PROGRESS_LOG" 2>/dev/null; then
+    { printf '>>> %s%s\n' "$label" "$(msg '（失败输出）' ' (failed output)')"; cat -- "$file" 2>/dev/null; } >>"$PROGRESS_LOG" 2>/dev/null; then
     printf "inspect '>>> %s' in %s before retrying" "$label" "$PROGRESS_LOG"
     return 0
   fi
-  printf '%s %s 的输出无法写入安装日志，最后 30 行：\n' "${PROGRESS_LABEL:-}" "$label" >&2
+  printf "$(msg '%s %s 的输出无法写入安装日志，最后 30 行：' '%s output of %s could not be added to the install log; last 30 lines:')\n" "${PROGRESS_LABEL:-}" "$label" >&2
   tail -n 30 -- "$file" 2>/dev/null | sed 's/^/    /' >&2 || true
   printf 'its output is printed above'
   return 0
@@ -1268,21 +1404,21 @@ progress_tick() {
     PROGRESS_WAIT_LABEL=$label PROGRESS_WAIT_START=$SECONDS PROGRESS_WAIT_NEXT=10
   fi
   waited=$((SECONDS - PROGRESS_WAIT_START))
-  text="  等待${label}……已等 $(progress_clock "$waited")，最长 $(progress_clock "$limit")"
+  text="  $(msg "等待${label}……已等 $(progress_clock "$waited")，最长 $(progress_clock "$limit")" "waiting:${label} ... $(progress_clock "$waited") of up to $(progress_clock "$limit")")"
   if "$PROGRESS_TTY"; then progress_inline "$text"
   elif [ "$waited" -ge "$PROGRESS_WAIT_NEXT" ]; then PROGRESS_WAIT_NEXT=$((PROGRESS_WAIT_NEXT + 10)); progress_line "$text"; fi
 }
 
 # apt 输出里的 “N/M：包名”；看不出时输出为空。
 progress_apt_detail() {
-  awk '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
+  awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
     /^Get:[0-9]+ / { got++ }
     /^Unpacking / { name = $2 }
     /^Setting up / { done++; name = $3 }
     END {
       if (total <= 0) exit
-      if (name != "") printf "  正在安装 %d/%d：%s", done, total, name
-      else if (got > 0) printf "  正在下载软件包 %d/%d", got, total
+      if (name != "") printf (en ? "  installing %d/%d: %s" : "  正在安装 %d/%d：%s"), done, total, name
+      else if (got > 0) printf (en ? "  downloading packages %d/%d" : "  正在下载软件包 %d/%d"), got, total
     }' "$1" 2>/dev/null || true
 }
 
@@ -1291,7 +1427,7 @@ progress_heartbeat() {
   local label=$1 output=$2 started=$SECONDS next=15 elapsed text
   while sleep 1 && kill -0 "$$" 2>/dev/null; do
     elapsed=$((SECONDS - started))
-    text="  仍在${label}……已用 $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
+    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
     if "$PROGRESS_TTY"; then progress_inline "$text"
     elif [ "$elapsed" -ge "$next" ]; then next=$((next + 15)); progress_line "$text"; fi
   done
@@ -1328,7 +1464,7 @@ progress_run() {
   if [ "$output" != "$PROGRESS_LOG" ]; then
     [ -z "$PROGRESS_LOG" ] || cat "$output" >>"$PROGRESS_LOG" 2>/dev/null || true
   elif [ "$status" -ne 0 ]; then
-    printf '%s %s失败（退出码 %s），输出最后 30 行：\n' "$PROGRESS_PREFIX" "$label" "$status" >&2
+    printf "$(msg '%s %s失败（退出码 %s），输出最后 30 行：' '%s %s failed (exit %s); last 30 lines of output:')\n" "$PROGRESS_PREFIX" "$label" "$status" >&2
     tail -n "+$from" "$PROGRESS_LOG" | tail -n 30 | sed 's/^/    /' >&2
   fi
   return "$status"
@@ -1340,11 +1476,11 @@ progress_download() {
   local label=$1
   shift
   [ -n "$PROGRESS_PREFIX" ] || { "$@"; return; }
-  { "$@" 2>&1 1>&3 3>&- | awk -v prefix="$PROGRESS_PREFIX" -v label="$label" -v tty="$PROGRESS_TTY" '
+  { "$@" 2>&1 1>&3 3>&- | awk -v prefix="$PROGRESS_PREFIX" -v label="$label" -v tty="$PROGRESS_TTY" -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '
     BEGIN { RS = "[\r\n]"; last = -10 }
     NF == 12 && $1 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ {
       pct = $3 + 0
-      text = sprintf("   下载 %s：%d%%（%s/%s，%s/s）", label, pct, $4, $2, $12)
+      text = sprintf(en ? "   downloading %s: %d%% (%s/%s, %s/s)" : "   下载 %s：%d%%（%s/%s，%s/s）", label, pct, $4, $2, $12)
       if (tty == "true") { printf "\r\033[K%s%s", prefix, text; inline = 1; next }
       if ($2 !~ /[MG]$/) next
       if (pct < last) last = -10
@@ -1499,7 +1635,7 @@ run_preflight() {
   preflight_check_systemd
   preflight_check_coexistence node
   if "$RESUME"; then
-    preflight_record pass 端口占用 '续装：跳过（端口可能由上次安装启动的服务占用）'
+    preflight_record pass 端口占用 "$(msg '续装：跳过（端口可能由上次安装启动的服务占用）' 'resume: skipped (the ports may be held by services the previous attempt started)')"
   else
     preflight_check_ports 80:网站HTTP 443:网站HTTPS 18080:本机健康检查 18443:本机证书服务
   fi
@@ -1508,7 +1644,7 @@ run_preflight() {
   if valid_url "$CONTROL_PLANE"; then
     preflight_check_remote 主控 "${CONTROL_PLANE%/}/downloads/node-install-defaults"
   else
-    preflight_record fail 主控 '--control-plane 不是 HTTPS 地址' '请从管理端「节点安装命令」重新复制完整命令'
+    preflight_record fail 主控 "$(msg '--control-plane 不是 HTTPS 地址' '--control-plane is not an HTTPS URL')" "$(msg '请从管理端「节点安装命令」重新复制完整命令' 'copy the complete command again from the node install command in the console')"
   fi
   preflight_check_selinux
   preflight_check_firewall 80 443
@@ -1522,7 +1658,7 @@ check_gateway_reachable() {
   local address=$GATEWAY_ENROLLMENT_ADDRESS host port
   host=${address%:*}; port=${address##*:}; host=${host#[}; host=${host%]}
   timeout 6 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null ||
-    warn "无法连接节点注册端口 ${address}；请确认主控已放行 TCP ${port}（以及节点通道 ${GATEWAY_ADDRESS}），否则注册会失败"
+    warn "$(msg "无法连接节点注册端口 ${address}；请确认主控已放行 TCP ${port}（以及节点通道 ${GATEWAY_ADDRESS}），否则注册会失败" "cannot reach the node enrollment port ${address}; make sure the control plane allows TCP ${port} (and the node channel ${GATEWAY_ADDRESS}) or enrollment will fail")"
 }
 
 assert_blank_host() {
@@ -1571,6 +1707,15 @@ install_state_begin() {
   (set -o noclobber; printf '%s\n' "$INSTALL_STATE_SCHEMA" >"$INSTALL_STATE_FILE")
   chmod 0600 "$INSTALL_STATE_FILE"
 }
+# keep_installer_copy SOURCE: refresh INSTALLER_COPY from the running script
+# (a regular file; `bash -s` from a pipe keeps no copy). Never fails the install.
+keep_installer_copy() {
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -d "$INSTALL_STATE_DIR" ] || return 0
+  [ "$1" -ef "$INSTALLER_COPY" ] && return 0
+  install -m 0700 -- "$1" "${INSTALLER_COPY}.tmp" 2>/dev/null && mv -f -- "${INSTALLER_COPY}.tmp" "$INSTALLER_COPY" ||
+    { rm -f -- "${INSTALLER_COPY}.tmp"; warn "could not keep a copy of the installer at ${INSTALLER_COPY}"; }
+  return 0
+}
 # No record (a step run outside main) records nothing; --resume then refuses.
 install_state_add() { [ ! -f "$INSTALL_STATE_FILE" ] || printf '%s\n' "$1" >>"$INSTALL_STATE_FILE"; }
 install_state_has() { grep -Fxq -- "$1" "$INSTALL_STATE_FILE" 2>/dev/null; }
@@ -1578,15 +1723,15 @@ install_state_value() { sed -n "s/^$1=//p" "$INSTALL_STATE_FILE" 2>/dev/null | t
 
 install_state_unfinished_hint() {
   [ -f "$INSTALL_STATE_FILE" ] && ! install_state_has step=done || return 0
-  warn "上次节点安装未完成（${INSTALL_STATE_FILE}）：修复失败原因后，在原安装命令末尾加 --resume 续装，已完成的步骤会跳过"
+  warn "$(msg "上次节点安装未完成（${INSTALL_STATE_FILE}）：修复失败原因后，在原安装命令末尾加 --resume 续装，已完成的步骤会跳过" "the previous node installation did not finish (${INSTALL_STATE_FILE}): fix the cause and append --resume to the original install command; finished steps are skipped")"
 }
 
 install_state_check_resumable() {
-  [ -f "$INSTALL_STATE_FILE" ] || fail "无法续装：本机没有安装记录 ${INSTALL_STATE_FILE}，--resume 只用于本安装器上次未完成的安装"
+  [ -f "$INSTALL_STATE_FILE" ] || fail "$(msg "无法续装：本机没有安装记录 ${INSTALL_STATE_FILE}，--resume 只用于本安装器上次未完成的安装" "cannot resume: no install record ${INSTALL_STATE_FILE} on this host; --resume only continues an unfinished installation by this installer")"
   [ ! -L "$INSTALL_STATE_DIR" ] && [ ! -L "$INSTALL_STATE_FILE" ] && [ "$(stat -c '%u:%h:%a' "$INSTALL_STATE_FILE")" = '0:1:600' ] &&
     [ "$(head -n 1 "$INSTALL_STATE_FILE")" = "$INSTALL_STATE_SCHEMA" ] || fail "unsafe or unknown install record ${INSTALL_STATE_FILE}"
-  ! install_state_has step=done || fail '本机节点已安装完成，无需续装；如需重装，请先在管理端删除该节点并清理本机'
-  log "续装上次未完成的节点安装（${INSTALL_STATE_FILE}）"
+  ! install_state_has step=done || fail "$(msg '本机节点已安装完成，无需续装；如需重装，请先在管理端删除该节点并清理本机' 'this node installation already finished; to reinstall, delete the node in the console and clean this host first')"
+  log "$(msg "续装上次未完成的节点安装（${INSTALL_STATE_FILE}）" "resuming the unfinished node installation (${INSTALL_STATE_FILE})")"
 }
 
 # resume_owned_path: a path the previous run of this installer may have left.
@@ -1639,6 +1784,18 @@ verify_ca_file() {
   fi
 }
 
+# --resume without CA flags (next-step list: `bash <installer> ... --resume </dev/null`): reuse the control-plane CA
+# the first run verified against the copied pin and saved, so a private-CA console stays reachable. The command's
+# own --control-plane-ca-file/--control-plane-ca-sha256 always win; a fresh install never trusts leftover files.
+reuse_saved_control_plane_ca() {
+  "$RESUME" && [ -z "$CONTROL_PLANE_CA_FILE" ] && [ -z "$CONTROL_PLANE_CA_SHA256" ] || return 0
+  [ -s "${TLS_DIR}/control-plane-ca.pem" ] && [ ! -L "${TLS_DIR}/control-plane-ca.pem" ] || return 0
+  # A temporary copy: install_trust_material later installs CONTROL_PLANE_CA_FILE onto the saved path (same file fails).
+  [ -n "$TEMP_DIR" ] || TEMP_DIR=$(mktemp -d -t cdnca-edge-install.XXXXXX)
+  install -m 0400 "${TLS_DIR}/control-plane-ca.pem" "${TEMP_DIR}/resume-control-plane-ca.pem"
+  CONTROL_PLANE_CA_FILE="${TEMP_DIR}/resume-control-plane-ca.pem"
+}
+
 prepare_control_plane_ca() {
   [ "${CONTROL_PLANE%%:*}" = 'https' ] || return 0
   [ -n "$TEMP_DIR" ] || TEMP_DIR=$(mktemp -d -t cdnca-edge-install.XXXXXX)
@@ -1685,7 +1842,7 @@ download_verified() {
     candidate="${TEMP_DIR}/download-candidate"
     sums="${TEMP_DIR}/download-checksums"
     rm -f -- "$candidate" "$sums"
-    progress_download 节点安装包 curl_download "${artifact_urls[$index]}" -fL --connect-timeout 10 --max-time 300 --max-filesize 536870912 --retry 1 --output "$candidate" || continue
+    progress_download "$(msg 节点安装包 'node package')" curl_download "${artifact_urls[$index]}" -fL --connect-timeout 10 --max-time 300 --max-filesize 536870912 --retry 1 --output "$candidate" || continue
     if file "$candidate" | grep -Eqi 'HTML|text, Unicode|ASCII text'; then
       continue
     fi
@@ -1797,7 +1954,8 @@ MAX_ARCHIVE, MAX_TOTAL, MAX_FILE = 512 << 20, 1 << 30, 256 << 20
 MAX_MANIFEST, MAX_MEMBERS = 4 << 20, 32768
 METADATA = {'release.manifest.json', 'release.manifest.sig'}
 EXECUTABLES = {'bin/edge-agent', 'bin/cdnca-edge-agent-helper', 'runtime/openresty/nginx/sbin/nginx',
-               'runtime/openresty/bin/openresty', 'runtime/lib/ld-musl-x86_64.so.1', 'runtime/bin/h3probe'}
+               'runtime/openresty/bin/openresty', 'runtime/lib/ld-musl-x86_64.so.1', 'runtime/bin/h3probe',
+               'runtime/openresty/luajit/bin/luajit'}
 # The signed packaging toolset and its manifest v2 inputs let the root helper
 # upgrade this node in place. Scripts are executable; everything else is data.
 PACKAGING_SCRIPTS = {f'packaging/scripts/{name}.sh' for name in
@@ -2050,7 +2208,7 @@ download_agent() {
   NATIVE_MANIFEST_SHA=$(jq -er .manifest_sha256 "${TEMP_DIR}/native-facts.json")
   NATIVE_VERSION=$(jq -er .version "${TEMP_DIR}/native-facts.json")
   PROGRESS_VERSION=$NATIVE_VERSION
-  progress_line "安装版本 ${NATIVE_VERSION}"
+  progress_line "$(msg 安装版本 'Installing version') ${NATIVE_VERSION}"
   OPENRESTY_VERSION=$(jq -er .openresty_version "${TEMP_DIR}/native-facts.json")
   NATIVE_SECURITY_ASSETS=$(jq -ec '.security_assets | select((keys == ["adaptive", "cc", "waf"]) and
     all(.[]; type == "string" and test("^[0-9a-f]{64}$")))' "${TEMP_DIR}/native-facts.json") ||
@@ -2549,7 +2707,7 @@ activate_native_package() {
     # release must equal what this run downloaded and verified again.
     recorded=$(install_state_value manifest_sha256)
     [ -z "$recorded" ] || [ "$recorded" = "$NATIVE_MANIFEST_SHA" ] ||
-      fail "本次下载的节点安装包（${NATIVE_MANIFEST_SHA}）与上次未完成安装的（${recorded}）不同：管理端已发布新版本，无法续装；请先清理本机后全新安装"
+      fail "$(msg "本次下载的节点安装包（${NATIVE_MANIFEST_SHA}）与上次未完成安装的（${recorded}）不同：管理端已发布新版本，无法续装；请先清理本机后全新安装" "the downloaded node package (${NATIVE_MANIFEST_SHA}) differs from the one of the unfinished installation (${recorded}): the console published a new release, resume is impossible; clean this host and install fresh")"
     [ -n "$recorded" ] || install_state_add "manifest_sha256=${NATIVE_MANIFEST_SHA}"
     mkdir -p "${NATIVE_ROOT}/releases"
     chmod 0755 "$NATIVE_ROOT" "${NATIVE_ROOT}/releases"
@@ -2568,6 +2726,8 @@ activate_native_package() {
     mv -- "$NATIVE_STAGE" "$NATIVE_RELEASE"
   fi
   mkdir -p /usr/local/share /opt/cdnca
+  # The installer runs under umask 0077; the L4 OpenResty (cdnca-runtime) must traverse /opt/cdnca to reach l4geo.
+  chmod 0755 /opt/cdnca
   # The Agent itself is published by the packaging transaction, not linked here.
   CREATED_LINKS+=("${NATIVE_ROOT}/current" /usr/local/openresty /usr/local/share/cdnca /opt/cdnca/l4geo)
   CREATED_TARGETS+=("releases/${NATIVE_MANIFEST_SHA}" "${NATIVE_ROOT}/current/runtime/openresty" \
@@ -2616,7 +2776,7 @@ install_agent_packaging() {
   PACKAGING_INSTALLED=true
   if "$RESUME" && install_state_has step=packaged &&
     [ "$(readlink "${PACKAGE_RELEASE_ROOT}/current" 2>/dev/null)" = "versions/${NATIVE_VERSION}" ]; then
-    log "续装：签名 Agent ${NATIVE_VERSION} 已安装，跳过"
+    log "$(msg "续装：签名 Agent ${NATIVE_VERSION} 已安装，跳过" "resume: signed Agent ${NATIVE_VERSION} already installed, skipped")"
     return 0
   fi
   "${release}/packaging/scripts/install.sh" --runtime-identity root \
@@ -2871,14 +3031,14 @@ detect_public_ip() {
   PUBLIC_IP=$(interface_public_ip) || PUBLIC_IP=$(external_public_ip) || PUBLIC_IP=''
   if [ -z "$PUBLIC_IP" ] && [ "$ASSUME_YES" != true ] && { : </dev/tty; } 2>/dev/null && [ -t 2 ]; then
     while [ -z "$PUBLIC_IP" ]; do
-      printf '[cdnca-edge] 未能自动检测本机公网 IP，请输入（直接回车跳过，由管理端按来源地址记录）: ' >&2
+      printf '[cdnca-edge] %s' "$(msg '未能自动检测本机公网 IP，请输入（直接回车跳过，由管理端按来源地址记录）: ' 'Could not detect the public IP of this host; enter it (press Enter to skip and let the console record the source address): ')" >&2
       IFS= read -r typed </dev/tty || typed=''
       [ -n "$typed" ] || break
       PUBLIC_IP=$(public_ip_or_empty "$typed")
-      [ -n "$PUBLIC_IP" ] || printf '[cdnca-edge] %s 不是公网 IP，请重新输入\n' "$typed" >&2
+      [ -n "$PUBLIC_IP" ] || printf "[cdnca-edge] $(msg '%s 不是公网 IP，请重新输入' '%s is not a public IP; try again')\n" "$typed" >&2
     done
   fi
-  if [ -n "$PUBLIC_IP" ]; then log "本机公网 IP：${PUBLIC_IP}"; else warn '未检测到本机公网 IP，管理端将按注册请求的来源地址记录'; fi
+  if [ -n "$PUBLIC_IP" ]; then log "$(msg "本机公网 IP：${PUBLIC_IP}" "public IP: ${PUBLIC_IP}")"; else warn "$(msg '未检测到本机公网 IP，管理端将按注册请求的来源地址记录' 'no public IP detected; the console records the source address of the registration request')"; fi
 }
 
 register_node() {
@@ -2905,7 +3065,7 @@ register_node() {
     # A control plane older than public_ip rejects the unknown field; send
     # the registration again without it (it records the source address).
     if [ "$status" = 400 ] && [ "$code" = invalid_request ] && [ -n "$public_ip" ]; then
-      warn '管理端版本较旧，不接收 public_ip 字段，改为按来源地址登记'
+      warn "$(msg '管理端版本较旧，不接收 public_ip 字段，改为按来源地址登记' 'the console is older and ignores public_ip; registering by source address')"
       public_ip=''
       continue
     fi
@@ -2914,20 +3074,25 @@ register_node() {
   unset REGISTRATION_KEY
   if [ "$status" = 200 ] || [ "$status" = 201 ]; then
     ENROLLMENT_TOKEN=$(jq -er '.enrollment_token.token | select(type == "string" and test("^[A-Za-z0-9._-]{16,512}$"))' "$response") ||
-      fail '主控返回的注册响应无效，请稍后重试'
-    log "节点已注册（$(jq -r '"ID " + .node.display_id + "，名称 " + .node.name' "$response")），安装完成后请到管理端「节点列表 → 待初始化」点击「初始化」"
+      fail "$(msg '主控返回的注册响应无效，请稍后重试' 'the control plane returned an invalid registration response; retry later')"
+    log "$(msg '节点已注册（' 'node registered (')$(jq -r --arg name "$(msg '，名称 ' ', name ')" '"ID " + .node.display_id + $name + .node.name' "$response")$(msg '），安装完成后请到管理端「节点列表 → 待初始化」点击「初始化」' '); after the installation open Nodes -> Pending initialization in the console and click Initialize')"
     rm -f -- "$response"
     return 0
   fi
   rm -f -- "$response"
   case "$code" in
-    invalid_registration_credential) fail '节点注册凭据无效或已被重置，请从管理端「节点安装命令」重新复制最新命令' ;;
-    node_already_registered) fail '本机已注册到管理端（已完成注册或已初始化）；如需重新安装，请先在管理端删除该节点' ;;
-    node_registration_rate_limited) fail '注册请求过于频繁，请 1 分钟后重试' ;;
-    node_registration_limit) fail '待初始化节点过多，请先在管理端处理「待初始化」列表' ;;
-    node_registration_unavailable) fail '管理端未启用节点注册，请检查主控配置' ;;
-    validation_error) fail '注册信息无效（请检查 /etc/machine-id）' ;;
-    *) fail "节点注册失败（HTTP ${status}${code:+，${code}}），请检查与管理端 ${CONTROL_PLANE} 的 HTTPS 连通性后重试" ;;
+    invalid_registration_credential) fail "$(msg '节点注册凭据无效或已被重置，请从管理端「节点安装命令」重新复制最新命令' 'the node registration credential is invalid or was reset; copy the latest command from "Install node" in the console')" ;;
+    node_already_registered) fail "$(msg '本机已注册到管理端（已完成注册或已初始化）；如需重新安装，请先在管理端删除该节点' 'this host is already registered (registered or initialised); delete the node in the console before reinstalling')" ;;
+    node_registration_rate_limited) fail "$(msg '注册请求过于频繁，请 1 分钟后重试' 'too many registration requests; retry in a minute')" ;;
+    node_registration_limit) fail "$(msg '待初始化节点过多，请先在管理端处理「待初始化」列表' 'too many pending nodes; handle the "Pending" list in the console first')" ;;
+    node_registration_unavailable) fail "$(msg '管理端未启用节点注册，请检查主控配置' 'node registration is disabled on the console; check the control plane configuration')" ;;
+    validation_error) fail "$(msg '注册信息无效（请检查 /etc/machine-id）' 'invalid registration data (check /etc/machine-id)')" ;;
+    entitlement_feature_denied) fail "$(msg '主控授权不含节点管理功能（nodes.manage），请到授权门户确认套餐，主控刷新授权后重试' 'the control plane licence does not grant node management (nodes.manage); check the plan in the licensing portal and retry after the control plane refreshes its licence')" ;;
+    entitlement_quota_denied) fail "$(msg '主控授权未包含节点数配额（nodes.count），请到授权门户确认套餐' 'the control plane licence has no node quota (nodes.count); check the plan in the licensing portal')" ;;
+    entitlement_quota_exceeded) fail "$(msg '节点数已达主控授权上限，请先删除不用的节点或升级套餐' 'the node count has reached the control plane licence limit; delete unused nodes or upgrade the plan')" ;;
+    entitlement_unavailable) fail "$(msg '主控尚无有效授权租约，请先在主控完成激活并确认授权在线后重试' 'the control plane has no verified licence lease yet; finish activation and retry once the licence is online')" ;;
+    entitlement_state_denied) fail "$(msg '主控授权状态不允许新增节点（已过期、暂停或吊销），请到授权门户处理' 'the control plane licence state does not allow new nodes (expired, suspended or revoked); resolve it in the licensing portal')" ;;
+    *) fail "$(msg "节点注册失败（HTTP ${status}${code:+，${code}}），请检查与管理端 ${CONTROL_PLANE} 的 HTTPS 连通性后重试" "node registration failed (HTTP ${status}${code:+, ${code}}); check HTTPS connectivity to ${CONTROL_PLANE} and retry")" ;;
   esac
 }
 
@@ -2946,11 +3111,11 @@ recover_registered_identity() {
     : >"$response" && chmod 0600 "$response" || return 1
   else
     csr=$("$AGENT_BINARY" enroll --print-pending-csr-sha256 --identity-dir "$IDENTITY_DIR" --machine-id-file /etc/machine-id) &&
-      [[ "$csr" =~ ^[0-9a-f]{64}$ ]] || { warn '续装：本机上次的身份申请记录不完整，按原流程注册'; return 1; }
+      [[ "$csr" =~ ^[0-9a-f]{64}$ ]] || { warn "$(msg '续装：本机上次的身份申请记录不完整，按原流程注册' 'resume: the previous identity request on this host is incomplete; registering normally')"; return 1; }
     fingerprint=$(machine_fingerprint)
     jq -n --arg credential "$REGISTRATION_KEY" --arg fingerprint "$fingerprint" --arg csr "$csr" \
       '{credential: $credential, machine_fingerprint: $fingerprint, csr_sha256: $csr}' >"$request" && chmod 0600 "$request" || return 1
-    log "续装：向 ${CONTROL_PLANE_ORIGIN:-$CONTROL_PLANE} 查询本机已签发的身份"
+    log "$(msg "续装：向 ${CONTROL_PLANE_ORIGIN:-$CONTROL_PLANE} 查询本机已签发的身份" "resume: asking ${CONTROL_PLANE_ORIGIN:-$CONTROL_PLANE} for the identity already issued to this host")"
     status=$(curl_download "${CONTROL_PLANE%/}/v1/node-registrations/identity" -sS --connect-timeout 10 --max-time 30 \
       --max-filesize 1048576 -o "$response" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
       --data-binary "@${request}") || status=000
@@ -2959,13 +3124,13 @@ recover_registered_identity() {
       code=$(jq -r '.error.code // empty' "$response" 2>/dev/null || true)
       rm -f -- "$response"
       case "$code" in
-        invalid_registration_credential) fail '节点注册凭据无效或已被重置，请从管理端「节点安装命令」重新复制最新命令' ;;
-        node_registration_rate_limited) fail '注册请求过于频繁，请 1 分钟后重试' ;;
+        invalid_registration_credential) fail "$(msg '节点注册凭据无效或已被重置，请从管理端「节点安装命令」重新复制最新命令' 'the node registration credential is invalid or was reset; copy the latest command from "Install node" in the console')" ;;
+        node_registration_rate_limited) fail "$(msg '注册请求过于频繁，请 1 分钟后重试' 'too many registration requests; retry in a minute')" ;;
       esac
       # 404: nothing was issued for this pending request (or an older
       # controller without the endpoint); registering again is safe.
-      if [ "$status" = 404 ]; then log '续装：主控没有本机已签发的身份，按原流程注册'; else
-        warn "续装：查询已签发身份失败（HTTP ${status}${code:+，${code}}），按原流程注册"
+      if [ "$status" = 404 ]; then log "$(msg '续装：主控没有本机已签发的身份，按原流程注册' 'resume: the control plane has no issued identity for this host; registering normally')"; else
+        warn "$(msg "续装：查询已签发身份失败（HTTP ${status}${code:+，${code}}），按原流程注册" "resume: looking up the issued identity failed (HTTP ${status}${code:+, ${code}}); registering as usual")"
       fi
       return 1
     fi
@@ -2974,12 +3139,12 @@ recover_registered_identity() {
   if ! "$AGENT_BINARY" enroll --recover-from-response "$response" --identity-dir "$IDENTITY_DIR" \
     --machine-id-file /etc/machine-id >"${TEMP_DIR}/enrollment-result.json"; then
     rm -f -- "$response"
-    fail '续装：主控返回的身份与本机保存的密钥不匹配，请到管理端删除该节点后重装'
+    fail "$(msg '续装：主控返回的身份与本机保存的密钥不匹配，请到管理端删除该节点后重装' 'resume: the identity from the control plane does not match the saved key; delete the node in the console and reinstall')"
   fi
   rm -f -- "$response"
   [ -f "${IDENTITY_DIR}/identity.json" ] || fail 'identity recovery returned without an identity file'
   unset REGISTRATION_KEY
-  log '续装：已从主控取回本机已签发的身份，跳过注册'
+  log "$(msg '续装：已从主控取回本机已签发的身份，跳过注册' 'resume: recovered the issued identity from the control plane; skipping registration')"
 }
 
 enroll() {
@@ -3140,7 +3305,7 @@ setup_service() {
     restarts=$(systemctl show "$SERVICE_NAME" --property=NRestarts --value 2>/dev/null || true)
     [ -z "$restarts" ] || [ "$restarts" = 0 ] || break
     [ "$stable" -lt 5 ] || return 0
-    progress_tick ' edge-agent 稳定运行' 90
+    progress_tick "$(msg ' edge-agent 稳定运行' ' edge-agent to run stably')" 90
     sleep 2
   done
   journalctl -u "$SERVICE_NAME" -n 50 --no-pager >&2 || true
@@ -3159,33 +3324,45 @@ verify_agent_connected() {
   for ((attempt = 0; attempt < tries; attempt++)); do
     if ! systemctl is-active --quiet "$SERVICE_NAME"; then
       journalctl -u "$SERVICE_NAME" -n 50 --no-pager >&2 || true
-      fail 'edge-agent 启动后又退出，见上面的服务日志'
+      fail "$(msg 'edge-agent 启动后又退出，见上面的服务日志' 'edge-agent exited after starting; see the service log above')"
     fi
     journal=$(journalctl -u "$SERVICE_NAME" --since "$AGENT_STARTED_AT" -o cat --no-pager 2>/dev/null || true)
     if grep -Eq 'node network inventory report|gateway session ended; reconnecting established=true' <<<"$journal"; then
-      log "已与主控网关 ${GATEWAY_ADDRESS} 建立会话"
+      log "$(msg "已与主控网关 ${GATEWAY_ADDRESS} 建立会话" "session established with the control Gateway ${GATEWAY_ADDRESS}")"
       if timeout 2 bash -c 'exec 3<>/dev/tcp/127.0.0.1/18080' 2>/dev/null; then
         curl -fsS --max-time 3 -o /dev/null http://127.0.0.1:18080/healthz || {
           INSTALL_KEEP=true
-          fail '本机健康检查失败：http://127.0.0.1:18080/healthz 无响应；查看 journalctl -u cdnca-edge-agent 中的 OpenResty 报错'
+          fail "$(msg '本机健康检查失败：http://127.0.0.1:18080/healthz 无响应；查看 journalctl -u cdnca-edge-agent 中的 OpenResty 报错' 'local health check failed: http://127.0.0.1:18080/healthz did not answer; check OpenResty errors in journalctl -u cdnca-edge-agent')"
         }
-        log '本机健康检查通过（127.0.0.1:18080/healthz）'
+        log "$(msg '本机健康检查通过（127.0.0.1:18080/healthz）' 'local health check passed (127.0.0.1:18080/healthz)')"
       else
-        log '健康端口 127.0.0.1:18080 尚未监听：主控下发首个配置后由 Agent 启动 OpenResty'
+        log "$(msg '健康端口 127.0.0.1:18080 尚未监听：主控下发首个配置后由 Agent 启动 OpenResty' 'health port 127.0.0.1:18080 is not listening yet: the Agent starts OpenResty after the first configuration arrives')"
       fi
       return 0
     fi
-    progress_tick ' 连接主控网关' "$GATEWAY_SESSION_WAIT_SECONDS"
+    progress_tick " $(msg 连接主控网关 'connecting to the control Gateway')" "$GATEWAY_SESSION_WAIT_SECONDS"
     sleep 3
   done
   last_error=$(grep -F 'established=false' <<<"$journal" | tail -n 1 | sed -nE 's/.*error=(.*)$/\1/p')
   INSTALL_KEEP=true
-  fail "服务已起但未连上主控网关 ${GATEWAY_ADDRESS}（等待 ${GATEWAY_SESSION_WAIT_SECONDS} 秒）${last_error:+；最近一次错误：${last_error}}。
+  fail "$(msg "服务已起但未连上主控网关 ${GATEWAY_ADDRESS}（等待 ${GATEWAY_SESSION_WAIT_SECONDS} 秒）${last_error:+；最近一次错误：${last_error}}。
   请检查：1) 主控防火墙/安全组已放行 TCP ${port}，本机能连通（timeout 5 bash -c 'exec 3<>/dev/tcp/${GATEWAY_ADDRESS%:*}/${port}'，IPv6 去掉方括号）；
   2) 本机时间准确（timedatectl）；3) 主控网关服务正常、证书名为 ${GATEWAY_SERVER_NAME}；4) 日志：journalctl -u ${SERVICE_NAME} -n 100。
-  服务保持运行并会自动重连；修好后在原安装命令末尾加 --resume 重新自检"
+  服务保持运行并会自动重连；修好后在原安装命令末尾加 --resume 重新自检" "the service is up but did not connect to the control Gateway ${GATEWAY_ADDRESS} (waited ${GATEWAY_SESSION_WAIT_SECONDS} s)${last_error:+; last error: ${last_error}}.
+  Check: 1) the control firewall / security group allows TCP ${port} and this host can reach it (timeout 5 bash -c 'exec 3<>/dev/tcp/${GATEWAY_ADDRESS%:*}/${port}', drop the brackets for IPv6);
+  2) the clock of this host is correct (timedatectl); 3) the control Gateway is healthy and its certificate name is ${GATEWAY_SERVER_NAME}; 4) logs: journalctl -u ${SERVICE_NAME} -n 100.
+  The service keeps running and reconnects by itself; once fixed append --resume to the original install command to rerun the self-check")"
 }
 
+# The steps the installer cannot do itself: they need the console. --resume
+# of an enrolled host needs no key.
+node_next_steps() {
+  printf '%s\n  1) %s\n  2) %s\n  3) %s\n  4) %s\n' "$(msg '下一步：' 'Next steps:')" \
+    "$(msg '主控「节点列表 → 待初始化」找到本机，点「初始化」（第一次装主控时还需先建「区域」）' 'console Nodes -> Pending initialization: find this host and click Initialize (on a new console create a Region first)')" \
+    "$(msg '把本机加入线路组（「线路组」→ 新建或编辑，端点选本机 80 端口），站点才会解析到本机' 'add this host to a line group (Line groups -> new or edit, endpoint this host port 80) so sites resolve to it')" \
+    "$(msg '原安装命令末尾加 --resume 重新自检（本机已有身份，无需重新取注册密钥；直接 bash <安装器> ... --resume </dev/null 也可）' 'rerun the original install command with --resume (this host already has its identity, no need to fetch the registration key again; bash <installer> ... --resume </dev/null works too)')" \
+    "$(msg "全部完成后核对：${INSTALLER_COPY} check（应全部 OK）" "when done verify: ${INSTALLER_COPY} check (every item must be OK)")" >&2
+}
 # Edge kernel baseline. Each entry is
 # name:direction:value; "min" raises a smaller value, "max" lowers a larger
 # one. ip_local_port_range is deliberately left alone: widening it downwards
@@ -3243,6 +3420,94 @@ configure_firewall() {
   warn 'firewall was not changed; allow the configured Gateway/OpenResty ports in the host policy'
 }
 
+# install-node.sh check: read-only contract of a finished node. A fresh
+# install must pass every item; exit 1 otherwise.
+check_installed() {
+  local ok=true value port version path listen
+  check_ok() { log "OK   $*"; }
+  check_bad() { warn "$*"; ok=false; }
+  check_info() { log "     $*"; }
+  for value in "$SERVICE_NAME" cdnca-edge-agent-helper.socket; do
+    if systemctl is-active --quiet "$value"; then check_ok "$value active"
+    else check_bad "$(msg "$value 不是 active（journalctl -u $value -n 100）" "$value is not active (journalctl -u $value -n 100)")"; fi
+  done
+  value=$(systemctl show "$SERVICE_NAME" -p KillMode --value 2>/dev/null)
+  if [ "$value" = process ]; then check_ok "$(msg 'KillMode=process（重启 Agent 不断四层）' 'KillMode=process (an Agent restart keeps layer 4 sessions)')"
+  else check_bad "$(msg "KillMode=${value:-?}，应为 process（有 drop-in 覆盖了打包单元？）" "KillMode=${value:-?}, expected process (a drop-in overrides the packaged unit?)")"; fi
+  value=$(systemctl show "$SERVICE_NAME" -p FragmentPath --value 2>/dev/null)
+  if [ "$value" = "${SYSTEMD_PACKAGE_DIR}/${SERVICE_NAME}.service" ]; then check_ok "$(msg "打包单元 $value" "packaged unit $value")"
+  else check_bad "$(msg "Agent 单元来自 ${value:-?}，应为打包单元 ${SYSTEMD_PACKAGE_DIR}/${SERVICE_NAME}.service（/etc 下的同名单元会让 helper 升级失效）" "the Agent unit comes from ${value:-?}, expected the packaged ${SYSTEMD_PACKAGE_DIR}/${SERVICE_NAME}.service (a same-named unit under /etc defeats helper upgrades)")"; fi
+  if [ -n "$(find "$CONFIG_FILE" -maxdepth 0 -type f -perm 0600 2>/dev/null)" ] &&
+    jq -e '.version == 2 and .dynamic_routing.enabled == true and .upgrade.enabled == true and .security_runtime.mode == "native"' "$CONFIG_FILE" >/dev/null 2>&1; then
+    check_ok "$(msg "config.json（0600，dynamic_routing、upgrade 已启用，native 运行时）" "config.json (0600, dynamic_routing and upgrade enabled, native runtime)")"
+  else check_bad "$(msg "$CONFIG_FILE 缺失、权限不是 0600，或 dynamic_routing/upgrade 未启用" "$CONFIG_FILE is missing, not 0600, or dynamic_routing/upgrade is off")"; fi
+  for path in "${TRUST_DIR}/artifacts.json" "${TRUST_DIR}/control-execution.json" "${TRUST_DIR}/edge-execution.json" \
+    "${TRUST_DIR}/installer-receipt.json" "${TLS_DIR}/upgrade-download-ca.pem"; do
+    [ -n "$(find "$path" -maxdepth 0 -type f -perm 0400 2>/dev/null)" ] ||
+      check_bad "$(msg "$path 缺失或不是只读 0400（节点无法验签升级）" "$path is missing or not read-only 0400 (the node cannot verify upgrades)")"
+  done
+  # Gateway session: an established connection of the Agent to the configured
+  # Gateway port, or this Agent start logged a passed GatewayHello.
+  value=$(jq -r '.gateway.address // empty' "$CONFIG_FILE" 2>/dev/null)
+  port=${value##*:}
+  if [ -n "$port" ] && ss -Htnp state established 2>/dev/null | grep -F '"edge-agent"' | grep -Eq "[]:.0-9a-fA-F]:${port}[[:space:]]"; then
+    check_ok "$(msg "网关会话：已连 ${value}" "Gateway session: connected to ${value}")"
+  elif journalctl -u "$SERVICE_NAME" _SYSTEMD_INVOCATION_ID="$(systemctl show "$SERVICE_NAME" -p InvocationID --value 2>/dev/null)" -o cat --no-pager 2>/dev/null |
+    grep -Eq 'node network inventory report|gateway session ended; reconnecting established=true'; then
+    check_ok "$(msg "网关会话：本次启动已与 ${value} 握手" "Gateway session: this start completed the handshake with ${value}")"
+  else check_bad "$(msg "网关会话：未连上 ${value:-?}（journalctl -u $SERVICE_NAME | grep 'gateway session'）" "Gateway session: not connected to ${value:-?} (journalctl -u $SERVICE_NAME | grep 'gateway session')")"; fi
+  if install_state_has step=done; then check_ok "$(msg "install-state 记录已完成（$INSTALL_STATE_FILE）" "install-state record finished ($INSTALL_STATE_FILE)")"
+  else check_bad "$(msg "安装未完成（$INSTALL_STATE_FILE 无 step=done）：在原安装命令末尾加 --resume 续装" "the installation did not finish ($INSTALL_STATE_FILE has no step=done): rerun the original install command with --resume")"; fi
+  version=$(/usr/local/openresty/bin/openresty -V 2>&1) || version=''
+  value=$(jq -r '.openresty.version // empty' "$CONFIG_FILE" 2>/dev/null)
+  if [ -n "$value" ] && grep -Fq "openresty/${value}" <<<"$version"; then check_ok "openresty ${value}"
+  else check_bad "$(msg "openresty -V 不是 config.json 声明的 ${value:-?}：$(head -n 1 <<<"$version")" "openresty -V differs from ${value:-?} declared in config.json: $(head -n 1 <<<"$version")")"; fi
+  if grep -Fq -- '--with-http_v3_module' <<<"$version"; then check_ok 'openresty http_v3'
+  else check_bad "$(msg 'openresty 缺 http_v3 模块' 'openresty lacks the http_v3 module')"; fi
+  if grep -iq ja4 <<<"$version"; then check_ok 'openresty JA4'
+  else check_bad "$(msg 'openresty 缺 JA4 模块' 'openresty lacks the JA4 module')"; fi
+  if [ -x "${NATIVE_ROOT}/current/runtime/openresty/luajit/bin/luajit" ]; then check_ok "$(msg 'luajit 存在（EDGE_WEBP 前提）' 'luajit present (EDGE_WEBP prerequisite)')"
+  else check_bad "$(msg "${NATIVE_ROOT}/current/runtime/openresty/luajit/bin/luajit 缺失（节点不声明 EDGE_WEBP）" "${NATIVE_ROOT}/current/runtime/openresty/luajit/bin/luajit is missing (the node does not declare EDGE_WEBP)")"; fi
+  # OpenResty starts with the first published site; before that 18080 is closed.
+  listen=$(ss -Hltn 'sport = :18080' 2>/dev/null || true)
+  if [ -z "$listen" ]; then check_info "$(msg '127.0.0.1:18080 未监听：发布首个站点后 Agent 才启动 OpenResty，届时 /healthz 应为 204' '127.0.0.1:18080 is not listening: the Agent starts OpenResty with the first published site; /healthz must then answer 204')"
+  else
+    value=$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:18080/healthz 2>/dev/null || true)
+    if [ "$value" = 204 ]; then check_ok '/healthz 204'; else check_bad "/healthz ${value:-000}$(msg '（应为 204）' ' (expected 204)')"; fi
+  fi
+  check_info "$(msg '节点包' 'node package') $(jq -r '(.version // "?") + " " + (.source.commit // "?")' "${NATIVE_ROOT}/current/release.manifest.json" 2>/dev/null)"
+  check_info "node_id $(jq -r '.node_id // "?"' "${IDENTITY_DIR}/identity.json" 2>/dev/null)"
+  value=$(ip -d link show 2>/dev/null | grep -c 'prog/xdp' || true)
+  check_info "XDP: ${value:-0}"
+  "$ok"
+}
+
+# 节点安装完成简版摘要（屏幕；不含安装令牌与注册密钥）。
+node_install_summary() {
+  local node_id transport
+  node_id=$(jq -r '.node_id // empty' "${IDENTITY_DIR}/identity.json" 2>/dev/null) || node_id=''
+  transport=$GATEWAY_TRANSPORT
+  [ "$transport" != ws ] || transport="ws ($(msg 'WebSocket 隧道' 'WebSocket tunnel')${GATEWAY_TUNNEL_HOST:+, $GATEWAY_TUNNEL_HOST})"
+  {
+    printf '\n%s\n' '================================================================'
+    printf '  %s\n' "$(msg 'CDNCA 节点安装完成' 'CDNCA node installed')"
+    printf '%s\n' '================================================================'
+    printf '%s %s\n' "$(msg '节点 ID：' 'Node ID:')" "${node_id:-$(msg '见' 'see') ${IDENTITY_DIR}/identity.json}"
+    [ -z "$NODE_NAME" ] || printf '%s %s\n' "$(msg '节点名称：' 'Node name:')" "$NODE_NAME"
+    printf '%s %s\n' "$(msg '所属主控：' 'Control plane:')" "$CONTROL_PLANE"
+    printf '%s %s  %s %s\n' "$(msg '网关地址：' 'Gateway:')" "$GATEWAY_ADDRESS" "$(msg '传输方式：' 'transport:')" "$transport"
+    printf '%s\n' "$(msg '需要在防火墙/云安全组放行（入站）：' 'Open inbound in the host firewall / cloud security group:')"
+    printf '  TCP 80, TCP 443  %s\n' "$(msg '网站 HTTP/HTTPS' 'website HTTP/HTTPS')"
+    printf '  UDP 443          %s\n' "$(msg '网站 HTTP/3（站点开启 HTTP/3 时）' 'website HTTP/3 (when enabled on a site)')"
+    printf '  %s\n' "$(msg "四层转发端口按管理端配置另行放行；出站需能访问网关 ${GATEWAY_ADDRESS}。" "Open layer-4 forwarding ports as configured in the console; outbound must reach ${GATEWAY_ADDRESS}.")"
+    printf '%s http://127.0.0.1:18080/healthz %s\n' "$(msg '健康检查：' 'Health check:')" "$(msg '（仅本机）' '(local only)')"
+    printf '%s journalctl -u %s%s\n' "$(msg '日志：' 'Logs:')" "$SERVICE_NAME" "${PROGRESS_LOG:+; $PROGRESS_LOG}"
+    printf '%s %s check\n' "$(msg '核对：' 'Verify:')" "$INSTALLER_COPY"
+    printf '%s /usr/libexec/cdnca-edge-agent/uninstall.sh\n' "$(msg '卸载：' 'Uninstall:')"
+    printf '%s\n' '================================================================'
+  } >&2
+}
+
 main() {
   # Used by the signed management bundle before consuming its activation code.
   # Verification/extraction only: no enrollment, global links or service writes.
@@ -3251,8 +3516,19 @@ main() {
     verify_native_package "$2" "$3" "$4"
     return
   fi
+  install_lang_init "$@"
+  set -- ${INSTALL_ARGS[@]+"${INSTALL_ARGS[@]}"}
+  if [ "${1:-}" = check ]; then
+    [ "$#" -eq 1 ] || fail 'usage: install-node.sh check [--lang zh|en]'
+    [ "$EUID" -eq 0 ] || fail 'run the check as root'
+    INSTALL_KEEP=true
+    check_installed
+    return
+  fi
   parse_args "$@"
+  install_lang_prompt
   read_enrollment_token
+  reuse_saved_control_plane_ca
   progress_init
   progress_stage
   run_preflight
@@ -3261,6 +3537,7 @@ main() {
   check_gateway_reachable
   assert_blank_host
   "$RESUME" || install_state_begin
+  keep_installer_copy "${BASH_SOURCE[0]}"
   progress_stage
   quiesce_package_automation
   # A freshly booted host runs unattended-upgrades, which holds the dpkg lock
@@ -3291,14 +3568,14 @@ main() {
   # Register only after every local preflight passed, so a host that cannot
   # be installed never appears in the pending list.
   if "$RESUME" && [ -f "${IDENTITY_DIR}/identity.json" ]; then
-    log '续装：本机已向网关注册（身份文件已存在），跳过注册'
+    log "$(msg '续装：本机已向网关注册（身份文件已存在），跳过注册' 'resume: this host is already registered with the Gateway (identity file exists), skipping registration')"
   elif "$RESUME" && [ -d "${IDENTITY_DIR}.enrolling" ] && [ -n "$REGISTRATION_KEY" ] && recover_registered_identity; then
     :
   else
     # A one-time token is consumed by the enrollment it started; the
     # controller cannot hand that identity back without a reusable credential.
     if "$RESUME" && [ -d "${IDENTITY_DIR}.enrolling" ] && [ -z "$REGISTRATION_KEY" ]; then
-      warn '续装：上次的身份申请未完成，用一次性安装令牌安装的节点无法从主控取回已签发的身份；若下面注册失败，请到管理端删除该节点后重装'
+      warn "$(msg '续装：上次的身份申请未完成，用一次性安装令牌安装的节点无法从主控取回已签发的身份；若下面注册失败，请到管理端删除该节点后重装' 'resume: the previous identity request did not finish and a node installed with a one-time token cannot fetch the issued identity back; if the registration below fails, delete the node in the console and reinstall')"
     fi
     if [ -n "$REGISTRATION_KEY" ]; then register_node; fi
     enroll
@@ -3313,6 +3590,8 @@ main() {
   verify_agent_connected
   install_state_add step=done
   log "edge-agent installed and enrolled; identity is ${IDENTITY_DIR}/identity.json"
+  node_install_summary
+  node_next_steps
   progress_done
 }
 

@@ -272,7 +272,7 @@ test('main wires the record, the cleanup entry point and the database markers', 
   assert.ok(main.indexOf('control_install_state_prepare') > -1 && main.indexOf('control_install_state_prepare') < main.indexOf('ssh_guard_setup'))
   assert.match(source, /install-ubuntu-dependencies\.sh" "\$action" \$\{inputs\[@\]\+"\$\{inputs\[@\]\}"\}\n\s+# [^\n]*\n\s+control_install_state_add step=dependencies_ready/)
   assert.match(source, /control_install_state_add "created=postgresql:\$\{PG_PORT\}"\n\s+"\$\{psql_runner\[@\]\}" -X -v ON_ERROR_STOP=1 --dbname postgres <"\$sql_file"/)
-  assert.match(source, /control_install_state_add "created=clickhouse:\$\{CH_TCP_PORT\}"\n\s+progress_run '初始化 ClickHouse'/)
+  assert.match(source, /control_install_state_add "created=clickhouse:\$\{CH_TCP_PORT\}"\n\s+progress_run "\$\(msg '初始化 ClickHouse' 'Initialise ClickHouse'\)"/)
   assert.match(source.match(/^cleanup\(\) \{[\s\S]*?^\}\n/m)[0], /\[ "\$status" -eq 0 \] \|\| control_install_failed_hint/)
 })
 

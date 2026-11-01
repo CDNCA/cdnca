@@ -501,8 +501,9 @@ components:
       name: tenant_scope_id
       in: query
       required: false
-      description: >-
-        Platform administrator sessions only: the tenant scope
+      description: "Platform administrator sessions only (platform administrators may review on a tenant's behalf): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+      x-description-zh: >-
+        Platform administrator sessions only (user 10-27: 平台管理员也能代审): the tenant scope
         whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant
         session. The administrator must hold platform.admin and the tenant must be active; the
         administrator acts and is audited as themself (payload actor_scope_kind=platform).

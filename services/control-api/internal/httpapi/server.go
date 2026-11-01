@@ -94,6 +94,7 @@ type Server struct {
 	identity                             *identity.Service
 	nodes                                *node.Service
 	nodeRegistrationLimiter              *registrationLimiter
+	pluginWriteLimiter                   *pluginWriteLimiter
 	nodeInventory                        *nodepresence.Inventory
 	nodeMetrics                          NodeMetricsReader
 	nodePortTransitions                  *nodeporttransition.Service
@@ -459,6 +460,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 	server.nodeInventory.WithTelemetryExclusions(nodeidentity.TelemetryScopeExclusions)
 	server.maintenanceUpgradeRuntime = config.MaintenanceUpgradeRuntime
 	server.nodeRegistrationLimiter = newRegistrationLimiter(config.Now)
+	server.pluginWriteLimiter = newPluginWriteLimiter(config.Now)
 	// Self-registration derives its credential MAC from the API key pepper; a
 	// missing pepper leaves the endpoints failing closed (503).
 	if len(config.APIKeyPepper) >= 32 {
@@ -1488,6 +1490,12 @@ func (s *Server) Handler() http.Handler {
 			"GET /v1/admin/nodes/ssh-installs", "POST /v1/admin/nodes/ssh-installs",
 			"GET /v1/admin/nodes/ssh-installs/{id}", "POST /v1/admin/nodes/ssh-installs/{id}/confirm-host-key",
 			"POST /v1/admin/nodes/ssh-installs/{id}/cancel",
+			// "only the controller may SSH" and the console SSH
+			// terminal (internal/nodesshinstall.TerminalPatterns).
+			"GET /v1/admin/nodes/ssh-access/controller-egress",
+			"GET /v1/nodes/{id}/ssh-access", "PUT /v1/nodes/{id}/ssh-access",
+			"GET /v1/nodes/{id}/ssh-endpoint", "POST /v1/nodes/{id}/ssh-host-key",
+			"GET /v1/nodes/{id}/ssh-terminal", "DELETE /v1/nodes/{id}/ssh-credential",
 		}},
 		{handler: s.accountRegistrationHandler, patterns: []string{
 			"POST /v1/auth/register",
@@ -1540,6 +1548,7 @@ func (s *Server) Handler() http.Handler {
 		{handler: s.firewallActionHandler, patterns: []string{
 			"/v1/firewall-actions/policy",
 			"/v1/firewall-actions/policy/recover",
+			"/v1/firewall-actions/default",
 		}},
 		{handler: s.nodeSchedulerHandler, patterns: []string{
 			"/v1/node-line-groups", "/v1/node-line-groups/",
@@ -1577,6 +1586,8 @@ func (s *Server) Handler() http.Handler {
 		}},
 		{handler: s.pluginUIHandler, patterns: []string{
 			"GET /v1/plugin-ui/pages", "GET /v1/plugin-ui/signing-key", "POST /v1/plugin-ui/{plugin_id}/proxy",
+			"GET /v1/plugin-ui/{plugin_id}/identity", "POST /v1/plugin-ui/{plugin_id}/identity",
+			"DELETE /v1/plugin-ui/{plugin_id}/identity",
 		}},
 		{handler: s.pluginProviderHandler, patterns: []string{
 			"GET /v1/admin/plugin-providers", "POST /v1/admin/plugin-providers/{plugin_id}/{action}",
@@ -1680,7 +1691,7 @@ func (s *Server) Handler() http.Handler {
 		s.approvalCenterRoutes(mux, func() http.Handler { return full })
 		gated = s.withApprovalCenter(mux)
 	}
-	handler := s.withRequestID(s.withAPIKeyClientIP(s.withInstallationLock(gated)))
+	handler := s.withRequestID(s.withAPIKeyClientIP(s.withPluginIdentity(s.withInstallationLock(gated))))
 	if s.controlPlaneUpgradeGate != nil {
 		handler = s.controlPlaneUpgradeGate(handler)
 	}
@@ -2305,7 +2316,16 @@ func (s *Server) authenticatedPrincipalWithAPIKey(r *http.Request) (identity.Pri
 		return principal, uuid.Nil, "", err
 	case strings.EqualFold(scheme, "CdncaKey"):
 		raw := strings.TrimSpace(rawToken)
-		principal, keyID, authenticatedAt, err := s.apiKeys.AuthenticateWithKeyID(r.Context(), raw)
+		var principal identity.Principal
+		var keyID uuid.UUID
+		var authenticatedAt time.Time
+		var err error
+		if cached, ok := cachedAPIKeyAuthentication(r.Context(), raw); ok {
+			// withPluginIdentity already authenticated this key (and checked its plugin installation).
+			principal, keyID, authenticatedAt, err = cached.principal, cached.keyID, cached.authenticatedAt, cached.err
+		} else {
+			principal, keyID, authenticatedAt, err = s.apiKeys.AuthenticateWithKeyID(r.Context(), raw)
+		}
 		if err != nil || keyID == uuid.Nil {
 			return identity.Principal{}, uuid.Nil, "", identity.ErrInvalidSession
 		}
@@ -2399,6 +2419,9 @@ func impersonationRequestAction(request *http.Request) string {
 		return "api_key.self.read"
 	case strings.HasPrefix(path, "/v1/account/api-keys"):
 		return "api_key.self.update"
+	case request.Method == http.MethodPost && strings.HasPrefix(path, "/v1/plugin-ui/") && strings.HasSuffix(path, "/identity"):
+		// 一键授权签发插件身份（产生密钥）：代登录不得代为授权。
+		return "api_key.self.create"
 	case strings.HasPrefix(path, "/v1/admin/users/") && strings.Contains(path, "/api-keys"):
 		return "api_key.admin.create"
 	default:
@@ -2544,6 +2567,8 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		s.writeAPIError(w, r, http.StatusForbidden, "permission_denied", "permission is required")
 	case errors.Is(err, apikey.ErrNotFound):
 		s.writeAPIError(w, r, http.StatusNotFound, "api_key_not_found", "API key was not found")
+	case errors.Is(err, apikey.ErrPluginInstallationUnavailable):
+		s.writeAPIError(w, r, http.StatusConflict, "plugin_installation_unavailable", "the plugin installation is not enabled in this tenant")
 	case errors.Is(err, apikey.ErrRevisionConflict):
 		s.writeAPIError(w, r, http.StatusConflict, "version_conflict", "API key revision is stale")
 	case errors.Is(err, apikey.ErrIdempotencyConflict):

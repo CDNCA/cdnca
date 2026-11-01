@@ -1,6 +1,7 @@
 package eventspool
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
@@ -18,8 +19,9 @@ import (
 )
 
 const (
-	segmentHeaderSize = 24
-	recordHeaderSize  = 40
+	segmentHeaderSize      = 24
+	recordHeaderSize       = 40
+	segmentReadBufferBytes = 256 << 10
 )
 
 var (
@@ -121,6 +123,10 @@ func (s *Spool) scanSegmentsLocked(recoverOpen bool) ([]Record, []segmentMeta, i
 		}
 	}
 
+	listedNames := make(map[string]struct{}, len(named))
+	for _, entry := range named {
+		listedNames[entry.name] = struct{}{}
+	}
 	var records []Record
 	metas := make([]segmentMeta, 0, len(named))
 	var total int64
@@ -142,6 +148,11 @@ func (s *Spool) scanSegmentsLocked(recoverOpen bool) ([]Record, []segmentMeta, i
 		}
 		metas = append(metas, meta)
 		total += meta.size
+	}
+	for name := range s.segmentCache {
+		if _, listed := listedNames[name]; !listed {
+			delete(s.segmentCache, name)
+		}
 	}
 	return records, metas, total, nil
 }
@@ -165,19 +176,45 @@ func (s *Spool) readSegmentLocked(path string, named struct {
 	if err != nil || !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 || identity.Nlink != 1 || uint64(identity.Dev) != s.device {
 		return nil, segmentMeta{}, ErrUnsafePath
 	}
-	header := make([]byte, segmentHeaderSize)
-	if _, err := io.ReadFull(file, header); err != nil || !bytes.Equal(header[:8], segmentMagic[:]) ||
-		binary.BigEndian.Uint16(header[8:10]) != SchemaVersion || binary.BigEndian.Uint64(header[16:24]) != named.start {
-		return nil, segmentMeta{}, ErrCorruptState
+	changedSec, changedNSec := statChangeTime(identity)
+	key := sealedSegmentKey{device: uint64(identity.Dev), inode: uint64(identity.Ino), size: info.Size(),
+		modified: info.ModTime().UnixNano(), changedSec: changedSec, changedNSec: changedNSec}
+	cached, haveCache := s.segmentCache[named.name]
+	if haveCache && !named.open && cached.key == key {
+		return cached.records, cached.meta, nil
 	}
+	// An open segment only grows by appends (recovery truncates an
+	// incomplete tail past the verified prefix), so a verified prefix of the
+	// same file is kept and only the bytes after it are read.
+	resume := haveCache && named.open && cached.meta.open && cached.key.device == key.device &&
+		cached.key.inode == key.inode && cached.meta.size <= key.size
 	meta := segmentMeta{path: path, name: named.name, start: named.start, size: info.Size(), open: named.open}
 	position := int64(segmentHeaderSize)
 	expected := named.start
 	var records []Record
+	if resume {
+		if _, err := file.Seek(cached.meta.size, io.SeekStart); err != nil {
+			return nil, segmentMeta{}, fmt.Errorf("seek event spool segment: %w", err)
+		}
+		position = cached.meta.size
+		records = cached.records[:len(cached.records):len(cached.records)]
+		meta.max, meta.records = cached.meta.max, cached.meta.records
+		expected = named.start + uint64(cached.meta.records)
+	}
+	// One buffered reader per segment: two unbuffered reads per record made
+	// every rebuild syscall-bound.
+	reader := bufio.NewReaderSize(file, segmentReadBufferBytes)
+	if !resume {
+		header := make([]byte, segmentHeaderSize)
+		if _, err := io.ReadFull(reader, header); err != nil || !bytes.Equal(header[:8], segmentMagic[:]) ||
+			binary.BigEndian.Uint16(header[8:10]) != SchemaVersion || binary.BigEndian.Uint64(header[16:24]) != named.start {
+			return nil, segmentMeta{}, ErrCorruptState
+		}
+	}
+	recordHeader := make([]byte, recordHeaderSize)
 	for {
 		recordStart := position
-		recordHeader := make([]byte, recordHeaderSize)
-		read, readErr := io.ReadFull(file, recordHeader)
+		read, readErr := io.ReadFull(reader, recordHeader)
 		if errors.Is(readErr, io.EOF) && read == 0 {
 			break
 		}
@@ -196,7 +233,7 @@ func (s *Spool) readSegmentLocked(path string, named struct {
 			return nil, segmentMeta{}, ErrCorruptState
 		}
 		payload := make([]byte, int(length))
-		if _, err := io.ReadFull(file, payload); err != nil {
+		if _, err := io.ReadFull(reader, payload); err != nil {
 			if named.open && recoverOpen && (errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF)) {
 				if err := truncateRecoveredTail(file, recordStart); err != nil {
 					return nil, segmentMeta{}, err
@@ -221,7 +258,7 @@ func (s *Spool) readSegmentLocked(path string, named struct {
 		records = append(records, Record{
 			Sequence: envelope.Sequence, EventID: envelope.EventID, TenantID: envelope.TenantID,
 			NodeID: envelope.NodeID, Type: envelope.Type, OccurredAt: envelope.OccurredAt,
-			Payload: append([]byte(nil), payload...), Size: frameSize, digest: contentDigest(envelope), envelope: envelope,
+			Payload: payload, Size: frameSize, digest: contentDigest(envelope), envelope: envelope,
 		})
 		meta.max = envelope.Sequence
 		meta.records++
@@ -231,7 +268,28 @@ func (s *Spool) readSegmentLocked(path string, named struct {
 	if meta.records == 0 && !meta.open {
 		return nil, segmentMeta{}, ErrCorruptState
 	}
+	if s.segmentCache == nil {
+		s.segmentCache = make(map[string]cachedSegment)
+	}
+	key.size = meta.size
+	s.segmentCache[named.name] = cachedSegment{key: key, records: records, meta: meta}
 	return records, meta, nil
+}
+
+// Decoded segments are kept across rebuilds: without this
+// every append batch re-read and re-decoded the whole backlog twice. A sealed
+// segment is never rewritten (only removed once acknowledged), so it is reused
+// while its identity, size, mtime and ctime are unchanged.
+type sealedSegmentKey struct {
+	device, inode           uint64
+	size, modified          int64
+	changedSec, changedNSec int64
+}
+
+type cachedSegment struct {
+	key     sealedSegmentKey
+	records []Record
+	meta    segmentMeta
 }
 
 func truncateRecoveredTail(file *os.File, size int64) error {

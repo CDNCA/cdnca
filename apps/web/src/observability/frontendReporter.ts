@@ -1,4 +1,4 @@
-import { observabilityLogsApi } from '../api/observabilityLogs'
+import type { observabilityLogsApi } from '../api/observabilityLogs'
 import type { ApiErrorSignal } from '../api/auth'
 import { useSessionStore } from '../auth/session'
 
@@ -33,7 +33,10 @@ function sendFrontendEvent(accessToken: string, input: Parameters<typeof observa
   const targetScopeId = currentPlatformTargetScopeId()
   if (targetScopeId === null || reportInFlight) return
   reportInFlight = true
-  void observabilityLogsApi.recordFrontend(accessToken, input, targetScopeId).catch(() => undefined).finally(() => { reportInFlight = false })
+  // The log API client loads on the first report, not with every first page.
+  void import('../api/observabilityLogs')
+    .then(({ observabilityLogsApi: api }) => api.recordFrontend(accessToken, input, targetScopeId))
+    .catch(() => undefined).finally(() => { reportInFlight = false })
 }
 
 export function reportFrontendRouteError(accessToken: string, pathname: string, lazyRouteError: boolean): void {

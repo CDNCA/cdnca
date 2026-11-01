@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -103,6 +104,7 @@ func newPasswordUpgradePool(t *testing.T) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "identity_password_upgrade")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

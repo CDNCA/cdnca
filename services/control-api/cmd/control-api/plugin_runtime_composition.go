@@ -6,9 +6,11 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/config"
@@ -68,7 +70,7 @@ func loadPluginRuntimeCompositionEnvironment() (pluginRuntimeCompositionEnvironm
 }
 
 func newPluginRuntimeWebhookDeliverer(cfg config.Config, trust *entitlementguard.TrustStore,
-	secrets pluginwebhook.V2SecretProvider) (*pluginruntimecomposition.WebhookDeliverer, error) {
+	secrets pluginwebhook.V2SecretProvider) (*deferredPluginWebhookDeliverer, error) {
 	if trust == nil || secrets == nil {
 		return nil, errors.New("plugin runtime composition requires trust and webhook secrets")
 	}
@@ -82,7 +84,7 @@ func newPluginRuntimeWebhookDeliverer(cfg config.Config, trust *entitlementguard
 // newAuthorizedPluginWebhookDeliverer wraps delegate with the license runtime gate: every delivery first resolves a
 // signed runtime projection and a workload authorization from the platform license service over mTLS.
 func newAuthorizedPluginWebhookDeliverer(cfg config.Config, trust *entitlementguard.TrustStore,
-	delegate pluginruntimecomposition.V2Deliverer) (*pluginruntimecomposition.WebhookDeliverer, error) {
+	delegate pluginruntimecomposition.V2Deliverer) (*deferredPluginWebhookDeliverer, error) {
 	if trust == nil || delegate == nil {
 		return nil, errors.New("plugin runtime composition requires trust and a webhook sender")
 	}
@@ -109,9 +111,75 @@ func newAuthorizedPluginWebhookDeliverer(cfg config.Config, trust *entitlementgu
 	if err != nil {
 		return nil, fmt.Errorf("initialize plugin runtime certificate manager: %w", err)
 	}
-	initialCredential, err := certificateManager.Ensure(context.Background())
+	// 延后构建要用安装证明私钥：留一份进程内副本（构建成功后清掉；provider 自己另存一份）。
+	retainedKey := append(ed25519.PrivateKey(nil), installationKey...)
+	deferred := &deferredPluginWebhookDeliverer{build: func(ctx context.Context) (*pluginruntimecomposition.WebhookDeliverer, error) {
+		deliverer, err := buildAuthorizedPluginWebhookDeliverer(ctx, trust, delegate, environment, installationID, retainedKey, certificateManager)
+		if err == nil {
+			clear(retainedKey)
+		}
+		return deliverer, err
+	}}
+	// 安装客户端证书不可用只让插件 webhook 投递按可重试失败延后，不让主控起不来；每次投递时再试构建。
+	// 其余构建错误（拨号/配置）仍在启动时报错。
+	if _, err := deferred.ready(context.Background()); err != nil && !errors.Is(err, errInstallationCredentialUnavailable) {
+		return nil, err
+	} else if err != nil {
+		slog.Warn("plugin webhook delivery degraded: plugin runtime credential unavailable; retrying on delivery", "error", err)
+	}
+	return deferred, nil
+}
+
+// errInstallationCredentialUnavailable 标记"安装客户端证书暂时取不到"：只降级插件相关功能，不阻止主控启动。
+var errInstallationCredentialUnavailable = errors.New("installation mTLS credential unavailable")
+
+// deferredPluginWebhookDeliverer 把授权投递器的构建（需要安装客户端证书）推迟到第一次成功；构建前每次投递
+// 都先重试构建，失败返回可重试的 runtime_authorization_unavailable（不放行、不丢投递）。
+type deferredPluginWebhookDeliverer struct {
+	build     func(context.Context) (*pluginruntimecomposition.WebhookDeliverer, error)
+	mu        sync.Mutex
+	deliverer *pluginruntimecomposition.WebhookDeliverer
+}
+
+func (deferred *deferredPluginWebhookDeliverer) ready(ctx context.Context) (*pluginruntimecomposition.WebhookDeliverer, error) {
+	deferred.mu.Lock()
+	defer deferred.mu.Unlock()
+	if deferred.deliverer != nil {
+		return deferred.deliverer, nil
+	}
+	deliverer, err := deferred.build(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap plugin runtime certificate: %w", err)
+		return nil, err
+	}
+	deferred.deliverer = deliverer
+	return deliverer, nil
+}
+
+func (deferred *deferredPluginWebhookDeliverer) Deliver(ctx context.Context, item pluginwebhook.QueueItem, attempt uint64) pluginwebhook.SendResult {
+	deliverer, err := deferred.ready(ctx)
+	if err != nil {
+		return pluginwebhook.SendResult{Code: "runtime_authorization_unavailable", Retryable: true}
+	}
+	return deliverer.Deliver(ctx, item, attempt)
+}
+
+func (deferred *deferredPluginWebhookDeliverer) DeliverV2(ctx context.Context, item pluginwebhook.QueueItem, attempt uint64,
+	secret []byte) pluginwebhook.SendResult {
+	deliverer, err := deferred.ready(ctx)
+	if err != nil {
+		return pluginwebhook.SendResult{Code: "runtime_authorization_unavailable", Retryable: true}
+	}
+	return deliverer.DeliverV2(ctx, item, attempt, secret)
+}
+
+func buildAuthorizedPluginWebhookDeliverer(ctx context.Context, trust *entitlementguard.TrustStore,
+	delegate pluginruntimecomposition.V2Deliverer, environment pluginRuntimeCompositionEnvironment, installationID uuid.UUID,
+	installationKey ed25519.PrivateKey, certificateManager *pluginruntimecomposition.CertificateManager,
+) (*pluginruntimecomposition.WebhookDeliverer, error) {
+	now := func() time.Time { return time.Now().UTC() }
+	initialCredential, err := certificateManager.Ensure(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap plugin runtime certificate: %w: %w", errInstallationCredentialUnavailable, err)
 	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13,
 		RootCAs: initialCredential.RootCAs, Certificates: []tls.Certificate{initialCredential.TLSCertificate},

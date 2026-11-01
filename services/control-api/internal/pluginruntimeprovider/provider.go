@@ -31,6 +31,10 @@ const (
 	maximumResponseHeaderBytes = 64 << 10
 	maximumTimeout             = 30 * time.Second
 	maximumCacheCapacity       = 4096
+	// idleConnTimeout keeps the tunnelled mTLS connection between calls
+	// and stays below the 9448
+	// server's 60 s IdleTimeout so the client closes first.
+	idleConnTimeout = 50 * time.Second
 )
 
 var (
@@ -174,7 +178,7 @@ func New(config Config) (*Provider, error) {
 	transport := &http.Transport{
 		Proxy: nil, DialContext: config.DialContext, TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true, DisableCompression: true,
 		TLSHandshakeTimeout: config.Timeout, ResponseHeaderTimeout: config.Timeout,
-		MaxIdleConns: 2, MaxIdleConnsPerHost: 2, IdleConnTimeout: config.Timeout,
+		MaxIdleConns: 2, MaxIdleConnsPerHost: 2, IdleConnTimeout: idleConnTimeout,
 		MaxResponseHeaderBytes: maximumResponseHeaderBytes,
 	}
 	client := &http.Client{Transport: transport, Timeout: config.Timeout,

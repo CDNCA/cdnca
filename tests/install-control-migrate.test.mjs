@@ -11,8 +11,8 @@ function block(name) {
 
 test('migrate-from is dispatched before the fresh-install argument parser', () => {
   const main = block('main')
-  // enable-gateway-access（918327477）、--cleanup-failed（AUDIT-1029 ①-12）与 --mode gateway (ADR 0013 GW-10) are the only other dispatches before parse_args.
-  assert.match(main, /^main\(\) \{\n  \[ "\$\{1:-\}" != migrate-from \] \|\| \{ shift; migrate_main "\$@"; return; \}\n  \[ "\$\{1:-\}" != enable-gateway-access \] \|\| \{ shift; gateway_access_main "\$@"; return; \}\n  \[ "\$\{1:-\}" != --cleanup-failed \] \|\| \{ shift; cleanup_failed_main "\$@"; return; \}\n  ! gateway_mode_requested "\$@" \|\| \{ INSTALL_MODE=gateway; gateway_main "\$@"; return; \}\n  parse_args "\$@"/)
+  // origin-auth（c3 F4）、enable-gateway-access（918327477）、--cleanup-failed（AUDIT-1029 ①-12）与 --mode gateway (ADR 0013 GW-10) are the only other dispatches before parse_args.
+  assert.match(main, /^main\(\) \{\n  install_lang_init "\$@"\n  set -- \$\{INSTALL_ARGS\[@\]\+"\$\{INSTALL_ARGS\[@\]\}"\}\n  \[ "\$\{1:-\}" != origin-auth \] \|\| \{ shift; origin_auth_main "\$@"; return; \}\n  \[ "\$\{1:-\}" != migrate-from \] \|\| \{ shift; migrate_main "\$@"; return; \}\n  \[ "\$\{1:-\}" != enable-gateway-access \] \|\| \{ shift; gateway_access_main "\$@"; return; \}\n  \[ "\$\{1:-\}" != --cleanup-failed \] \|\| \{ shift; cleanup_failed_main "\$@"; return; \}\n  ! gateway_mode_requested "\$@" \|\| \{ INSTALL_MODE=gateway; gateway_main "\$@"; return; \}\n  parse_args "\$@"/)
 })
 
 test('fresh installs keep the dependency installer and enable the backup agent', () => {
@@ -48,4 +48,17 @@ test('migration orders freeze, transfer, restore and verification and rolls back
   assert.doesNotMatch(verify.split('fail ')[0], /migrate_rollback/)
   // The new host never generates identity or activates.
   assert.doesNotMatch(migrate, /generate_identity|activate|prepare_database|configure_clickhouse|install-rustfs/)
+})
+
+test('an IP Gateway is announced before the freeze and moved by the restore (migrate-ip)', () => {
+  const migrate = block('migrate_main')
+  const announce = migrate.indexOf('native-backup announce-gateway --host $gateway_host')
+  assert.ok(announce > 0, 'announce-gateway missing')
+  assert.ok(announce < migrate.indexOf('create --reason migration --hold'), 'announce must run before the freeze')
+  assert.match(migrate, /native-backup restore[\s\S]*\$\{gateway_args\[@\]\+"\$\{gateway_args\[@\]\}"\}/)
+  const host = block('migrate_gateway_host')
+  // A domain Gateway follows the DNS switch: only IP endpoints are moved.
+  assert.match(host, /\^\[0-9\]\+\(\\\.\[0-9\]\+\)\{3\}\$/)
+  assert.match(host, /CDNCA_GATEWAY_AGENT_PUBLIC_ENDPOINT/)
+  assert.match(source, /--gateway-host\) need_value "\$@"; MIGRATE_GATEWAY_HOST=/)
 })

@@ -79,6 +79,7 @@ import CacheRuleDialog from './CacheRuleDialog'
 import { ruleScope, ruleSliceBytes } from './cacheRuleScope'
 import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import SiteEditState from './SiteEditState'
+import CacheSettingRow, { cacheSettingBriefId } from './CacheSettingRow'
 import { useCommitRequest, useInstantFeedback } from './instantSave'
 
 const minQuota = 64 * 1024 * 1024
@@ -1195,24 +1196,24 @@ function CacheSiteTabOwned({
         </Radio.Group>
         </div>
 
-        {extra}
-        <div className="cache-policy-form-grid">
-        <label>
-          <span>{t('fields.queryMode')}</span>
-          <Select
-            value={draft.query_mode}
-            aria-label={t('fields.queryMode')}
-            disabled={!tenantManage || editLocked}
-            options={(['preserve', 'ignore', 'include', 'exclude'] as const).map((value) => ({ value, label: t(`queryModes.${value}`) }))}
-            onChange={(value: CacheQueryMode) => updateDraft({ ...draft, query_mode: value, query_names: value === 'include' || value === 'exclude' ? draft.query_names : [] })}
-          />
-        </label>
-        {draft.query_mode === 'include' || draft.query_mode === 'exclude' ? (
-          <label>
-            <span>{t('fields.queryNames')}</span>
-            <Input aria-label={t('fields.queryNames')} value={draft.query_names.join(', ')} disabled={!tenantManage || editLocked} onChange={(event) => updateDraft({ ...draft, query_names: commaValues(event.target.value) })} />
-          </label>
-        ) : null}
+        <div className="cache-setting-list">
+          {extra}
+          <CacheSettingRow name="query-mode" label={t('fields.queryMode')} brief={t('brief.queryMode')}>
+            <Select
+              className="cache-setting-select"
+              value={draft.query_mode}
+              aria-label={t('fields.queryMode')}
+              aria-describedby={cacheSettingBriefId('query-mode')}
+              disabled={!tenantManage || editLocked}
+              options={(['preserve', 'ignore', 'include', 'exclude'] as const).map((value) => ({ value, label: t(`queryModes.${value}`) }))}
+              onChange={(value: CacheQueryMode) => updateDraft({ ...draft, query_mode: value, query_names: value === 'include' || value === 'exclude' ? draft.query_names : [] })}
+            />
+          </CacheSettingRow>
+          {draft.query_mode === 'include' || draft.query_mode === 'exclude' ? (
+            <CacheSettingRow name="query-names" label={t('fields.queryNames')}>
+              <Input className="cache-setting-wide-input" aria-label={t('fields.queryNames')} value={draft.query_names.join(', ')} disabled={!tenantManage || editLocked} onChange={(event) => updateDraft({ ...draft, query_names: commaValues(event.target.value) })} />
+            </CacheSettingRow>
+          ) : null}
         </div>
       </section>
 
@@ -1229,89 +1230,82 @@ function CacheSiteTabOwned({
             {t(advancedOpen ? 'actions.hideAdvanced' : 'actions.showAdvanced')}
           </Button>
         </div>
-        <div id="cache-policy-advanced-panel" className="cache-policy-form-grid" hidden={!advancedOpen}>
-            <div className="cache-policy-field">
-              <span>{t('fields.varyHeaders')}</span>
-              <Select
-                mode="tags"
-                aria-label={t('fields.varyHeaders')}
-                value={draft.vary_headers}
-                disabled={!tenantManage || editLocked}
-                tokenSeparators={[',', ' ']}
-                placeholder={t('placeholders.varyHeaders')}
-                options={commonVaryHeaders.map((value) => ({ value, label: t(`varyHeaderOptions.${value}`) }))}
-                onChange={(values: string[]) => updateDraft({ ...draft, vary_headers: [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))] })}
-              />
-              <small>{t('help.varyHeaders')}</small>
-            </div>
-            <div className="cache-policy-field">
-              <span>{t('fields.diskQuotaBytes')}</span>
-              <ByteSizeInput
-                label={t('fields.diskQuotaBytes')}
-                value={draft.disk_quota_bytes}
-                units={['mb', 'gb', 'tb']}
-                max={maxQuota}
-                disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
-                onChange={(bytes) => updateDraft({ ...draft, disk_quota_bytes: bytes })}
-              />
-              <small>{t('help.diskQuota', { min: '64 MB', max: '16 TB' })}</small>
-            </div>
-            <label className="cache-policy-switch">
-              <span>{t('fields.staleIfError')}</span>
-              <Switch
-                aria-label={t('fields.staleIfError')}
-                checked={draft.stale_if_error ?? false}
-                disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
-                onChange={(checked) => updateDraft({ ...draft, stale_if_error: checked, background_update: checked && draft.background_update })}
-              />
-              <small>{t('help.staleIfError')}</small>
-            </label>
-            <label className="cache-policy-switch">
-              <span>{t('fields.backgroundUpdate')}</span>
-              <Switch
-                aria-label={t('fields.backgroundUpdate')}
-                checked={draft.background_update ?? false}
-                disabled={!tenantManage || editLocked || draft.mode === 'disabled' || !draft.stale_if_error}
-                onChange={(checked) => updateDraft({ ...draft, background_update: checked })}
-              />
-              <small>{t('help.backgroundUpdate')}</small>
-            </label>
-            <div className="cache-policy-field">
-              <span>{t('fields.minObjectBytes')}</span>
-              <ByteSizeInput
-                label={t('fields.minObjectBytes')}
-                value={draft.min_object_bytes ?? 0}
-                units={['kb', 'mb', 'gb']}
-                max={cacheMaxObjectBytesLimit}
-                disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
-                onChange={(bytes) => updateDraft({ ...draft, min_object_bytes: bytes })}
-              />
-            </div>
-            <div className="cache-policy-field">
-              <span>{t('fields.maxObjectBytes')}</span>
-              <ByteSizeInput
-                label={t('fields.maxObjectBytes')}
-                value={draft.max_object_bytes ?? 0}
-                units={['kb', 'mb', 'gb']}
-                max={cacheMaxObjectBytesLimit}
-                disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
-                onChange={(bytes) => updateDraft({ ...draft, max_object_bytes: bytes })}
-              />
-              <small>{t('help.objectBytes')}</small>
-            </div>
-            <label>
-              <span>{t('fields.sliceBytes')}</span>
-              <Select
-                aria-label={t('fields.sliceBytes')}
-                value={draft.slice_bytes ?? 0}
-                disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
-                options={[0, 256 << 10, 1 << 20, 4 << 20, 16 << 20, 64 << 20].map((value) => ({
-                  value, label: value === 0 ? t('slice.off') : t('slice.size', { size: value >= 1 << 20 ? `${value >> 20} MiB` : `${value >> 10} KiB` }),
-                }))}
-                onChange={(value: number) => updateDraft({ ...draft, slice_bytes: value })}
-              />
-              <small>{t('help.sliceBytes')}</small>
-            </label>
+        <div id="cache-policy-advanced-panel" className="cache-setting-list" hidden={!advancedOpen}>
+          <CacheSettingRow name="stale-if-error" label={t('fields.staleIfError')} brief={t('brief.staleIfError')} more={t('help.staleIfError')} toggle>
+            <Switch
+              aria-label={t('fields.staleIfError')}
+              aria-describedby={cacheSettingBriefId('stale-if-error')}
+              checked={draft.stale_if_error ?? false}
+              disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
+              onChange={(checked) => updateDraft({ ...draft, stale_if_error: checked, background_update: checked && draft.background_update })}
+            />
+          </CacheSettingRow>
+          <CacheSettingRow name="background-update" label={t('fields.backgroundUpdate')} brief={t('brief.backgroundUpdate')} more={t('help.backgroundUpdate')} toggle>
+            <Switch
+              aria-label={t('fields.backgroundUpdate')}
+              aria-describedby={cacheSettingBriefId('background-update')}
+              checked={draft.background_update ?? false}
+              disabled={!tenantManage || editLocked || draft.mode === 'disabled' || !draft.stale_if_error}
+              onChange={(checked) => updateDraft({ ...draft, background_update: checked })}
+            />
+          </CacheSettingRow>
+          <CacheSettingRow name="disk-quota" label={t('fields.diskQuotaBytes')}
+            brief={t('brief.diskQuota', { min: '64 MB', max: '16 TB' })} more={t('help.diskQuota', { min: '64 MB', max: '16 TB' })}>
+            <ByteSizeInput
+              label={t('fields.diskQuotaBytes')}
+              value={draft.disk_quota_bytes}
+              units={['mb', 'gb', 'tb']}
+              max={maxQuota}
+              disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
+              onChange={(bytes) => updateDraft({ ...draft, disk_quota_bytes: bytes })}
+            />
+          </CacheSettingRow>
+          <CacheSettingRow name="slice-bytes" label={t('fields.sliceBytes')} brief={t('help.sliceBytes')}>
+            <Select
+              className="cache-setting-select"
+              aria-label={t('fields.sliceBytes')}
+              aria-describedby={cacheSettingBriefId('slice-bytes')}
+              value={draft.slice_bytes ?? 0}
+              disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
+              options={[0, 256 << 10, 1 << 20, 4 << 20, 16 << 20, 64 << 20].map((value) => ({
+                value, label: value === 0 ? t('slice.off') : t('slice.size', { size: value >= 1 << 20 ? `${value >> 20} MiB` : `${value >> 10} KiB` }),
+              }))}
+              onChange={(value: number) => updateDraft({ ...draft, slice_bytes: value })}
+            />
+          </CacheSettingRow>
+          <CacheSettingRow name="min-object" label={t('fields.minObjectBytes')} brief={t('brief.minObjectBytes')}>
+            <ByteSizeInput
+              label={t('fields.minObjectBytes')}
+              value={draft.min_object_bytes ?? 0}
+              units={['kb', 'mb', 'gb']}
+              max={cacheMaxObjectBytesLimit}
+              disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
+              onChange={(bytes) => updateDraft({ ...draft, min_object_bytes: bytes })}
+            />
+          </CacheSettingRow>
+          <CacheSettingRow name="max-object" label={t('fields.maxObjectBytes')} brief={t('brief.maxObjectBytes')} more={t('help.objectBytes')}>
+            <ByteSizeInput
+              label={t('fields.maxObjectBytes')}
+              value={draft.max_object_bytes ?? 0}
+              units={['kb', 'mb', 'gb']}
+              max={cacheMaxObjectBytesLimit}
+              disabled={!tenantManage || editLocked || draft.mode === 'disabled'}
+              onChange={(bytes) => updateDraft({ ...draft, max_object_bytes: bytes })}
+            />
+          </CacheSettingRow>
+          <CacheSettingRow name="vary-headers" label={t('fields.varyHeaders')} brief={t('brief.varyHeaders')} more={t('help.varyHeaders')} wide>
+            <Select
+              className="cache-setting-tags"
+              mode="tags"
+              aria-label={t('fields.varyHeaders')}
+              value={draft.vary_headers}
+              disabled={!tenantManage || editLocked}
+              tokenSeparators={[',', ' ']}
+              placeholder={t('placeholders.varyHeaders')}
+              options={commonVaryHeaders.map((value) => ({ value, label: t(`varyHeaderOptions.${value}`) }))}
+              onChange={(values: string[]) => updateDraft({ ...draft, vary_headers: [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))] })}
+            />
+          </CacheSettingRow>
         </div>
       </section>
 

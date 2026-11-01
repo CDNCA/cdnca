@@ -123,7 +123,8 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
     post:
       operationId: lockEscalateSite
-      summary: Hold a site at a level (管理员锁定) until unlocked
+      summary: "Hold a site at a level (administrator lock) until unlocked"
+      x-summary-zh: Hold a site at a level (管理员锁定) until unlocked
       description: >-
         422 escalate_level_unavailable when the site's package cannot put the level in force (B/C without a line group,
         C via Cloudflare not bound and synced, D with the blackhole off, or no policy).
@@ -171,7 +172,8 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
     post:
       operationId: resetEscalateSite
-      summary: Send a site back to level A now (一键回切), unlocking it
+      summary: "Send a site back to level A now (one-click switch back), unlocking it"
+      x-summary-zh: Send a site back to level A now (一键回切), unlocking it
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin]
       x-required-features: [module.escalate]
@@ -250,7 +252,8 @@ paths:
     parameters: [{name: line_group_id, in: path, required: true, schema: {type: string, format: uuid}}]
     put:
       operationId: putEscalateLineGroupTier
-      summary: Mark one of the session scope's own line groups 普通 / 高防 / 无限防
+      summary: "Mark one of the session scope's own line groups normal / high defence / unlimited defence"
+      x-summary-zh: Mark one of the session scope's own line groups 普通 / 高防 / 无限防
       security: [{bearerAuth: []}]
       x-required-permissions: [node_scheduling.manage]
       x-required-features: [module.escalate]

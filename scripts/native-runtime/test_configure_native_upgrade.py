@@ -160,6 +160,27 @@ class NativeUpgradeConfigurationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.helper.check(self.installation, self.url, web_ca_file=source)
 
+    def test_web_index_address_binds_local_control_web_and_rejects_non_loopback(self):
+        # 10-30 73: the public domain sat behind a CDN that rewrote the console page;
+        # the runner dials the local control-web, still verifying the URL host.
+        self.assertEqual(self.helper.prepare(self.installation, self.url, web_index_address="127.0.0.1:18443")["status"],
+                         "prepared_not_started")
+        runner = dict(line.split("=", 1) for line in (self.config / "runner-input.env").read_text().splitlines())
+        self.assertEqual(runner["CDNCA_NATIVE_UPGRADE_WEB_INDEX_ADDRESS"], "127.0.0.1:18443")
+        self.assertEqual(runner["CDNCA_NATIVE_UPGRADE_WEB_INDEX_URL"], self.url)
+        self.assertEqual(self.helper.check(self.installation, self.url, web_index_address="127.0.0.1:18443")["status"],
+                         "configuration_checked")
+        with self.assertRaises(ValueError):
+            self.helper.check(self.installation, self.url)
+        with self.assertRaises(ValueError):
+            self.helper.check(self.installation, self.url, web_index_address="127.0.0.1:443")
+        shutil.rmtree(self.config)
+        for address in ("203.0.113.7:443", "localhost:443", "127.0.0.1:0", "127.0.0.1:0443", "::1:443", "127.0.0.1", "[127.0.0.1]:443"):
+            with self.subTest(address=address), self.assertRaises(ValueError):
+                self.helper.prepare(self.installation, self.url, web_index_address=address)
+            self.assertFalse(self.config.exists())
+        self.assertEqual(self.helper.prepare(self.installation, self.url, web_index_address="[::1]:443")["status"], "prepared_not_started")
+
     def test_web_ca_without_option_is_absent_and_invalid_or_unsafe_files_refuse_preparation(self):
         self.helper.prepare(self.installation, self.url)
         self.assertFalse((self.config / "web-ca.pem").exists())

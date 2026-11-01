@@ -21,6 +21,9 @@ func TestFirewallActionHandlerFactoryMountsExactProductionRoutes(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/v1/firewall-actions/policy?target_scope_id=x&site_id=y", nil),
 		httptest.NewRequest(http.MethodPut, "/v1/firewall-actions/policy?target_scope_id=x&site_id=y", nil),
 		httptest.NewRequest(http.MethodPost, "/v1/firewall-actions/policy/recover?target_scope_id=x&site_id=y", nil),
+		httptest.NewRequest(http.MethodDelete, "/v1/firewall-actions/policy?target_scope_id=x&site_id=y", nil),
+		httptest.NewRequest(http.MethodGet, "/v1/firewall-actions/default?target_scope_id=x", nil),
+		httptest.NewRequest(http.MethodPut, "/v1/firewall-actions/default?target_scope_id=x", nil),
 	} {
 		response := httptest.NewRecorder()
 		api.Handler().ServeHTTP(response, request)
@@ -32,6 +35,7 @@ func TestFirewallActionHandlerFactoryMountsExactProductionRoutes(t *testing.T) {
 		"/v1/firewall-actions/policy/",
 		"/v1/firewall-actions/policy/recover/neighbor",
 		"/v1/firewall-actions/policy-extra",
+		"/v1/firewall-actions/default/",
 	} {
 		response := httptest.NewRecorder()
 		api.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
@@ -39,7 +43,7 @@ func TestFirewallActionHandlerFactoryMountsExactProductionRoutes(t *testing.T) {
 			t.Fatalf("adjacent route %s status=%d", path, response.Code)
 		}
 	}
-	if calls != 3 {
-		t.Fatalf("mounted calls=%d, want 3", calls)
+	if calls != 6 {
+		t.Fatalf("mounted calls=%d, want 6", calls)
 	}
 }

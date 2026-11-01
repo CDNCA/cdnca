@@ -13,6 +13,7 @@ import (
 	transport "github.com/cdnca/cdnca/libs/edgeconfig/installationban"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
+	"github.com/cdnca/cdnca/services/control-api/internal/natsready"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -211,7 +212,7 @@ func (distributor *Distributor) Run(ctx context.Context) error {
 			delivery, err := distributor.Commands.NextReceipt(ctx)
 			if err != nil {
 				if ctx.Err() == nil {
-					distributor.Logger.Warn("installation ban receipts unavailable", "error", err)
+					natsready.LogUnbound(distributor.Logger, "installation ban receipts unavailable", err)
 					select {
 					case <-ctx.Done():
 					case <-time.After(distributor.Interval):

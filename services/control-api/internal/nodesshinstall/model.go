@@ -95,19 +95,29 @@ type Credential struct {
 	PrivateKey string
 }
 
-// Target is one host of a request.
+// Target is one host of a request. Credential, when set, is this host's own
+// login (batch install: one "IP port user password" line per host);
+// otherwise the request's Credential applies.
 type Target struct {
-	Host string
-	Port int
-	Name string
+	Host       string
+	Port       int
+	Name       string
+	Credential *Credential
 }
 
 // CreateRequest starts one job per target. ControlPlane is the console origin
-// the node downloads install-node.sh from (https only).
+// the node downloads install-node.sh from (https only). BatchID, when set,
+// adds the jobs to an existing batch of this scope (retrying one failed host
+// keeps it in its batch). RestrictSSH turns on "only the controller may SSH"
+// for the node each job registers. Language ("" / "zh" / "en", migration 610)
+// is the operator's UI language; the install command carries it as --lang.
 type CreateRequest struct {
 	Targets      []Target
 	Credential   Credential
 	ControlPlane string
+	BatchID      uuid.UUID
+	RestrictSSH  bool
+	Language     string
 }
 
 // Job is the API view; it never carries the secret.
@@ -129,4 +139,5 @@ type Job struct {
 	CreatedAt        time.Time  `json:"created_at"`
 	StartedAt        *time.Time `json:"started_at"`
 	FinishedAt       *time.Time `json:"finished_at"`
+	RestrictSSH      bool       `json:"restrict_ssh"`
 }

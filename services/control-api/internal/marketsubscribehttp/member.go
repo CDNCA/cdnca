@@ -129,7 +129,10 @@ var memberRoutes = map[string]memberRoute{
 	// Plugin market (buyer.yaml, M2).
 	"GET /v1/admin/market/plugins": {upstream: "/v1/plugins", access: accessPluginRead, compat: true, query: with(page, map[string]*regexp.Regexp{
 		"q": textValue, "kind": pluginKind, "applies_to": regexp.MustCompile(`^(admin|user|site)$`),
-		"compat": versionArg, "price": regexp.MustCompile(`^(free|paid)$`), "sort": regexp.MustCompile(`^(popular|newest|name)$`)})},
+		"compat": versionArg, "price": regexp.MustCompile(`^(free|paid)$`), "sort": regexp.MustCompile(`^(popular|newest|name)$`),
+		// plugin_ids: name lookup of the plugins this controller holds (comma-separated plugin_id; the 1024-byte
+		// value cap means the console asks in batches).
+		"plugin_ids": regexp.MustCompile(`^[a-z0-9]+([.-][a-z0-9]+)+(,[a-z0-9]+([.-][a-z0-9]+)+)*$`)})},
 	"GET /v1/admin/market/plugins/{id}":          {upstream: "/v1/plugins/{id}", access: accessPluginRead},
 	"GET /v1/admin/market/licenses":              {upstream: "/v1/licenses", access: accessBrowse, query: page},
 	"POST /v1/admin/market/licenses/{id}/cancel": {upstream: "/v1/licenses/{id}/cancel", access: accessPurchase, keyed: true},

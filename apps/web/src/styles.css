@@ -282,6 +282,34 @@ body {
   margin-bottom: 24px;
 }
 
+/* In-form notices (CAPTCHA hint, verification channel): their own row, never
+   in a Form.Item's error slot, and no negative margin like .login-notice. */
+.login-form-alert {
+  margin-bottom: 16px;
+}
+
+/* CAPTCHA row: input, image and refresh button share the 40px input height. */
+.login-captcha .ant-space-compact > .ant-input,
+.login-captcha .ant-space-compact > .ant-btn {
+  height: 40px;
+}
+
+.login-captcha .ant-space-compact > img {
+  flex: none;
+  height: 40px;
+  width: auto;
+  border: 1px solid var(--cdnca-color-border);
+  border-inline: 0;
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.login-captcha-error {
+  margin-top: 4px;
+  color: var(--cdnca-color-error);
+  font-size: 14px;
+  line-height: 22px;
+}
+
 .login-form .ant-input-affix-wrapper {
   height: 40px;
   padding: 6px 7px;

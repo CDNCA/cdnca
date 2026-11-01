@@ -47,6 +47,21 @@ describe('PriceBadge', () => {
     expect(screen.getByText('限免 5 小时')).toBeTruthy()
   })
 
+  // store-pricing (user 10-31): the store names what a 限免 costs afterwards next to the badge.
+  it('writes the price after a live promo next to the badge with showThen', () => {
+    const { container, rerender } = render(<PriceBadge plan={promo(3 * 24 * H)} now={now} showThen />)
+    expect(screen.getByText('限免 3 天')).toBeTruthy()
+    const then = container.querySelector('[data-price-then]')!
+    expect(then.textContent).toBe('之后 ¥9.90/月')
+    expect(then.getAttribute('aria-hidden')).toBe('true')
+    rerender(<PriceBadge plan={promo(3 * 24 * H, 'one_time')} now={now} showThen />)
+    expect(container.querySelector('[data-price-then]')!.textContent).toBe('之后 ¥9.90 一次性')
+    rerender(<PriceBadge plan={promo(3 * 24 * H)} now={now} />)
+    expect(container.querySelector('[data-price-then]')).toBeNull()
+    rerender(<PriceBadge plan={{ kind: 'free', price_minor: 0, currency: 'CNY' }} now={now} showThen />)
+    expect(container.querySelector('[data-price-then]')).toBeNull()
+  })
+
   it('drops the badge and shows the price once the promo ended', () => {
     const { container, rerender } = render(<PriceBadge plan={promo(-1)} now={now} />)
     expect(container.querySelector('.cdnca-price-badge')).toBeNull()
@@ -56,8 +71,9 @@ describe('PriceBadge', () => {
   })
 
   it('follows the antd locale', () => {
-    render(<ConfigProvider locale={enUS}><PriceBadge plan={promo(5 * H)} now={now} /></ConfigProvider>)
+    render(<ConfigProvider locale={enUS}><PriceBadge plan={promo(5 * H)} now={now} showThen /></ConfigProvider>)
     expect(screen.getByText('Free for 5 hours')).toBeTruthy()
+    expect(screen.getByText('then ¥9.90/month')).toBeTruthy()
   })
 
   it('styles only with --cdnca-* variables and has no motion', () => {

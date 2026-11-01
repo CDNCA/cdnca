@@ -21,6 +21,10 @@ export interface APIKeyRecord {
   revision: number
   created_at: string
   updated_at: string
+  /** 插件身份（ADR 0007 §3.2）：这把密钥绑定的插件安装；安装停用/卸载后即失效。 */
+  plugin_installation_authorization_id?: string
+  plugin_installation_id?: string
+  plugin_id?: string
 }
 
 export interface IssuedAPIKey {
@@ -34,6 +38,9 @@ export interface APIKeyFields {
   ip_allowlist: string[]
   expires_at?: string
 }
+
+/** 创建时可选绑定本租户一个已启用的插件安装（authorization_id），之后不可改。 */
+export type APIKeyCreateFields = APIKeyFields & { plugin_installation_authorization_id?: string }
 
 export interface APIKeyListInput {
   limit: number
@@ -185,6 +192,7 @@ function parseAPIKeyRecord(value: unknown): APIKeyRecord {
     'ip_allowlist',
     'pending_expires_at', 'expires_at', 'last_used_at', 'activated_at', 'revoked_at',
     'revision', 'created_at', 'updated_at',
+    'plugin_installation_authorization_id', 'plugin_installation_id', 'plugin_id',
   ])
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   const scopePattern = /^[a-z][a-z0-9_.-]{0,127}$/
@@ -206,10 +214,19 @@ function parseAPIKeyRecord(value: unknown): APIKeyRecord {
     typeof value.updated_at !== 'string' || !isOptionalString(value.updated_at) ||
     !isOptionalString(value.pending_expires_at) || !isOptionalString(value.expires_at) ||
     !isOptionalString(value.last_used_at) || !isOptionalString(value.activated_at) ||
-    !isOptionalString(value.revoked_at)) {
+    !isOptionalString(value.revoked_at) ||
+    !validPluginBinding(value.plugin_installation_authorization_id, value.plugin_installation_id, value.plugin_id, uuid)) {
     throw invalidResponse()
   }
   return value as unknown as APIKeyRecord
+}
+
+// The three plugin binding fields are all absent or all present.
+function validPluginBinding(authorizationID: unknown, installationID: unknown, pluginID: unknown, uuid: RegExp): boolean {
+  if (authorizationID === undefined && installationID === undefined && pluginID === undefined) return true
+  return typeof authorizationID === 'string' && uuid.test(authorizationID) &&
+    typeof installationID === 'string' && uuid.test(installationID) &&
+    typeof pluginID === 'string' && pluginID.length >= 3 && pluginID.length <= 128
 }
 
 function parseIssuedAPIKey(value: unknown): IssuedAPIKey {
@@ -259,7 +276,7 @@ async function get(accessToken: string, id: string): Promise<APIKeyRecord> {
   return parseAPIKeyRecord(await request(accessToken, `/v1/account/api-keys/${encodeURIComponent(id)}`))
 }
 
-async function create(accessToken: string, input: APIKeyFields, idempotencyKey: string): Promise<IssuedAPIKey> {
+async function create(accessToken: string, input: APIKeyCreateFields, idempotencyKey: string): Promise<IssuedAPIKey> {
   return parseIssuedAPIKey(await request(accessToken, '/v1/account/api-keys', {
     method: 'POST',
     headers: writeHeaders(idempotencyKey, 0),

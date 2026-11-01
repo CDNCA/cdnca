@@ -253,7 +253,19 @@ const (
 	DNSReasonRebindingRejected = "L4_DNS_REBINDING_REJECTED_LKG"
 	DNSReasonHealthRejected    = "L4_DNS_HEALTH_REJECTED_LKG"
 	DNSReasonStaticAddress     = "L4_STATIC_ADDRESS_VERIFIED"
+	// the forward is deployed but degraded.
+	DNSReasonStaticUnreachable = "L4_STATIC_ADDRESS_UNREACHABLE"
+	DNSReasonHealthUnverified  = "L4_DNS_ADDRESS_SET_UNVERIFIED"
+	DNSReasonUnavailable       = "L4_DNS_ADDRESS_SET_UNAVAILABLE"
 )
+
+// DegradedStream is a forward of the active release that runs degraded: its
+// origin did not answer the probe, or it has no address set and refuses
+// connections (ReasonCode one of the l4-isolate DNSReason codes).
+type DegradedStream struct {
+	StreamID   string
+	ReasonCode string
+}
 
 type ResolvedAddressSet struct {
 	TenantID     string

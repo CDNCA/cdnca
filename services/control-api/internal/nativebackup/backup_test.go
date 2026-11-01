@@ -386,6 +386,73 @@ func TestRecoveryKitRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRecoveryKitWithoutPassphrase(t *testing.T) {
+	rig := newRig(t)
+	kit, err := ExportRecoveryKit(rig.keys, "id", "", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kit.NeedsPassphrase() || kit.SealedIdentity != "" || !strings.Contains(kit.PassphraseHintCN, "这个文件就是恢复凭据") {
+		t.Fatalf("kit = %+v", kit)
+	}
+	encoded, _ := jsonMarshal(kit)
+	if !bytes.Contains(encoded, []byte(`"has_passphrase":false`)) {
+		t.Fatalf("the kit must say it has no passphrase: %s", encoded)
+	}
+	// The passphrase argument is ignored for such a kit.
+	for _, passphrase := range []string{"", "anything at all"} {
+		identity, opened, err := OpenRecoveryKit(encoded, passphrase)
+		if err != nil || identity.String() != rig.keys.Identity.String() || opened.SignerFinger != rig.keys.Fingerprint() {
+			t.Fatalf("open(%q) = %v", passphrase, err)
+		}
+	}
+	// A swapped identity no longer matches the recipient.
+	other, _ := NewEphemeralIdentity(filepath.Join(t.TempDir(), "other"))
+	kit.Identity = other.String()
+	tampered, _ := jsonMarshal(kit)
+	if _, _, err := OpenRecoveryKit(tampered, ""); err == nil {
+		t.Fatal("an identity that does not match the recipient must be refused")
+	}
+}
+
+func TestRecoveryKitLegacySchemaNeedsPassphrase(t *testing.T) {
+	rig := newRig(t)
+	kit, err := ExportRecoveryKit(rig.keys, "id", "correct horse battery", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A kit exported before has_passphrase existed carries only sealed_identity.
+	legacy, _ := json.Marshal(map[string]any{"schema": kit.Schema, "installation_id": kit.InstallationID,
+		"signer_fingerprint": kit.SignerFinger, "recipient": kit.Recipient, "created_at": kit.CreatedAt,
+		"sealed_identity": kit.SealedIdentity, "note": "恢复口令不保存在任何地方"})
+	parsed, err := ParseRecoveryKit(legacy)
+	if err != nil || !parsed.NeedsPassphrase() {
+		t.Fatalf("legacy kit must need a passphrase: %v", err)
+	}
+	if _, _, err := OpenRecoveryKit(legacy, ""); err == nil {
+		t.Fatal("a legacy kit must not open without its passphrase")
+	}
+	if _, _, err := OpenRecoveryKit(legacy, "wrong horse battery"); err == nil {
+		t.Fatal("a wrong passphrase must fail")
+	}
+	identity, _, err := OpenRecoveryKit(legacy, "correct horse battery")
+	if err != nil || identity.String() != rig.keys.Identity.String() {
+		t.Fatalf("legacy open = %v", err)
+	}
+	// Mixed or empty forms are invalid.
+	for _, body := range []map[string]any{
+		{"has_passphrase": false, "sealed_identity": kit.SealedIdentity},
+		{"has_passphrase": true, "identity": rig.keys.Identity.String()},
+		{"has_passphrase": false},
+	} {
+		body["schema"], body["signer_fingerprint"], body["recipient"], body["note"] = kit.Schema, kit.SignerFinger, kit.Recipient, ""
+		encoded, _ := json.Marshal(body)
+		if _, err := ParseRecoveryKit(encoded); err == nil {
+			t.Fatalf("kit %v must be invalid", body)
+		}
+	}
+}
+
 func TestRedactKeepsPublicIdentifiers(t *testing.T) {
 	line := "copy: 20261017T030000Z-abcdefgh signer SHA256:" + strings.Repeat("A", 43)
 	if got := Redact(line); got != line {

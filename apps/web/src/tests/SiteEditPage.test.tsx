@@ -2632,3 +2632,27 @@ function siteCardResponse(input: Parameters<typeof fetch>[0]): unknown {
   }
   return detail
 }
+
+// 页头「接入受阻：CNAME 未生成」旁有「查看原因」，从任何标签回到基本配置的接入状态卡。
+describe('autodefense-ux 页头接入受阻的查看原因', () => {
+  it('opens the basic tab with the access card from another tab', async () => {
+    authenticate('user')
+    const blocked: SiteDetail = { ...detail, access_readiness: { state: 'blocked', checks: [
+      { code: 'cname_generated', ok: false, detail: 'dns_provider_not_configured', checked_at: null }] } }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(blocked))
+    renderEdit('/site/site-1/edit?tab=advanced')
+    const reason = await screen.findByTestId('site-edit-access-reason')
+    expect(screen.getByTestId('site-edit-access')).toHaveTextContent('接入受阻：CNAME 未生成')
+    expect(screen.queryByTestId('site-access-card')).not.toBeInTheDocument()
+    await userEvent.click(reason)
+    expect(await screen.findByTestId('site-access-card')).toBeInTheDocument()
+  })
+
+  it('is not shown when access is ready', async () => {
+    authenticate('user')
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ...detail, access_readiness: { state: 'ready', checks: [] } }))
+    renderEdit()
+    expect(await screen.findByTestId('site-edit-access')).toBeInTheDocument()
+    expect(screen.queryByTestId('site-edit-access-reason')).not.toBeInTheDocument()
+  })
+})

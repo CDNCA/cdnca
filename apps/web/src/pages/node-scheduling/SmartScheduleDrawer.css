@@ -1,0 +1,272 @@
+/* 线路组智能调度抽屉：设置、当前选中节点、延迟矩阵。色值一律用共享变量。 */
+.smart-schedule-drawer .ant-drawer-body {
+  padding: 16px 24px 24px;
+}
+
+.smart-schedule-intro {
+  margin: 0 0 12px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.smart-schedule-probe {
+  margin-bottom: 12px;
+}
+
+.smart-schedule-probe-sources,
+.smart-schedule-help {
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.smart-schedule-probe-sources {
+  margin-bottom: 12px;
+}
+
+.smart-schedule-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+
+.smart-schedule-settings h2 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.smart-schedule-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--cdnca-color-text);
+}
+
+.smart-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.smart-schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.smart-schedule-field > label,
+.smart-schedule-label {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.smart-schedule-field .ant-input-number,
+.smart-schedule-field .ant-input-number-group-wrapper {
+  width: 100%;
+}
+
+.smart-schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.smart-schedule-tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.smart-schedule-empty,
+.smart-schedule-loading {
+  margin: 0;
+  padding: 24px 0;
+  color: var(--cdnca-color-text-secondary);
+  text-align: center;
+}
+
+.smart-schedule-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.smart-schedule-line {
+  padding: 12px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+
+.smart-schedule-line-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--cdnca-color-title);
+}
+
+.smart-schedule-line-head code,
+.smart-schedule-address,
+.smart-schedule-cell code {
+  color: var(--cdnca-color-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.smart-schedule-line-time {
+  margin-left: auto;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.smart-schedule-nodes,
+.smart-schedule-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.smart-schedule-nodes li,
+.smart-schedule-cell li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.smart-schedule-nodes .ant-tag {
+  margin-inline-end: 0;
+}
+
+.smart-schedule-muted {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+/* 矩阵单元格：第一行节点 IP，第二行延迟与样本数，窄屏也不乱换行。 */
+.smart-schedule-cell {
+  gap: 8px;
+}
+
+.smart-schedule-cell li {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  line-height: 20px;
+}
+
+.smart-schedule-cell-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* 延迟快慢用文字数值表达，颜色只作辅助。 */
+.smart-schedule-latency {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.smart-schedule-latency-fast {
+  color: var(--cdnca-color-success);
+}
+
+.smart-schedule-latency-medium {
+  color: var(--cdnca-color-text);
+}
+
+.smart-schedule-latency-slow {
+  color: var(--cdnca-color-error);
+}
+
+.smart-schedule-matrix-filters {
+  display: grid;
+  grid-template-columns: 140px 160px 140px minmax(0, 1fr);
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.smart-schedule-matrix-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+
+.smart-schedule-matrix-scroll:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 2px;
+}
+
+.smart-schedule-matrix-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.smart-schedule-matrix-table th,
+.smart-schedule-matrix-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+  text-align: left;
+  vertical-align: top;
+}
+
+.smart-schedule-matrix-table thead th {
+  background: var(--cdnca-color-table-header);
+  color: var(--cdnca-color-table-header-text);
+  font-weight: 500;
+}
+
+.smart-schedule-matrix-table tbody th {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.smart-schedule-matrix-table tbody tr:last-child th,
+.smart-schedule-matrix-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 767px) {
+  .smart-schedule-drawer .ant-drawer-body {
+    padding: 12px 16px 20px;
+  }
+
+  .smart-schedule-grid,
+  .smart-schedule-matrix-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .smart-schedule-line-time {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .smart-schedule-actions .ant-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+}

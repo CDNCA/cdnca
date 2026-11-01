@@ -932,6 +932,7 @@ func newStoreIntegrationFixtureWithLeaseWindow(t *testing.T, leaseWindow, graceW
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
 	ctx := t.Context()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "plugin_webhook_control_impl")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

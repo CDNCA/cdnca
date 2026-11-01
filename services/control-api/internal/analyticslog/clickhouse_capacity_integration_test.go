@@ -76,7 +76,7 @@ func TestProductionCandidateScanExtraction(t *testing.T) {
 			for _, clause := range []string{
 				"SELECT event_id",
 				"FROM " + test.candidateSource,
-				"occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')",
+				"occurred_at >= segment_from",
 				"occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')",
 				"ingested_at <= snapshot_at",
 				"GROUP BY event_id",
@@ -85,7 +85,9 @@ func TestProductionCandidateScanExtraction(t *testing.T) {
 					t.Fatalf("candidate scan is missing %q", clause)
 				}
 			}
-			if strings.Contains(candidate, "FINAL") {
+			// The conflict CTEs read migration 030's digest table FINAL on
+			// purpose; the candidate scan itself must not.
+			if strings.Contains(candidate[strings.Index(candidate, "candidate_scan AS"):], "FINAL") {
 				t.Fatal("candidate scan must not substitute alternate FINAL SQL")
 			}
 		})
@@ -257,6 +259,10 @@ func assertProductionCandidatePrunesPartitions(
 	}
 	parameters := filterParameters(scope{tenantID: tenantID}, filter, productionPageSize)
 	parameters.Set("param_snapshot_ms", strconv.FormatInt(time.Now().UTC().UnixMilli(), 10))
+	parameters.Set("param_segment_from_ms", strconv.FormatInt(filter.From.UnixMilli(), 10))
+	parameters.Set("param_conflict_scan", "0")
+	parameters.Set("param_has_cursor", "0")
+	parameters.Set("param_cursor_occurred_at_ms", "0")
 	body, err := database.execute(context.Background(), "EXPLAIN indexes=1 "+candidate, true, parameters)
 	if err != nil {
 		t.Fatal(err)
@@ -295,7 +301,15 @@ func productionCandidateScan(productionQuery string) (string, error) {
 		return "", errors.New("production query candidate_event_ids CTE is not extractable")
 	}
 	candidate := productionQuery[start : start+end]
-	return "WITH fromUnixTimestamp64Milli({snapshot_ms:Int64}, 'UTC') AS snapshot_at\n" + candidate, nil
+	// the candidates read segment_from and the conflict CTEs
+	// declared before them; keep those, with the snapshot pinned.
+	prefixStart := strings.Index(productionQuery, "fromUnixTimestamp64Milli({segment_from_ms:Int64}, 'UTC') AS segment_from,")
+	if prefixStart < 0 || prefixStart > start {
+		return "", errors.New("production query has no segment_from before candidate_event_ids")
+	}
+	prefix := productionQuery[prefixStart : start-len(startMarker)]
+	return "WITH fromUnixTimestamp64Milli({snapshot_ms:Int64}, 'UTC') AS snapshot_at,\n" + prefix + "candidate_scan AS\n(\n" +
+		candidate + "\n)\nSELECT event_id FROM candidate_scan", nil
 }
 
 func paginateProductionClient(

@@ -35,7 +35,7 @@ paths:
       operationId: getAdminL4Realtime
       security: [{ bearerAuth: [] }]
       parameters:
-        - {name: tenant_id, in: query, required: false, description: 可选租户范围；省略时平台管理员查询全部租户, schema: {type: string, format: uuid}}
+        - {name: tenant_id, in: query, required: false, description: "Optional tenant scope; when omitted a platform administrator queries every tenant", x-description-zh: 可选租户范围；省略时平台管理员查询全部租户, schema: {type: string, format: uuid}}
         - {name: range, in: query, required: true, schema: {type: string, enum: [1h, 6h, 12h, 24h, custom]}}
         - {name: timezone, in: query, required: true, schema: {type: string, example: UTC}}
         - {name: from, in: query, schema: {type: string, format: date-time}}

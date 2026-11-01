@@ -663,6 +663,7 @@ func isolatedSubscriptionPoolThrough(t *testing.T, target int64) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "package_subscription_test")
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

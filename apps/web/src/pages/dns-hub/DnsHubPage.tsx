@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { App, Alert, Button, Checkbox, Empty, Input, Result, Select, Space, Table, Tag, Tooltip, Typography, type TableColumnsType } from 'antd'
 import { Layers, Pencil, Plus, RefreshCw, RotateCw, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { PageSection } from '@cdnca/ui'
 import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../../api/auth'
@@ -185,8 +186,8 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
     }] : []),
   ]
 
-  if (providers.isPending) return <div className="dns-hub-page"><DataState status="loading" /></div>
-  if (providers.isError) return <div className="dns-hub-page"><DataState status="error" message={t(dnsHubErrorKey(providers.error))} onRetry={() => void providers.refetch()} /></div>
+  if (providers.isPending) return <PageSection className="dns-hub-page"><DataState status="loading" /></PageSection>
+  if (providers.isError) return <PageSection className="dns-hub-page"><DataState status="error" message={t(dnsHubErrorKey(providers.error))} onRetry={() => void providers.refetch()} /></PageSection>
 
   const header = (
     <header className="dns-hub-header">
@@ -209,17 +210,17 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
 
   if (!providers.data.length) {
     return (
-      <div className="dns-hub-page">
+      <PageSection className="dns-hub-page">
         {header}
         <Empty className="dns-hub-empty" description={<><div>{t('accounts.empty')}</div><div className="dns-hub-muted">{t('accounts.emptyHint')}</div></>}>
           <Button type="primary" onClick={() => navigate('/site/list', { state: { siteSubnav: 'dnsApi' } })}>{t('accounts.goAdd')}</Button>
         </Empty>
-      </div>
+      </PageSection>
     )
   }
 
   return (
-    <div className="dns-hub-page">
+    <PageSection className="dns-hub-page">
       {header}
       {!canManage ? <Alert className="dns-hub-alert" type="info" showIcon message={t('errors.readonly')} /> : null}
       <div className="dns-hub-layout">
@@ -333,7 +334,7 @@ function DnsHubContent({ canManage }: { canManage: boolean }) {
           if (changed) void queryClient.invalidateQueries({ queryKey: ['dns-hub'] })
         }} />
       ) : null}
-    </div>
+    </PageSection>
   )
 }
 

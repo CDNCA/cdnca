@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/config"
@@ -83,26 +86,29 @@ func buildPluginInstallationRuntime(ctx context.Context, cfg config.Config, pool
 	if err != nil {
 		return nil, fmt.Errorf("initialize plugin installation mTLS credentials: %w", err)
 	}
-	initial, err := credentials.Ensure(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load plugin installation mTLS credentials: %w", err)
-	}
-	defer clear(initial.PrivateKey)
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13,
-		RootCAs: initial.RootCAs, Certificates: []tls.Certificate{initial.TLSCertificate},
-		GetClientCertificate: credentials.GetClientCertificate,
-	}
 	dial, err := pluginRuntimeDialer(environment.providerURL)
 	if err != nil {
 		return nil, fmt.Errorf("plugin installation runtime: %w", err)
 	}
-	httpClient := &http.Client{Transport: &http.Transport{
-		Proxy: nil, DialContext: dial, ForceAttemptHTTP2: true, DisableCompression: true, TLSClientConfig: tlsConfig,
-		TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 5 * time.Second,
-		MaxIdleConns: 2, MaxIdleConnsPerHost: 2, IdleConnTimeout: 5 * time.Second,
-		MaxResponseHeaderBytes: 64 << 10,
-	}, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+	// 安装客户端证书不可用（授权端不可达、签发被拒）只降级插件安装与安全公告同步，不让主控起不来：
+	// 传输层在首次请求时才取证书，失败按请求失败返回，下次请求再试。
+	transport := &lazyInstallationTransport{credentials: credentials, build: func(roots *x509.CertPool) http.RoundTripper {
+		return &http.Transport{
+			Proxy: nil, DialContext: dial, ForceAttemptHTTP2: true, DisableCompression: true,
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13, RootCAs: roots,
+				GetClientCertificate: credentials.GetClientCertificate},
+			TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 5 * time.Second,
+			// 50 s < 9448 IdleTimeout 60 s: keep the tunnelled mTLS connection
+			// between calls.
+			MaxIdleConns: 2, MaxIdleConnsPerHost: 2, IdleConnTimeout: 50 * time.Second,
+			MaxResponseHeaderBytes: 64 << 10,
+		}
+	}}
+	if err := transport.prepare(ctx); err != nil {
+		slog.Warn("plugin installation runtime degraded: installation mTLS credential unavailable; retrying on use",
+			"error", err)
+	}
+	httpClient := &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return errors.New("plugin installation activation redirects are forbidden")
 	}}
 	activation, err := plugininstallation.NewActivationClient(plugininstallation.ActivationClientConfig{
@@ -126,6 +132,40 @@ func buildPluginInstallationRuntime(ctx context.Context, cfg config.Config, pool
 			Domain:              domain,
 		})
 	}, licenseHTTP: httpClient, providerURL: environment.providerURL, installationID: installationID}, nil
+}
+
+// lazyInstallationTransport 在第一次成功取到安装客户端证书时才建 mTLS 传输层（根证书来自该凭据），之后复用；
+// 取证书失败时本次请求失败、不缓存失败，下次请求重试。客户端证书每次握手仍从证书管理器取（到期前自动续签）。
+type lazyInstallationTransport struct {
+	credentials *pluginruntimecomposition.CertificateManager
+	build       func(*x509.CertPool) http.RoundTripper
+	mu          sync.Mutex
+	ready       http.RoundTripper
+}
+
+func (lazy *lazyInstallationTransport) prepare(ctx context.Context) error {
+	lazy.mu.Lock()
+	defer lazy.mu.Unlock()
+	if lazy.ready != nil {
+		return nil
+	}
+	initial, err := lazy.credentials.Ensure(ctx)
+	if err != nil {
+		return fmt.Errorf("load plugin installation mTLS credentials: %w", err)
+	}
+	clear(initial.PrivateKey)
+	lazy.ready = lazy.build(initial.RootCAs)
+	return nil
+}
+
+func (lazy *lazyInstallationTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if err := lazy.prepare(request.Context()); err != nil {
+		if request.Body != nil {
+			_ = request.Body.Close()
+		}
+		return nil, err
+	}
+	return lazy.ready.RoundTrip(request)
 }
 
 type pluginInstallationRuntimeEnvironment struct {

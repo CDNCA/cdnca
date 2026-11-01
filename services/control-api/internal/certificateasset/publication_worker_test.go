@@ -322,3 +322,30 @@ func runErrString41(err error) string {
 	}
 	return err.Error()
 }
+
+// Migration 612: an Ack with a noop reason carries no publication result;
+// an Ack without one must carry the full result; failures never carry one.
+func TestValidPublicationResultNoop612(t *testing.T) {
+	noop := PublicationResult{Outcome: PublicationAck, NoopReason: PublicationNoopNeverPublished}
+	full := PublicationResult{
+		Outcome: PublicationAck, PublicationID: uuid.New(), PublicationRevision: 1,
+		ConfigVersionID: uuid.New(), RolloutID: uuid.New(), RolloutRevision: 1,
+	}
+	withRollout := noop
+	withRollout.RolloutID = uuid.New()
+	unknownReason := noop
+	unknownReason.NoopReason = "skipped"
+	failedNoop := PublicationResult{Outcome: PublicationRetry, FailureCode: "publication_unavailable", NoopReason: PublicationNoopNeverPublished}
+	for name, test := range map[string]struct {
+		result PublicationResult
+		want   bool
+	}{
+		"noop": {noop, true}, "full": {full, true}, "noop with rollout": {withRollout, false},
+		"unknown reason": {unknownReason, false}, "failure with noop": {failedNoop, false},
+		"empty ack": {PublicationResult{Outcome: PublicationAck}, false},
+	} {
+		if got := validPublicationResult(test.result); got != test.want {
+			t.Errorf("%s: valid = %t, want %t", name, got, test.want)
+		}
+	}
+}

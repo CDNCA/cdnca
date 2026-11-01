@@ -20,8 +20,19 @@ const (
 type serviceStoreStub struct {
 	putRequest     PutRequest
 	recoverRequest RecoverRequest
+	enableRequest  SetEnabledRequest
+	enableCalls    int
+	inheritRequest InheritRequest
+	defaultRequest DefaultPutRequest
 	policy         Policy
+	defaultPolicy  DefaultPolicy
 	err            error
+}
+
+func (store *serviceStoreStub) SetEnabled(_ context.Context, request SetEnabledRequest) (WriteResult, error) {
+	store.enableCalls++
+	store.enableRequest = request
+	return WriteResult{Policy: store.policy}, store.err
 }
 
 func (store *serviceStoreStub) Put(_ context.Context, request PutRequest) (WriteResult, error) {
@@ -42,6 +53,20 @@ func (store *serviceStoreStub) Recover(_ context.Context, request RecoverRequest
 		return WriteResult{}, store.err
 	}
 	return WriteResult{Policy: store.policy}, nil
+}
+
+func (store *serviceStoreStub) Inherit(_ context.Context, request InheritRequest) (WriteResult, error) {
+	store.inheritRequest = request
+	return WriteResult{Policy: store.policy}, store.err
+}
+
+func (store *serviceStoreStub) GetDefault(_ context.Context, _ DefaultReadRequest) (DefaultPolicy, error) {
+	return store.defaultPolicy, store.err
+}
+
+func (store *serviceStoreStub) PutDefault(_ context.Context, request DefaultPutRequest) (DefaultWriteResult, error) {
+	store.defaultRequest = request
+	return DefaultWriteResult{Policy: store.defaultPolicy}, store.err
 }
 
 func testActor(scopeKind string, scopeID uuid.UUID, permissions ...string) Actor {
@@ -171,5 +196,41 @@ func TestOutcomeKeepsLKGOnFailureAndPromotesOnlyAcceptedCandidate(t *testing.T) 
 	accepted, state, err := applyOutcome(current, OutcomeRequest{Revision: 8, DocumentSHA256: digest, Applied: true, ReasonCode: "applied"}, time.Unix(11, 0))
 	if err != nil || state != "acked" || accepted.DeploymentState != StateActive || accepted.ActiveRevision != 8 || accepted.LKGRevision != 8 {
 		t.Fatalf("accepted outcome = (%+v, %q, %v)", accepted, state, err)
+	}
+}
+
+// migration 608: switching needs firewall.manage, the tenant's own scope, a
+// current revision >= 1 and write metadata; the digest binds the target state.
+func TestSetEnabledAuthorizesAndBindsDigest(t *testing.T) {
+	tenant, site := uuid.MustParse(testTenant), uuid.MustParse(testSite)
+	request := SetEnabledRequest{Actor: testActor(ScopeTenant, tenant, PermissionManage), TargetScopeID: tenant, SiteID: site,
+		ExpectedRevision: 2, IdempotencyKey: "adux2", RequestID: "44444444-4444-4444-8444-444444444444", Enabled: false}
+	for name, mutate := range map[string]func(*SetEnabledRequest) error{
+		"read_only": func(r *SetEnabledRequest) error {
+			r.Actor = testActor(ScopeTenant, tenant, PermissionRead)
+			return ErrPermissionDenied
+		},
+		"other_tenant": func(r *SetEnabledRequest) error {
+			r.Actor = testActor(ScopeTenant, uuid.New(), PermissionManage)
+			return ErrNotFound
+		},
+		"no_revision": func(r *SetEnabledRequest) error { r.ExpectedRevision = 0; return ErrInvalidInput },
+		"bad_key":     func(r *SetEnabledRequest) error { r.IdempotencyKey = "bad key"; return ErrInvalidInput },
+	} {
+		store := &serviceStoreStub{}
+		candidate := request
+		want := mutate(&candidate)
+		if _, err := NewService(store).SetEnabled(context.Background(), candidate); !errors.Is(err, want) || store.enableCalls != 0 {
+			t.Fatalf("%s: err=%v calls=%d", name, err, store.enableCalls)
+		}
+	}
+	store := &serviceStoreStub{}
+	if _, err := NewService(store).SetEnabled(context.Background(), request); err != nil || store.enableCalls != 1 {
+		t.Fatalf("disable: %v", err)
+	}
+	disabled := store.enableRequest.RequestSHA256
+	request.Enabled = true
+	if _, err := NewService(store).SetEnabled(context.Background(), request); err != nil || store.enableRequest.RequestSHA256 == disabled {
+		t.Fatalf("enable digest must differ from disable: %v", err)
 	}
 }

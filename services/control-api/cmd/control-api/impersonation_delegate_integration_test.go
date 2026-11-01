@@ -178,9 +178,10 @@ func TestImpersonationDelegateServesTenantPagesAsTarget(t *testing.T) {
 		WHERE action='identity.impersonation.use' AND result='success'`).Scan(&used); err != nil || used < 6 {
 		t.Fatalf("impersonation use audit rows=%d err=%v", used, err)
 	}
-	// A sensitive identity action stays refused while impersonating.
+	// A sensitive identity action stays refused while impersonating: 403
+	// impersonation_sensitive_action_denied since e7661415e (was folded into 401).
 	call(login.AccessToken, "POST", "/v1/account/password", map[string]any{"current_password": password,
-		"new_password": password + "x"}, nil, 401)
+		"new_password": password + "x"}, nil, 403)
 	// Without the cookie the administrator is still the administrator.
 	cookie = nil
 	call(login.AccessToken, "GET", "/v1/tickets", nil, nil, 403)

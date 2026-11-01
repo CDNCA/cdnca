@@ -287,8 +287,8 @@ export default function StreamDefaultsPanel({
     <>
       {messageContext}
       {modalContext}
-      <p className="stream-panel-description">{t('defaults.description')}</p>
-      <div className="stream-panel-toolbar stream-defaults-toolbar is-end">
+      <div className="stream-panel-toolbar stream-defaults-toolbar">
+        <p className="stream-panel-description">{t('defaults.description')}</p>
         <div className="stream-toolbar-actions">
           {canManageDefaults ? <Button type="primary" icon={<Plus size={15} />} disabled={writesLocked} onClick={() => {
             writes.clearError()

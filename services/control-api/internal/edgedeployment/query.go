@@ -273,6 +273,9 @@ func loadLatestDeployments(
 		item.ErrorCode = code
 		item.Superseded = DeploymentSuperseded(item.State, code, unchanged)
 		item.CanRetry = retryAllowed && deploymentFailed(item.State) && !item.Superseded && item.Attempt < maxAttempts
+		if deploymentFailed(item.State) {
+			item.ErrorMessage = DeploymentErrorMessage(payload)
+		}
 		item.Warnings = DeploymentWarnings(payload)
 		ApplyFrozenMark(&item, frozenMark)
 		result = append(result, item)

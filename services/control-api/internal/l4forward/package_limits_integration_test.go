@@ -13,6 +13,7 @@ import (
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
 	"github.com/cdnca/cdnca/services/control-api/internal/packageperiod"
 	"github.com/cdnca/cdnca/services/control-api/internal/packagesubscription"
@@ -270,6 +271,7 @@ func newStreamAddonFixture(t *testing.T) streamAddonFixture {
 		t.Skip("TEST_DATABASE_URL required")
 	}
 	// 用随机 schema 隔离（下方 CREATE SCHEMA），不需要专用库名。
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "stream_addon")
 	adminPool, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

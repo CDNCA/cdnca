@@ -258,6 +258,13 @@ func TestRestoreCommandsAndRecoveryKit(t *testing.T) {
 	if _, _, err := nativebackup.OpenRecoveryKit(kit.Body.Bytes(), "correct horse battery staple"); err != nil {
 		t.Fatal(err)
 	}
+	plain := h.do(http.MethodPost, Prefix+"/recovery-kit", `{}`)
+	if plain.Code != http.StatusOK || !strings.Contains(plain.Body.String(), `"has_passphrase":false`) {
+		t.Fatalf("kit without passphrase = %d %s", plain.Code, plain.Body)
+	}
+	if identity, _, err := nativebackup.OpenRecoveryKit(plain.Body.Bytes(), ""); err != nil || identity.String() != keys.Identity.String() {
+		t.Fatalf("open kit without passphrase: %v", err)
+	}
 	if del := h.do(http.MethodDelete, Prefix+"/backups/"+id, `{"confirm":"nope"}`); del.Code != http.StatusBadRequest {
 		t.Fatalf("unconfirmed delete = %d", del.Code)
 	}

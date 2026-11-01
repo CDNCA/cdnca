@@ -43,7 +43,6 @@ type fakeClickHouse struct {
 	inserts map[string][]map[string]any
 	queries []string
 	params  []map[string]string
-	exists  bool
 	rows    []sessionLogRow
 }
 
@@ -79,11 +78,7 @@ func (fake *fakeClickHouse) handler(t *testing.T) http.HandlerFunc {
 		}
 		fake.params = append(fake.params, params)
 		if strings.HasPrefix(text, "EXISTS TABLE") {
-			if fake.exists {
-				_, _ = writer.Write([]byte("{\"result\":1}\n"))
-			} else {
-				_, _ = writer.Write([]byte("{\"result\":0}\n"))
-			}
+			t.Errorf("unexpected table probe: %s", text)
 			return
 		}
 		for _, row := range fake.rows {
@@ -104,11 +99,11 @@ func sessionEvent(id string, log *agentv1.L4SessionLogV1) *agentv1.L4SessionEven
 }
 
 // Every event is a fact; only events with a session log are log rows, and
-// only when the table exists. The facts never carry an address.
+// the table is never probed first. The facts never carry an address.
 func TestFactWriterSplitsSessionLogs(t *testing.T) {
 	connect := uint32(7)
-	for _, exists := range []bool{true, false} {
-		fake := &fakeClickHouse{exists: exists}
+	{
+		fake := &fakeClickHouse{}
 		server := httptest.NewServer(fake.handler(t))
 		source, err := NewClickHouseSource(ClickHouseConfig{Endpoint: server.URL, Database: "facts", QueryTimeout: time.Second, HTTPClient: server.Client()})
 		if err != nil {
@@ -139,12 +134,6 @@ func TestFactWriterSplitsSessionLogs(t *testing.T) {
 				}
 			}
 		}
-		if !exists {
-			if len(logs) != 0 {
-				t.Fatalf("logs written without the table: %v", logs)
-			}
-			continue
-		}
 		if len(logs) != 1 || logs[0]["client_ip"] != "203.0.113.10" || logs[0]["peer_ip"] != "192.0.2.9" ||
 			logs[0]["upstream_connect_ms"] != float64(7) || logs[0]["end_reason"] != "killed" || logs[0]["event_id"] != "logged" ||
 			logs[0]["source_watermark"] != float64(9) || logs[0]["finalized_at"] != "2026-08-09 12:00:01.000" {
@@ -158,7 +147,7 @@ func TestFactWriterSplitsSessionLogs(t *testing.T) {
 func TestSessionLogQueryScopesFiltersAndPages(t *testing.T) {
 	now := time.Date(2026, 8, 9, 13, 0, 0, 0, time.UTC)
 	finalized := now.Add(-time.Minute)
-	fake := &fakeClickHouse{exists: true, rows: []sessionLogRow{
+	fake := &fakeClickHouse{rows: []sessionLogRow{
 		{FinalizedMS: finalized.UnixMilli(), StartedMS: finalized.Add(-time.Second).UnixMilli(), EventID: "a", NodeID: testNode, SiteID: testSite,
 			StreamID: testStream, ListenerID: testStream, Protocol: "tcp", ListenPort: 18080, ClientIP: "203.0.113.10", EndReason: "closed"},
 		{FinalizedMS: finalized.UnixMilli(), StartedMS: finalized.UnixMilli(), EventID: "b", NodeID: testNode, SiteID: testSite,
@@ -224,11 +213,6 @@ func TestSessionLogQueryScopesFiltersAndPages(t *testing.T) {
 	if _, err := service.ReadSessionLogs(t.Context(), tenant, other); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatalf("cursor reused under another filter: %v", err)
 	}
-	fake.exists = false
-	query.Cursor = ""
-	if _, err := service.ReadSessionLogs(t.Context(), tenant, query); !errors.Is(err, ErrSessionLogUnavailable) {
-		t.Fatalf("missing table: %v", err)
-	}
 }
 
 // The platform 四层访问日志 opens with no filter: every tenant's rows, newest
@@ -236,7 +220,7 @@ func TestSessionLogQueryScopesFiltersAndPages(t *testing.T) {
 // optional narrowing. A tenant session can never widen to the platform.
 func TestSessionLogPlatformScopeNeedsNoFilter(t *testing.T) {
 	now := time.Date(2026, 8, 9, 13, 0, 0, 0, time.UTC)
-	fake := &fakeClickHouse{exists: true}
+	fake := &fakeClickHouse{}
 	server := httptest.NewServer(fake.handler(t))
 	defer server.Close()
 	source, err := NewClickHouseSource(ClickHouseConfig{Endpoint: server.URL, Database: "facts", QueryTimeout: time.Second, HTTPClient: server.Client()})
@@ -281,7 +265,7 @@ func TestSessionLogPlatformScopeNeedsNoFilter(t *testing.T) {
 func TestSessionLogReturnsIPv4MappedClientsAsIPv4(t *testing.T) {
 	now := time.Date(2026, 8, 9, 13, 0, 0, 0, time.UTC)
 	finalized := now.Add(-time.Minute)
-	fake := &fakeClickHouse{exists: true, rows: []sessionLogRow{
+	fake := &fakeClickHouse{rows: []sessionLogRow{
 		{FinalizedMS: finalized.UnixMilli(), StartedMS: finalized.UnixMilli(), EventID: "b", NodeID: testNode, SiteID: testSite,
 			StreamID: testStream, ListenerID: testStream, Protocol: "tcp", ListenPort: 18080, ClientIP: "::ffff:203.0.113.10", EndReason: "closed"},
 		{FinalizedMS: finalized.UnixMilli(), StartedMS: finalized.UnixMilli(), EventID: "a", NodeID: testNode, SiteID: testSite,

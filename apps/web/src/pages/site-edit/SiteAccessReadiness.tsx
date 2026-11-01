@@ -8,7 +8,7 @@ import type { SiteAccessCheckCode, SiteAccessReadiness as Readiness } from '../.
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/siteAccessReadiness'
 import { accessStatusLabel, firstFailing, lookup, type Check, type Translate } from './accessReadinessText'
-import { lineGroupsPath, tenantTicketPathFor } from './cnameFailureText'
+import { cnameFailureNeedsDnsConfig, dnsConfigPath, lineGroupsPath, tenantTicketPathFor } from './cnameFailureText'
 
 // fix-readiness：服务端 access_readiness 的两种呈现——列表状态列的一行（第一个未通过项），
 // 详情“接入状态”卡逐项列出通过/未通过、原因与按角色的下一步（普通用户只给工单入口）。
@@ -40,7 +40,9 @@ interface Advice {
 function adviceFor(check: Check, admin: boolean, cname: string, t: Translate, go: {
   navigate: (path: string) => void
   https: () => void
+  basic: () => void
   siteID: string
+  cnameFailureCode?: string | null
 }): Advice | null {
   const ticket = { label: t('actions.contactAdmin'), onClick: () => go.navigate(tenantTicketPathFor(go.siteID)) }
   switch (check.code) {
@@ -53,7 +55,14 @@ function adviceFor(check: Check, admin: boolean, cname: string, t: Translate, go
         ? { text: t('advice.adminNodes'), action: { label: t('actions.goNodes'), onClick: () => go.navigate(nodesPath) } }
         : { text: t('advice.adminLineGroup'), action: { label: t('actions.goLineGroups'), onClick: () => go.navigate(lineGroupsPath) } }
     case 'cname_generated':
-      return null // CNAME 字段旁已有失败原因与重新生成/联系管理员（CnameFailureActions）
+      if (check.detail === 'cname_pending') return null
+      // DNS 未配置时管理员直接去 DNS 配置，用户提交工单；其余看 CNAME 字段旁的原因与“重新生成”。
+      if (cnameFailureNeedsDnsConfig(go.cnameFailureCode ?? check.detail)) {
+        return admin
+          ? { text: t('advice.adminDnsConfig'), action: { label: t('actions.goDnsConfig'), onClick: () => go.navigate(dnsConfigPath) } }
+          : { text: t('advice.tenantPlatform'), action: ticket }
+      }
+      return { text: t('advice.cnameRegenerate'), action: { label: t('actions.viewCname'), onClick: go.basic } }
     case 'dns_resolved':
       if (check.detail === 'waiting_cname' || check.detail === 'no_domains') return null
       return { text: cname ? `${t('advice.dnsTarget', { cname })}${t('advice.waitDNS')}` : t('advice.waitDNS') }
@@ -75,11 +84,13 @@ function adviceFor(check: Check, admin: boolean, cname: string, t: Translate, go
 const checkOrder: SiteAccessCheckCode[] = ['package', 'line_group', 'cname_generated', 'dns_resolved', 'https_cert', 'published']
 
 /** 详情“接入状态”卡。onCheckNow 缺省时不显示“立即检查”（无权限或只读预览）。 */
-export function SiteAccessReadinessCard({ readiness, siteID, admin, cname, onCheckNow }: {
+export function SiteAccessReadinessCard({ readiness, siteID, admin, cname, cnameFailureCode, onCheckNow }: {
   readiness: Readiness
   siteID: string
   admin: boolean
   cname: string
+  /** basic.cname_failure_code：区分 DNS 未配置（去 DNS 配置/工单）与其他失败（看 CNAME 字段、重新生成）。 */
+  cnameFailureCode?: string | null
   onCheckNow?: () => Promise<unknown>
 }) {
   const { t, i18n } = useTranslation('siteAccessReadiness')
@@ -95,6 +106,10 @@ export function SiteAccessReadinessCard({ readiness, siteID, admin, cname, onChe
     return next
   })
   const dns = checks.find((check) => check.code === 'dns_resolved')
+  const basic = () => {
+    setSearchParams(new URLSearchParams())
+    document.querySelector<HTMLElement>('.site-basic-cname button, .site-basic-cname')?.scrollIntoView?.({ block: 'center' })
+  }
 
   const checkNow = async () => {
     if (!onCheckNow) return
@@ -114,10 +129,10 @@ export function SiteAccessReadinessCard({ readiness, siteID, admin, cname, onChe
   const detailed = checks.map((check) => ({
     check,
     reason: lookup(t, exists, 'reasons', check),
-    advice: check.ok ? null : adviceFor(check, admin, cname, t, { navigate, https, siteID }),
+    advice: check.ok ? null : adviceFor(check, admin, cname, t, { navigate, https, basic, siteID, cnameFailureCode }),
   }))
   return (
-    <section className={`site-access-card is-${readiness.state}`} aria-labelledby="site-access-card-title" data-testid="site-access-card">
+    <section id="site-access-card" className={`site-access-card is-${readiness.state}`} aria-labelledby="site-access-card-title" data-testid="site-access-card">
       <header className="site-access-card-head">
         <h3 id="site-access-card-title">{t('title')}</h3>
         <span className={`site-access-status is-${readiness.state}`}>{accessStatusLabel(readiness, t, exists)}</span>

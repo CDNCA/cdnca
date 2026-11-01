@@ -31,6 +31,9 @@ type PublicationStatus struct {
 	ConfigVersionID     *uuid.UUID `json:"config_version_id,omitempty"`
 	RolloutID           *uuid.UUID `json:"rollout_id,omitempty"`
 	RolloutRevision     int64      `json:"rollout_revision,omitempty"`
+	// NoopReason: succeeded without a rollout (migration 612), an
+	// unpublication whose certificate never reached a node.
+	NoopReason string `json:"noop_reason,omitempty"`
 }
 
 type PublicationStatusEvent struct {
@@ -122,12 +125,14 @@ func (store *PublicationStatusStore) List(
 			intent.asset_id,intent.version_id,intent.binding_revision,intent.operation,intent.is_default,
 			latest.sequence,latest.state,latest.attempt,latest.next_attempt_at,
 			latest.failure_code,latest.occurred_at,latest.publication_id,
-			latest.publication_revision,latest.config_version_id,latest.rollout_id,latest.rollout_revision
+			latest.publication_revision,latest.config_version_id,latest.rollout_id,latest.rollout_revision,
+			latest.noop_reason
 		FROM certificate_publication_intents intent
 		JOIN LATERAL (
 			SELECT state.sequence,state.state,state.attempt,state.next_attempt_at,
 				state.failure_code,state.occurred_at,state.publication_id,
-				state.publication_revision,state.config_version_id,state.rollout_id,state.rollout_revision
+				state.publication_revision,state.config_version_id,state.rollout_id,state.rollout_revision,
+				state.noop_reason
 			FROM certificate_publication_intent_state_facts state
 			WHERE state.tenant_scope_id=intent.tenant_scope_id AND state.site_id=intent.site_id
 			  AND state.binding_revision=intent.binding_revision AND state.occurred_at<=$2
@@ -189,11 +194,12 @@ func (store *PublicationStatusStore) Get(
 			intent.asset_id,intent.version_id,intent.binding_revision,intent.operation,intent.is_default,
 			latest.sequence,latest.state,latest.attempt,latest.next_attempt_at,
 			latest.failure_code,latest.occurred_at,latest.publication_id,
-			latest.publication_revision,latest.config_version_id,latest.rollout_id,latest.rollout_revision
+			latest.publication_revision,latest.config_version_id,latest.rollout_id,latest.rollout_revision,
+			latest.noop_reason
 		FROM certificate_publication_intents intent
 		JOIN LATERAL (
 			SELECT sequence,state,attempt,next_attempt_at,failure_code,occurred_at,
-				publication_id,publication_revision,config_version_id,rollout_id,rollout_revision
+				publication_id,publication_revision,config_version_id,rollout_id,rollout_revision,noop_reason
 			FROM certificate_publication_intent_state_facts state
 			WHERE state.tenant_scope_id=intent.tenant_scope_id AND state.site_id=intent.site_id
 			  AND state.binding_revision=intent.binding_revision
@@ -248,11 +254,12 @@ func scanPublicationStatus(scanner publicationStatusScanner) (PublicationStatus,
 	var failureCode sql.NullString
 	var publicationID, configVersionID, rolloutID uuid.NullUUID
 	var publicationRevision, rolloutRevision sql.NullInt64
+	var noopReason sql.NullString
 	err := scanner.Scan(
 		&status.TenantScopeID, &status.SiteID, &status.AssetID, &status.VersionID,
 		&status.BindingRevision, &status.Operation, &status.Default, &status.StateSequence,
 		&status.State, &status.Attempt, &nextAttempt, &failureCode, &status.OccurredAt,
-		&publicationID, &publicationRevision, &configVersionID, &rolloutID, &rolloutRevision,
+		&publicationID, &publicationRevision, &configVersionID, &rolloutID, &rolloutRevision, &noopReason,
 	)
 	if err != nil {
 		return PublicationStatus{}, err
@@ -277,6 +284,9 @@ func scanPublicationStatus(scanner publicationStatusScanner) (PublicationStatus,
 	}
 	if rolloutRevision.Valid {
 		status.RolloutRevision = rolloutRevision.Int64
+	}
+	if noopReason.Valid {
+		status.NoopReason = noopReason.String
 	}
 	if !validPublicationStatus(status) {
 		return PublicationStatus{}, ErrInvalidStore
@@ -319,6 +329,10 @@ func validPublicationStatus(status PublicationStatus) bool {
 		status.RolloutID != nil && *status.RolloutID != uuid.Nil && status.RolloutRevision > 0
 	emptyResult := status.PublicationID == nil && status.PublicationRevision == 0 &&
 		status.ConfigVersionID == nil && status.RolloutID == nil && status.RolloutRevision == 0
+	if status.NoopReason != "" {
+		return status.State == "succeeded" && status.Operation == "unpublish" &&
+			status.NoopReason == PublicationNoopNeverPublished && emptyResult
+	}
 	return (status.State == "succeeded" && completeResult) || (status.State != "succeeded" && emptyResult)
 }
 

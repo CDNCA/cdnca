@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 )
 
@@ -15,7 +16,7 @@ const (
 	defaultMaxMetadataBytes      = 4 << 10
 	defaultMaxIdentifierBytes    = 128
 	defaultMaxActiveDeployments  = 128
-	defaultMaxCapabilities       = 64
+	defaultMaxCapabilities       = agentv1.MaxCapabilities
 	defaultMaxCommandArtifacts   = 128
 	defaultMaxDeploymentChecks   = 64
 	defaultMaxPendingCommands    = 8

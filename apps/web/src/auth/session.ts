@@ -137,7 +137,13 @@ async function applyAuthResponse(
   signal?: AbortSignal,
 ): Promise<Principal> {
   if (!canApply()) throw new Error('Session changed during refresh')
-  const principal = await authApi.me(response.access_token, signal)
+  // A refresh answer already carries the session principal (the control plane
+  // builds it with PrincipalForSession, as /v1/auth/me does), so a restored
+  // session needs no second round trip (one fewer request in
+  // front of the first page). Sign-in still reads /v1/auth/me.
+  const principal = update === 'refresh'
+    ? { ...response.principal, ...(response.impersonation ? { impersonation: response.impersonation } : {}) }
+    : await authApi.me(response.access_token, signal)
   if (!canApply()) throw new Error('Session changed during refresh')
   if (!validPrincipal(principal)) throw new Error('Refresh principal identity changed')
   useSessionStore.getState().setSession(response, principal, update)

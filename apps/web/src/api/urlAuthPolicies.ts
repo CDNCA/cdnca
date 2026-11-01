@@ -26,7 +26,7 @@ export type URLAuthPolicy = Omit<URLAuthPolicyFields, 'site_id'> & {
   scope_id: string
   owner?: { id: string; display_name: string }
   site: { id: string; domain: string }
-  migration_marker?: 'cdnfly_type_a_md5' | 'cdnfly_type_b_md5'
+  migration_marker?: 'legacy_type_a_md5' | 'legacy_type_b_md5'
   current_key: URLAuthKeyMetadata
   previous_key?: URLAuthKeyMetadata
   version: number
@@ -111,7 +111,7 @@ function parsePolicy(value: unknown): URLAuthPolicy {
     typeof site.id !== 'string' || !uuidPattern.test(site.id) || typeof site.domain !== 'string' || site.domain.length < 1 || site.domain.length > 253 ||
     typeof value.name !== 'string' || value.name.length < 1 || value.name.length > 128 ||
     typeof value.enabled !== 'boolean' || value.algorithm !== 'hmac-sha256' ||
-    (value.migration_marker !== undefined && value.migration_marker !== 'cdnfly_type_a_md5' && value.migration_marker !== 'cdnfly_type_b_md5') ||
+    (value.migration_marker !== undefined && value.migration_marker !== 'legacy_type_a_md5' && value.migration_marker !== 'legacy_type_b_md5') ||
     typeof value.signature_parameter !== 'string' || !parameterPattern.test(value.signature_parameter) ||
     typeof value.expiration_parameter !== 'string' || !parameterPattern.test(value.expiration_parameter) ||
     typeof value.key_id_parameter !== 'string' || !parameterPattern.test(value.key_id_parameter) ||

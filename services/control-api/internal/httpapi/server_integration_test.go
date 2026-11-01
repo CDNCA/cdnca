@@ -578,6 +578,7 @@ func isolatedTestSchema(t *testing.T, migrate bool) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "control_api_test")
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatalf("open test administration pool: %v", err)

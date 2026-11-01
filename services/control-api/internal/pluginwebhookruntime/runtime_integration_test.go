@@ -373,6 +373,7 @@ func newRuntimeIntegrationFixture(t *testing.T) *runtimeIntegrationFixture {
 	if databaseURL == "" || natsURL == "" {
 		t.Skip(runtimeDatabaseEnv + " and " + runtimeNATSEnv + " are required")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "plugin_webhook_runtime")
 	poolConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -3732,6 +3733,7 @@ func TestRuntimePGTwoConnectionLockOrdering(t *testing.T) {
 	if databaseURL == "" {
 		t.Skip(runtimeDatabaseEnv + " is required")
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "plugin_webhook_lock_order")
 	adminConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatal(err)

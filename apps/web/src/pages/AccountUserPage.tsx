@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Form, Input, Result, Spin } from 'antd'
+import { Alert, Button, Form, Input, Result, Spin } from 'antd'
 import { useFeedbackMessage, useFeedback, FeedbackWhen, useFormSubmitError } from '@cdnca/ui'
 import type { TFunction } from 'i18next'
 import { LockKeyhole, Mail, MonitorSmartphone, Pencil, Smartphone, UserRound } from 'lucide-react'
@@ -12,6 +12,7 @@ import { identityVerificationApi, type IdentityVerificationSelfStatusValue } fro
 import { mfaApi } from '../api/mfa'
 import { usersApi, type ChangePasswordRequest, type UpdateProfileRequest } from '../api/users'
 import { useSessionStore } from '../auth/session'
+import { useDemoLocked } from '../components/useRuntimeFeatures'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { formatDateTime as dateTime } from '../i18n/formatters'
 import '../i18n/accountMfa'
@@ -153,12 +154,15 @@ function AccountUserPageSession({
   profileQueryKey,
   canUpdateProfile,
   canChangePassword,
+  demoLocked,
 }: {
   accessToken: string
   owner: string
   profileQueryKey: ProfileQueryKey
   canUpdateProfile: boolean
   canChangePassword: boolean
+  /** 演示账号：密码、联系方式、MFA 置灰（接口同样 403 demo_account_locked）。 */
+  demoLocked: boolean
 }) {
   const { t, i18n } = useTranslation('accountProfile')
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
@@ -391,7 +395,7 @@ function AccountUserPageSession({
   ] as const
   const checkEnabled = (item: (typeof checkRows)[number][0]) => {
     if (item === 'realName') return canOpenVerification
-    if (item === 'loginSecurityItem') return true
+    if (item === 'loginSecurityItem') return !demoLocked
     return canUpdateProfile && !bindMutation.isPending
   }
   // 点行内按钮展开一个 padding 16px、左边距 66px 的内联表单，再点收起。
@@ -428,6 +432,7 @@ function AccountUserPageSession({
   return (
     <section className="identity-page account-profile-page account-user-page" aria-labelledby="account-profile-title">
       {messageContext}
+      {demoLocked ? <Alert type="info" showIcon role="status" message={t('errors:demo_account_locked')} /> : null}
       <h1 id="account-profile-title" className="visually-hidden">{t('title')}</h1>
       <section className="account-user-shell">
         <section className="account-compatibility-summary account-user-summary" aria-label={t('profile.sectionTitle')}>
@@ -618,6 +623,7 @@ export default function AccountUserPage() {
   const accessToken = useSessionStore((state) => state.accessToken)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
   const principal = useSessionStore((state) => state.principal)
+  const demoLocked = useDemoLocked(accessToken)
   if (!accessToken) return null
 
   const owner = profileOwnerKey(
@@ -649,8 +655,9 @@ export default function AccountUserPage() {
       accessToken={accessToken}
       owner={owner}
       profileQueryKey={profileQueryKey}
-      canUpdateProfile={principal.permissions.includes('identity.self.update')}
-      canChangePassword={principal.permissions.includes('identity.password.change')}
+      canUpdateProfile={!demoLocked && principal.permissions.includes('identity.self.update')}
+      canChangePassword={!demoLocked && principal.permissions.includes('identity.password.change')}
+      demoLocked={demoLocked}
     />
   )
 }

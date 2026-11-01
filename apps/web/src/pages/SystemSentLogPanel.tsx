@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, Input, Pagination, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -68,11 +69,14 @@ function SentLogContent({ owner, accessToken }: { owner: string; accessToken: st
   useFilterUrl({ user_id: userID, message_id: messageID })
   const filtersReady = userValid && messageValid
   const filters: NotificationHistoryFilters = { userID: userID || undefined, messageID: messageID || undefined, eventType, channel, result, limit, cursor: cursors.at(-1) }
+  // control-log-ui：条件变了、点刷新按新数据读；同一条件下翻页 30 秒内用缓存。
+  const [generation, renew] = useLogListGeneration({ ...filters, cursor: undefined })
   const query = useQuery({
-    queryKey: ['notification-delivery-history', owner, filters],
+    queryKey: ['notification-delivery-history', owner, generation, filters],
     queryFn: ({ signal }) => notificationHistoryApi.list(accessToken, filters, signal),
     enabled: filtersReady,
     retry: false,
+    ...logListQueryOptions,
   })
   const resetPage = () => setCursors([])
   const eventLabel = (value: string) => {
@@ -141,7 +145,7 @@ function SentLogContent({ owner, accessToken }: { owner: string; accessToken: st
         queryLoading={query.isFetching}
         queryDisabled={!filtersReady || query.isFetching}
         onQuery={() => {
-          if (cursors.length) resetPage()
+          if (cursors.length) { resetPage(); renew() }
           else void query.refetch()
         }}
         onClearAdvanced={() => { setUserDraft(''); setMessageDraft(''); setUserID(''); setMessageID(''); resetPage() }}

@@ -47,7 +47,8 @@ describe('NodeSSHInstall', () => {
     const post = calls.find((call) => call.init?.method === 'POST')!
     const created = JSON.parse(String(post.init?.body))
     expect(post.url).toBe('/v1/admin/nodes/ssh-installs')
-    expect(created).toEqual({ hosts: ['203.0.113.7', '203.0.113.8'], port: 22, username: 'root', password: 'root-secret' })
+    expect(created).toEqual({ hosts: ['203.0.113.7', '203.0.113.8'], port: 22, username: 'root', password: 'root-secret', restrict_ssh: false,
+      language: 'zh-CN' })
     expect(screen.getByLabelText('SSH 密码')).toHaveValue('')
     await user.click(screen.getAllByRole('button', { name: '确认指纹并安装' })[0])
     await waitFor(() => expect(screen.getByText('排队中')).toBeInTheDocument())

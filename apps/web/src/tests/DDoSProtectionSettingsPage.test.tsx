@@ -35,7 +35,8 @@ function json(body: unknown, headers: Record<string, string> = {}) {
 describe('DDoS protection settings', () => {
   it('round-trips the form values', () => {
     expect(fromFormValues(toFormValues(stored))).toEqual(stored)
-    const { empty_connection: _, ...withoutEmpty } = stored
+    const withoutEmpty = { ...stored }
+    delete withoutEmpty.empty_connection
     expect(fromFormValues({ ...toFormValues(stored), empty_enabled: false })).toEqual(withoutEmpty)
     expect(fromFormValues({ ...toFormValues(stored), allow_networks: ' 198.51.100.1 \n\n2001:db8::/48 ' }).allow_networks)
       .toEqual(['198.51.100.1', '2001:db8::/48'])
@@ -75,7 +76,8 @@ describe('DDoS protection settings', () => {
     fireEvent.click(screen.getByRole('switch', { name: '丢弃无效连接' }))
     fireEvent.click(screen.getByRole('button', { name: /保存/ }))
     expect(await screen.findByText('草稿 #4，未启用')).toBeInTheDocument()
-    const { drop_invalid: _, ...withoutInvalid } = flags
+    const withoutInvalid = { ...flags }
+    delete withoutInvalid.drop_invalid
     expect(puts[0]).toEqual({ value: { ...withoutInvalid, tcp_flag_types: ['null', 'xmas', 'syn_fin', 'syn_rst', 'fin'] } })
 
     for (const kind of ['NULL（无任何标志）', 'Xmas（FIN+PSH+URG）', 'SYN+FIN', 'SYN+RST', '孤立 FIN（不属于已有连接）']) {

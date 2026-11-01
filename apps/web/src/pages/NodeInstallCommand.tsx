@@ -19,7 +19,10 @@ function publicOrigin(value: string): URL {
 // The copied command stays short: install-node.sh reads the upgrade trust pin,
 // Gateway endpoints and download fallback from this console over HTTPS, and
 // keeps verifying every artifact signature and checksum itself.
-type InstallRuntime = { __CDNCA_NODE_UPGRADE_TRUST_SHA256__?: string }
+// __CDNCA_CONTROL_CA_SHA256__ pins /downloads/gateway-ca.pem
+// when this console serves the installer-generated self-signed root; it is
+// empty for a publicly trusted certificate.
+type InstallRuntime = { __CDNCA_NODE_UPGRADE_TRUST_SHA256__?: string; __CDNCA_CONTROL_CA_SHA256__?: string }
 
 const registrationCredentialPattern = /^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/
 
@@ -29,15 +32,19 @@ const registrationCredentialPattern = /^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/
 // builtin, so it never appears in a process argument list (ps). The installer
 // is downloaded to a temporary file and checked before it runs; the command
 // returns the installer's own exit status (packages/cdnca-ui/src/installerCommand.ts).
-export function buildNodeInstallCommand(credential: string, origin: string, runtime: InstallRuntime = {}): string {
+// language: console UI language; an English UI adds --lang en, a Chinese one --lang zh.
+export function buildNodeInstallCommand(credential: string, origin: string, runtime: InstallRuntime = {}, language?: string): string {
   if (!registrationCredentialPattern.test(credential)) throw new Error('invalid registration credential')
   // Published by install-control.sh together with node-install-defaults; a
   // console without it cannot hand out an upgradable node.
   if (!/^[0-9a-f]{64}$/.test(runtime.__CDNCA_NODE_UPGRADE_TRUST_SHA256__ ?? '')) throw new Error('invalid upgrade trust digest')
   const control = publicOrigin(origin).origin
+  const caDigest = runtime.__CDNCA_CONTROL_CA_SHA256__ ?? ''
+  if (caDigest !== '' && !/^[0-9a-f]{64}$/.test(caDigest)) throw new Error('invalid control-plane CA digest')
   return buildInstallerCommand({
     urls: [`${control}/downloads/install-node.sh`], protocols: '=https', label: '[cdnca-edge]',
-    args: `--control-plane ${quote(control)} --registration-key-stdin`, stdinSecret: credential,
+    args: `--control-plane ${quote(control)} --registration-key-stdin`, stdinSecret: credential, language,
+    controlPlaneCA: caDigest ? { url: `${control}/downloads/gateway-ca.pem`, sha256: caDigest } : undefined,
   })
 }
 
@@ -45,7 +52,7 @@ export default function NodeInstallCommand({ getAccessToken, errorText }: {
   getAccessToken: () => string | null
   errorText: (error: ApiError) => string
 }) {
-  const { t } = useTranslation('nodes')
+  const { t, i18n } = useTranslation('nodes')
   const active = useRef(true)
   const [busy, setBusy] = useState(false)
   const [command, setCommand] = useState<string | null>(null)
@@ -67,7 +74,7 @@ export default function NodeInstallCommand({ getAccessToken, errorText }: {
         ? await nodesApi.resetRegistrationCredential(accessToken)
         : await nodesApi.getRegistrationCredential(accessToken)
       if (!active.current || !getAccessToken()) return
-      setCommand(buildNodeInstallCommand(result.credential, window.location.origin, window as InstallRuntime))
+      setCommand(buildNodeInstallCommand(result.credential, window.location.origin, window as InstallRuntime, i18n.resolvedLanguage))
       setCopied(false)
     } catch (cause) {
       if (!active.current || !getAccessToken()) return

@@ -151,12 +151,27 @@ func (verifier *Verifier) VerifyTx(
 	var ipAllowlist []string
 	var revision int64
 	var createdAt time.Time
-	if err := tx.QueryRow(ctx, `SELECT status,expires_at,secret_digest,pepper_version,scopes,ip_allowlist,revision,created_at
+	var pluginAuthorizationID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT status,expires_at,secret_digest,pepper_version,scopes,ip_allowlist,revision,created_at,
+		plugin_installation_authorization_id
 		FROM api_keys
 		WHERE id=$1 AND key_id=$2 AND user_id=$3 AND scope_id=$4 AND tenant_id=$5
 		FOR SHARE`, keyIDUUID, keyID, userID, scopeID, tenantID).Scan(
-		&status, &expiresAt, &storedDigest, &pepperVersion, &scopes, &ipAllowlist, &revision, &createdAt); err != nil {
+		&status, &expiresAt, &storedDigest, &pepperVersion, &scopes, &ipAllowlist, &revision, &createdAt,
+		&pluginAuthorizationID); err != nil {
 		return Credential{}, credentialFactError(err)
+	}
+	// 插件身份（迁移 604）：绑定的安装停用/卸载后即拒绝，与 internal/apikey 鉴权一致。
+	if pluginAuthorizationID != nil {
+		var installationStatus string
+		if err := tx.QueryRow(ctx, `SELECT status FROM plugin_installation_heads
+			WHERE tenant_scope_id=$1 AND authorization_id=$2 FOR SHARE`, scopeID, *pluginAuthorizationID).Scan(
+			&installationStatus); err != nil {
+			return Credential{}, credentialFactError(err)
+		}
+		if installationStatus != "enabled" {
+			return Credential{}, ErrInvalidCredential
+		}
 	}
 	computed, ok := verifier.keyring.Sign(
 		pepperVersion, digestDomain, []byte(keyID), []byte{0}, []byte(secret),

@@ -84,6 +84,7 @@ type claimed struct {
 	id, scopeID, createdBy         uuid.UUID
 	host, username, authKind, name string
 	controlPlane, hostKey, keyID   string
+	language                       string
 	port, attempts                 int
 	ciphertext                     []byte
 	batchID                        uuid.UUID
@@ -98,10 +99,10 @@ func (service *Service) claim(ctx context.Context) (claimed, bool, error) {
 			WHERE (state='pending' OR state='running' AND lease_until<$3) AND attempts<$4
 			ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED)
 		RETURNING id,scope_id,batch_id,created_by_user_id,host,port,username,auth_kind,node_name,
-			control_plane,host_key_sha256,credential_key_id,credential_ciphertext,attempts`,
+			control_plane,host_key_sha256,credential_key_id,credential_ciphertext,attempts,language`,
 		service.worker, now.Add(leaseDuration), now, maxAttempts).Scan(&job.id, &job.scopeID, &job.batchID, &job.createdBy,
 		&job.host, &job.port, &job.username, &job.authKind, &job.name, &job.controlPlane, &job.hostKey,
-		&job.keyID, &job.ciphertext, &job.attempts)
+		&job.keyID, &job.ciphertext, &job.attempts, &job.language)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Jobs that ran out of attempts while running are failed.
 		_, err = service.pool.Exec(ctx, `UPDATE node_ssh_install_jobs SET state='failed',failure_code='install_timeout',
@@ -129,7 +130,7 @@ func (service *Service) execute(ctx context.Context, job claimed) {
 	}
 	root := job.username == "root"
 	command, err := InstallCommand(job.controlPlane, registration.Credential, job.host, job.name, root,
-		!root && credential.Password != "")
+		!root && credential.Password != "", service.controlCASHA256(), job.language)
 	if err != nil {
 		fail(FailInstall)
 		return
@@ -276,13 +277,30 @@ func (service *Service) retry(ctx context.Context, job claimed) {
 func (service *Service) finish(ctx context.Context, job claimed, state, code string) {
 	err := pgx.BeginFunc(ctx, service.pool, func(tx pgx.Tx) error {
 		now := service.now().UTC()
-		command, err := tx.Exec(ctx, `UPDATE node_ssh_install_jobs SET state=$2,failure_code=$3,credential_key_id='',
+		var nodeID *uuid.UUID
+		var restrict bool
+		err := tx.QueryRow(ctx, `UPDATE node_ssh_install_jobs SET state=$2,failure_code=$3,credential_key_id='',
 			credential_ciphertext=NULL,finished_at=$4,lease_owner='',lease_until=NULL,updated_at=$4,
 			node_id=CASE WHEN $2='succeeded' THEN (SELECT node.id FROM nodes node WHERE node.scope_id=$5
 				AND (host(node.ipv4)=$6 OR host(node.ipv6)=$6) ORDER BY node.created_at DESC LIMIT 1) END
-			WHERE id=$1 AND state='running'`, job.id, state, code, now, job.scopeID, job.host)
-		if err != nil || command.RowsAffected() != 1 {
+			WHERE id=$1 AND state='running' RETURNING node_id,restrict_ssh`, job.id, state, code, now, job.scopeID, job.host).
+			Scan(&nodeID, &restrict)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
 			return err
+		}
+		// "Only the controller may SSH" chosen at install time: the node it
+		// registered gets the restriction (on the port the install used).
+		if restrict && nodeID != nil {
+			if controller := service.ControllerEgress(); len(controller) > 0 {
+				var access Access
+				if err := service.setAccessTx(ctx, tx, Actor{ScopeID: job.scopeID}, *nodeID,
+					AccessChange{Enabled: true, SSHPort: job.port}, []string{}, controller, &access); err != nil {
+					return err
+				}
+			}
 		}
 		result := "success"
 		if state == StateFailed {

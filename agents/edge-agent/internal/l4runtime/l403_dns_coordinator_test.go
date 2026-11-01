@@ -137,9 +137,12 @@ func TestL403DNSCoordinatorNegativeTTLStaleBoundAndHealthFailure(t *testing.T) {
 	if err != nil || stillLKG.ReasonCode != DNSReasonHealthRejected || stillLKG.Addresses[0] != netip.MustParseAddr("8.8.4.4") {
 		t.Fatalf("health failure = %+v, %v", stillLKG, err)
 	}
+	// Past the stale bound the LKG is not served; a probe failure is runtime
+	// health, not a release gate: the answer is used unverified.
 	now = first.StaleUntil.Add(time.Second)
-	if _, err := coordinator.Resolve(context.Background(), config, l403Stream); !errors.Is(err, ErrDNSStale) {
-		t.Fatalf("stale bound error = %v, want ErrDNSStale", err)
+	unverified, err := coordinator.Resolve(context.Background(), config, l403Stream)
+	if err != nil || unverified.ReasonCode != DNSReasonHealthUnverified || unverified.Addresses[0] != netip.MustParseAddr("9.9.9.9") {
+		t.Fatalf("stale bound = %+v, %v; want the unverified answer", unverified, err)
 	}
 }
 

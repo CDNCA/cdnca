@@ -97,7 +97,7 @@ func (c Config) validate() error {
 	if err := validateVersionRange(c.SupportedVersions); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidConfiguration, err)
 	}
-	if c.Capabilities == nil || !boundedMetadata(c.Capabilities.AgentVersion, true) || !boundedMetadata(c.Capabilities.BuildId, false) || !boundedMetadata(c.Capabilities.OperatingSystem, false) || !boundedMetadata(c.Capabilities.Architecture, false) || !boundedMetadata(c.Capabilities.OpenrestyVersion, false) || len(c.Capabilities.Features) > 64 {
+	if c.Capabilities == nil || !boundedMetadata(c.Capabilities.AgentVersion, true) || !boundedMetadata(c.Capabilities.BuildId, false) || !boundedMetadata(c.Capabilities.OperatingSystem, false) || !boundedMetadata(c.Capabilities.Architecture, false) || !boundedMetadata(c.Capabilities.OpenrestyVersion, false) || len(c.Capabilities.Features) > agentv1.MaxCapabilities {
 		return fmt.Errorf("%w: agent capabilities are required", ErrInvalidConfiguration)
 	}
 	seen := make(map[agentv1.CapabilityName]struct{}, len(c.Capabilities.Features))

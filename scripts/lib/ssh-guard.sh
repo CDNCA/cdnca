@@ -12,6 +12,8 @@ SSH_GUARD_ROOT=${SSH_GUARD_ROOT:-}
 SSH_GUARD_JAIL=${SSH_GUARD_ROOT}/etc/fail2ban/jail.d/cdnca-sshd.local
 
 ssh_guard_log() { printf '[cdnca-ssh-guard] %s\n' "$*" >&2; }
+# 未嵌 install-i18n 的安装器按中文输出。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 # 地址列表：空格或逗号分隔的 IPv4/IPv6 地址或 CIDR；非法项返回 1。
 ssh_guard_validate_ignoreip() {
@@ -44,22 +46,22 @@ ssh_guard_install_package() {
 
 # 安装并启用；失败只告警不中断安装（防爆破不是业务前置）。
 ssh_guard_setup() {
-  [ "$SSH_GUARD_ENABLED" = true ] || { ssh_guard_log '已按 --no-ssh-guard 跳过 fail2ban'; return 0; }
-  ssh_guard_validate_ignoreip "$SSH_GUARD_IGNOREIP" || { ssh_guard_log "--ssh-guard-ignoreip 含非法地址：$SSH_GUARD_IGNOREIP"; return 1; }
+  [ "$SSH_GUARD_ENABLED" = true ] || { ssh_guard_log "$(msg '已按 --no-ssh-guard 跳过 fail2ban' 'fail2ban skipped (--no-ssh-guard)')"; return 0; }
+  ssh_guard_validate_ignoreip "$SSH_GUARD_IGNOREIP" || { ssh_guard_log "$(msg "--ssh-guard-ignoreip 含非法地址：$SSH_GUARD_IGNOREIP" "--ssh-guard-ignoreip contains an invalid address: $SSH_GUARD_IGNOREIP")"; return 1; }
   [ -n "$SSH_GUARD_IGNOREIP" ] ||
-    ssh_guard_log '提示：未给 --ssh-guard-ignoreip，只放行回环；建议加上运维出口与本平台各机器地址，避免误封'
+    ssh_guard_log "$(msg '提示：未给 --ssh-guard-ignoreip，只放行回环；建议加上运维出口与本平台各机器地址，避免误封' 'note: no --ssh-guard-ignoreip given, only loopback is exempt; add your admin egress and platform host addresses to avoid being banned')"
   if ! ssh_guard_install_package; then
-    ssh_guard_log '警告：无法安装 fail2ban（无 apt-get/dnf 或安装失败），SSH 防爆破未启用'
+    ssh_guard_log "$(msg '警告：无法安装 fail2ban（无 apt-get/dnf 或安装失败），SSH 防爆破未启用' 'warning: cannot install fail2ban (no apt-get/dnf or the install failed); SSH brute-force protection is off')"
     return 0
   fi
   install -d -m 0755 "${SSH_GUARD_JAIL%/*}"
   ssh_guard_render >"${SSH_GUARD_JAIL}.new"
   mv -f -- "${SSH_GUARD_JAIL}.new" "$SSH_GUARD_JAIL"
   if ! fail2ban-client -t >/dev/null 2>&1; then
-    ssh_guard_log "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）"
+    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
     return 0
   fi
   systemctl enable fail2ban >/dev/null 2>&1 || true
-  systemctl restart fail2ban >/dev/null 2>&1 || { ssh_guard_log '警告：fail2ban 启动失败，SSH 防爆破未启用'; return 0; }
-  ssh_guard_log "fail2ban sshd 已启用（5 次失败/10 分钟封 1 小时；ignoreip：127.0.0.1/8 ::1${SSH_GUARD_IGNOREIP:+ ${SSH_GUARD_IGNOREIP//,/ }}）"
+  systemctl restart fail2ban >/dev/null 2>&1 || { ssh_guard_log "$(msg '警告：fail2ban 启动失败，SSH 防爆破未启用' 'warning: fail2ban failed to start; SSH brute-force protection is off')"; return 0; }
+  ssh_guard_log "$(msg "fail2ban sshd 已启用（5 次失败/10 分钟封 1 小时；ignoreip：" 'fail2ban sshd enabled (5 failures in 10 minutes ban for 1 hour; ignoreip: ')127.0.0.1/8 ::1${SSH_GUARD_IGNOREIP:+ ${SSH_GUARD_IGNOREIP//,/ }}$(msg '）' ')')"
 }

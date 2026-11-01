@@ -89,7 +89,10 @@ func (store *Store) Put(ctx context.Context, request PutRequest) (WriteResult, e
 		if err != nil {
 			return err
 		}
-		if !found && request.ExpectedRevision != 0 || found && current.Revision != request.ExpectedRevision || found && current.DeploymentState == StatePending {
+		// A pending candidate is overwritten: no production path records its
+		// outcome (RecordOutcome has no caller), so refusing it made every
+		// second save of a site a 409 for good.
+		if !found && request.ExpectedRevision != 0 || found && current.Revision != request.ExpectedRevision {
 			return ErrRevisionConflict
 		}
 		request.Document.ExpectedActivePolicyVersion = 0
@@ -109,11 +112,22 @@ func (store *Store) Put(ctx context.Context, request PutRequest) (WriteResult, e
 		}
 		policy := Policy{
 			ID: policyID, TenantScopeID: request.TargetScopeID, SiteID: request.SiteID,
-			PolicyInput: request.Policy, Revision: request.ExpectedRevision + 1, DeploymentState: StatePending,
-			DocumentSHA256: hex.EncodeToString(request.DocumentSHA256[:]), CreatedAt: now, UpdatedAt: now,
+			PolicyInput: request.Policy, Revision: request.ExpectedRevision + 1, DeploymentState: StatePending, Enabled: true,
+			DocumentSHA256: hex.EncodeToString(request.DocumentSHA256[:]), CreatedAt: &now, UpdatedAt: &now,
+			Source: SourceSite, Delivered: true,
 		}
 		if found {
+			// A new revision keeps the on/off state (migration 608); PATCH changes it.
 			policy.ID, policy.ActiveRevision, policy.LKGRevision, policy.CreatedAt = current.ID, current.ActiveRevision, current.LKGRevision, current.CreatedAt
+			policy.Enabled, policy.Delivered = current.Enabled, current.Enabled
+			if current.Inherited && !current.Enabled {
+				// A policy disabled, then put back to inheritance, starts its next own
+				// revision enabled (the toggle first: the 608 guard keeps it apart).
+				if err := setHeadEnabled(ctx, tx, request.TargetScopeID, request.SiteID, true, now); err != nil {
+					return err
+				}
+				policy.Enabled, policy.Delivered = true, true
+			}
 		}
 		if policy.HostEscalation, err = hostEscalation(ctx, tx, request.TargetScopeID); err != nil {
 			return err
@@ -152,16 +166,19 @@ func (store *Store) Get(ctx context.Context, request ReadRequest) (Policy, error
 		if err := store.authorize(ctx, tx, request.Actor, request.TargetScopeID, PermissionRead); err != nil {
 			return err
 		}
-		var found bool
-		var err error
-		result, found, err = lockPolicy(ctx, tx, request.TargetScopeID, request.SiteID)
+		if err := requireSite(ctx, tx, request.TargetScopeID, request.SiteID); err != nil {
+			return err
+		}
+		current, found, err := lockPolicy(ctx, tx, request.TargetScopeID, request.SiteID)
 		if err != nil {
 			return err
 		}
-		if !found {
-			return ErrNotFound
+		if found && !current.Inherited {
+			result = current
+			return nil
 		}
-		return nil
+		result, err = inheritedView(ctx, tx, request.TargetScopeID, request.SiteID, current.Revision, current.HostEscalation)
+		return err
 	})
 	if err != nil {
 		return Policy{}, normalizeStoreError(err)
@@ -189,7 +206,7 @@ func (store *Store) Recover(ctx context.Context, request RecoverRequest) (WriteR
 		if err != nil {
 			return err
 		}
-		if !found {
+		if !found || current.Inherited {
 			return ErrNotFound
 		}
 		if current.Revision != request.ExpectedRevision || current.DeploymentState == StatePending {
@@ -219,7 +236,7 @@ func (store *Store) Recover(ctx context.Context, request RecoverRequest) (WriteR
 		now := store.now().UTC().Truncate(time.Microsecond)
 		policy := current
 		policy.PolicyInput, policy.Revision, policy.DeploymentState = policyInputFromEdge(edge), current.Revision+1, StatePending
-		policy.DocumentSHA256, policy.UpdatedAt = hex.EncodeToString(digest[:]), now
+		policy.DocumentSHA256, policy.UpdatedAt = hex.EncodeToString(digest[:]), &now
 		put := PutRequest{Actor: request.Actor, TargetScopeID: request.TargetScopeID, SiteID: request.SiteID,
 			ExpectedRevision: request.ExpectedRevision, IdempotencyKey: request.IdempotencyKey, RequestID: request.RequestID,
 			Policy: policy.PolicyInput, Document: edge, RequestSHA256: request.RequestSHA256, DocumentSHA256: digest}
@@ -246,6 +263,85 @@ func (store *Store) Recover(ctx context.Context, request RecoverRequest) (WriteR
 		return WriteResult{}, normalizeStoreError(err)
 	}
 	return result, nil
+}
+
+// SetEnabled toggles head.enabled (migration 608) without a new revision.
+// A pending head may be switched too: nothing moves a head out of pending
+// today (RecordOutcome has no caller), and the toggle leaves the candidate
+// untouched. Setting the current state is an audited no-op.
+func (store *Store) SetEnabled(ctx context.Context, request SetEnabledRequest) (WriteResult, error) {
+	if !store.ready() {
+		return WriteResult{}, ErrUnavailable
+	}
+	var result WriteResult
+	err := pgx.BeginFunc(ctx, store.pool, func(tx pgx.Tx) error {
+		if err := store.authorize(ctx, tx, request.Actor, request.TargetScopeID, PermissionManage); err != nil {
+			return err
+		}
+		if replay, found, err := loadReceipt(ctx, tx, request.TargetScopeID, request.SiteID, request.Actor, request.IdempotencyKey, request.RequestSHA256); err != nil {
+			return err
+		} else if found {
+			result = replay
+			result.Replayed = true
+			return nil
+		}
+		current, found, err := lockPolicy(ctx, tx, request.TargetScopeID, request.SiteID)
+		if err != nil {
+			return err
+		}
+		// Only a site's own policy is switched (an inherited site follows the
+		// tenant default; to stop it alone the site first gets its own policy).
+		if !found || current.Inherited {
+			return ErrNotFound
+		}
+		if current.Revision != request.ExpectedRevision {
+			return ErrRevisionConflict
+		}
+		now := store.now().UTC().Truncate(time.Microsecond)
+		policy := current
+		if current.Enabled != request.Enabled {
+			if err := setHeadEnabled(ctx, tx, request.TargetScopeID, request.SiteID, request.Enabled, now); err != nil {
+				return err
+			}
+			policy.Enabled, policy.Delivered, policy.UpdatedAt = request.Enabled, request.Enabled, &now
+			if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, request.TargetScopeID); err != nil {
+				return fmt.Errorf("advance firewall action edge source revision: %w", err)
+			}
+			if err := advanceFirewallActionSourceRevision(ctx, tx, request.TargetScopeID, now); err != nil {
+				return err
+			}
+		}
+		action := "firewall.action.disable"
+		if request.Enabled {
+			action = "firewall.action.enable"
+		}
+		if err := store.auditor.Append(ctx, tx, audit.Event{
+			ScopeID: request.TargetScopeID, ActorUserID: &request.Actor.UserID, Action: action,
+			ResourceType: "firewall_action_policy", ResourceID: policy.ID.String(), RequestID: request.RequestID,
+			Result: "success", Payload: map[string]any{"site_id": request.SiteID.String(), "revision": policy.Revision,
+				"changes": map[string]any{"enabled": map[string]bool{"from": current.Enabled, "to": request.Enabled}}},
+		}); err != nil {
+			return err
+		}
+		if current.Enabled != request.Enabled {
+			if err := store.publishRevisionTx(ctx, tx, request.TargetScopeID, request.SiteID, request.RequestID); err != nil {
+				return err
+			}
+		}
+		result = WriteResult{Policy: policy}
+		return saveReceipt(ctx, tx, request.TargetScopeID, request.SiteID, request.Actor, request.IdempotencyKey, request.RequestSHA256, result, now)
+	})
+	if err != nil {
+		return WriteResult{}, normalizeStoreError(err)
+	}
+	return result, nil
+}
+
+// setHeadEnabled is the 608 toggle: enabled and updated_at only.
+func setHeadEnabled(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID, enabled bool, now time.Time) error {
+	_, err := tx.Exec(ctx, `UPDATE firewall_action_policy_heads SET enabled=$3,updated_at=$4
+		WHERE tenant_scope_id=$1 AND site_id=$2`, scopeID, siteID, enabled, now)
+	return err
 }
 
 type firewallActionSourceRevisionTx interface {
@@ -277,7 +373,7 @@ func (store *Store) RecordOutcome(ctx context.Context, request OutcomeRequest) (
 		if err != nil {
 			return err
 		}
-		if !found {
+		if !found || current.Inherited {
 			return ErrNotFound
 		}
 		now := store.now().UTC().Truncate(time.Microsecond)
@@ -376,7 +472,7 @@ func (store *Store) FinishProjection(ctx context.Context, result ProjectionResul
 		var finalState string
 		err := tx.QueryRow(ctx, `UPDATE firewall_action_publication_outbox
 			SET state=CASE WHEN $3='retryable' AND attempts>=16 THEN 'failed' ELSE $3 END,
-			available_at=$4,last_error=NULLIF($5,''),projected_at=CASE WHEN $3='published' THEN $6 ELSE NULL END,
+			available_at=$4,last_error=NULLIF($5,''),projected_at=CASE WHEN $3='published' THEN $6::timestamptz ELSE NULL END,
 			claim_expires_at=NULL,updated_at=$6
 			WHERE id=$1 AND document_sha256=$2 AND state='projecting' AND attempts=$7
 			RETURNING tenant_scope_id,site_id,revision,state`, result.PublicationID, result.DocumentSHA256[:], state, availableAt, lastError, now, result.Attempt).
@@ -411,7 +507,7 @@ func applyOutcome(current Policy, request OutcomeRequest, now time.Time) (Policy
 		return Policy{}, "", ErrRevisionConflict
 	}
 	current.DeploymentState = StateFailed
-	current.UpdatedAt = now
+	current.UpdatedAt = &now
 	if !request.Applied {
 		return current, "failed", nil
 	}
@@ -453,7 +549,7 @@ func persistCandidate(ctx context.Context, tx pgx.Tx, request PutRequest, policy
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO firewall_action_policy_heads(id,tenant_scope_id,site_id,document,document_bytes,document_sha256,revision,active_revision,lkg_revision,deployment_state,created_at,updated_at)
 		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) ON CONFLICT(tenant_scope_id,site_id) DO UPDATE SET
-		document=EXCLUDED.document,document_bytes=EXCLUDED.document_bytes,document_sha256=EXCLUDED.document_sha256,revision=EXCLUDED.revision,deployment_state=EXCLUDED.deployment_state,updated_at=EXCLUDED.updated_at`,
+		document=EXCLUDED.document,document_bytes=EXCLUDED.document_bytes,document_sha256=EXCLUDED.document_sha256,revision=EXCLUDED.revision,deployment_state=EXCLUDED.deployment_state,inherited=false,updated_at=EXCLUDED.updated_at`,
 		policy.ID, policy.TenantScopeID, policy.SiteID, document, document, request.DocumentSHA256[:], policy.Revision,
 		policy.ActiveRevision, policy.LKGRevision, StatePending, now)
 	if err != nil {
@@ -481,22 +577,35 @@ func persistCandidate(ctx context.Context, tx pgx.Tx, request PutRequest, policy
 func lockPolicy(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID) (Policy, bool, error) {
 	var policy Policy
 	var document, digest []byte
-	err := tx.QueryRow(ctx, `SELECT id,tenant_scope_id,site_id,document_bytes,document_sha256,revision,active_revision,lkg_revision,deployment_state,created_at,updated_at
+	var createdAt, updatedAt time.Time
+	err := tx.QueryRow(ctx, `SELECT id,tenant_scope_id,site_id,document_bytes,document_sha256,revision,active_revision,lkg_revision,deployment_state,enabled,inherited,created_at,updated_at
 		FROM firewall_action_policy_heads WHERE tenant_scope_id=$1 AND site_id=$2 FOR UPDATE`, scopeID, siteID).
 		Scan(&policy.ID, &policy.TenantScopeID, &policy.SiteID, &document, &digest, &policy.Revision, &policy.ActiveRevision,
-			&policy.LKGRevision, &policy.DeploymentState, &policy.CreatedAt, &policy.UpdatedAt)
+			&policy.LKGRevision, &policy.DeploymentState, &policy.Enabled, &policy.Inherited, &createdAt, &updatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Policy{}, false, nil
+		var absent Policy
+		if absent.HostEscalation, err = hostEscalation(ctx, tx, scopeID); err != nil {
+			return Policy{}, false, err
+		}
+		return absent, false, nil
 	}
 	if err != nil {
 		return Policy{}, false, err
 	}
-	var edge EdgePolicy
-	if err := json.Unmarshal(document, &edge); err != nil || len(digest) != sha256.Size {
+	if len(digest) != sha256.Size {
 		return Policy{}, false, ErrUnavailable
 	}
-	policy.PolicyInput = policyInputFromEdge(edge)
+	policy.CreatedAt, policy.UpdatedAt = &createdAt, &updatedAt
 	policy.DocumentSHA256 = hex.EncodeToString(digest)
+	if !policy.Inherited {
+		var edge EdgePolicy
+		if err := json.Unmarshal(document, &edge); err != nil {
+			return Policy{}, false, ErrUnavailable
+		}
+		policy.PolicyInput = policyInputFromEdge(edge)
+		// A disabled own policy (migration 608) is not delivered.
+		policy.Source, policy.Delivered = SourceSite, policy.Enabled
+	}
 	if policy.HostEscalation, err = hostEscalation(ctx, tx, scopeID); err != nil {
 		return Policy{}, false, err
 	}

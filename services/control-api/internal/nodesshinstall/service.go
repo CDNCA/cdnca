@@ -47,6 +47,7 @@ const (
 )
 
 type Service struct {
+	controlCA    func() string // see UseControlCA
 	pool         *pgxpool.Pool
 	cipher       CredentialCipher
 	registration RegistrationKeys
@@ -55,6 +56,10 @@ type Service struct {
 	now          func() time.Time
 	logger       *slog.Logger
 	worker       string
+	terminals    chan struct{}
+	access       *AccessConfig
+	// accessChanged wakes the SSH access delivery worker (nil: none runs).
+	accessChanged func()
 }
 
 type Config struct {
@@ -64,6 +69,9 @@ type Config struct {
 	Dialer       *Dialer
 	Now          func() time.Time
 	Logger       *slog.Logger
+	// Access configures "only the controller may SSH"; nil refuses turning
+	// it on (the controller's egress address is unknown).
+	Access *AccessConfig
 }
 
 func New(config Config) (*Service, error) {
@@ -81,7 +89,8 @@ func New(config Config) (*Service, error) {
 	}
 	return &Service{pool: config.Pool, cipher: config.Cipher, registration: config.Registration, dialer: config.Dialer,
 		auditor: audit.NewWithClock(config.Pool, func() time.Time { return config.Now().UTC() }), now: config.Now,
-		logger: config.Logger, worker: "nodesshinstall-" + uuid.NewString()}, nil
+		logger: config.Logger, worker: "nodesshinstall-" + uuid.NewString(), terminals: make(chan struct{}, maxTerminals),
+		access: config.Access}, nil
 }
 
 func binding(jobID uuid.UUID) dnsacme.CredentialBinding {
@@ -151,14 +160,11 @@ func ValidControlPlane(value string) bool {
 		parsed.Fragment == "" && parsed.User == nil && parsed.Opaque == "" && !strings.ContainsAny(value, " \t\r\n'\"")
 }
 
-func normalizeCreate(request *CreateRequest, blocked func(netip.Addr) bool) error {
-	credential := &request.Credential
+func normalizeCredential(credential *Credential) error {
 	credential.Username = strings.TrimSpace(credential.Username)
-	if len(request.Targets) < 1 || len(request.Targets) > MaxBatch ||
-		!usernamePattern.MatchString(credential.Username) || !ValidControlPlane(request.ControlPlane) ||
+	if !usernamePattern.MatchString(credential.Username) ||
 		(credential.Password == "") == (credential.PrivateKey == "") || len(credential.Password) > 1024 ||
-		strings.ContainsAny(credential.Password, "\r\n") ||
-		len(credential.PrivateKey) > 16<<10 {
+		strings.ContainsAny(credential.Password, "\r\n") || len(credential.PrivateKey) > 16<<10 {
 		return ErrInvalidInput
 	}
 	if credential.PrivateKey != "" {
@@ -166,9 +172,39 @@ func normalizeCreate(request *CreateRequest, blocked func(netip.Addr) bool) erro
 			return ErrInvalidInput
 		}
 	}
+	return nil
+}
+
+// credentialOf is the login a target's job uses.
+func (request CreateRequest) credentialOf(target Target) Credential {
+	if target.Credential != nil {
+		return *target.Credential
+	}
+	return request.Credential
+}
+
+func normalizeCreate(request *CreateRequest, blocked func(netip.Addr) bool) error {
+	if len(request.Targets) < 1 || len(request.Targets) > MaxBatch || !ValidControlPlane(request.ControlPlane) ||
+		!ValidLanguage(request.Language) {
+		return ErrInvalidInput
+	}
+	shared := false
+	for _, target := range request.Targets {
+		shared = shared || target.Credential == nil
+	}
+	if shared {
+		if err := normalizeCredential(&request.Credential); err != nil {
+			return err
+		}
+	}
 	seen := map[string]bool{}
 	for index := range request.Targets {
 		target := &request.Targets[index]
+		if target.Credential != nil {
+			if err := normalizeCredential(target.Credential); err != nil {
+				return err
+			}
+		}
 		target.Host = strings.ToLower(strings.Trim(strings.TrimSpace(target.Host), "[]"))
 		if address, err := netip.ParseAddr(target.Host); err == nil {
 			target.Host = address.String()
@@ -205,18 +241,29 @@ func (service *Service) audit(ctx context.Context, tx pgx.Tx, actor Actor, actio
 	for key, value := range extra {
 		payload[key] = value
 	}
-	event := audit.Event{ScopeID: actor.ScopeID, Action: action, ResourceType: "node_ssh_install",
-		ResourceID: job.ID.String(), RequestID: actor.RequestID, Result: result, ReasonCode: reason,
-		SourceIP: actor.IP, Payload: payload}
+	var actorID *uuid.UUID
 	if actor.UserID != uuid.Nil {
-		event.ActorUserID = &actor.UserID
+		actorID = &actor.UserID
+	}
+	requestID := actor.RequestID
+	if requestID == "" {
+		requestID = "node-ssh-install/" + uuid.NewString()
+	}
+	return service.auditor.Append(ctx, tx, auditEvent(actor.ScopeID, actorID, action, "node_ssh_install", job.ID.String(),
+		requestID, result, reason, actor.IP, payload))
+}
+
+// auditEvent: a user's event, or the install worker's (no user).
+func auditEvent(scopeID uuid.UUID, actorID *uuid.UUID, action, resourceType, resourceID, requestID, result, reason, ip string,
+	payload map[string]any) audit.Event {
+	event := audit.Event{ScopeID: scopeID, Action: action, ResourceType: resourceType, ResourceID: resourceID,
+		RequestID: requestID, Result: result, ReasonCode: reason, SourceIP: ip, Payload: payload}
+	if actorID != nil {
+		event.ActorUserID = actorID
 	} else {
 		event.ActorKind, event.ActorRef = audit.ActorSystem, "job:node_ssh_install"
 	}
-	if event.RequestID == "" {
-		event.RequestID = "node-ssh-install/" + uuid.NewString()
-	}
-	return service.auditor.Append(ctx, tx, event)
+	return event
 }
 
 // Create records one job per target and fetches each host key. A job waits
@@ -226,11 +273,13 @@ func (service *Service) Create(ctx context.Context, actor Actor, request CreateR
 	if err := normalizeCreate(&request, service.dialer.blocked); err != nil {
 		return nil, err
 	}
+	if request.RestrictSSH && len(service.ControllerEgress()) == 0 {
+		return nil, ErrControllerEgressUnknown
+	}
 	defer clear([]byte(request.Credential.Password))
-	batchID := uuid.New()
-	authKind := AuthPassword
-	if request.Credential.PrivateKey != "" {
-		authKind = AuthPrivateKey
+	batchID := request.BatchID
+	if batchID == uuid.Nil {
+		batchID = uuid.New()
 	}
 	// Host keys are fetched before the transaction (network I/O).
 	type fetched struct {
@@ -258,11 +307,26 @@ func (service *Service) Create(ctx context.Context, actor Actor, request CreateR
 		if err := service.requirePlatform(ctx, tx, actor); err != nil {
 			return err
 		}
+		if request.BatchID != uuid.Nil {
+			var exists bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM node_ssh_install_jobs WHERE scope_id=$1 AND batch_id=$2)`,
+				actor.ScopeID, request.BatchID).Scan(&exists); err != nil {
+				return err
+			}
+			if !exists {
+				return ErrNotFound
+			}
+		}
 		now := service.now().UTC()
 		for index, target := range request.Targets {
+			credential := request.credentialOf(target)
+			authKind := AuthPassword
+			if credential.PrivateKey != "" {
+				authKind = AuthPrivateKey
+			}
 			job := Job{ID: uuid.New(), BatchID: batchID, Host: target.Host, Port: target.Port,
-				Username: request.Credential.Username, AuthKind: authKind, NodeName: target.Name,
-				State: StateAwaitingHostKey, Progress: []string{}, CreatedAt: now}
+				Username: credential.Username, AuthKind: authKind, NodeName: target.Name,
+				State: StateAwaitingHostKey, Progress: []string{}, CreatedAt: now, RestrictSSH: request.RestrictSSH}
 			var keyID string
 			var ciphertext []byte
 			if keys[index].err != nil || !hostKeyPattern.MatchString(keys[index].key) {
@@ -272,17 +336,17 @@ func (service *Service) Create(ctx context.Context, actor Actor, request CreateR
 			} else {
 				job.HostKeySHA256 = keys[index].key
 				var err error
-				if keyID, ciphertext, err = service.seal(job.ID, request.Credential); err != nil {
+				if keyID, ciphertext, err = service.seal(job.ID, credential); err != nil {
 					return ErrInvalidInput
 				}
 			}
 			_, err := tx.Exec(ctx, `INSERT INTO node_ssh_install_jobs(id,scope_id,batch_id,host,port,username,auth_kind,
 				node_name,control_plane,host_key_sha256,credential_key_id,credential_ciphertext,state,
-				failure_code,created_by_user_id,created_at,finished_at,updated_at)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16)`,
+				failure_code,created_by_user_id,created_at,finished_at,updated_at,restrict_ssh,language)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16,$18,$19)`,
 				job.ID, actor.ScopeID, batchID, job.Host, job.Port, job.Username, authKind, job.NodeName,
 				request.ControlPlane, job.HostKeySHA256, keyID, ciphertext, job.State, job.FailureCode, actor.UserID,
-				now, job.FinishedAt)
+				now, job.FinishedAt, request.RestrictSSH, request.Language)
 			clear(ciphertext)
 			if err != nil {
 				if isUnique(err) {
@@ -295,7 +359,7 @@ func (service *Service) Create(ctx context.Context, actor Actor, request CreateR
 				result, reason = "failure", job.FailureCode
 			}
 			if err := service.audit(ctx, tx, actor, "node.ssh_install.create", job, result, reason,
-				map[string]any{"auth_kind": authKind, "host_key_sha256": job.HostKeySHA256}); err != nil {
+				map[string]any{"auth_kind": authKind, "host_key_sha256": job.HostKeySHA256, "restrict_ssh": request.RestrictSSH}); err != nil {
 				return err
 			}
 			jobs = append(jobs, job)
@@ -381,14 +445,14 @@ func (service *Service) transition(ctx context.Context, actor Actor, jobID uuid.
 }
 
 const selectJob = `SELECT id,batch_id,host,port,username,auth_kind,node_name,host_key_sha256,
-	host_key_confirmed,state,failure_code,progress,node_id,attempts,created_at,started_at,finished_at
+	host_key_confirmed,state,failure_code,progress,node_id,attempts,created_at,started_at,finished_at,restrict_ssh
 	FROM node_ssh_install_jobs`
 
 func scanJob(row pgx.Row) (Job, error) {
 	var job Job
 	err := row.Scan(&job.ID, &job.BatchID, &job.Host, &job.Port, &job.Username, &job.AuthKind, &job.NodeName,
 		&job.HostKeySHA256, &job.HostKeyConfirmed, &job.State, &job.FailureCode, &job.Progress,
-		&job.NodeID, &job.Attempts, &job.CreatedAt, &job.StartedAt, &job.FinishedAt)
+		&job.NodeID, &job.Attempts, &job.CreatedAt, &job.StartedAt, &job.FinishedAt, &job.RestrictSSH)
 	if job.Progress == nil {
 		job.Progress = []string{}
 	}

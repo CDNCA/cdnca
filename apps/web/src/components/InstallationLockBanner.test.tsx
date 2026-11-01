@@ -115,6 +115,16 @@ describe('InstallationLockBanner', () => {
     expect(await screen.findByText('授权已换绑到其他服务器')).toBeInTheDocument()
     expect(screen.getByText('可以登录、查看数据、修改自己的密码与两步验证，其他修改暂不可用。')).toBeInTheDocument()
   })
+
+  // 门户「重装主控」退役的旧主控显示"授权已用于重装"，不再提示改回 IP。
+  it('says the license was used for a reinstall', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ locked: false, rebound: true, reinstalled: true })))
+    renderWithProviders(<InstallationLockBanner />)
+    expect(await screen.findByText('授权已用于重装')).toBeInTheDocument()
+    expect(screen.getByText(/节点流量不受影响/)).toBeInTheDocument()
+    expect(screen.queryByText('授权已换绑到其他服务器')).toBeNull()
+    expect(screen.queryByText(/改回本机出口 IP/)).toBeNull()
+  })
 })
 
 describe('supply_in_use refusal', () => {

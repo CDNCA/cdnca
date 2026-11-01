@@ -117,3 +117,28 @@ func publicationStoreSource40(t *testing.T, name string) string {
 func compactPublicationStore40(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
+
+// The busy-node wait has its own short backoff (at most 30 s between
+// attempts), never longer than the configured maximum.
+func TestPublicationBusyRetryConfig(t *testing.T) {
+	config := DefaultPublicationIntentStoreConfig()
+	busy := publicationBusyRetryConfig(config)
+	if busy.RetryMaximum != 30*time.Second || busy.RetryBase != config.RetryBase || busy.MaxAttempts != config.MaxAttempts {
+		t.Fatalf("busy config = %+v", busy)
+	}
+	for attempt := 1; attempt <= 50; attempt++ {
+		delay, err := publicationIntentRetryDelay(busy, attempt, func(maximum time.Duration) time.Duration { return maximum })
+		if err != nil || delay > 30*time.Second || delay <= 0 {
+			t.Fatalf("busy attempt %d delay = %s, %v", attempt, delay, err)
+		}
+	}
+	short := config
+	short.RetryBase, short.RetryMaximum = 10*time.Millisecond, 20*time.Millisecond
+	if got := publicationBusyRetryConfig(short); got.RetryMaximum != 20*time.Millisecond || got.RetryBase != 10*time.Millisecond {
+		t.Fatalf("busy config of a short maximum = %+v", got)
+	}
+	if !strings.Contains(publicationDeferredAttemptsSQL, "failure_code='"+PublicationFailureNodeBusy+"'") ||
+		!strings.Contains(publicationDeferredAttemptsSQL, "state='retry_wait'") {
+		t.Fatalf("deferred attempts SQL = %s", publicationDeferredAttemptsSQL)
+	}
+}

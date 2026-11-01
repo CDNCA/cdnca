@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cdnca/cdnca/services/control-api/internal/nativebackup"
 	"net/http"
 	"os"
 	"strings"
@@ -119,7 +120,7 @@ func buildGatewayRegistryRuntime(pool *pgxpool.Pool, installationID, nodeCAFile 
 	}
 	return gatewayregistry.New(gatewayregistry.Config{Pool: pool, Signer: gatewayregistry.Signer{Client: client, Server: root},
 		RootCAPEM: string(rootPEM), NodeCAPEM: string(nodePEM), InstallationID: c.installationID, Endpoints: c.endpoints,
-		LocalGateway: c.localGateway})
+		LocalGateway: c.localGateway, NodeDefaultsFile: nodeDefaultsFileFor(c.localGateway)})
 }
 
 func gatewayRegistryHandlerFactory(service *gatewayregistry.Service, identityService *identity.Service) httpapi.MountedHandlerFactory {
@@ -185,4 +186,13 @@ func controlInternalGatewayRegistry(service *gatewayregistry.Service) controlint
 		return nil
 	}
 	return controlInternalGateways{service: service}
+}
+
+// nodeDefaultsFileFor: only an installation with a co-located Gateway (written by
+// install-control.sh, which also publishes node-install-defaults) maintains the file.
+func nodeDefaultsFileFor(local gatewayregistry.Entrypoint) string {
+	if local.Address == "" {
+		return ""
+	}
+	return nativebackup.NodeInstallDefaultsFile
 }

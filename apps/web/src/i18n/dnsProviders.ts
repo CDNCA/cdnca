@@ -1,5 +1,6 @@
 import i18n from './index'
-import { enUS, zhCN } from './resources'
+import { enUS } from './resources.enUS'
+import { zhCN } from './resources.zhCN'
 
 const zhProviderMessages = {
   ...zhCN.dnsProviders,

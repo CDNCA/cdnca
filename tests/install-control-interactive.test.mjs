@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { spawnSync } from './helpers/large-bash-script.mjs'
 import { tmpdir } from 'node:os'
@@ -102,15 +103,18 @@ test('runtime configuration JSON-escapes the public download fallback without ch
     const entry = '<script src="/runtime-config.js"></script>'
     writeFileSync(join(web, 'index.html'), entry)
     writeFileSync(join(web, 'runtime-config.js'), '// immutable release default\n')
+    // the installer-generated root the console HTTPS uses.
+    writeFileSync(join(directory, 'gateway-ca.pem'), 'fixture root\n')
+    const rootDigest = createHash('sha256').update('fixture root\n').digest('hex')
     const licensing = 'https://auth.example.test?quoted="value"'
     const upgradeTrust = 'ab'.repeat(32)
-    const unpublished = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), block('write_web_runtime_config'), 'write_node_install_defaults() { :; }', 'write_web_runtime_config'].join('\n')], {
-      encoding: 'utf8', env: { ...process.env, WEB_ROOT: web, DATA_DIR: directory, GATEWAY_HOST: 'gateway.example.test', GATEWAY_ENROLLMENT_PORT: '23001', GATEWAY_AGENT_PORT: '23002', LICENSING_SERVER: licensing, LICENSING_SERVER_FALLBACK: 'https://fallback.example.test', UPGRADE_TRUST_SHA256: '' },
+    const unpublished = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), block('control_ca_sha256'), block('write_web_runtime_config'), 'write_node_install_defaults() { :; }', 'write_web_runtime_config'].join('\n')], {
+      encoding: 'utf8', env: { ...process.env, WEB_ROOT: web, DATA_DIR: directory, GATEWAY_HOST: 'gateway.example.test', GATEWAY_ENROLLMENT_PORT: '23001', GATEWAY_AGENT_PORT: '23002', LICENSING_SERVER: licensing, LICENSING_SERVER_FALLBACK: 'https://fallback.example.test', UPGRADE_TRUST_SHA256: '', DOWNLOAD_DIR: directory, PUBLIC_CERT_FILE: '' },
     })
     assert.notEqual(unpublished.status, 0)
     assert.match(unpublished.stderr, /node upgrade trust was not published/)
-    const result = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), block('write_web_runtime_config'), 'write_node_install_defaults() { :; }', 'write_web_runtime_config'].join('\n')], {
-      encoding: 'utf8', env: { ...process.env, WEB_ROOT: web, DATA_DIR: directory, GATEWAY_HOST: 'gateway.example.test', GATEWAY_ENROLLMENT_PORT: '23001', GATEWAY_AGENT_PORT: '23002', LICENSING_SERVER: licensing, LICENSING_SERVER_FALLBACK: 'https://fallback.example.test', UPGRADE_TRUST_SHA256: upgradeTrust },
+    const result = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), block('control_ca_sha256'), block('write_web_runtime_config'), 'write_node_install_defaults() { :; }', 'write_web_runtime_config'].join('\n')], {
+      encoding: 'utf8', env: { ...process.env, WEB_ROOT: web, DATA_DIR: directory, GATEWAY_HOST: 'gateway.example.test', GATEWAY_ENROLLMENT_PORT: '23001', GATEWAY_AGENT_PORT: '23002', LICENSING_SERVER: licensing, LICENSING_SERVER_FALLBACK: 'https://fallback.example.test', UPGRADE_TRUST_SHA256: upgradeTrust, DOWNLOAD_DIR: directory, PUBLIC_CERT_FILE: '' },
     })
     assert.equal(result.status, 0, result.stderr)
     const window = {}
@@ -120,12 +124,23 @@ test('runtime configuration JSON-escapes the public download fallback without ch
     assert.equal(window.__CDNCA_GATEWAY_ADDRESS__, 'gateway.example.test:23002')
     assert.equal(window.__CDNCA_GATEWAY_ENROLLMENT_ADDRESS__, 'gateway.example.test:23001')
     assert.equal(window.__CDNCA_GATEWAY_SERVER_NAME__, 'gateway.example.test')
+    assert.equal(window.__CDNCA_CONTROL_CA_SHA256__, rootDigest)
+    // A public (or operator-supplied) certificate, or BaoTa: no pin, the command stays on system trust.
+    for (const extra of [{ PUBLIC_CERT_FILE: '/etc/letsencrypt/live/x/fullchain.pem' }, { PUBLIC_CERT_FILE: '', INSTALL_ENV: 'bt' }]) {
+      const publicCert = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), block('control_ca_sha256'), block('write_web_runtime_config'), 'write_node_install_defaults() { :; }', 'write_web_runtime_config'].join('\n')], {
+        encoding: 'utf8', env: { ...process.env, WEB_ROOT: web, DATA_DIR: directory, GATEWAY_HOST: 'gateway.example.test', GATEWAY_ENROLLMENT_PORT: '23001', GATEWAY_AGENT_PORT: '23002', LICENSING_SERVER: licensing, LICENSING_SERVER_FALLBACK: 'https://fallback.example.test', UPGRADE_TRUST_SHA256: upgradeTrust, DOWNLOAD_DIR: directory, ...extra },
+      })
+      assert.equal(publicCert.status, 0, publicCert.stderr)
+      const publicWindow = {}
+      runInNewContext(readFileSync(join(directory, 'runtime-config.js'), 'utf8'), { window: publicWindow })
+      assert.equal(publicWindow.__CDNCA_CONTROL_CA_SHA256__, '')
+    }
     assert.equal(readFileSync(join(web, 'index.html'), 'utf8'), entry)
     assert.equal(readFileSync(join(web, 'runtime-config.js'), 'utf8'), '// immutable release default\n')
     assert.equal(statSync(join(directory, 'runtime-config.js')).mode & 0o777, 0o644)
     writeFileSync(join(web, 'index.html'), '<script type="module" src="/assets/main.js"></script>')
-    const missingHook = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), block('write_web_runtime_config'), 'write_node_install_defaults() { :; }', 'write_web_runtime_config'].join('\n')], {
-      encoding: 'utf8', env: { ...process.env, WEB_ROOT: web, DATA_DIR: directory, GATEWAY_HOST: 'gateway.example.test', GATEWAY_ENROLLMENT_PORT: '23001', GATEWAY_AGENT_PORT: '23002', LICENSING_SERVER: licensing, LICENSING_SERVER_FALLBACK: 'https://fallback.example.test', UPGRADE_TRUST_SHA256: upgradeTrust },
+    const missingHook = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), block('control_ca_sha256'), block('write_web_runtime_config'), 'write_node_install_defaults() { :; }', 'write_web_runtime_config'].join('\n')], {
+      encoding: 'utf8', env: { ...process.env, WEB_ROOT: web, DATA_DIR: directory, GATEWAY_HOST: 'gateway.example.test', GATEWAY_ENROLLMENT_PORT: '23001', GATEWAY_AGENT_PORT: '23002', LICENSING_SERVER: licensing, LICENSING_SERVER_FALLBACK: 'https://fallback.example.test', UPGRADE_TRUST_SHA256: upgradeTrust, DOWNLOAD_DIR: directory, PUBLIC_CERT_FILE: '' },
     })
     assert.notEqual(missingHook.status, 0)
     assert.equal(readFileSync(join(web, 'index.html'), 'utf8'), '<script type="module" src="/assets/main.js"></script>')
@@ -183,6 +198,100 @@ test('management nginx compresses, speaks HTTP/2 and caches only content-hashed 
   assert.ok(config.indexOf('location ^~ /v1/internal/') < config.indexOf('location ^~ /v1/auth/'))
 })
 
+test('management nginx compresses only the ETag-free log/list GET reads of /v1', () => {
+  const config = block('write_nginx_config')
+  const v1 = config.match(/\n {8}location \^~ \/v1\/ \{\n([\s\S]*?)\n {8}\}\n/)?.[1]
+  assert.ok(v1, 'the /v1/ API location exists')
+  const nested = [...v1.matchAll(/^ {12}location ~ \^(\S+)\\\$ \{\n([\s\S]*?)\n {12}\}$/gm)]
+  assert.equal(nested.length, 1, 'exactly one compressed sub-location')
+  const [, pattern, body] = nested[0]
+  // The inner location inherits the outer proxy headers (nginx inherits proxy_set_header
+  // only when a level sets none), so it must not set any, and only adds JSON to gzip_types.
+  assert.deepEqual(body.trim().split('\n').map((line) => line.trim()),
+    ['gzip_types application/json;', 'proxy_pass http://127.0.0.1:8080;'])
+  assert.equal(config.match(/application\/json/g)?.length, 1, 'JSON is compressed nowhere else')
+  const route = new RegExp(`^${pattern}$`)
+  for (const path of ['/v1/analytics/logs/access', '/v1/admin/analytics/logs/access', '/v1/analytics/logs/block-events',
+    '/v1/admin/analytics/logs/blocks/current', '/v1/analytics/logs/blocks/current-count', '/v1/analytics/logs/blocks/history',
+    '/v1/analytics/logs/cc-bans', '/v1/analytics/logs/cc-coordination', '/v1/analytics/logs/access/geo-evidence/event-1',
+    '/v1/analytics/l4-session-logs', '/v1/admin/analytics/l4-session-logs', '/v1/audit-logs', '/v1/audit-logs/categories',
+    '/v1/observability/logs', '/v1/billing-bridge/logs', '/v1/admin/billing-bridge/logs', '/v1/control-site/content']) {
+    assert.match(path, route, path)
+  }
+  // The website content only: its images (SVG goes through http-level gzip_types),
+  // package list and the admin draft (If-Match revisions) stay as they are.
+  for (const path of ['/v1/admin/control-site/content', '/v1/control-site/assets/' + 'a'.repeat(64), '/v1/control-site/packages',
+    '/v1/admin/control-site', '/v1/control-site/content/x', '/v1/control-site/contents']) {
+    assert.doesNotMatch(path, route, path)
+  }
+  // Credentials, ETag revision documents, CSV/file downloads, download grants and POST actions stay uncompressed.
+  for (const path of ['/v1/auth/login', '/v1/auth/refresh', '/v1/system/settings/nginx', '/v1/sites',
+    '/v1/analytics/logs/access/exports', '/v1/analytics/logs/access/exports/x/download',
+    '/v1/analytics/logs/access/exports/x/download-grants', '/v1/audit-logs/export', '/v1/observability/logs/export',
+    '/v1/analytics/logs/blocks/current/x/unlock', '/v1/analytics/logs/cc-coordination/x/release',
+    '/v1/billing-bridge/keys', '/v1/admin/analytics/logs/access/']) {
+    assert.doesNotMatch(path, route, path)
+  }
+})
+
+function renderBrotli(available) {
+  const directory = mkdtempSync(join(tmpdir(), 'cdnca-brotli-'))
+  try {
+    const conf = join(directory, 'nginx.conf')
+    const script = ['set -Eeuo pipefail', 'mkdir() { :; }; chmod() { :; }; nginx() { :; }; node_download_server() { :; }',
+      block('control_nginx_bin'), block('control_nginx_mime_types'),
+      // The writer's heredoc has its own lone '}' lines: cut at the next function.
+      source.match(/^write_nginx_config\(\) \{[\s\S]*?^\}\n\n(?=# 验证节点升级下载端点)/m)[0],
+      `control_brotli_static_available() { ${available}; }`, 'write_nginx_config'].join('\n')
+    const result = spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { PATH: process.env.PATH, NGINX_CONF: conf,
+      NGINX_RUNTIME_DIR: '/r', INSTALL_ENV: 'plain', NGINX_BROTLI_STATIC_MODULE: '/usr/lib/nginx/modules/ngx_http_brotli_static_module.so',
+      WEB_LISTEN: '443', WEB_REAL_IP: '', WEB_ROOT: '/w', DATA_DIR: '/d', NATIVE_ROOT: '/n', DOWNLOAD_DIR: '/d/downloads', PUBLIC_CERT_PATH: '/c.pem', PUBLIC_KEY_PATH: '/k.pem' } })
+    assert.equal(result.status, 0, result.stderr)
+    return readFileSync(conf, 'utf8')
+  } finally {
+    rmSync(directory, { recursive: true })
+  }
+}
+
+test('management nginx serves the website .br only where the brotli_static module is installed', () => {
+  assert.match(source, /^readonly NGINX_BROTLI_STATIC_MODULE="\/usr\/lib\/nginx\/modules\/ngx_http_brotli_static_module\.so"$/m)
+  const statics = /\n {8}location ~\* \^\/\(\?:dashboard\/\)\?\(\?:assets[^\n]*\{\n([\s\S]*?)\n {8}\}\n/
+  const withModule = renderBrotli('true')
+  // Its own -c configuration includes no modules-enabled: the module is loaded here, first.
+  assert.ok(withModule.startsWith('load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;\npid /r/nginx.pid;\n'))
+  assert.equal(withModule.match(/brotli/g).length, 2)
+  assert.deepEqual(withModule.match(statics)?.[1].trim().split('\n').map((line) => line.trim()),
+    ['rewrite ^/dashboard/(.*)$ /$1 break;', 'try_files $uri =404;', 'brotli_static on;'])
+  const without = renderBrotli('false')
+  assert.ok(without.startsWith('pid /r/nginx.pid;\n'))
+  assert.doesNotMatch(without, /brotli|load_module/)
+  assert.deepEqual(without.match(statics)?.[1].trim().split('\n').map((line) => line.trim()),
+    ['rewrite ^/dashboard/(.*)$ /$1 break;', 'try_files $uri =404;'])
+  assert.equal(withModule.replace(/^load_module [^\n]+\n/, '').replace('\n            brotli_static on;', ''), without)
+})
+
+test('ensure_brotli_static installs the module on apt hosts, skips BaoTa, and only warns on failure', () => {
+  const run = (env, aptStatus = 0, present = false) => spawnSync('bash', ['-c', ['set -Eeuo pipefail',
+    'log() { printf "log:%s\\n" "$*"; }', `apt-get() { printf "apt:%s\\n" "$*" >&3; return ${aptStatus}; }`,
+    `control_os_family() { printf %s "$FAMILY"; }`, block('control_brotli_static_available'), block('ensure_brotli_static'),
+    present ? 'NGINX_BROTLI_STATIC_MODULE=/bin/sh' : 'NGINX_BROTLI_STATIC_MODULE=/nonexistent/brotli.so', 'exec 3>&1', 'ensure_brotli_static', 'echo done'].join('\n')],
+  { encoding: 'utf8', env: { PATH: process.env.PATH, INSTALL_ENV: 'plain', FAMILY: 'debian', ...env } })
+  let result = run({})
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /^apt:install -y -qq --no-install-recommends libnginx-mod-http-brotli-static\ndone\n$/)
+  result = run({}, 100)
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /log:提示：libnginx-mod-http-brotli-static 安装失败，官网只发预压缩 \.gz\ndone\n$/)
+  for (const [env, present] of [[{ INSTALL_ENV: 'bt' }, false], [{}, true]]) {
+    result = run(env, 0, present)
+    assert.equal(result.stdout, 'done\n', JSON.stringify(env))
+  }
+  result = run({ FAMILY: 'rhel' })
+  assert.match(result.stdout, /^log:提示：非 apt 系统[^\n]*\ndone\n$/)
+  assert.match(block('setup_web'), /\n  ensure_brotli_static\n  write_nginx_config\n/)
+  assert.match(block('control_brotli_static_available'), /INSTALL_ENV:-\}" != bt/)
+})
+
 test('management nginx sandboxes only /site/t/ page bundles and keeps the built-in website as it was', () => {
   const config = block('write_nginx_config')
   // No server-level CSP or $uri map: the built-in website (/site/index.html,
@@ -226,7 +335,7 @@ test('download and dependency failures happen before the community installation 
     if (failed) assert.ok(steps.includes(failed), `missing failure gate ${failed}`)
     // gateway_mode_requested must report "not gateway" (non-zero) to reach the fresh-install path.
     const stubs = ['parse_args', 'valid_url', 'require_commands', ...steps].map((name) => `${name}() { printf '%s\\n' '${name}'; [[ '$FAILED_STEP' != '${name}' ]]; }`.replace('$FAILED_STEP', failed))
-    const result = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), 'log() { :; }', ...stubs, 'gateway_mode_requested() { return 1; }', main, 'main'].join('\n')], {
+    const result = spawnSync('bash', ['-c', ['set -Eeuo pipefail', block('fail'), 'log() { :; }', 'install_lang_init() { INSTALL_ARGS=("$@"); }', ...stubs, 'gateway_mode_requested() { return 1; }', main, 'main'].join('\n')], {
       encoding: 'utf8', env: { ...process.env, SKIP_DEPENDENCIES: 'true', INSTALL_MODE: 'all', CONTROL_BINARY: '/opt/cdnca/current/bin/control-api' },
     })
     const calls = result.stdout.trim().split('\n')

@@ -86,10 +86,13 @@ func Validate(value Settings) error {
 
 // Checkpoint is one dnspup checkpoint's answer in the availability log.
 type Checkpoint struct {
-	ID       string `json:"id"`
-	Group    string `json:"group"`
-	Carrier  string `json:"carrier,omitempty"`
-	Region   string `json:"region,omitempty"`
+	ID      string `json:"id"`
+	Group   string `json:"group"`
+	Carrier string `json:"carrier,omitempty"`
+	Region  string `json:"region,omitempty"`
+	// Province is the mainland province of the checkpoint (smart scheduling
+	// latency samples, migration 609); the availability log API ignores it.
+	Province string `json:"province,omitempty"`
 	Location string `json:"location,omitempty"`
 	OK       bool   `json:"ok"`
 	Latency  int    `json:"latency_ms,omitempty"`
@@ -145,8 +148,12 @@ func Round(results []dnspupprobe.Result, settings Settings) RoundResult {
 			round.Failed++
 		}
 		region, _ := marketprobe.Region(results[index].Region)
+		province, ok := marketprobe.Province(results[index].Region)
+		if !ok {
+			province, _ = marketprobe.Province(results[index].Location)
+		}
 		round.Checkpoints = append(round.Checkpoints, Checkpoint{ID: vote.NodeID, Group: group, Carrier: vote.Carrier,
-			Region: region, Location: results[index].Location, OK: vote.OK, Latency: vote.LatencyMS})
+			Region: region, Province: province, Location: results[index].Location, OK: vote.OK, Latency: vote.LatencyMS})
 	}
 	return round
 }

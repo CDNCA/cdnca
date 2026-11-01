@@ -22,11 +22,28 @@ import (
 
 const revocationPollInterval = time.Minute
 
+// Long poll: the license service holds a request that would
+// answer 304 for up to RevocationWaitSeconds (header RevocationWaitHeader)
+// and answers as soon as the installation's revocation state changes. 50 s
+// stays below Cloudflare's 100 s idle limit. After revocationLongPollFailures
+// failure the caller falls back to the 60 s poll until a plain fetch
+// succeeds again (cmd/control-api entitlementRevocationRuntime.Run).
+const (
+	RevocationWaitHeader  = "X-CDNCA-Revocation-Wait"
+	RevocationWaitSeconds = 50
+	// revocationLongPollTimeout bounds one long poll: the wait plus the
+	// license service's own request time.
+	revocationLongPollTimeout = (RevocationWaitSeconds + 15) * time.Second
+)
+
 type RevocationFetchRequest struct {
 	InstallationID uuid.UUID
 	PrivateKey     ed25519.PrivateKey
 	Now            time.Time
 	Known          *entitlementguard.RevocationSnapshot
+	// Wait asks the license service to hold a 304 for up to Wait (whole
+	// seconds, 1..RevocationWaitSeconds); 0 answers at once.
+	Wait time.Duration
 }
 
 type RevocationFetchResponse struct {
@@ -73,6 +90,10 @@ func (client *RevocationClient) Fetch(ctx context.Context, input RevocationFetch
 		InstallationID: input.InstallationID.String(),
 		RequestedAt:    requestedAt,
 	}
+	waitSeconds := int64(input.Wait / time.Second)
+	if input.Wait < 0 || input.Wait%time.Second != 0 || waitSeconds > RevocationWaitSeconds {
+		return RevocationFetchResponse{}, ErrInvalidConfiguration
+	}
 	if input.Known != nil {
 		if input.Known.Revision == 0 || input.Known.ArtifactSHA256 == ([32]byte{}) || input.Known.ETag == "" ||
 			input.Known.ExpiresAt.IsZero() {
@@ -110,7 +131,10 @@ func (client *RevocationClient) Fetch(ctx context.Context, input RevocationFetch
 	if proof.IfNoneMatch != "" {
 		request.Header.Set("If-None-Match", proof.IfNoneMatch)
 	}
-	response, err := client.base.http.Do(request)
+	if waitSeconds > 0 {
+		request.Header.Set(RevocationWaitHeader, strconv.FormatInt(waitSeconds, 10))
+	}
+	response, err := client.base.longPollHTTP(waitSeconds > 0).Do(request)
 	if err != nil {
 		return RevocationFetchResponse{}, fmt.Errorf("fetch entitlement revocation state: %w", err)
 	}
@@ -269,6 +293,17 @@ func NewRevocationSyncer(config RevocationSyncConfig) (*RevocationSyncer, error)
 }
 
 func (syncer *RevocationSyncer) SyncOnce(ctx context.Context) (entitlementguard.RevocationSnapshot, error) {
+	return syncer.sync(ctx, 0)
+}
+
+// LongPollOnce is SyncOnce held by the license service until the state
+// changes or RevocationWaitSeconds pass. Without a current list it does not
+// wait (the 304 it would hold needs a known set).
+func (syncer *RevocationSyncer) LongPollOnce(ctx context.Context) (entitlementguard.RevocationSnapshot, error) {
+	return syncer.sync(ctx, RevocationWaitSeconds*time.Second)
+}
+
+func (syncer *RevocationSyncer) sync(ctx context.Context, wait time.Duration) (entitlementguard.RevocationSnapshot, error) {
 	if syncer == nil || syncer.client == nil || syncer.store == nil || syncer.now == nil {
 		return entitlementguard.RevocationSnapshot{}, ErrInvalidConfiguration
 	}
@@ -283,8 +318,11 @@ func (syncer *RevocationSyncer) SyncOnce(ctx context.Context) (entitlementguard.
 		!errors.Is(currentErr, entitlementguard.ErrRevocationInvalid) {
 		return entitlementguard.RevocationSnapshot{}, currentErr
 	}
+	if known == nil {
+		wait = 0
+	}
 	response, err := syncer.client.Fetch(ctx, RevocationFetchRequest{InstallationID: syncer.installationID,
-		PrivateKey: syncer.privateKey, Now: now, Known: known})
+		PrivateKey: syncer.privateKey, Now: now, Known: known, Wait: wait})
 	if err != nil {
 		return entitlementguard.RevocationSnapshot{}, err
 	}
@@ -302,7 +340,8 @@ func (syncer *RevocationSyncer) SyncOnce(ctx context.Context) (entitlementguard.
 	if len(response.Artifact) == 0 {
 		return entitlementguard.RevocationSnapshot{}, ErrInvalidResponse
 	}
-	return syncer.store.Install(ctx, response.Artifact, now)
+	// A long poll may have waited: verify the new set at the time it arrived.
+	return syncer.store.Install(ctx, response.Artifact, syncer.now().UTC())
 }
 
 // RefreshLease renews the lease when the observed lease refresh generation differs from

@@ -130,6 +130,66 @@ describe('SiteBlockLogPage', () => {
     expect(screen.getByText('过滤器：海外拉黑')).toBeInTheDocument()
   })
 
+  // control-log-ui：IP 框边输入边生效但要防抖；半截 IP 不发请求（原来每键一查、"1" 当 cidr 送去报"参数无效"），
+  // 输入单个 IP 按 /32、/128 查（后端 cidr 只认规范前缀，block_state.go validBlockCIDR）。
+  it('debounces the IP filter, skips partial input and queries a bare IP as its host prefix', async () => {
+    const actor = principal({ permissions: ['sites.read'] })
+    useSessionStore.getState().setSession(authResponse(actor), actor)
+    const row = {
+      id: '018f0000-0000-5000-8000-000000000061', site_id: siteId, policy_id: '018f0000-0000-7000-8000-000000000062', policy_version: 1,
+      tenant_id: tenantId, cidr: '203.0.113.9/32', reason_code: 'acl_policy_block' as const, blocked_at: '2026-08-07T08:00:00Z',
+      unlockable: true, site_display_id: 42, domain: 'cdn.example.test', position: 'CN-Beijing',
+    }
+    const currentSpy = vi.spyOn(analyticsLogsApi, 'listCurrentBlocks').mockImplementation(async (_token, _audience, filters) => ({
+      data: filters.cidr ? [] : [row], total_count: filters.cidr ? 0 : 1, snapshot_at: '2026-08-07T08:01:00Z',
+    }))
+    const user = userEvent.setup()
+    renderWithProviders(<SiteBlockLogPage />)
+    expect(await screen.findByText('203.0.113.9/32')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('请输入IP地址'), '192.0.2.10')
+    await waitFor(() => expect(currentSpy).toHaveBeenLastCalledWith(expect.any(String), 'tenant', {
+      limit: 10, offset: 0, cidr: '192.0.2.10/32',
+    }))
+    expect(currentSpy).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('查询或解锁参数无效。')).not.toBeInTheDocument()
+
+    await user.clear(screen.getByPlaceholderText('请输入IP地址'))
+    await user.type(screen.getByPlaceholderText('请输入IP地址'), '2001:DB8::1')
+    await waitFor(() => expect(currentSpy).toHaveBeenLastCalledWith(expect.any(String), 'tenant', {
+      limit: 10, offset: 0, cidr: '2001:db8::1/128',
+    }))
+    await user.clear(screen.getByPlaceholderText('请输入IP地址'))
+    await user.type(screen.getByPlaceholderText('请输入IP地址'), '198.51.100.0/24')
+    await waitFor(() => expect(currentSpy).toHaveBeenLastCalledWith(expect.any(String), 'tenant', {
+      limit: 10, offset: 0, cidr: '198.51.100.0/24',
+    }))
+    // 半截 "198.51" 不发请求（不再弹"参数无效"），保留上一个有效条件；清空回到无条件列表。
+    const before = currentSpy.mock.calls.length
+    await user.clear(screen.getByPlaceholderText('请输入IP地址'))
+    await user.type(screen.getByPlaceholderText('请输入IP地址'), '198.51')
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    expect(currentSpy).toHaveBeenCalledTimes(before)
+    // 清空回到无条件列表：条件变了，按最新数据重读。
+    await user.clear(screen.getByPlaceholderText('请输入IP地址'))
+    await waitFor(() => expect(currentSpy).toHaveBeenLastCalledWith(expect.any(String), 'tenant', { limit: 10, offset: 0 }))
+    expect(currentSpy).toHaveBeenCalledTimes(before + 1)
+    expect(await screen.findByText('203.0.113.9/32')).toBeInTheDocument()
+  })
+
+  it('offers no page size above the server limit of 100', async () => {
+    const actor = principal({ permissions: ['sites.read'] })
+    useSessionStore.getState().setSession(authResponse(actor), actor)
+    vi.spyOn(analyticsLogsApi, 'listCurrentBlocks').mockResolvedValue({ data: [], total_count: 500, snapshot_at: '2026-08-07T08:01:00Z' })
+    const user = userEvent.setup()
+    const { container } = renderWithProviders(<SiteBlockLogPage />)
+    await screen.findByText('共 500 条')
+    await user.click(within(container.querySelector('.ant-pagination-options') as HTMLElement).getByRole('combobox'))
+    await waitFor(() => expect(document.querySelector('.ant-select-dropdown')).not.toBeNull())
+    const sizes = [...document.querySelectorAll('.ant-select-dropdown .ant-select-item-option')].map((item) => Number.parseInt(item.textContent ?? '', 10))
+    expect(sizes).toEqual([10, 30, 100])
+  })
+
   it('keeps the filter ID input when the user cannot list security policies', async () => {
     const actor = principal({ permissions: ['sites.read'] })
     useSessionStore.getState().setSession(authResponse(actor), actor)

@@ -75,7 +75,7 @@ func (h *Hub) ListDomains(ctx context.Context, actor HubActor, query HubDomainQu
 	}
 	page := HubDomainPage{Accounts: []HubAccount{}, Items: []HubDomain{}}
 	err = pgx.BeginTxFunc(ctx, h.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		if err := h.authorize(ctx, tx, actor, "dns.read"); err != nil {
+		if err := h.authorize(ctx, tx, actor, PermissionHubRead); err != nil {
 			return err
 		}
 		accounts, err := h.accounts(ctx, tx, actor.ScopeID, query.ProviderID)
@@ -216,7 +216,7 @@ type HubRefreshResult struct {
 func (h *Hub) RefreshDomains(ctx context.Context, actor HubActor, providerID uuid.UUID) ([]HubRefreshResult, error) {
 	var accounts []hubAccount
 	err := pgx.BeginTxFunc(ctx, h.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		if err := h.authorize(ctx, tx, actor, "dns.manage"); err != nil {
+		if err := h.authorize(ctx, tx, actor, hubWritePermissions...); err != nil {
 			return err
 		}
 		var err error
@@ -250,7 +250,7 @@ func (h *Hub) refreshAccount(ctx context.Context, actor HubActor, providerID uui
 		return result, err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	if err := h.authorize(callCtx, tx, actor, "dns.manage"); err != nil {
+	if err := h.authorize(callCtx, tx, actor, hubWritePermissions...); err != nil {
 		return result, err
 	}
 	account, err := h.account(callCtx, tx, actor.ScopeID, providerID, true)
@@ -312,7 +312,7 @@ func (h *Hub) refreshAccount(ctx context.Context, actor HubActor, providerID uui
 		auditResult, reason = "failure", listError
 	}
 	if err := h.auditor.Append(callCtx, tx, audit.Event{
-		ScopeID: actor.ScopeID, ActorUserID: &actor.UserID, Action: "dns.hub.domain.refresh",
+		ScopeID: actor.ScopeID, ActorUserID: &actor.UserID, ActorRef: actor.auditRef(), Action: "dns.hub.domain.refresh",
 		ResourceType: "dns_provider", ResourceID: providerID.String(), RequestID: actor.RequestID,
 		Result: auditResult, ReasonCode: reason,
 		Payload: map[string]any{"provider_name": account.Name, "provider_type": account.ProviderType,

@@ -104,11 +104,11 @@ paths:
   /v1/admin/control-backup/recovery-kit:
     post:
       operationId: exportControlBackupRecoveryKit
-      summary: Download the backup identity sealed with a passphrase (scrypt) for off-host disaster recovery
+      summary: Download the backup identity for off-host disaster recovery; an empty passphrase (default) stores it as is, otherwise it is sealed with the passphrase (scrypt)
       security: [{bearerAuth: []}]
       responses:
-        '200': {description: Recovery kit JSON}
-        '400': {description: Passphrase shorter than 12 characters}
+        '200': {description: Recovery kit JSON (has_passphrase tells whether restore asks for a passphrase)}
+        '400': {description: Passphrase given but not 12 to 1024 characters}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}

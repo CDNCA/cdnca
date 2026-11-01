@@ -40,6 +40,19 @@ describe('apiKeysApi IP allowlist contract', () => {
     await expect(apiKeysApi.list('token', { limit: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
   })
 
+  it('accepts a complete plugin installation binding only (migration 604)', async () => {
+    const binding = {
+      plugin_installation_authorization_id: '018cc251-f400-7def-8000-000000000032',
+      plugin_installation_id: '018cc251-f400-7def-8000-000000000033', plugin_id: 'io.cdnca.cf-optimize',
+    }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    fetchSpy.mockImplementationOnce(() => response(page([{ ...record, ...binding }])))
+    await expect(apiKeysApi.list('token', { limit: 10 })).resolves.toMatchObject({ items: [binding] })
+
+    fetchSpy.mockImplementationOnce(() => response(page([{ ...record, plugin_id: 'io.cdnca.cf-optimize' }])))
+    await expect(apiKeysApi.list('token', { limit: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
   it('accepts all-permission keys up to 128 scopes (migration 574)', async () => {
     const scopes = Array.from({ length: 129 }, (_, index) => `module${String(index).padStart(3, '0')}.read`)
     const fetchSpy = vi.spyOn(globalThis, 'fetch')

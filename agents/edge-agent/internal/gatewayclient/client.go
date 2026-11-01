@@ -27,6 +27,7 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/objectstore"
 	"github.com/cdnca/cdnca/libs/edgeconfig/autodefense"
 	"github.com/cdnca/cdnca/libs/edgeconfig/sched302"
+	contractsshaccess "github.com/cdnca/cdnca/libs/edgeconfig/sshaccess"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 	"github.com/google/uuid"
@@ -103,6 +104,7 @@ type Client struct {
 	installationBan InstallationBanApplier
 	siteDrop        SiteDropApplier
 	gatewayAddress  *GatewayAddressRuntime
+	sshAccess       *SSHAccessRuntime
 	securityBans    SecurityBanApplier
 	sched302        Sched302Applier
 	autoDefense     AutoDefenseRuntime
@@ -1608,6 +1610,14 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 	if err != nil {
 		return false, err
 	}
+	sshAccessEnabled, err := negotiateSSHAccessV1(gatewayHello, c.sshAccess)
+	if err != nil {
+		return false, err
+	}
+	var sshAccessReports <-chan struct{}
+	if sshAccessEnabled {
+		sshAccessReports = c.sshAccess.pendingReports()
+	}
 	cacheCancelEnabled, err := negotiateCacheControlCancelV1(gatewayHello, c.cacheTasks)
 	if err != nil {
 		return false, err
@@ -1998,6 +2008,15 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			if err := sendL4LiveResult(stream, sendSequence, result, c.now()); err != nil {
 				return true, err
 			}
+		case <-sshAccessReports:
+			reports := c.sshAccess.takeReports()
+			for index, report := range reports {
+				sendSequence++
+				if err := sendSSHAccessReceipt(stream, sendSequence, report, c.now()); err != nil {
+					c.sshAccess.requeue(reports[index:])
+					return true, err
+				}
+			}
 		case report := <-autoDefenseReports:
 			// Display only: a report too large for the carrier is dropped here.
 			if len(report) == 0 || len(report) > autodefense.MaxReportBytes {
@@ -2131,6 +2150,18 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				}
 				if switched {
 					return true, errGatewayEndpointSwitched
+				}
+			case *agentv1.ConnectResponse_SshAccessCommand:
+				if !sshAccessEnabled || cacheControlMessageHasUnknown(incoming.response.ProtoReflect()) {
+					return true, fmt.Errorf("%w: SSH access command was not negotiated or contains unknown fields", ErrInvalidMessage)
+				}
+				receipt, err := c.sshAccess.Handle(ctx, payload.SshAccessCommand)
+				if err != nil {
+					return true, err
+				}
+				sendSequence++
+				if err := sendSSHAccessReceipt(stream, sendSequence, receipt, c.now()); err != nil {
+					return true, err
 				}
 			case *agentv1.ConnectResponse_SiteDropCommand:
 				if !siteDropEnabled || cacheControlMessageHasUnknown(incoming.response.ProtoReflect()) {
@@ -2831,6 +2862,11 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 	if c.gatewayAddress != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE) {
 		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE, ApiVersion: gatewayAddressAPIVersion,
+		})
+	}
+	if c.sshAccess != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_SSH_ACCESS) {
+		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_SSH_ACCESS, ApiVersion: contractsshaccess.APIVersion,
 		})
 	}
 	if c.siteDrop != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_SITE_DROP) {

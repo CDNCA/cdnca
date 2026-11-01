@@ -597,3 +597,56 @@
 .analytics-log-page.site-access-log-page .analytics-log-advfilters .analytics-log-toolbar-actions {
   order: 0;
 }
+
+/* 拦截事件明细「来源」用与访问日志同款页签（浅蓝底圆角、无下划线墨条）。 */
+.analytics-log-page.analytics-block-event-page > .analytics-block-event-source {
+  margin-bottom: 16px;
+  padding-bottom: 0;
+}
+
+.analytics-log-page.analytics-block-event-page .analytics-block-event-source .analytics-log-tabs .ant-tabs-nav {
+  margin: 0;
+  padding: 12px 0;
+}
+
+.analytics-log-page.analytics-block-event-page .analytics-block-event-source .analytics-log-tabs .ant-tabs-nav::before {
+  border-bottom: 0;
+}
+
+.analytics-log-page.analytics-block-event-page .analytics-block-event-source .analytics-log-tabs .ant-tabs-tab {
+  margin: 0 6px 0 0 !important;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.analytics-log-page.analytics-block-event-page .analytics-block-event-source .analytics-log-tabs .ant-tabs-tab-active {
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 12%, transparent);
+}
+
+.analytics-log-page.analytics-block-event-page .analytics-block-event-source .analytics-log-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+/* 市场供给筛选栏按底边对齐，时间范围与「查询」按钮落在输入框同一条线上（同 AdvancedFilters 的 flex-end）。 */
+.analytics-log-page .market-security-filter-bar {
+  align-items: flex-end;
+}
+
+/* 管理员视图 4 个输入框 + 时间范围 + 查询在 1440 下排成一行。 */
+.analytics-log-page .market-security-filter-bar .analytics-filter-field .ant-input {
+  width: 170px;
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  /* 窄屏筛选栏纵向排列（styles.css），保持拉伸铺满，不随上面的 flex-end 靠右。 */
+  .analytics-log-page .market-security-filter-bar {
+    align-items: stretch;
+  }
+
+  .analytics-log-page .market-security-filter-bar .analytics-filter-field .ant-input {
+    width: 100%;
+  }
+}

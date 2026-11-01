@@ -77,7 +77,7 @@ const smokeChecks = ['dynamic_modules', 'http1', 'http2', 'http3', 'http3_after_
 // Built features the Agent and the edge configs rely on (build-openresty.sh configure flags).
 const configureFlags = ['--with-http_ssl_module', '--with-http_v2_module', '--with-http_v3_module', '--with-stream', '--with-stream_ssl_module',
   '--with-stream_ssl_preread_module', '--with-stream_realip_module', '--with-compat', '--with-threads']
-const runtimeMembers = ['runtime/openresty/bin/openresty', 'runtime/openresty/nginx/sbin/nginx', 'runtime/lib/ld-musl-x86_64.so.1', 'runtime/bin/h3probe']
+const runtimeMembers = ['runtime/openresty/bin/openresty', 'runtime/openresty/nginx/sbin/nginx', 'runtime/lib/ld-musl-x86_64.so.1', 'runtime/bin/h3probe', 'runtime/openresty/luajit/bin/luajit']
 const evidenceFiles = ['openresty-V.txt', 'runtime-apk-inventory.txt', 'runtime-build-inputs.sha256', 'runtime-export.json', 'runtime-sources.lock.json', 'source-verification.json']
 const byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0
 function acceptanceDirectory(filename) {

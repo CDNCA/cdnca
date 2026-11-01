@@ -105,6 +105,9 @@ export const coreZhCN = {
     network_error: '无法连接服务，请稍后重试',
     request_failed: '请求失败，请稍后重试',
     installation_locked: '主控授权已锁定，后台只读，暂不能执行此修改。请按页面顶部授权提示中的处理办法恢复授权后点「重新检查」，或联系授权方。',
+    // ID-06：代登录期间的敏感操作被拒，不是登录失效。
+    impersonation_sensitive_action_denied: '代登录期间不能执行此操作，请由用户本人登录后操作。',
+    feature_disabled: '该功能未启用。当前主控没有开启此功能，请平台管理员按部署文档启用（源站鉴权：在主控 /etc/cdnca-control/control.env 中设置 ORIGIN_AUTH_RUNTIME_ENABLED=true 及加密密钥后重启 control-api）。',
     unknown: '操作失败，请稍后重试',
     requestId: '请求 ID：{{requestId}}',
   },
@@ -215,6 +218,8 @@ export const coreEnUS = {
     network_error: 'Unable to connect to the service. Try again later.',
     request_failed: 'Request failed. Try again later.',
     installation_locked: 'This controller\'s license is locked and the console is read-only, so this change cannot be made. Follow the steps in the license banner at the top of the page, then select "Check again", or contact your license provider.',
+    impersonation_sensitive_action_denied: 'This action is not available while signed in on behalf of a user. Ask the user to do it from their own account.',
+    feature_disabled: 'This feature is not enabled on this control plane. A platform administrator enables it as the deployment guide describes (origin authentication: set ORIGIN_AUTH_RUNTIME_ENABLED=true and its encryption keys in /etc/cdnca-control/control.env, then restart control-api).',
     unknown: 'The operation failed. Try again later.',
     requestId: 'Request ID: {{requestId}}',
   },

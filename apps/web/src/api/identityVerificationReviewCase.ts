@@ -6,6 +6,7 @@ import type {
   IdentityVerificationKind,
   IdentityVerificationStatus,
 } from './identityVerification'
+import { responseETag } from './etag'
 
 export type IdentityVerificationReviewCase = IdentityVerificationCase
 export type IdentityVerificationReviewMaterial = IdentityVerificationMaterial
@@ -212,7 +213,7 @@ async function sendCase(
     throw invalidResponse()
   }
   if (!isCase(value) || value.id !== expectedCaseID ||
-    response.headers.get('ETag') !== `"${value.revision}"`) {
+    responseETag(response) !== `"${value.revision}"`) {
     throw invalidResponse()
   }
   return value

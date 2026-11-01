@@ -1,4 +1,5 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { responseETag } from './etag'
 
 export type OriginAuthProvider = 's3' | 'oss' | 'cos'
 export type OriginAuthCredentialStatus = 'pending' | 'verified' | 'disabled' | 'deleted'
@@ -196,7 +197,7 @@ async function request(
   } catch {
     throw invalidResponse()
   }
-  if (!isCredential(value, scopeID) || (requireETag && response.headers.get('ETag') !== `"${value.revision}"`)) {
+  if (!isCredential(value, scopeID) || (requireETag && responseETag(response) !== `"${value.revision}"`)) {
     throw invalidResponse()
   }
   return value

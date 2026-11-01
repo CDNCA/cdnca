@@ -853,31 +853,8 @@ export default function SiteAnalysisPage() {
         {queryError && !rankQuery.isFetching && !(queryError instanceof ApiError && queryError.status === 403) ? (
           <FeedbackWhen title={t(errorKey(queryError))} action={<Button size="small" onClick={() => void rankQuery.refetch()}>{t('actions.retry')}</Button>} />
         ) : null}
-        <div className="analytics-meta">
-            {rankQuery.data ? (
-              <span className="analytics-meta-item">
-                {t('meta.localWindow', {
-                  from: formatDateTime(rankQuery.data.meta.from, language),
-                  to: formatDateTime(rankQuery.data.meta.to, language),
-                })}
-              </span>
-            ) : null}
-            {rankQuery.data ? (
-              <span className="analytics-meta-item">
-                {t('meta.snapshotAt', { time: formatDateTime(rankQuery.data.page.snapshot_at, language) })}
-              </span>
-            ) : null}
-            <span className="analytics-meta-item">{t('meta.watermarkUnavailable')}</span>
-        </div>
         {summaryQuery.data ? (
           <div className="analytics-summary-strip" role="group" aria-label={t('rangeSummary.label')}>
-            {/* TEL-UX-SUMMARY-SCOPE：汇总只按时间、站点 UUID、节点、租户统计（history 安全事实无 host 列），
-                排行按域名/端口筛了也不能让人以为汇总是同一范围。 */}
-            <span className="analytics-meta-item analytics-summary-scope">
-              {t(appliedFilters.siteId
-                ? 'rangeSummary.scopeSite'
-                : appliedFilters.domain || appliedFilters.listenPort ? 'rangeSummary.scopeAllNarrowed' : 'rangeSummary.scopeAll')}
-            </span>
             <span className="analytics-meta-item">
               {t('rangeSummary.cacheHitRatio', {
                 value: summaryQuery.data.data.request_count === 0

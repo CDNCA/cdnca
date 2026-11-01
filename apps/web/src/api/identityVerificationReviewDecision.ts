@@ -1,4 +1,5 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { responseETag } from './etag'
 
 export type IdentityVerificationReviewDecision = 'approved' | 'rejected'
 export type IdentityVerificationReviewReason =
@@ -216,7 +217,7 @@ async function sendCase(
     throw invalidResponse()
   }
   if (!isCase(value) || value.id !== expectedCaseID ||
-    response.headers.get('ETag') !== `"${value.revision}"`) {
+    responseETag(response) !== `"${value.revision}"`) {
     throw invalidResponse()
   }
   return value

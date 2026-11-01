@@ -30,6 +30,19 @@ curl --fail-with-body \
   "${CDNCA_CONTROL_ORIGIN}/v1/security-policies?limit=20"
 ```
 
+按线路写一条 DNS 记录（DNS 统一管理；Key 需 `dns.records.manage` 或 `dns.manage`，
+`provider_id` 与 `apex` 取自 `GET /v1/dns/hub/domains`，`line` 取该账号 `supported_lines`）：
+
+```sh
+curl --fail-with-body \
+  --request POST \
+  --header "Authorization: CdncaKey ${CDNCA_API_KEY_ID}.${CDNCA_API_KEY_SECRET}" \
+  --header "Content-Type: application/json" \
+  --header "Idempotency-Key: ${CDNCA_IDEMPOTENCY_KEY}" \
+  --data '{"name":"www","type":"A","value":"192.0.2.10","ttl":600,"line":"电信"}' \
+  "${CDNCA_CONTROL_ORIGIN}/v1/dns/hub/domains/${PROVIDER_ID}/example.com/records"
+```
+
 API key secret 只在创建或轮换成功响应中显示一次。不要把完整 header 写入日志、
 工单、追踪属性或命令历史；生产调用应从进程内 secret provider 注入。
 

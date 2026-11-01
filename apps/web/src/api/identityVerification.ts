@@ -1,4 +1,5 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { responseETag } from './etag'
 
 export type IdentityVerificationKind = 'personal_initial' | 'personal_reverification' | 'enterprise'
 export type IdentityVerificationStatus =
@@ -490,7 +491,7 @@ async function sendCase(
     throw invalidResponse()
   }
   if (!isCase(value) || (expectedCaseID !== undefined && value.id !== expectedCaseID) ||
-    response.headers.get('ETag') !== `"${value.revision}"`) {
+    responseETag(response) !== `"${value.revision}"`) {
     throw invalidResponse()
   }
   return value

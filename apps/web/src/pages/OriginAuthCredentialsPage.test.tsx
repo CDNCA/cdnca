@@ -99,6 +99,15 @@ describe('OriginAuthCredentialsPage', () => {
     expect(listSpy).not.toHaveBeenCalled()
   })
 
+  // omfix-a 5：主控未启用源站鉴权（feature_disabled）不说「暂不可用，请稍后重试」。
+  it('says the feature is not enabled for feature_disabled', async () => {
+    authenticate()
+    vi.spyOn(originAuthCredentialsApi, 'list').mockRejectedValue(new ApiError('raw env detail', 503, 'feature_disabled'))
+    renderPage()
+    expect(await screen.findByText(/该功能未启用/)).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('稍后重试')
+  })
+
   it('renders loading, empty, localized error/retry, and server forbidden states', async () => {
     authenticate()
     const pending = deferred<{ items: OriginAuthCredential[] }>()

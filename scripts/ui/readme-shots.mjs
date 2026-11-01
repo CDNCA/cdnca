@@ -628,11 +628,11 @@ const ansiHTML = (text) => {
 }
 async function shootTerminal(browser, { file, terminal }) {
   const { execFileSync } = await import('node:child_process')
-  const text = execFileSync('bash', [path.join(repoRoot, 'scripts/ui/readme-install-transcript.sh'), terminal], { encoding: 'utf8' })
+  const text = execFileSync('bash', [path.join(repoRoot, 'scripts/ui/readme-install-transcript.sh'), terminal, lang], { encoding: 'utf8' })
   const page = await browser.newPage({ viewport: { width: 1280, height: 400 }, deviceScaleFactor: 1 })
   await page.setContent(`<!doctype html><meta charset="utf-8"><body style="margin:0;background:#0f172a">
     <div style="padding:14px 18px 6px;display:flex;gap:8px">${['#ef4444', '#f59e0b', '#22c55e'].map((c) => `<i style="width:12px;height:12px;border-radius:50%;background:${c}"></i>`).join('')}</div>
-    <pre style="margin:0;padding:6px 22px 22px;color:#e2e8f0;font:14px/1.55 Menlo,'PingFang SC',monospace;white-space:pre-wrap">${ansiHTML(text.trimEnd())}</pre></body>`)
+    <pre style="margin:0;padding:6px 22px 22px;color:#e2e8f0;font:13px/1.5 Menlo,'PingFang SC',monospace;white-space:pre-wrap">${ansiHTML(text.trimEnd())}</pre></body>`)
   await page.screenshot({ path: path.join(outDir, file), fullPage: true })
   console.log(`${file} OK`)
   await page.close()

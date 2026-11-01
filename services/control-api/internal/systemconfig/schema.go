@@ -392,9 +392,12 @@ func ProjectBootstrapConfiguration() Configuration {
 				},
 				CacheRules: []DefaultCacheRule{}, OriginRequestHeaders: []DefaultOriginRequestHeader{},
 				AccessLog: DefaultAccessLogSettings{CaptureRequestHeaders: true, RequestBodyLimitKB: 16},
+				// the official self-developed WAF modules block by
+				// default, so a site's one-click WAF has official rules to start from.
 				Security: DefaultSecuritySettings{
+					WAFEnabled:   true,
 					WAFAutoBlock: DefaultWAFAutoBlockSettings{WindowSeconds: 60, HitThreshold: 20, BlockSeconds: 600},
-					WAFModules:   defaultWAFModules("off"),
+					WAFModules:   defaultWAFModules("on"),
 				},
 				Other: DefaultWebsiteOtherSettings{
 					LoadBalancing: "round_robin", GzipEnabled: true,

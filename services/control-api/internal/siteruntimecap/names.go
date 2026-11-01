@@ -105,6 +105,9 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// GATEWAY_ADDRESS_CHANGE gates the signed Gateway address change command
 	// (fix-nodegw), a node command feature.
 	agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE: true,
+	// SSH_ACCESS gates the "only the controller may SSH" command
+	//, a node command feature.
+	agentv1.CapabilityName_CAPABILITY_NAME_SSH_ACCESS: true,
 }
 
 // Name maps a document capability name to its Agent capability.

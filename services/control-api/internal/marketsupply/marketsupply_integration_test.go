@@ -12,6 +12,7 @@ import (
 	"github.com/cdnca/cdnca/libs/marketproto/grant"
 	"github.com/cdnca/cdnca/libs/marketproto/spec"
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/packagesubscription"
 	"github.com/google/uuid"
@@ -323,9 +324,22 @@ func openShared(databaseURL string) (*pgxpool.Pool, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	schema, keep := os.Getenv("MARKET_SUPPLY_TEST_SCHEMA"), true
+	schema := os.Getenv("MARKET_SUPPLY_TEST_SCHEMA")
+	// 不保留时建独立库：580 起的迁移守卫读 information_schema 不限 schema，
+	// 同库兄弟 schema 到头后会误拒 P5800。
+	freshDatabase := ""
 	if schema == "" {
-		schema, keep = "market_supply_test_"+strings.ReplaceAll(uuid.NewString(), "-", ""), false
+		schema = "market_supply_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+		freshDatabase = schema
+		if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{freshDatabase}.Sanitize()+" TEMPLATE template0"); err != nil {
+			admin.Close()
+			return nil, nil, err
+		}
+		if databaseURL, err = databasetest.WithDatabase(databaseURL, freshDatabase); err != nil {
+			_, _ = admin.Exec(context.Background(), "DROP DATABASE IF EXISTS "+pgx.Identifier{freshDatabase}.Sanitize()+" WITH (FORCE)")
+			admin.Close()
+			return nil, nil, err
+		}
 	}
 	identifier := pgx.Identifier{schema}.Sanitize()
 	closeAll := func(pool *pgxpool.Pool) func() {
@@ -333,13 +347,21 @@ func openShared(databaseURL string) (*pgxpool.Pool, func(), error) {
 			if pool != nil {
 				pool.Close()
 			}
-			if !keep {
-				_, _ = admin.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+identifier+" CASCADE")
+			if freshDatabase != "" {
+				_, _ = admin.Exec(context.Background(), "DROP DATABASE IF EXISTS "+pgx.Identifier{freshDatabase}.Sanitize()+" WITH (FORCE)")
 			}
 			admin.Close()
 		}
 	}
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+identifier); err != nil {
+	schemaAdmin := admin
+	if freshDatabase != "" {
+		if schemaAdmin, err = pgxpool.New(ctx, databaseURL); err != nil {
+			closeAll(nil)()
+			return nil, nil, err
+		}
+		defer schemaAdmin.Close()
+	}
+	if _, err := schemaAdmin.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+identifier); err != nil {
 		closeAll(nil)()
 		return nil, nil, err
 	}

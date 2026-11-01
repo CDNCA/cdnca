@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/certificateasset"
@@ -32,6 +34,10 @@ type CertificateTargetResolver interface {
 		certificateasset.CertificatePublicationCommandV1,
 	) (edgeautopublish.CertificateTargetPolicy, error)
 }
+
+// errCertificateNeverPublished: no earlier intent of the site put its
+// certificate on a node, so an unpublication has nothing to remove.
+var errCertificateNeverPublished = errors.New("certificate was never published to the site's nodes")
 
 type certificateUnpublishSource struct {
 	RolloutID uuid.UUID
@@ -73,12 +79,12 @@ func (adapter *PublisherAdapter) Publish(
 	}
 	policy, err := adapter.resolver.ResolveCertificateTarget(ctx, command)
 	if err != nil {
-		return classifyPublicationAdapterError(err), nil
+		return classifyPublicationAdapterError(command, err), nil
 	}
 	request := adapter.publicationRequest(command, policy)
 	result, err := adapter.service.Publish(ctx, request)
 	if err != nil {
-		return classifyPublicationAdapterError(err), nil
+		return classifyPublicationAdapterError(command, err), nil
 	}
 	return adapter.resolvePublicationResult(ctx, command, request, result.Rollout)
 }
@@ -93,8 +99,16 @@ func (adapter *PublisherAdapter) unpublish(
 		return publicationAdapterRetry("publication_unavailable"), nil
 	}
 	source, err := resolver.ResolveCertificateUnpublishSource(ctx, command)
+	if errors.Is(err, errCertificateNeverPublished) {
+		slog.Info("certificate unpublication has nothing to remove", "event", "certificate_unpublication_noop",
+			"tenant_scope_id", command.TenantScopeID.String(), "site_id", command.SiteID.String(),
+			"binding_revision", command.BindingRevision, "noop_reason", certificateasset.PublicationNoopNeverPublished)
+		return certificateasset.PublicationResult{
+			Outcome: certificateasset.PublicationAck, NoopReason: certificateasset.PublicationNoopNeverPublished,
+		}, nil
+	}
 	if err != nil {
-		return classifyPublicationAdapterError(err), nil
+		return classifyPublicationAdapterError(command, err), nil
 	}
 	request.NodeIDs = append([]uuid.UUID(nil), source.NodeIDs...)
 	request.SiteIDs = nil
@@ -103,7 +117,7 @@ func (adapter *PublisherAdapter) unpublish(
 		ExpectedSourceRevision: source.Revision, RemovedSiteIDs: []uuid.UUID{command.SiteID},
 	})
 	if err != nil {
-		return classifyPublicationAdapterError(err), nil
+		return classifyPublicationAdapterError(command, err), nil
 	}
 	return adapter.resolvePublicationResult(ctx, command, request, result.Rollout)
 }
@@ -120,7 +134,7 @@ func (adapter *PublisherAdapter) resolvePublicationResult(
 	}
 	receipt, err := resolver.ResolvePublicationReceipt(ctx, request, rollout)
 	if err != nil {
-		return classifyPublicationAdapterError(err), nil
+		return classifyPublicationAdapterError(command, err), nil
 	}
 	return publicationAdapterResult(command, request, rollout, receipt)
 }
@@ -207,7 +221,12 @@ func publicationAdapterResult(
 			receipt.Succeeded+receipt.Failed+receipt.Cancelled != receipt.Total {
 			return publicationAdapterPermanent("publication_contract_invalid"), nil
 		}
-		return publicationAdapterPermanent("publication_terminal_failed"), nil
+		code := nodeCertificateFailureCode(receipt.FailureMessage, receipt.FailedNodeID)
+		slog.Warn("certificate publication failed on a node", "event", "certificate_publication_node_failed",
+			"failure_code", code, "tenant_scope_id", command.TenantScopeID.String(), "site_id", command.SiteID.String(),
+			"binding_revision", command.BindingRevision, "rollout_id", rollout.ID.String(),
+			"node_id", receipt.FailedNodeID.String(), "node_message", receipt.FailureMessage)
+		return publicationAdapterPermanent(code), nil
 	default:
 		return publicationAdapterPermanent("publication_contract_invalid"), nil
 	}
@@ -277,15 +296,92 @@ func publicationSourceIdentity(
 	return uuid.NewSHA1(rollout.ConfigVersionID, identity)
 }
 
-func classifyPublicationAdapterError(err error) certificateasset.PublicationResult {
+// classifyPublicationAdapterError maps a publication error to the intent
+// outcome and logs the real cause (node-logs 10-31: every unknown error was
+// an anonymous publication_unavailable retried with no trace of why).
+// Validation failures a retry cannot fix fail the intent at once with their
+// reason; the rest keep the intent's bounded backoff.
+func classifyPublicationAdapterError(
+	command certificateasset.CertificatePublicationCommandV1,
+	err error,
+) certificateasset.PublicationResult {
+	var result certificateasset.PublicationResult
+	nodeID := ""
+	var rejection *edgeautopublish.CertificateTargetRejection
 	switch {
 	case errors.Is(err, edgedeployment.ErrUnauthenticated), errors.Is(err, edgedeployment.ErrPermissionDenied):
-		return publicationAdapterPermanent("actor_unauthenticated")
+		result = publicationAdapterPermanent("actor_unauthenticated")
 	case errors.Is(err, edgedeployment.ErrIdempotencyConflict):
-		return publicationAdapterPermanent("publication_conflict")
+		result = publicationAdapterPermanent("publication_conflict")
+	case errors.As(err, &rejection):
+		if rejection.NodeID != uuid.Nil {
+			nodeID = rejection.NodeID.String()
+		}
+		if rejection.Transient {
+			result = publicationAdapterRetry(rejection.FailureCode())
+		} else {
+			result = publicationAdapterPermanent(rejection.FailureCode())
+		}
+	case errors.Is(err, edgeautopublish.ErrInvalidInput):
+		result = publicationAdapterPermanent("target_invalid")
+	case errors.Is(err, edgedeployment.ErrNodeDeploymentActive):
+		// a node runs another deployment of the scope (usually the site's
+		// own publication): wait for it, not counted as a failure
+		result = publicationAdapterRetry(certificateasset.PublicationFailureNodeBusy)
+	case errors.Is(err, edgedeployment.ErrNodeNotFound):
+		result = publicationAdapterPermanent("publication_node_not_found")
+	case errors.Is(err, edgedeployment.ErrConfigNotReleasable):
+		result = publicationAdapterPermanent("publication_config_not_releasable")
+	case errors.Is(err, ErrInvalidInput), errors.Is(err, edgedeployment.ErrInvalidInput):
+		// raised from many places, some racing node state: bounded retry,
+		// but under its own code instead of publication_unavailable
+		result = publicationAdapterRetry("publication_input_invalid")
 	default:
-		return publicationAdapterRetry("publication_unavailable")
+		result = publicationAdapterRetry("publication_unavailable")
 	}
+	attributes := []any{
+		"event", "certificate_publication_failed", "failure_code", result.FailureCode,
+		"outcome", string(result.Outcome), "tenant_scope_id", command.TenantScopeID.String(),
+		"site_id", command.SiteID.String(), "binding_revision", command.BindingRevision,
+		"operation", command.Operation, "error", publicationLogError(err),
+	}
+	if nodeID != "" {
+		attributes = append(attributes, "node_id", nodeID)
+	}
+	slog.Warn("certificate publication attempt failed", attributes...)
+	return result
+}
+
+// nodeCertificateFailureReasons are the certstore stages the edge agent
+// names in its failure message (gatewayclient.classifyCertificateError).
+var nodeCertificateFailureReasons = map[string]string{
+	"CERTIFICATE_PRECHECK_FAILED":   "node_certificate_precheck_failed",
+	"CERTIFICATE_ACTIVATION_FAILED": "node_certificate_activation_failed",
+	"CERTIFICATE_HEALTH_FAILED":     "node_certificate_health_failed",
+}
+
+// nodeCertificateFailureCode is the failure code of a publication a node
+// failed: the stage the node named, with the node ("<code>.<node ID>", as
+// the console reads it); publication_terminal_failed for an agent that
+// names none (older agents send "certificate activation failed").
+func nodeCertificateFailureCode(message string, nodeID uuid.UUID) string {
+	reason, _, found := strings.Cut(message, ":")
+	code, known := nodeCertificateFailureReasons[reason]
+	if !found || !known || nodeID == uuid.Nil {
+		return "publication_terminal_failed"
+	}
+	return code + "." + nodeID.String()
+}
+
+func publicationLogError(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := err.Error()
+	if len(message) > 512 {
+		message = message[:512]
+	}
+	return message
 }
 
 func publicationAdapterRetry(code string) certificateasset.PublicationResult {

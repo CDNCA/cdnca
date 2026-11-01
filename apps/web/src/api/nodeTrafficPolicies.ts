@@ -1,4 +1,5 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { responseETag } from './etag'
 
 export type NodeTrafficOverrideMode = 'none' | 'force_enabled' | 'force_disabled'
 export type NodeTrafficSyncStatus = 'queued' | 'running' | 'succeeded' | 'failed'
@@ -237,7 +238,7 @@ export const nodeTrafficPoliciesApi = {
     if (!uuidPattern.test(scopeId) || !uuidPattern.test(nodeId)) throw invalidRequest()
     const { response, value } = await requestJSON(accessToken, policyPath(scopeId, nodeId), { method: 'GET', signal })
     if (!isState(value) || value.policy.scope_id !== scopeId || value.policy.node_id !== nodeId ||
-      response.headers.get('ETag') !== `"${value.policy.revision}"`) throw invalidResponse()
+      responseETag(response) !== `"${value.policy.revision}"`) throw invalidResponse()
     return value
   },
   async put(
@@ -259,7 +260,7 @@ export const nodeTrafficPoliciesApi = {
       body: JSON.stringify(input),
     })
     if (!isState(value) || value.policy.scope_id !== scopeId || value.policy.node_id !== nodeId ||
-      response.headers.get('ETag') !== `"${value.policy.revision}"` ||
+      responseETag(response) !== `"${value.policy.revision}"` ||
       !['true', 'false'].includes(response.headers.get('Idempotency-Replayed') ?? '')) throw invalidResponse()
     return value
   },

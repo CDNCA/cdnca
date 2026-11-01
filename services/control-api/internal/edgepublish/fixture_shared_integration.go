@@ -186,17 +186,20 @@ func seedPublishPackage(
 	// Catalog products always carry explicit limits; an absent stream_ports
 	// counts as 0 at runtime and would refuse every stream.
 	const spec = `{"limits":{"stream_ports":-1,"http_ports":-1,"root_domains":-1}}`
+	// Names are unique per owner (481); a second tenant's package is another
+	// platform product, so it needs its own name.
+	name := "Edge publish L4 product " + productID.String()[:8]
 	err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(t.Context(), `INSERT INTO package_products(
 			id,name,enabled,sort_order,spec,revision,created_by_user_id,updated_by_user_id,created_at,updated_at)
-			VALUES($1,'Edge publish L4 product',true,1,$4::jsonb,1,$2,$2,$3,$3)`,
-			productID, platformUserID, publishTestClock, spec); err != nil {
+			VALUES($1,$5,true,1,$4::jsonb,1,$2,$2,$3,$3)`,
+			productID, platformUserID, publishTestClock, spec, name); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(t.Context(), `INSERT INTO package_product_versions(
 			product_id,revision,name,enabled,sort_order,spec,deleted,created_by_user_id,created_at)
-			VALUES($1,1,'Edge publish L4 product',true,1,$4::jsonb,false,$2,$3)`,
-			productID, platformUserID, publishTestClock, spec); err != nil {
+			VALUES($1,1,$5,true,1,$4::jsonb,false,$2,$3)`,
+			productID, platformUserID, publishTestClock, spec, name); err != nil {
 			return err
 		}
 		if err := insertPublishCatalogAudit(t.Context(), tx, platformScopeID, platformUserID,
@@ -208,12 +211,12 @@ func seedPublishPackage(
 			site_limit,domain_limit,node_limit,traffic_limit_bytes,starts_at,ends_at,timezone,cycle_kind,
 			custom_cycle_days,tcp_factor_numerator,tcp_factor_denominator,lifecycle_status,revision,
 			created_by_user_id,updated_by_user_id,created_at,updated_at)
-			VALUES($1,$2,$3,1,jsonb_build_object('id',$7::text,'revision',1,'name','Edge publish L4 product','spec',$8::jsonb),
+			VALUES($1,$2,$3,1,jsonb_build_object('id',$7::text,'revision',1,'name',$9::text,'spec',$8::jsonb),
 			10,10,10,-1,$4,$5,'UTC','monthly',0,1,1,'active',1,$6,$6,$4,$4)`,
 			// The window outlives every request deadline (publishTestClock+1h),
 			// so tests that move the clock to a deadline still see it active.
 			subscriptionID, tenantScopeID, productID, publishTestClock.Add(-time.Hour),
-			publishTestClock.Add(24*time.Hour), tenantUserID, productID.String(), spec); err != nil {
+			publishTestClock.Add(24*time.Hour), tenantUserID, productID.String(), spec, name); err != nil {
 			return err
 		}
 		// Every opening path writes the active entitlement revision that

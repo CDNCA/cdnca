@@ -33,6 +33,7 @@ func init() {
 		e("api_key.self.update", CategoryUser, "修改 API 密钥 {resource} 的设置", "updated API key {resource}"),
 		e("api_key.self.rotate", CategoryUser, "轮换 API 密钥 {resource}", "rotated API key {resource}"),
 		e("api_key.self.revoke", CategoryUser, "删除 API 密钥 {resource}", "revoked API key {resource}"),
+		// one-click plugin identity (ADR 0007 §3.2).
 		e("identity_verification.create_draft", CategoryUser, "开始填写实名认证", "started an identity verification"),
 		e("identity_verification.submit", CategoryUser, "提交实名认证", "submitted identity verification"),
 		e("identity_verification.withdraw", CategoryUser, "撤回实名认证申请", "withdrew identity verification"),

@@ -131,6 +131,7 @@ func scopeTenantIntegrationPool(t *testing.T) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "pkg_tenantid")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

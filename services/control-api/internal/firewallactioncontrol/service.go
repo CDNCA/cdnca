@@ -35,7 +35,7 @@ func (service *Service) Put(ctx context.Context, request PutRequest) (WriteResul
 	if err != nil {
 		return WriteResult{}, err
 	}
-	policyID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("cdnca/firewall-action/"+request.TargetScopeID.String()+"/"+request.SiteID.String()))
+	policyID := OwnPolicyID(request.TargetScopeID, request.SiteID)
 	request.Policy = policy
 	request.Document = EdgePolicy{
 		SchemaVersion: SchemaVersion, PolicyVersion: uint64(request.ExpectedRevision + 1),
@@ -94,11 +94,106 @@ func (service *Service) Recover(ctx context.Context, request RecoverRequest) (Wr
 	return service.store.Recover(ctx, request)
 }
 
+// SetEnabled switches the site's own policy on or off (migration 608); the
+// revisions and LKG stay, a disabled policy is not delivered to the nodes.
+func (service *Service) SetEnabled(ctx context.Context, request SetEnabledRequest) (WriteResult, error) {
+	if service == nil || service.store == nil {
+		return WriteResult{}, ErrUnavailable
+	}
+	if err := authorize(request.Actor, request.TargetScopeID, request.SiteID, PermissionManage); err != nil {
+		return WriteResult{}, err
+	}
+	if request.ExpectedRevision < 1 || request.ExpectedRevision > 1<<53-1 || !validWriteMetadata(request.IdempotencyKey, request.RequestID) {
+		return WriteResult{}, ErrInvalidInput
+	}
+	encoded, _ := json.Marshal(struct {
+		TargetScopeID uuid.UUID `json:"target_scope_id"`
+		SiteID        uuid.UUID `json:"site_id"`
+		Expected      int64     `json:"expected_revision"`
+		RequestID     string    `json:"request_id"`
+		Enabled       bool      `json:"enabled"`
+	}{request.TargetScopeID, request.SiteID, request.ExpectedRevision, request.RequestID, request.Enabled})
+	request.RequestSHA256 = sha256.Sum256(encoded)
+	return service.store.SetEnabled(ctx, request)
+}
+
+// Inherit drops the site's own policy so it follows the tenant default.
+func (service *Service) Inherit(ctx context.Context, request InheritRequest) (WriteResult, error) {
+	if service == nil || service.store == nil {
+		return WriteResult{}, ErrUnavailable
+	}
+	if err := authorize(request.Actor, request.TargetScopeID, request.SiteID, PermissionManage); err != nil {
+		return WriteResult{}, err
+	}
+	if request.ExpectedRevision < 1 || request.ExpectedRevision > 1<<53-1 || !validWriteMetadata(request.IdempotencyKey, request.RequestID) {
+		return WriteResult{}, ErrInvalidInput
+	}
+	encoded, _ := json.Marshal(struct {
+		Operation     string    `json:"operation"`
+		TargetScopeID uuid.UUID `json:"target_scope_id"`
+		SiteID        uuid.UUID `json:"site_id"`
+		Expected      int64     `json:"expected_revision"`
+		RequestID     string    `json:"request_id"`
+	}{"inherit", request.TargetScopeID, request.SiteID, request.ExpectedRevision, request.RequestID})
+	request.RequestSHA256 = sha256.Sum256(encoded)
+	return service.store.Inherit(ctx, request)
+}
+
+func (service *Service) GetDefault(ctx context.Context, request DefaultReadRequest) (DefaultPolicy, error) {
+	if service == nil || service.store == nil {
+		return DefaultPolicy{}, ErrUnavailable
+	}
+	if err := authorizeScope(request.Actor, request.TargetScopeID, PermissionRead); err != nil {
+		return DefaultPolicy{}, err
+	}
+	return service.store.GetDefault(ctx, request)
+}
+
+// PutDefault saves the tenant default; it is validated as a site policy is.
+func (service *Service) PutDefault(ctx context.Context, request DefaultPutRequest) (DefaultWriteResult, error) {
+	if service == nil || service.store == nil {
+		return DefaultWriteResult{}, ErrUnavailable
+	}
+	if err := authorizeScope(request.Actor, request.TargetScopeID, PermissionManage); err != nil {
+		return DefaultWriteResult{}, err
+	}
+	if request.ExpectedRevision < 0 || request.ExpectedRevision > 1<<53-1 || !validWriteMetadata(request.IdempotencyKey, request.RequestID) {
+		return DefaultWriteResult{}, ErrInvalidInput
+	}
+	policy, err := normalizePolicy(request.Policy)
+	if err != nil {
+		return DefaultWriteResult{}, err
+	}
+	request.Policy = policy
+	encoded, err := json.Marshal(struct {
+		TargetScopeID uuid.UUID   `json:"target_scope_id"`
+		Expected      int64       `json:"expected_revision"`
+		RequestID     string      `json:"request_id"`
+		Policy        PolicyInput `json:"policy"`
+	}{request.TargetScopeID, request.ExpectedRevision, request.RequestID, policy})
+	if err != nil {
+		return DefaultWriteResult{}, ErrInvalidInput
+	}
+	request.RequestSHA256 = sha256.Sum256(encoded)
+	return service.store.PutDefault(ctx, request)
+}
+
 func authorize(actor Actor, targetScopeID, siteID uuid.UUID, permission string) error {
-	if actor.UserID == uuid.Nil || actor.ScopeID == uuid.Nil || actor.ScopeKind != ScopeTenant && actor.ScopeKind != ScopePlatform {
+	if siteID == uuid.Nil && validActor(actor) {
+		return ErrInvalidInput
+	}
+	return authorizeScope(actor, targetScopeID, permission)
+}
+
+func validActor(actor Actor) bool {
+	return actor.UserID != uuid.Nil && actor.ScopeID != uuid.Nil && (actor.ScopeKind == ScopeTenant || actor.ScopeKind == ScopePlatform)
+}
+
+func authorizeScope(actor Actor, targetScopeID uuid.UUID, permission string) error {
+	if !validActor(actor) {
 		return ErrUnauthenticated
 	}
-	if targetScopeID == uuid.Nil || siteID == uuid.Nil {
+	if targetScopeID == uuid.Nil {
 		return ErrInvalidInput
 	}
 	if actor.ScopeKind == ScopeTenant && actor.ScopeID != targetScopeID {

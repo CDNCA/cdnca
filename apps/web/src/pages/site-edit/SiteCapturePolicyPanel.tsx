@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { ApiError } from '../../api/auth'
 import { siteCapturePolicyApi, type SiteCapturePolicy, type SiteCapturePolicyDocument, type SiteCapturePolicyUnconfigured, type SiteCapturePolicyUpdate } from '../../api/siteCapturePolicy'
 import '../../i18n/siteCapturePolicy'
-import { FormRow, SettingSection } from './SiteEditFields'
+import { FormRow, SettingGroup } from './SiteEditFields'
 import { FeedbackWhen } from '@cdnca/ui'
 import SiteEditState from './SiteEditState'
 import { useInstantDraft, useInstantFeedback } from './instantSave'
@@ -133,10 +133,10 @@ export default function SiteCapturePolicyPanel({ siteId, scopeId, accessToken, o
   if (query.isPending) return <SiteEditState status="loading" label={t('states.loading')} />
   if (query.isError) {
     return (
-      <SettingSection title={t('title')}>
+      <SettingGroup title={t('title')} className="is-wide">
         <SiteEditState status="error" title={t('errors.load')} detail={t(`errors.${errorKey(query.error)}`, { defaultValue: '' }) || undefined}
           onRetry={() => void query.refetch()} />
-      </SettingSection>
+      </SettingGroup>
     )
   }
 
@@ -144,15 +144,15 @@ export default function SiteCapturePolicyPanel({ siteId, scopeId, accessToken, o
   const valid = !draft.enabled || capturedOf(draft) > 0
 
   return (
-    <SettingSection title={t('title')} tip={t('description')}>
+    // 与「更多设置」其它卡片同一形态，启用开关放标题右侧，三个上限并排
+    <SettingGroup title={t('title')} tip={t('description')} className="is-wide"
+      help={draft.enabled ? t('help.explicit') : t('states.disabled')}
+      extra={<Switch aria-label={t('fields.enabled')} checked={draft.enabled} disabled={!canWrite} onChange={(checked) => set('enabled', checked)} />}>
       <div aria-busy={mutation.isPending} {...instant.typingProps}>
       {!canWrite ? <Alert type="info" message={t('states.readOnly')} /> : null}
       {unconfigured && !saved ? <Alert type="info" message={t('states.unconfigured')} /> : null}
       {mutation.isError ? <FeedbackWhen title={t(`errors.${errorKey(mutation.error)}`, { defaultValue: t('errors.unknown') })} action={attempt ? <Button onClick={() => mutation.mutate(attempt)}>{t('actions.retry')}</Button> : undefined} /> : null}
       {!valid ? <Alert type="warning" message={t('help.explicit')} /> : null}
-      <FormRow label={t('fields.enabled')} help={draft.enabled ? t('help.explicit') : t('states.disabled')}>
-        <Switch aria-label={t('fields.enabled')} checked={draft.enabled} disabled={!canWrite} onChange={(checked) => set('enabled', checked)} />
-      </FormRow>
       {draft.enabled ? <>
       <FormRow label={t('fields.methods')}>
         <Select aria-label={t('fields.methods')} mode="multiple" value={draft.methods} options={methods.map((value) => ({ value, label: value }))} disabled={!canWrite || !draft.enabled} onChange={(value) => set('methods', value)} />
@@ -166,6 +166,7 @@ export default function SiteCapturePolicyPanel({ siteId, scopeId, accessToken, o
         </FormRow>
       ))}
       </> : null}
+      <div className="site-setting-inline-fields">
       {([
         ['max_value_bytes', 'maxValueBytes', 1, 16 * 1024], ['max_body_bytes', 'maxBodyBytes', 1, 1024 * 1024],
         ['max_event_bytes', 'maxEventBytes', 256, 1024 * 1024],
@@ -174,10 +175,11 @@ export default function SiteCapturePolicyPanel({ siteId, scopeId, accessToken, o
           <InputNumber aria-label={t(`fields.${label}`)} min={min} max={max} value={draft[key]} disabled={!canWrite} onChange={(value) => value !== null && set(key, value)} />
         </FormRow>
       ))}
+      </div>
       <div className="site-setting-actions">
         <Button icon={<RefreshCw size={15} />} disabled={mutation.isPending} onClick={() => void query.refetch()}>{t('actions.refresh')}</Button>
       </div>
       </div>
-    </SettingSection>
+    </SettingGroup>
   )
 }

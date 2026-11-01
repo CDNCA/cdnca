@@ -4,7 +4,9 @@ import { logoutSession, refreshSession, useSessionStore } from '../auth/session'
 import { authResponse, principal } from '../test/fixtures'
 
 describe('session refresh', () => {
-  it('uses the HttpOnly cookie flow and refreshes account data from me', async () => {
+  // the refresh answer carries the same principal as /v1/auth/me
+  // (both PrincipalForSession), so restoring a session is one request, not two.
+  it('uses the HttpOnly cookie flow and takes the principal from the refresh answer', async () => {
     const user = principal()
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
@@ -14,27 +16,13 @@ describe('session refresh', () => {
           headers: { 'Content-Type': 'application/json' },
         }),
       )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(user), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      )
 
     await refreshSession()
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith(
       '/v1/auth/refresh',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      '/v1/auth/me',
-      expect.objectContaining({
-        credentials: 'include',
-        headers: expect.objectContaining({ Authorization: 'Bearer memory-only-access-token' }),
-      }),
     )
     expect(useSessionStore.getState()).toMatchObject({
       status: 'authenticated',
@@ -69,16 +57,17 @@ describe('session refresh', () => {
     }
     useSessionStore.getState().setSession(authResponse(target), target)
     const sessionEpoch = useSessionStore.getState().sessionEpoch
-    const response = { ...authResponse(target), impersonation: target.impersonation }
-    vi.spyOn(globalThis, 'fetch')
+    // The refresh answer has the marker at the top level; it goes onto the principal as /v1/auth/me had it.
+    const { impersonation: _marker, ...targetPrincipal } = target
+    const response = { ...authResponse(targetPrincipal), impersonation: target.impersonation }
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify(response), {
-        status: 200, headers: { 'Content-Type': 'application/json' },
-      }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(target), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       }))
 
     await refreshSession()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
 
     expect(useSessionStore.getState()).toMatchObject({
       status: 'authenticated',

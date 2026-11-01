@@ -4,12 +4,8 @@ package node
 
 import (
 	"errors"
-	"os"
-	"regexp"
-	"strings"
 	"testing"
 
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -88,44 +84,5 @@ func TestEnsureLineGroupAddressesKept(t *testing.T) {
 // nodeAddressTestPool is a fully migrated private schema.
 func nodeAddressTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-		return pool
-	}
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx := t.Context()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "node_address_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^node_address_test_[a-f0-9]{32}$`).MatchString(schema) {
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		cleanupCtx, cancel := databasetest.CleanupContext()
-		defer cancel()
-		_, _ = admin.Exec(cleanupCtx, "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }

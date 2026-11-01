@@ -184,6 +184,29 @@ type Asset struct {
 	CreatedAt          time.Time    `json:"created_at"`
 	UpdatedAt          time.Time    `json:"updated_at"`
 	DeletedAt          *time.Time   `json:"deleted_at,omitempty"`
+	// Sync is the publication of the asset's current site bindings, on list
+	// rows and the detail; nil for an asset bound
+	// to no site.
+	Sync *AssetSync `json:"sync,omitempty"`
+}
+
+// AssetSync is a list row's sync state (ListSyncStates) and, when failed,
+// the first permanent failure code of its bindings' publications
+// ("<code>[.<node ID>]", certificatepublish).
+type AssetSync struct {
+	State       string `json:"state"`
+	FailureCode string `json:"failure_code,omitempty"`
+}
+
+func assetSync(state, failureCode *string) *AssetSync {
+	if state == nil {
+		return nil
+	}
+	sync := &AssetSync{State: *state}
+	if failureCode != nil {
+		sync.FailureCode = *failureCode
+	}
+	return sync
 }
 
 type AssetOwner struct {
@@ -425,6 +448,9 @@ type Binding struct {
 	Bound         bool      `json:"bound"`
 	ChangedBy     uuid.UUID `json:"changed_by"`
 	ChangedAt     time.Time `json:"changed_at"`
+	// Sync is the publication of a current bound row, on
+	// ListBindings only; nil for an unbound row.
+	Sync *AssetSync `json:"sync,omitempty"`
 }
 
 type preparedCertificate struct {

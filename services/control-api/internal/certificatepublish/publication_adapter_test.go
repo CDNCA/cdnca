@@ -297,3 +297,71 @@ func certificatePublicationCommand47() certificateasset.CertificatePublicationCo
 		CreatedAt:      time.Now().UTC(),
 	}
 }
+
+// demo-fill 11-01: an unbind after a publication that never reached a node
+// retried "edge deployment not found" to permanent_failed. Nothing on the
+// nodes completes it at once, without a rollout; a source that cannot be
+// read right now still retries.
+func TestPublisherAdapterCompletesUnpublishOfNeverPublishedCertificate(t *testing.T) {
+	command := certificatePublicationCommand47()
+	command.Operation = "unpublish"
+	service := &publicationAdapterService47{unpublishSourceErr: errCertificateNeverPublished}
+	adapter, err := NewPublisherAdapter(service, publicationTargetResolver47{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Publish(t.Context(), command)
+	if err != nil || result.Outcome != certificateasset.PublicationAck ||
+		result.NoopReason != certificateasset.PublicationNoopNeverPublished || result.RolloutID != uuid.Nil ||
+		result.PublicationID != uuid.Nil || service.unpublishRequest != nil || service.receiptCalls != 0 {
+		t.Fatalf("never-published unpublish = %+v, %v (unpublish request %v)", result, err, service.unpublishRequest)
+	}
+
+	for _, transient := range []error{edgedeployment.ErrUnavailable, edgedeployment.ErrNotFound, errors.New("connection reset")} {
+		service := &publicationAdapterService47{unpublishSourceErr: transient}
+		adapter, err := NewPublisherAdapter(service, publicationTargetResolver47{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := adapter.Publish(t.Context(), command)
+		if err != nil || result.Outcome != certificateasset.PublicationRetry || result.NoopReason != "" {
+			t.Fatalf("source error %v = %+v, %v; want a retry", transient, result, err)
+		}
+	}
+}
+
+// demo-fill 11-01: the node's certstore stage reaches the intent's failure
+// code (with the node), not one generic publication_terminal_failed.
+func TestPublisherAdapterKeepsNodeCertificateFailureStage(t *testing.T) {
+	command := certificatePublicationCommand47()
+	nodeID := uuid.New()
+	configID, rolloutID := uuid.New(), uuid.New()
+	rollout := edgedeployment.Rollout{
+		ID: rolloutID, ConfigurationScopeID: command.TenantScopeID, ConfigVersionID: configID,
+		Revision: 1, CreatedAt: time.Now(), QueuedAt: time.Now(),
+	}
+	for _, test := range []struct{ message, want string }{
+		{"CERTIFICATE_PRECHECK_FAILED: OpenResty rejected the certificate configuration (nginx -t)", "node_certificate_precheck_failed." + nodeID.String()},
+		{"CERTIFICATE_ACTIVATION_FAILED: OpenResty did not start or reload with the certificate", "node_certificate_activation_failed." + nodeID.String()},
+		{"CERTIFICATE_HEALTH_FAILED: TLS handshake with the certificate failed after activation", "node_certificate_health_failed." + nodeID.String()},
+		{"certificate activation failed", "publication_terminal_failed"},
+		{"", "publication_terminal_failed"},
+	} {
+		receipt := terminalReceipt47(rollout, edgedeployment.CertificatePublicationReceiptFailed)
+		receipt.FailedNodeID, receipt.FailureMessage = nodeID, test.message
+		service := &publicationAdapterService47{
+			publishResult: edgedeployment.CreateRolloutResult{Rollout: rollout}, receipt: receipt,
+		}
+		adapter, err := NewPublisherAdapter(service, publicationTargetResolver47{policy: edgeautopublish.CertificateTargetPolicy{
+			NodeIDs: []uuid.UUID{nodeID}, Deadline: time.Now().Add(time.Minute),
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := adapter.Publish(t.Context(), command)
+		if err != nil || result.Outcome != certificateasset.PublicationPermanent || result.FailureCode != test.want ||
+			!validStoredFailureCode(result.FailureCode) {
+			t.Fatalf("node message %q → %+v, %v; want %s", test.message, result, err, test.want)
+		}
+	}
+}

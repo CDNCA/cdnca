@@ -1,0 +1,88 @@
+.firewall-action-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+/* Fields use the site edit pages' horizontal row (.site-form-row): label and
+   control on one line. Row spacing comes from the grid gap, so the first row
+   sits right under the card title and stacked rows (≤960px) keep 16px. */
+.firewall-action-page .ant-card-body .cdnca-form-grid {
+  row-gap: 16px;
+}
+
+.firewall-action-page .ant-card-body .site-form-row {
+  margin-top: 0;
+}
+
+.firewall-action-page .ant-card-body > * + .cdnca-form-grid,
+.firewall-action-page .ant-card-body > * + .ant-space {
+  margin-top: 16px;
+}
+
+.firewall-action-page .site-form-row-label > label {
+  white-space: nowrap;
+}
+
+.firewall-action-crawler {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 16px 12px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--cdnca-border-radius);
+}
+
+.firewall-action-crawler > .cdnca-form-grid {
+  flex: 1;
+  min-width: 0;
+}
+
+/* three label+control rows need ~400px each; drop to two, then one, like the
+   site advanced cards (single column at ≤960px) */
+@media (max-width: 1279px) {
+  .firewall-action-page .cdnca-form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .firewall-action-page .cdnca-form-grid-2,
+  .firewall-action-page .cdnca-form-grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* a two-line help splits evenly instead of leaving a few characters alone on
+   the last line */
+.firewall-action-page .site-form-row-help,
+.firewall-action-page .ant-card-body > .ant-typography {
+  text-wrap: balance;
+}
+
+/* crawler lists hold one entry per line: keep each entry on its line so a
+   single entry stays one input-height tall like the name field */
+.firewall-action-crawler textarea.ant-input {
+  overflow-x: auto;
+  white-space: pre;
+}
+
+@media (max-width: 720px) {
+  .firewall-action-page .site-form-row-label > label {
+    white-space: normal;
+  }
+}
+
+/* 站点标题下的来源标签；默认设置展开后的表单与摘要间距。 */
+.firewall-action-source {
+  margin-inline-start: 8px;
+}
+
+.firewall-action-default-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}

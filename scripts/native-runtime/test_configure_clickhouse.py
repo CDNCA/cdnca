@@ -374,6 +374,8 @@ class TestNativeClickHouseConfiguration(unittest.TestCase):
             self.assertEqual(sorted(ledger.ledger), list(range(1, len(CH.native_clickhouse_migrations(MIGRATIONS)) + 1)))
             sql = "\n".join(call[0][0] for call in command.call_args_list)
             self.assertIn("GRANT SELECT ON cdnca_analytics.* TO cdnca_analytics_query", sql)
+            # replica_health.go reads system.replicas with the query identity (else CH 497 every 15 s).
+            self.assertIn("GRANT SELECT ON system.replicas TO cdnca_analytics_query", sql)
             self.assertIn("GRANT INSERT ON cdnca_analytics.access_events", sql)
             self.assertIn("GRANT INSERT ON cdnca_analytics.security_events", sql)
             self.assertIn("GRANT INSERT ON cdnca_analytics.connections_ingest_receipts_v1 TO cdnca_analytics_ingest", sql)

@@ -39,7 +39,7 @@ export default function SiteResponseRulesEditor({ rules, statusTexts, disabled, 
     ;[texts[index], texts[index + offset]] = [texts[index + offset], texts[index]]
     onChange(next, texts)
   }
-  return <SettingGroup title={t('responseRules.title')} tip={t('responseRules.hint')}>
+  return <SettingGroup title={t('responseRules.title')} tip={t('responseRules.hint')} className="is-wide">
     <Alert type="info" showIcon message={t('responseRules.cacheHint')} />
     {rules.map((rule, index) => {
       const label = (name: string) => `${t(name)} ${index + 1}`

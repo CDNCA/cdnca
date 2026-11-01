@@ -20,7 +20,7 @@ const (
 )
 
 // dnsLALineZone serves recordList over two pages: page 1 holds 100 records on
-// the default line and on an unmapped province line, page 2 the telecom one.
+// the default line and on an unmapped region (华东电信) line, page 2 the telecom one.
 type dnsLALineZone struct {
 	t      *testing.T
 	mu     sync.Mutex
@@ -56,7 +56,7 @@ func (zone *dnsLALineZone) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			for index := range 100 {
 				lineID, lineCode := "", ""
 				if index == 0 {
-					lineID, lineCode = "84613320933647360", "cnshhdgtele"
+					lineID, lineCode = "84613317066499072", "hdgtele"
 				}
 				results = append(results, record("default-"+strconv.Itoa(index), "198.51.100."+strconv.Itoa(index+1), lineID, lineCode))
 			}
@@ -100,7 +100,7 @@ func TestDNSLALineLookupSeesOnlyItsLineAcrossPages(t *testing.T) {
 	if lookup, err = remote.Lookup(t.Context(), config, operation); err != nil || lookup.TargetComplete || lookup.Conflict {
 		t.Fatalf("default Lookup() of a telecom value = (%+v, %v), want absent", lookup, err)
 	}
-	operation.Value = "198.51.100.1" // on the unmapped Shanghai-telecom line
+	operation.Value = "198.51.100.1" // on the unmapped 华东电信 region line
 	if lookup, err = remote.Lookup(t.Context(), config, operation); err != nil || lookup.TargetComplete || lookup.Conflict {
 		t.Fatalf("default Lookup() of a province-line value = (%+v, %v), want absent", lookup, err)
 	}
@@ -132,7 +132,7 @@ func TestDNSLALineMutationsSendLineID(t *testing.T) {
 	update.Action, update.RecordID, update.Line = dnscheck.ProviderUpdate, "telecom-1", LineMobile
 	update.PreviousValue, update.PreviousTTL, update.PreviousLine = "192.0.2.10", 300, LineTelecom
 	remove := base
-	remove.Action, remove.RecordID, remove.Line = dnscheck.ProviderDelete, "default-0", "dns_la:cnshhdgtele"
+	remove.Action, remove.RecordID, remove.Line = dnscheck.ProviderDelete, "default-0", "dns_la:hdgtele"
 	for _, operation := range []dnscheck.ProviderOperation{create, defaultCreate, update, remove} {
 		if _, err := remote.Mutate(t.Context(), config, operation); err != nil {
 			t.Fatalf("Mutate(%s %q) error = %v", operation.Action, operation.Line, err)
@@ -165,7 +165,7 @@ func TestDNSLALineMutationsSendLineID(t *testing.T) {
 
 func TestDNSLALineUnmappedLineFailsBeforeNetwork(t *testing.T) {
 	zone, remote, config := newDNSLALineRemote(t)
-	for _, line := range []string{"教育网", "dns_la:cnshhdgtele"} {
+	for _, line := range []string{"教育网", "dns_la:hdgtele"} {
 		operation := dnscheck.ProviderOperation{Action: dnscheck.ProviderCreate, Name: "www.example.test.",
 			Type: dnscheck.RecordA, Value: "192.0.2.10", TTL: 300, Line: line}
 		if _, err := remote.Mutate(t.Context(), config, operation); ErrorCodeOf(err) != CodeUnsupported {
@@ -187,7 +187,7 @@ func TestDNSLAListZoneRecordsReportsUnifiedLines(t *testing.T) {
 	for _, record := range records {
 		lines[record.ID] = record.Line
 	}
-	if lines["telecom-1"] != LineTelecom || lines["default-1"] != LineDefault || lines["default-0"] != "dns_la:cnshhdgtele" {
+	if lines["telecom-1"] != LineTelecom || lines["default-1"] != LineDefault || lines["default-0"] != "dns_la:hdgtele" {
 		t.Fatalf("lines = telecom-1:%q default-1:%q default-0:%q", lines["telecom-1"], lines["default-1"], lines["default-0"])
 	}
 }

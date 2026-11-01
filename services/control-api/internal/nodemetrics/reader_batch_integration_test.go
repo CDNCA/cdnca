@@ -53,6 +53,7 @@ func TestPostgresReaderLatestBatch(t *testing.T) {
 
 func migratedBatchMetricsPool(t *testing.T, ctx context.Context, dsn string, tracer *batchMetricsQueryTracer) *pgxpool.Pool {
 	t.Helper()
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "node_metrics_batch")
 	admin, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)

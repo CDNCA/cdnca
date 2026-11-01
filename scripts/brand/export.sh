@@ -25,6 +25,13 @@ cp "$src/mark.svg" "$web/favicon.svg"
 for size in 512 192 180; do png app-icon.svg "$size" "$size" "$web/app-icon-$size.png"; done
 png login-ad.svg 1024 1120 "$tmp/ad.png"
 magick "$tmp/ad.png" -strip -quality 88 -sampling-factor 4:2:0 "$web/ad.jpeg"
+# 英文/繁体广告：同一图形层，只把 login-ad.svg 的 <text> 行换成 login-ad-<语言>.text。
+for lang in en zh-TW; do
+  grep -v '^<text' "$src/login-ad.svg" \
+    | awk -v layer="$src/login-ad-$lang.text" '/^<\/svg>/ { while ((getline line < layer) > 0) print line } { print }' > "$tmp/ad-$lang.svg"
+  rsvg-convert -w 1024 -h 1120 "$tmp/ad-$lang.svg" -o "$tmp/ad-$lang.png"
+  magick "$tmp/ad-$lang.png" -strip -quality 88 -sampling-factor 4:2:0 "$web/ad-$lang.jpeg"
+done
 png login-background.svg 1920 1080 "$tmp/bg.png"
 magick "$tmp/bg.png" -strip -quality 86 -sampling-factor 4:2:0 "$web/login-background.jpeg"
 for f in "$web"/logo*.png "$web"/favicon.png "$web"/app-icon-*.png; do strip "$f"; done

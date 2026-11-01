@@ -232,7 +232,7 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
       {!parts && locked ? <Alert type="warning" showIcon message={t('locked')} /> : null}
 
       {has('forceHttps') ? <>
-      <SettingGroup title={t('forceHttps.title')} status={!state.force_https ? t('inactive') : undefined}
+      <SettingGroup title={t('forceHttps.title')} status={!state.force_https ? t('inactive') : undefined} className="is-wide"
         help={!state.force_https ? t('forceHttps.notEnabled') : undefined}>
       <FormRow label={t('forceHttps.status')} help={t('forceHttps.statusHint')}>
         <Radio.Group aria-label={t('forceHttps.status')} optionType="button" value={draft.settings.force_https.status}
@@ -250,7 +250,7 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
       </> : null}
 
       {has('hostRedirects') ? <>
-      <SettingGroup title={t('hostRedirects.title')} help={t('hostRedirects.hint')}>
+      <SettingGroup title={t('hostRedirects.title')} help={t('hostRedirects.hint')} className={redirects.length ? 'is-wide' : undefined}>
       {redirects.map((redirect, index) => <Space key={index} wrap>
         <Select aria-label={`${t('hostRedirects.source')} ${index + 1}`} style={{ width: 220 }} value={redirect.source_host || undefined}
           placeholder={t('hostRedirects.source')} disabled={disabled} options={plainDomains.map((value) => ({ value, label: value }))}
@@ -277,11 +277,11 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
 
       {has('hsts') ? <>
       <SettingGroup title={t('hsts.title')} status={!state.https_enabled ? t('inactive') : undefined}
-        help={!state.https_enabled ? t('hsts.needsHttps') : t('hsts.hint')} tip={!state.https_enabled ? t('hsts.hint') : undefined}>
-      <FormRow label={t('enabled')}>
-        <Switch aria-label={t('hsts.title')} checked={draft.hstsOn} disabled={disabled || !state.https_enabled} onChange={(value) => set({ hstsOn: value })} />
-      </FormRow>
+        help={!state.https_enabled ? t('hsts.needsHttps') : t('hsts.hint')} tip={!state.https_enabled ? t('hsts.hint') : undefined}
+        className={draft.hstsOn ? 'is-wide' : undefined}
+        extra={<Switch aria-label={t('hsts.title')} checked={draft.hstsOn} disabled={disabled || !state.https_enabled} onChange={(value) => set({ hstsOn: value })} />}>
       {draft.hstsOn ? <>
+        <div className="site-setting-inline-fields">
         <FormRow label={t('hsts.maxAge')}>
           <InputNumber aria-label={t('hsts.maxAge')} min={0} max={63072000} value={hsts.max_age_seconds} disabled={disabled}
             onChange={(value) => setSettings({ hsts: { ...hsts, max_age_seconds: value ?? 0 } })} />
@@ -294,6 +294,7 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
           <Switch aria-label={t('hsts.preload')} checked={hsts.preload} disabled={disabled}
             onChange={(value) => setSettings({ hsts: { ...hsts, preload: value } })} />
         </FormRow>
+        </div>
         {preloadInvalid ? <FeedbackWhen type="warning" title={t('hsts.preloadHint')} /> : null}
       </> : null}
       </SettingGroup>
@@ -369,10 +370,8 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
       })() : null}
 
       {has('webp') ? <>
-      <SettingGroup title={t('webp.title')} tip={t('webp.hint')}>
-      <FormRow label={t('enabled')}>
-        <Switch aria-label={t('webp.title')} checked={draft.webpOn} disabled={disabled} onChange={(value) => set({ webpOn: value })} />
-      </FormRow>
+      <SettingGroup title={t('webp.title')} tip={t('webp.hint')} className={draft.webpOn ? 'is-wide' : undefined}
+        extra={<Switch aria-label={t('webp.title')} checked={draft.webpOn} disabled={disabled} onChange={(value) => set({ webpOn: value })} />}>
       {draft.webpOn ? (
         <FormRow label={t('webp.quality')} help={t('webp.qualityHint')}>
           <InputNumber aria-label={t('webp.quality')} min={0} max={100} disabled={disabled}
@@ -392,11 +391,9 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
         })} /> : null}
 
       {has('limits') ? <>
-      <SettingGroup title={t('limits.title')} help={t('limits.hint')}>
-      <FormRow label={t('enabled')}>
-        <Switch aria-label={t('limits.title')} checked={draft.limitsOn} disabled={disabled} onChange={(value) => set({ limitsOn: value })} />
-      </FormRow>
-      {draft.limitsOn ? <>
+      <SettingGroup title={t('limits.title')} help={t('limits.hint')} className={draft.limitsOn ? 'is-wide' : undefined}
+        extra={<Switch aria-label={t('limits.title')} checked={draft.limitsOn} disabled={disabled} onChange={(value) => set({ limitsOn: value })} />}>
+      {draft.limitsOn ? <div className="site-setting-inline-fields">
         <FormRow label={t('limits.connections')} help={t('limits.connectionsHint')}>
           <InputNumber aria-label={t('limits.connections')} min={0} max={65535} value={limits.connections_per_ip ?? 0} disabled={disabled}
             onChange={(value) => setSettings({ limits: { ...limits, connections_per_ip: value || undefined } })} />
@@ -410,16 +407,14 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
             disabled={disabled || !limits.rate_bytes_per_second}
             onChange={(value) => setSettings({ limits: { ...limits, rate_after_bytes: value ? value * 1024 : undefined } })} />
         </FormRow>
-      </> : null}
+      </div> : null}
       </SettingGroup>
       </> : null}
 
       {has('basicAuth') ? <>
-      <SettingGroup title={t('basicAuth.title')} help={t('basicAuth.hint')}>
-      <FormRow label={t('enabled')}>
-        <Switch aria-label={t('basicAuth.title')} checked={draft.authOn} disabled={disabled}
-          onChange={(value) => set({ authOn: value, settings: { ...draft.settings, basic_auth: draft.settings.basic_auth ?? auth } })} />
-      </FormRow>
+      <SettingGroup title={t('basicAuth.title')} help={t('basicAuth.hint')} className={draft.authOn ? 'is-wide' : undefined}
+        extra={<Switch aria-label={t('basicAuth.title')} checked={draft.authOn} disabled={disabled}
+          onChange={(value) => set({ authOn: value, settings: { ...draft.settings, basic_auth: draft.settings.basic_auth ?? auth } })} />}>
       {draft.authOn ? <>
         <FormRow label={t('basicAuth.realm')}>
           <Input aria-label={t('basicAuth.realm')} style={{ maxWidth: 320 }} value={auth.realm} disabled={disabled}
@@ -449,12 +444,11 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
       </> : null}
 
       {has('maintenance') ? <>
-      <SettingGroup title={t('maintenance.title')} help={t('maintenance.hint')}>
-      <FormRow label={t('enabled')}>
-        <Switch aria-label={t('maintenance.title')} checked={draft.maintenanceOn} disabled={disabled}
-          onChange={(value) => set({ maintenanceOn: value, settings: { ...draft.settings, maintenance: draft.settings.maintenance ?? maintenance } })} />
-      </FormRow>
+      <SettingGroup title={t('maintenance.title')} help={t('maintenance.hint')} className={draft.maintenanceOn ? 'is-wide' : undefined}
+        extra={<Switch aria-label={t('maintenance.title')} checked={draft.maintenanceOn} disabled={disabled}
+          onChange={(value) => set({ maintenanceOn: value, settings: { ...draft.settings, maintenance: draft.settings.maintenance ?? maintenance } })} />}>
       {draft.maintenanceOn ? <>
+        <div className="site-setting-inline-fields">
         <FormRow label={t('maintenance.status')}>
           <InputNumber aria-label={t('maintenance.status')} min={200} max={599} value={maintenance.status} disabled={disabled}
             onChange={(value) => setSettings({ maintenance: { ...maintenance, status: value ?? 503 } })} />
@@ -464,13 +458,14 @@ function SiteAccessForm({ siteId, accessToken, canManage, locked, parts, state, 
             options={(['text/html', 'text/plain', 'application/json'] as const).map((value) => ({ value, label: value }))}
             onChange={(value) => setSettings({ maintenance: { ...maintenance, content_type: value } })} />
         </FormRow>
-        <FormRow label={t('maintenance.body')}>
-          <Input.TextArea aria-label={t('maintenance.body')} rows={4} value={maintenance.body} disabled={disabled} maxLength={65536}
-            onChange={(event) => setSettings({ maintenance: { ...maintenance, body: event.target.value } })} />
-        </FormRow>
         <FormRow label={t('maintenance.retryAfter')}>
           <InputNumber aria-label={t('maintenance.retryAfter')} min={0} max={604800} value={maintenance.retry_after_seconds} disabled={disabled}
             onChange={(value) => setSettings({ maintenance: { ...maintenance, retry_after_seconds: value ?? undefined } })} />
+        </FormRow>
+        </div>
+        <FormRow label={t('maintenance.body')}>
+          <Input.TextArea aria-label={t('maintenance.body')} rows={4} value={maintenance.body} disabled={disabled} maxLength={65536}
+            onChange={(event) => setSettings({ maintenance: { ...maintenance, body: event.target.value } })} />
         </FormRow>
         <FormRow label={t('maintenance.allowed')} help={t('maintenance.allowedHint')}>
           <Input.TextArea aria-label={t('maintenance.allowed')} rows={2} value={draft.allowedCIDRs} disabled={disabled}

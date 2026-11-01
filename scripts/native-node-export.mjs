@@ -69,9 +69,14 @@ export function exportNativeRuntime(rootDirectory, outputDirectory) {
   }
   fs.mkdirSync(output, { mode: 0o755 })
   const copy = (source, target) => copyRuntimeTree(root, source, path.join(output, target))
-  for (const name of ['bin/openresty', 'nginx/sbin', 'nginx/modules', 'nginx/conf', 'lualib', 'luajit/lib', 'openssl3/lib', 'pcre2/lib']) {
+  // luajit/bin/luajit is what the Agent's EDGE_WEBP probe runs; the image link
+  // (luajit -> luajit-2.1.*) is materialized and relinked like bin/openresty.
+  if (!fs.lstatSync(path.join(root, 'usr/local/openresty/luajit/bin/luajit'), { throwIfNoEntry: false })) throw new Error('runtime image has no luajit/bin/luajit')
+  for (const name of ['bin/openresty', 'nginx/sbin', 'nginx/modules', 'nginx/conf', 'lualib', 'luajit/bin/luajit', 'luajit/lib', 'openssl3/lib', 'pcre2/lib']) {
     copy(`usr/local/openresty/${name}`, `runtime/openresty/${name}`)
   }
+  const luajit = runtimeELF(fs.readFileSync(path.join(output, 'runtime/openresty/luajit/bin/luajit')))
+  if (!luajit?.interpreter) throw new Error('luajit/bin/luajit must be a dynamic x86-64 executable')
   for (const directory of ['lib', 'usr/lib']) {
     for (const name of fs.readdirSync(path.join(root, directory)).sort()) {
       if (/\.so(?:\.|$)/.test(name)) copy(`${directory}/${name}`, `runtime/${directory}/${name}`)

@@ -87,6 +87,50 @@ func WithActor(ctx context.Context, actor ContextActor) context.Context {
 	return context.WithValue(ctx, actorKey{}, actor)
 }
 
+type pluginActorKey struct{}
+
+// PluginActor is the plugin installation a request acts for: an API key bound
+// to a plugin installation (control migration 604, ADR 0007 §3.2).
+type PluginActor struct {
+	PluginID       string
+	InstallationID string
+	APIKeyID       string
+}
+
+// WithPluginActor marks events appended under ctx as done by a plugin: an
+// event that would be attributed to a user gets actor_kind=plugin,
+// actor_ref=plugin:<id> (actor_user_id keeps the user who issued the key) and
+// plugin_id / installation_id / api_key_id in its payload. Explicit non-user
+// actor kinds are left alone.
+func WithPluginActor(ctx context.Context, actor PluginActor) context.Context {
+	if actor.PluginID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, pluginActorKey{}, actor)
+}
+
+type apiKeyActorKey struct{}
+
+// WithAPIKeyActor records that the request authenticated with this API key
+// (api_keys.id): a user-attributed event without an ActorRef gets
+// actor_ref=api_key:<id>, so key writes are told apart from the owner's own
+// session. A plugin identity (WithPluginActor) takes precedence.
+func WithAPIKeyActor(ctx context.Context, apiKeyID string) context.Context {
+	if apiKeyID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, apiKeyActorKey{}, apiKeyID)
+}
+
+// PluginActorFrom returns the actor recorded by WithPluginActor.
+func PluginActorFrom(ctx context.Context) (PluginActor, bool) {
+	if ctx == nil {
+		return PluginActor{}, false
+	}
+	actor, ok := ctx.Value(pluginActorKey{}).(PluginActor)
+	return actor, ok
+}
+
 func actorFrom(ctx context.Context) (ContextActor, bool) {
 	if ctx == nil {
 		return ContextActor{}, false
@@ -106,6 +150,21 @@ func validActorKind(kind string) bool {
 // enrich fills the unified-log fields of input and returns the record to
 // hash and insert (ID, position and previous hash are set by the caller).
 func enrich(ctx context.Context, input Event) (record, error) {
+	plugin, asPlugin := PluginActorFrom(ctx)
+	asPlugin = asPlugin && (input.ActorKind == ActorUser || (input.ActorKind == "" && input.ActorUserID != nil))
+	if asPlugin {
+		input.ActorKind, input.ActorRef = ActorPlugin, "plugin:"+plugin.PluginID
+		payload := make(map[string]any, len(input.Payload)+3)
+		for key, value := range input.Payload {
+			payload[key] = value
+		}
+		payload["plugin_id"], payload["installation_id"], payload["api_key_id"] =
+			plugin.PluginID, plugin.InstallationID, plugin.APIKeyID
+		input.Payload = payload
+	} else if apiKeyID, ok := ctx.Value(apiKeyActorKey{}).(string); ok && input.ActorRef == "" &&
+		(input.ActorKind == ActorUser || (input.ActorKind == "" && input.ActorUserID != nil)) {
+		input.ActorRef = "api_key:" + apiKeyID
+	}
 	payload := input.Payload
 	if _, hasChanges := payload["changes"]; hasChanges {
 		// The changes column holds them (redacted); do not keep a raw copy.

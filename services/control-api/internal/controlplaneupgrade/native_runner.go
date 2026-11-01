@@ -11,11 +11,14 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -40,7 +43,13 @@ type NativeStandaloneConfig struct {
 	// WebCAFile optionally replaces the system roots for WebIndexURL only (an
 	// operator certificate that does not chain to the system store, such as a
 	// temporary self-signed one). Root-owned, not group/world writable, PEM.
-	WebCAFile       string
+	WebCAFile string
+	// WebIndexAddress is the loopback IP:port the WebIndexURL check always dials
+	// (the local control-web), whatever the URL host resolves to: a domain behind
+	// a CDN would otherwise return the CDN's rewritten page (10-30 73: injected
+	// beacon script, console_index_mismatch). TLS SNI, Host and certificate
+	// verification still use the URL host. Empty means 127.0.0.1:<URL port>.
+	WebIndexAddress string
 	MaintenanceFile string
 	HTTPClient      *http.Client
 	PollInterval    time.Duration
@@ -143,18 +152,32 @@ func newNativeStandaloneRunner(config NativeStandaloneConfig, trust *entitlement
 		// a 100MB release over a slow link needs far longer than any fixed bound.
 		client = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
-	var webClient *http.Client
+	webAddress, err := nativeWebIndexAddress(config.WebIndexURL, config.WebIndexAddress)
+	if err != nil {
+		return nil, err
+	}
+	// Same TLS trust as the shared client (system roots in production) unless
+	// WebCAFile replaces it; only the dial target is pinned.
+	base, ok := client.Transport.(*http.Transport)
+	if !ok {
+		base = http.DefaultTransport.(*http.Transport)
+	}
+	transport := base.Clone()
+	transport.Proxy = nil
+	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	transport.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return dialer.DialContext(ctx, network, webAddress)
+	}
 	if config.WebCAFile != "" {
 		roots, err := readNativeWebCA(config.WebCAFile, owner)
 		if err != nil {
 			return nil, ErrInvalidConfig
 		}
-		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
-		webClient = &http.Client{Transport: transport, CheckRedirect: client.CheckRedirect}
-		if webClient.CheckRedirect == nil {
-			webClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-		}
+	}
+	webClient := &http.Client{Transport: transport, CheckRedirect: client.CheckRedirect}
+	if webClient.CheckRedirect == nil {
+		webClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	}
 	executor := &nativeExecutor{config: config, owner: owner, commands: commands, inspect: inspect,
 		now: now, client: client, webClient: webClient, platform: NativePlatform{OS: "linux", Arch: runtime.GOARCH},
@@ -191,6 +214,30 @@ func newNativeStandaloneRunner(config NativeStandaloneConfig, trust *entitlement
 	}
 	runner.runLog = newRunLogWriter(store.root, now)
 	return &NativeStandaloneRunner{runner: runner, executor: executor, lock: lock}, nil
+}
+
+// nativeWebIndexAddress returns the loopback IP:port the console index check
+// dials; explicit values must already be a loopback IP literal and port.
+func nativeWebIndexAddress(webIndexURL, explicit string) (string, error) {
+	if explicit == "" {
+		parsed, err := url.Parse(webIndexURL)
+		if err != nil {
+			return "", ErrInvalidConfig
+		}
+		port := parsed.Port()
+		if port == "" {
+			port = map[string]string{"https": "443", "http": "80"}[parsed.Scheme]
+		}
+		explicit = net.JoinHostPort("127.0.0.1", port)
+	}
+	host, port, err := net.SplitHostPort(explicit)
+	ip := net.ParseIP(host)
+	number, portErr := strconv.Atoi(port)
+	if err != nil || ip == nil || !ip.IsLoopback() || portErr != nil || number < 1 || number > 65535 ||
+		strconv.Itoa(number) != port || net.JoinHostPort(ip.String(), port) != explicit {
+		return "", ErrInvalidConfig
+	}
+	return explicit, nil
 }
 
 // readNativeWebCA reads the optional WebIndexURL trust anchors with the same

@@ -653,10 +653,18 @@ export default function SitePublicationsPage() {
           : <Tag>{t(`deploymentStates.${value}`)}</Tag>,
     },
     {
-      title: t('columns.errorCode'), dataIndex: 'error_code', width: 190,
+      title: t('columns.errorCode'), dataIndex: 'error_code', width: 280,
       render: (value: string | undefined, item) => item.superseded && value
         ? t(`superseded.reasons.${value}`, { defaultValue: t('superseded.label') })
-        : value ?? t('values.placeholder'),
+        // the node's own failure text under the code (full text on hover).
+        : item.error_message ? (
+          <span className="site-deployment-error">
+            <span>{value ?? t('values.placeholder')}</span>
+            <Tooltip title={item.error_message}>
+              <small aria-label={t('deployments.errorMessage', { message: item.error_message })} tabIndex={0}>{item.error_message}</small>
+            </Tooltip>
+          </span>
+        ) : value ?? t('values.placeholder'),
     },
     ...(isPlatform ? [{
       title: t('columns.warnings'), dataIndex: 'warnings', width: 220,
@@ -943,7 +951,7 @@ export default function SitePublicationsPage() {
           dataSource={(deploymentsQuery.data?.items ?? []) as Array<TenantSiteDeployment & { node_id?: string }>}
           loading={deploymentsQuery.isLoading}
           pagination={false}
-          scroll={{ x: isPlatform ? 900 : 650 }}
+          scroll={{ x: isPlatform ? 990 : 740 }}
           locale={{ emptyText: t('empty.deployments') }}
         />
         <CursorPagination

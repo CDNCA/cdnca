@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
@@ -38,7 +39,11 @@ const (
 	maximumBodyBytes           int64 = 64 << 10
 	maximumResponseHeaderBytes int64 = 64 << 10
 	maximumTimeout                   = 5 * time.Second
-	webhookCapabilityCode            = "webhook.deliver"
+	// projectionIdleConnTimeout keeps the tunnelled mTLS connection for the
+	// next call and stays below
+	// the 9448 server's 60 s IdleTimeout so the client closes first.
+	projectionIdleConnTimeout = 50 * time.Second
+	webhookCapabilityCode     = "webhook.deliver"
 )
 
 var (
@@ -139,6 +144,42 @@ type ProjectionClient struct {
 	credentials    ProjectionCredentialSource
 	timeout        time.Duration
 	dial           func(context.Context, string, string) (net.Conn, error)
+
+	// dynamic: the HTTP client for the current credential, kept so that
+	// connections are reused until the certificate or roots change.
+	dynamicMu    sync.Mutex
+	dynamicKey   [sha256.Size]byte
+	dynamicRoots *x509.CertPool
+	dynamicHTTP  *http.Client
+}
+
+// dynamicHTTPClient returns the cached client for credential, replacing it
+// (and closing the old client's idle connections) after a rotation.
+func (client *ProjectionClient) dynamicHTTPClient(credential RuntimeCredential) *http.Client {
+	digest := sha256.New()
+	for _, der := range credential.TLSCertificate.Certificate {
+		var length [8]byte
+		binary.BigEndian.PutUint64(length[:], uint64(len(der)))
+		digest.Write(length[:])
+		digest.Write(der)
+	}
+	var key [sha256.Size]byte
+	copy(key[:], digest.Sum(nil))
+	client.dynamicMu.Lock()
+	defer client.dynamicMu.Unlock()
+	if client.dynamicHTTP != nil && client.dynamicKey == key && client.dynamicRoots.Equal(credential.RootCAs) {
+		return client.dynamicHTTP
+	}
+	if client.dynamicHTTP != nil {
+		client.dynamicHTTP.CloseIdleConnections()
+	}
+	certificate := cloneTLSCertificate(credential.TLSCertificate)
+	roots := credential.RootCAs.Clone()
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13,
+		RootCAs: roots, Certificates: []tls.Certificate{certificate}}
+	client.dynamicKey, client.dynamicRoots = key, roots
+	client.dynamicHTTP = newProjectionHTTPClient(tlsConfig, client.timeout, client.dial)
+	return client.dynamicHTTP
 }
 
 type projectionRequestPayload struct {
@@ -267,9 +308,7 @@ func (client *ProjectionClient) Resolve(ctx context.Context, request ProjectionR
 		if _, _, err := validateClientCertificate(credential.TLSCertificate, client.installationID, client.now()); err != nil {
 			return Projection{}, ErrInvalidInput
 		}
-		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13,
-			RootCAs: credential.RootCAs, Certificates: []tls.Certificate{credential.TLSCertificate}}
-		httpClient = newProjectionHTTPClient(tlsConfig, client.timeout, client.dial)
+		httpClient = client.dynamicHTTPClient(credential)
 	}
 	payload := projectionRequestPayload{Schema: projectionRequestSchema, RequestID: request.RequestID,
 		InstallationID: request.InstallationID, CertificateID: certificateID,
@@ -581,7 +620,7 @@ func validateClientCertificate(certificate tls.Certificate, installationID uuid.
 	publicKey, publicOK := leafPublicKey(leaf)
 	if err != nil || !privateOK || len(privateKey) != ed25519.PrivateKeySize || !publicOK ||
 		!bytes.Equal(privateKey.Public().(ed25519.PublicKey), publicKey) || leaf.IsCA ||
-		now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) || !allowsClientAuth(leaf) ||
+		now.Add(bootstrapClockSkew).Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) || !allowsClientAuth(leaf) ||
 		leaf.SerialNumber == nil || leaf.SerialNumber.Sign() <= 0 || len(leaf.SerialNumber.Bytes()) != 16 ||
 		len(leaf.URIs) != 1 || leaf.URIs[0] == nil || len(leaf.DNSNames) != 0 || len(leaf.EmailAddresses) != 0 ||
 		len(leaf.IPAddresses) != 0 || leaf.URIs[0].String() != "spiffe://cdn-platform/installation/"+installationID.String() {
@@ -601,7 +640,7 @@ func newProjectionHTTPClient(tlsConfig *tls.Config, timeout time.Duration,
 	transport := &http.Transport{
 		Proxy: nil, DialContext: dial, TLSClientConfig: clone, ForceAttemptHTTP2: true, DisableCompression: true,
 		TLSHandshakeTimeout: timeout, ResponseHeaderTimeout: timeout,
-		MaxIdleConns: 2, MaxIdleConnsPerHost: 2, IdleConnTimeout: timeout,
+		MaxIdleConns: 2, MaxIdleConnsPerHost: 2, IdleConnTimeout: projectionIdleConnTimeout,
 		MaxResponseHeaderBytes: maximumResponseHeaderBytes,
 	}
 	return &http.Client{Transport: transport, Timeout: timeout,

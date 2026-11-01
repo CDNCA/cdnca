@@ -8,6 +8,10 @@ info:
     security, cache, access, and other advanced sections remain outside this
     version until their control-plane behavior exists.
     Origin changes in this contract are not evidence of edge activation.
+    Plugin services may call the operations that list cdncaApiKey (website
+    list and detail, basic settings including domains, origin pool, origin
+    routing and origin status) with a tenant API key; creating, deleting,
+    batch actions, locking and transferring websites stay session-only.
 servers:
   - url: /
 security:
@@ -16,6 +20,10 @@ paths:
   /v1/sites:
     get:
       operationId: listSites
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
       summary: List websites visible in the authenticated scope
       description: >-
         Platform administrators can list all tenant scopes. Tenant principals
@@ -156,7 +164,8 @@ paths:
     post:
       operationId: batchSiteAction
       summary: Enable, disable, soft-delete, queue CNAME regeneration for, or set the HTTPS protocols of websites
-      description: >-
+      description: "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (bulk website protocol settings) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated."
+      x-description-zh: >-
         Requires sites.manage and Idempotency-Key. The response preserves input
         order while rows are locked in UUID order. Business failures are
         reported per item and do not undo successful items; a database or audit
@@ -207,6 +216,10 @@ paths:
       - $ref: '#/components/parameters/SiteID'
     get:
       operationId: getSite
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
       summary: Get one website and its basic settings
       responses:
         '200':
@@ -224,6 +237,10 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     patch:
       operationId: updateSiteSettings
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.manage]
       summary: Replace the complete basic or origin settings section
       description: >-
         section=basic and section=origin are writable discriminated variants.
@@ -280,6 +297,10 @@ paths:
       - $ref: '#/components/parameters/SiteID'
     get:
       operationId: getSiteOriginRouting
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
       summary: Get the normalized conditional origin-routing document
       description: >-
         Requires sites.read. Tenant principals can only read sites in their
@@ -305,6 +326,10 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     put:
       operationId: replaceSiteOriginRouting
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.manage]
       summary: Replace the complete conditional origin-routing document
       description: >-
         Requires sites.manage, Idempotency-Key, and a strong If-Match value for
@@ -403,6 +428,10 @@ paths:
       - $ref: '#/components/parameters/SiteID'
     get:
       operationId: getSiteOriginStatus
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
       summary: Origin pool probe state and the active origin level
       description: >-
         Requires sites.read. The control plane probes every origin of the pool
@@ -428,7 +457,8 @@ paths:
       - $ref: '#/components/parameters/SiteID'
     post:
       operationId: syncSiteAutoDNS
-      summary: 解析检测 > 同步解析 (run the site's automatic DNS records again)
+      summary: "DNS check > Sync records (run the site's automatic DNS records again)"
+      x-summary-zh: 解析检测 > 同步解析 (run the site's automatic DNS records again)
       description: >-
         Requires sites.manage and dns.manage. Resets the site's auto_dns task
         to pending (creating it with provider_id when the site has none) and
@@ -463,7 +493,8 @@ paths:
       - $ref: '#/components/parameters/SiteID'
     post:
       operationId: checkSiteAccess
-      summary: 接入状态 > 立即检查 (resolve the site's domains now)
+      summary: "Access status > Check now (resolve the site's domains now)"
+      x-summary-zh: 接入状态 > 立即检查 (resolve the site's domains now)
       description: >-
         Requires sites.read. Resolves every domain of the site through the
         control plane host's resolver now (no DNS provider or third-party API),
@@ -487,7 +518,8 @@ paths:
   /v1/site-defaults:
     get:
       operationId: listSiteDefaults
-      summary: 网站列表 > 默认设置 (the caller's defaults for new sites)
+      summary: "Website list > Default settings (the caller's defaults for new sites)"
+      x-summary-zh: 网站列表 > 默认设置 (the caller's defaults for new sites)
       description: >-
         Requires sites.read. A tenant sees only its own scope. Defaults fill
         the fields a new site's create request leaves out; group rows win over
@@ -744,6 +776,19 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: >-
+        Send `CdncaKey <key_id>.<secret>` (a tenant API key, for example one a
+        customer gave a plugin service). Effective permissions are the live
+        intersection of the key scopes and its owner's current RBAC grants;
+        tenant isolation, entitlement and package checks are the same as for a
+        session. The supported API-key surface is the operations that list
+        this scheme. createSite, deleteSite and batchSiteAction answer 403
+        api_key_not_allowed to an API key; lock, unlock and transfer are
+        platform-session only.
   headers:
     RequestID:
       description: Stable request correlation identifier.
@@ -1176,6 +1221,8 @@ components:
             https_enabled, https_listen_ports: they follow the owner's site
             defaults (网站列表 > 默认设置, group before global), else 80 and
             443. Listed ports win. Required in responses and basic updates.
+            With https_enabled false the list is ignored and stored empty
+            (as is https_redirect_port), so turning HTTPS off drops them.
         ipv6_enabled:
           type: boolean
           description: >-
@@ -1372,11 +1419,13 @@ components:
           type: [integer, 'null']
           minimum: 0
           readOnly: true
-          description: >-
+          description: "N days left: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+          x-description-zh: >-
             剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from
             elapsed time, so it does not depend on the display time zone. Null without a subscription.
         access_readiness:
-          description: 接入状态 (same as the list item's).
+          description: "Access status (same as the list item's)."
+          x-description-zh: 接入状态 (same as the list item's).
           oneOf:
             - {$ref: '#/components/schemas/SiteAccessReadiness'}
             - {type: 'null'}
@@ -1636,7 +1685,8 @@ components:
         dns_provider_id:
           type: string
           format: uuid
-          description: >-
+          description: "Create site \"DNS API (add records automatically)\": a verified DNS API account of the owner (needs dns.manage). After the site is created, every domain gets a CNAME to the site CNAME through it (site.auto_dns). A failure there never fails the create; it shows in auto_dns and is retried. 422 dns_provider_unusable: not a verified account of the owner."
+          x-description-zh: >-
             建站「DNS API（自动添加记录）」: a verified DNS API account of the
             owner (needs dns.manage). After the site is created, every domain
             gets a CNAME to the site CNAME through it (site.auto_dns). A

@@ -13,6 +13,9 @@ export interface InstallationLock {
   // fix-ipswitch: the license was rebound to another server's master IP; this
   // controller gets no new lease (frozen, sites keep serving).
   rebound?: boolean
+  // with rebound, the license holder retired this controller
+  // via 我的授权 → 重装主控 (same freeze; different banner).
+  reinstalled?: boolean
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -26,7 +29,7 @@ function parse(value: unknown): InstallationLock {
   const until = text('until', 64)
   return { locked: v.locked as boolean, reason: text('reason', 64), ban_id: text('ban_id', 64), reason_code: text('reason_code', 64),
     reason_text: text('reason_text', 2000), until: until && !Number.isNaN(Date.parse(until)) ? until : null,
-    rebound: v.rebound === true }
+    rebound: v.rebound === true, reinstalled: v.rebound === true && v.reinstalled === true }
 }
 
 async function call(token: string, method: 'GET' | 'POST'): Promise<InstallationLock> {

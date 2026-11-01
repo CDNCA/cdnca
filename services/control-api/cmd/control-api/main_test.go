@@ -103,6 +103,8 @@ func TestNodeSchedulerSharedCompositionContracts(t *testing.T) {
 		"/v1/node-line-groups/{id}/target-snapshots":     "~1v1~1node-line-groups~1{id}~1target-snapshots",
 		"/v1/node-line-groups/{id}/rollback":             "~1v1~1node-line-groups~1{id}~1rollback",
 		"/v1/node-line-groups/{id}/platform-default":     "~1v1~1node-line-groups~1{id}~1platform-default",
+		"/v1/node-line-groups/{id}/smart-schedule":       "~1v1~1node-line-groups~1{id}~1smart-schedule",
+		"/v1/node-line-groups/{id}/latency-matrix":       "~1v1~1node-line-groups~1{id}~1latency-matrix",
 		"/v1/l2-configs":                                 "~1v1~1l2-configs",
 		"/v1/l2-configs/{id}":                            "~1v1~1l2-configs~1{id}",
 		"/v1/l2-conds":                                   "~1v1~1l2-conds",
@@ -367,12 +369,28 @@ func TestNewDashboardHandlerProductionRequests(t *testing.T) {
 
 func newDashboardCompositionTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return dashboardCompositionTestPool(t, true)
+}
+
+// newDashboardCompositionTestPoolInPlace keeps the schema in TEST_DATABASE_URL's
+// own database: the traffic package session gate asserts it runs in the task's
+// dedicated database, whose owner may not create databases.
+func newDashboardCompositionTestPoolInPlace(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	return dashboardCompositionTestPool(t, false)
+}
+
+func dashboardCompositionTestPool(t *testing.T, freshDatabase bool) *pgxpool.Pool {
+	t.Helper()
 	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	if freshDatabase {
+		databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "dashboard_composition")
+	}
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

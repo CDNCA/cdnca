@@ -160,7 +160,7 @@ func decodeNodePublicationCapabilities(snapshot, digest []byte) (*agentv1.AgentC
 	}
 	capabilities := new(agentv1.AgentCapabilities)
 	if err := proto.Unmarshal(snapshot, capabilities); err != nil ||
-		len(capabilities.ProtoReflect().GetUnknown()) != 0 || len(capabilities.Features) == 0 || len(capabilities.Features) > 64 {
+		len(capabilities.ProtoReflect().GetUnknown()) != 0 || len(capabilities.Features) == 0 || len(capabilities.Features) > agentv1.MaxCapabilities {
 		return nil, ErrTargetIneligible
 	}
 	for _, text := range []struct {

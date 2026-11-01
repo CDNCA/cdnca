@@ -6,13 +6,11 @@ import (
 	"bytes"
 	"context"
 	"net/netip"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -116,45 +114,5 @@ func TestStoreListsRenderedEventsByCategory(t *testing.T) {
 
 func migratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "auditlog_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err == nil {
-		err = database.Migrate(ctx, pool, "up")
-	}
-	t.Cleanup(func() {
-		if pool != nil {
-			pool.Close()
-		}
-		cleanupCtx, cleanupCancel := databasetest.CleanupContext()
-		defer cleanupCancel()
-		if _, err := admin.Exec(cleanupCtx, "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop schema: %v", err)
-		}
-		admin.Close()
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }

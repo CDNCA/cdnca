@@ -3,61 +3,21 @@
 package edgesignertrustsync
 
 import (
-	"context"
 	"crypto/ed25519"
 	"errors"
-	"os"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/libs/entitlement/edgesignertrust"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func signerTrustPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-		return pool
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "edge_signer_trust_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^edge_signer_trust_test_[a-f0-9]{32}$`).MatchString(schema) {
-		t.Fatal("unsafe schema")
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		t.Fatal(err)
-	}
-	config, _ := pgxpool.ParseConfig(databaseURL)
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 func seedNode(t *testing.T, pool *pgxpool.Pool) uuid.UUID {

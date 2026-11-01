@@ -143,7 +143,8 @@ paths:
     get:
       tags: [Error page assets]
       summary: Read a ready asset's content
-      description: >-
+      description: "The stored body of a ready asset (error_pages.read), integrity checked against its sha256, so a site's error page can be edited as text (Edit website → Error pages). A staged, scanning, rejected or deleted asset answers 409."
+      x-description-zh: >-
         The stored body of a ready asset (error_pages.read), integrity checked
         against its sha256, so a site's error page can be edited as text
         (网站编辑 → 错误页面). A staged, scanning, rejected or deleted asset

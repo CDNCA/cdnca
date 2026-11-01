@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
@@ -193,6 +194,7 @@ func newLineGroupPublicationFixtureMode(t *testing.T, automatic bool) *lineGroup
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required")
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "line_group_publish")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

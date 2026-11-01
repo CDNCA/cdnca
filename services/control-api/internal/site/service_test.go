@@ -309,6 +309,33 @@ func TestNormalizeFieldsForceHTTPS(t *testing.T) {
 	}
 }
 
+// HTTPS off with HTTPS ports (73 demo site: https_ports
+// {443}) was saved and then refused by every publication; the save now drops
+// them, so what is stored is what the publication accepts.
+func TestNormalizeFieldsHTTPSOffDropsHTTPSPorts(t *testing.T) {
+	redirect := 443
+	fields := SiteFields{Domains: []string{"demo.example"}, HTTPPorts: []string{"80"}, HTTPSPorts: []string{"443"},
+		HTTPSRedirectPort: &redirect, Origins: []string{"192.0.2.1"}, Enabled: true}
+	if err := normalizeFields(&fields); err != nil {
+		t.Fatalf("HTTPS off with ports rejected: %v", err)
+	}
+	if fields.HTTPSPorts == nil || len(fields.HTTPSPorts) != 0 || fields.HTTPSRedirectPort != nil {
+		t.Fatalf("HTTPS off kept ports %#v redirect %v", fields.HTTPSPorts, fields.HTTPSRedirectPort)
+	}
+	// A port HTTP also listens on is no conflict once HTTPS is off.
+	fields = SiteFields{Domains: []string{"demo.example"}, HTTPPorts: []string{"80"}, HTTPSPorts: []string{"80"},
+		Origins: []string{"192.0.2.1"}, Enabled: true}
+	if err := normalizeFields(&fields); err != nil || len(fields.HTTPSPorts) != 0 {
+		t.Fatalf("HTTPS off: err %v ports %#v", err, fields.HTTPSPorts)
+	}
+	// HTTPS on keeps them.
+	fields = SiteFields{Domains: []string{"demo.example"}, HTTPPorts: []string{"80"}, HTTPSPorts: []string{"443"},
+		HTTPSEnabled: true, Origins: []string{"192.0.2.1"}, Enabled: true}
+	if err := normalizeFields(&fields); err != nil || !reflect.DeepEqual(fields.HTTPSPorts, []string{"443"}) {
+		t.Fatalf("HTTPS on: err %v ports %#v", err, fields.HTTPSPorts)
+	}
+}
+
 // CU-SITE-02：带回源池建站省略回源超时（0）时，用户默认优先，没有默认则
 // 回落内置池的系统默认（3000/30000），不再因 0 被 normalizeOriginPool 拒成 400；
 // 显式值原样保留。

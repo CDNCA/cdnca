@@ -33,8 +33,9 @@ func TestProviderUsesMTLSCanonicalProofAndExactRetry(t *testing.T) {
 	defer fixture.close()
 	provider := fixture.provider(t, 4)
 	transport, ok := provider.http.Transport.(*http.Transport)
-	if !ok || !transport.DisableCompression || transport.MaxResponseHeaderBytes != maximumResponseHeaderBytes {
-		t.Fatalf("transport = %#v, want disabled compression and bounded response headers", provider.http.Transport)
+	if !ok || !transport.DisableCompression || transport.MaxResponseHeaderBytes != maximumResponseHeaderBytes ||
+		transport.IdleConnTimeout != idleConnTimeout {
+		t.Fatalf("transport = %#v, want disabled compression, bounded response headers and %v idle reuse", provider.http.Transport, idleConnTimeout)
 	}
 	request := fixture.request("runtime-request-1")
 

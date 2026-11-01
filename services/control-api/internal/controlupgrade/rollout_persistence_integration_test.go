@@ -1988,6 +1988,7 @@ func openRolloutPersistenceIntegrationPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "control_upgrade_rollout")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

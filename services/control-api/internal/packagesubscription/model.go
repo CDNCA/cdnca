@@ -3,6 +3,7 @@ package packagesubscription
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/cdnca/cdnca/services/control-api/internal/bridgeauth"
 	"time"
 
@@ -45,6 +46,10 @@ var (
 	ErrIdempotencyConflict = errors.New("package subscription idempotency conflict")
 	ErrInvalidState        = errors.New("invalid package subscription state")
 	ErrUsageOverflow       = errors.New("package subscription usage overflows uint64")
+	// ErrTenantScopeNotFound: the target (an operator's tenant_id) is no
+	// tenant access scope, e.g. a tenants.id sent instead of the tenant's
+	// scope ID.
+	ErrTenantScopeNotFound = fmt.Errorf("%w: tenant_id is not a tenant access scope ID", ErrNotFound)
 )
 
 type Actor struct {

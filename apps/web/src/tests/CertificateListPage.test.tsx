@@ -324,6 +324,78 @@ describe('CertificateListPage', () => {
     expect(statuses).not.toHaveBeenCalled()
   })
 
+  // 当前绑定发布永久失败时状态列标「同步失败」，原因按失败码翻译（含节点 ID），未知码不回显原文。
+  it.each([
+    { name: 'tenant', session: () => authenticate(['certificates.read', 'sites.read']) },
+    { name: 'platform', session: () => platformSession() },
+  ])('marks a certificate whose sync failed with the translated reason ($name)', async ({ session }) => {
+    session()
+    const nodeID = '0b5a3c1e-2f4d-4a6b-8c9d-0e1f2a3b4c5d'
+    const failed = { ...asset, id: 'a0000000-0000-4000-8000-000000000001', name: 'Failed sync', sync: { state: 'failed' as const, failure_code: `target_node_not_carried.${nodeID}` } }
+    const unknown = { ...asset, id: 'a0000000-0000-4000-8000-000000000002', name: 'Unknown sync', sync: { state: 'failed' as const, failure_code: 'some_future_code' } }
+    const pending = { ...asset, id: 'a0000000-0000-4000-8000-000000000003', name: 'Pending sync', sync: { state: 'pending' as const } }
+    vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [failed, unknown, pending], total: 3, counts: { all: 3, normal: 3, expiring: 0, expired: 0, auto_renew: 0, manual_renew: 3 } })
+    vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue(assetDetail)
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    const rowOf = async (name: string) => (await screen.findByText(name)).closest('tr') as HTMLElement
+    expect(within(await rowOf('Failed sync')).getByLabelText(`同步失败：节点 ${nodeID} 不承载该租户的网站`)).toHaveTextContent('同步失败')
+    expect(within(await rowOf('Unknown sync')).getByLabelText('同步失败：同步失败')).toBeInTheDocument()
+    expect(screen.queryByText(/some_future_code/)).not.toBeInTheDocument()
+    expect(within(await rowOf('Pending sync')).queryByText('同步失败')).not.toBeInTheDocument()
+  })
+
+  // 证书详情与绑定网站表显示同步状态，失败原因直接显示（按网站各自的失败码）。
+  it.each([
+    { name: 'tenant', session: () => authenticate(['certificates.read', 'sites.read']) },
+    { name: 'platform', session: () => platformSession() },
+  ])('shows the sync state and failure reason in the detail and its site bindings ($name)', async ({ session }) => {
+    session()
+    const nodeID = '0b5a3c1e-2f4d-4a6b-8c9d-0e1f2a3b4c5d'
+    const failedAsset = { ...asset, sync: { state: 'failed' as const, failure_code: `target_node_offline.${nodeID}` } }
+    vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [failedAsset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } })
+    vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({ ...assetDetail, asset: failedAsset })
+    const synced = { ...binding, site_id: '88888888-8888-4888-8888-888888888888', sync: { state: 'complete' as const } }
+    const failed = { ...binding, sync: { state: 'failed' as const, failure_code: `target_node_offline.${nodeID}` } }
+    vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [synced, failed] })
+    const user = userEvent.setup()
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+
+    expect(await screen.findByText('边缘站点证书')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '查看详情' }))
+    const detailDialog = await findDialog('证书详情')
+    const reason = `节点 ${nodeID} 离线，将自动重试`
+    const summary = within(detailDialog).getByLabelText('证书摘要')
+    expect(await within(summary).findByText('节点同步')).toBeInTheDocument()
+    expect(within(summary).getByText(reason)).toBeInTheDocument()
+    const rows = within(detailDialog).getAllByRole('row')
+    const failedRow = rows.find((row) => row.textContent?.includes(failed.site_id)) as HTMLElement
+    const syncedRow = rows.find((row) => row.textContent?.includes(synced.site_id)) as HTMLElement
+    expect(within(failedRow).getByText('同步失败')).toBeInTheDocument()
+    expect(within(failedRow).getByText(reason)).toBeInTheDocument()
+    expect(within(syncedRow).getByText('已同步')).toBeInTheDocument()
+    expect(within(detailDialog).getByRole('columnheader', { name: '同步状态' })).toBeInTheDocument()
+  })
+
+  // 证书ID 输入名称即按证书名称过滤，数字仍按证书ID。
+  it('filters the 证书ID field by a typed certificate name', async () => {
+    authenticate(['certificates.read', 'sites.read'])
+    vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [asset], total: 1, counts: { all: 1, normal: 1, expiring: 0, expired: 0, auto_renew: 0, manual_renew: 1 } })
+    const user = userEvent.setup()
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    await screen.findByText('边缘站点证书')
+    await user.click(screen.getByRole('button', { name: '高级筛选' }))
+    const filter = screen.getByRole('group', { name: '高级筛选' })
+    await user.type(within(filter).getByRole('combobox', { name: '证书ID' }), '边缘')
+    await waitFor(() => {
+      const filters = vi.mocked(certificatesApi.listAssets).mock.lastCall?.[2]?.filters
+      expect(filters?.name).toBe('边缘')
+      expect(filters?.certificate_id).toBeUndefined()
+    }, { timeout: 2000 })
+    await user.clear(within(filter).getByRole('combobox', { name: '证书ID' }))
+    await user.type(within(filter).getByRole('combobox', { name: '证书ID' }), '42')
+    await waitFor(() => expect(vi.mocked(certificatesApi.listAssets).mock.lastCall?.[2]?.filters?.certificate_id).toBe('42'), { timeout: 2000 })
+  })
+
   it('reads platform certificates across tenants without a mandatory user selection', async () => {
     platformSession()
     const listUsers = vi.spyOn(usersApi, 'list').mockRejectedValue(new ApiError('denied', 403, 'permission_denied'))
@@ -581,7 +653,7 @@ describe('CertificateListPage', () => {
     expect(create.mock.calls[0][1]).toEqual({ domains: ['www.example.com'], challenge_type: 'http-01', auto_renew: true })
   })
 
-  // A refused domains[1] marks the 域名 textarea, without the editor alert.
+  // a refused domains[1] marks the 域名 textarea, without the editor alert.
   it('marks a server-refused order domain on the domains field', async () => {
     authenticate()
     vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
@@ -800,7 +872,7 @@ describe('CertificateListPage', () => {
 		expect(screen.getAllByLabelText('DNS API').length).toBeGreaterThan(0)
 	})
 
-  // 备注列显示服务商的备注，不再固定横线；停用的仍标“已禁用”。
+  // Codex 复查卡 28：备注列显示服务商的备注，不再固定横线；停用的仍标“已禁用”。
   it('shows the DNS provider remark in the remark column', async () => {
     authenticate()
     vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [
@@ -1065,7 +1137,7 @@ describe('CertificateListPage', () => {
 		expect(screen.getByRole('menuitem', { name: '开启续签' })).toBeInTheDocument()
 	})
 
-	// 行内“吊销”“删除”是 link 按钮（删除为 danger），不再是没有样式的原生按钮；行内“更多”里不再重复这两项。
+	// fix-ui1026 补充 5：行内“吊销”“删除”是 link 按钮（删除为 danger），不再是没有样式的原生按钮；行内“更多”里不再重复这两项。
 	// 操作列 管理 · 重新申请 · 更多▼；更多里 下载证书/禁用|启用/…/删除（危险色）。
 	// 更多里不再重复“重新申请”，“吊销”下线（只改本地状态、与禁用重叠）。
 	it('renders the row actions in the reference shape with single-certificate actions under 更多', async () => {
@@ -1526,7 +1598,7 @@ describe('CertificateListPage', () => {
 		expect(screen.queryByText(/acme_/)).not.toBeInTheDocument()
 	})
 
-	// 分类文案后显示 CA 给出的具体原因（已在服务端脱敏、≤512 字符），可展开。
+	//  10-27 第 10 条：分类文案后显示 CA 给出的具体原因（已在服务端脱敏、≤512 字符），可展开。
 	it('shows the CA reason after the failure category and expands it', async () => {
 		authenticate(['certificates.read'])
 		const reason = 'www.example.test: Invalid response from [url]: 404'
@@ -2063,7 +2135,7 @@ describe('CertificateListPage', () => {
     expect(await screen.findByText('当前账号没有修改证书的权限')).toBeInTheDocument()
   })
 
-  // 申请证书弹窗的目标用户与 DNS 服务商带入。
+  // fix-certui 第 3 项：申请证书弹窗的目标用户与 DNS 服务商带入。
   it('requests for the site owner without a picker when opened from a site', async () => {
     platformSession(undefined, ['certificates.read', 'certificates.manage', 'identity.users.manage', 'dns.read', 'sites.read'])
     vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
@@ -2370,6 +2442,13 @@ describe('CertificateListPage', () => {
     await user.click(await screen.findByText('target-admin（ID: 17）'))
     await waitFor(() => expect(defaults).toHaveBeenCalledWith('platform-certificate-token', managedTarget.scope_id, managedTarget.id))
     expect(screen.getByRole('tab', { name: '默认设置' })).toHaveAttribute('aria-selected', 'true')
+
+    // DNS API 页签目标用户选择框与「新增 DNS API/删除选中」在同一工具条里。
+    await user.click(screen.getByRole('tab', { name: 'DNS API' }))
+    const dnsTarget = await screen.findByRole('combobox', { name: '目标用户' })
+    const toolbar = dnsTarget.closest('.certificate-dns-toolbar')
+    expect(toolbar).not.toBeNull()
+    expect(toolbar).toContainElement(screen.getByRole('button', { name: /新增 DNS API/ }))
   })
 
   // CERT-03（审测卡 7）：管理员新增按弹窗里选的目标用户读取默认（不是设置页的用户）；
@@ -3071,8 +3150,94 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '查看详情' }))
     const dialog = await findDialog('证书详情')
     expect(within(dialog).getAllByText('ACME 订单').length).toBeGreaterThan(0)
-    expect(within(dialog).getByText('order-acme-123')).toBeInTheDocument()
-    expect(within(dialog).getByText('待续期')).toBeInTheDocument()
+    // 订单号缩短显示，悬停看全文、可复制全文。
+    expect(within(dialog).getByTitle('order-acme-123')).toHaveTextContent('order-ac…')
+    expect(within(dialog).getByRole('button', { name: '复制 ACME 订单号' })).toBeInTheDocument()
+    expect(within(dialog).getAllByText('待续期').length).toBeGreaterThan(0)
+  })
+
+  // 头部摘要卡、版本表不横向滚动、绑定区空态行内按钮、底部只留关闭。
+  it('summarizes an ACME certificate in a header card and keeps only Close in the footer', async () => {
+    await changeLocale('zh-CN')
+    tenantSession('certificate-detail-card-token')
+    const generated = { ...asset, source: 'acme' as const, name: `ACME ${activeOrder.id}`, auto_renew: true }
+    vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [generated], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 1, manual_renew: 0 } })
+    vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({
+      asset: generated,
+      versions: [{ ...assetDetail.versions[0], sans: ['shop.example.com', 'www.shop.example.com'], acme_order_id: activeOrder.id }],
+    })
+    vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [] })
+    const user = userEvent.setup()
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+
+    await user.click(await screen.findByRole('button', { name: '查看详情' }))
+    const dialog = await findDialog('证书详情')
+    const summary = await within(dialog).findByRole('region', { name: '证书摘要' })
+    // 自动签发的生成名（ACME + 订单 UUID）不当标题：标题是主域名，旁边是来源标签。
+    expect(within(summary).getByRole('heading', { name: 'shop.example.com' })).toBeInTheDocument()
+    expect(within(summary).getByText('自动签发')).toBeInTheDocument()
+    expect(within(summary).queryByText(`ACME ${activeOrder.id}`)).not.toBeInTheDocument()
+    // 长 ID 收进可复制的小号字段。
+    expect(within(summary).getByTitle(generated.id)).toBeInTheDocument()
+    expect(within(summary).getByRole('button', { name: '复制证书 ID' })).toBeInTheDocument()
+    expect(within(summary).getByText('第 1 版')).toBeInTheDocument()
+    expect(within(summary).getByText('剩余 7 天')).toBeInTheDocument()
+    expect(within(summary).getByText('已开启自动续签')).toBeInTheDocument()
+    // 版本表与绑定表都不设横向滚动。
+    expect(dialog.querySelector('.ant-table-scroll-horizontal')).toBeNull()
+    // 空绑定：一行说明 + 行内主按钮“绑定网站”，没有空表。
+    const bindings = within(dialog).getByRole('region', { name: '网站绑定' })
+    expect(within(bindings).getByText('还没有网站使用这张证书')).toBeInTheDocument()
+    expect(within(bindings).getByRole('button', { name: '绑定网站' })).toHaveClass('ant-btn-primary')
+    expect(within(bindings).queryByRole('table')).not.toBeInTheDocument()
+    // 底部只有关闭。
+    const footer = dialog.querySelector('.ant-modal-footer') as HTMLElement
+    expect(within(footer).getAllByRole('button').map((button) => button.textContent)).toEqual(['关闭'])
+  })
+
+  it('moves secondary version columns into an expanded row on a 390px screen', async () => {
+    const original = window.matchMedia
+    // 只让 antd 的 xs 断点（max-width: 575px）命中，模拟 390 宽。
+    window.matchMedia = ((query: string) => ({ ...original(query), matches: /max-width:\s*575/.test(query) })) as typeof window.matchMedia
+    try {
+      tenantSession('certificate-detail-compact-token')
+      vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [asset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } })
+      vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue({ ...assetDetail, versions: [{ ...assetDetail.versions[0], acme_order_id: activeOrder.id }] })
+      vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [] })
+      const user = userEvent.setup()
+      renderWithProviders(<CertificateListPage />, ['/site/cert'])
+
+      await user.click(await screen.findByRole('button', { name: '查看详情' }))
+      const dialog = await findDialog('证书详情')
+      const versions = within(dialog).getByRole('region', { name: '证书版本（1）' })
+      expect(within(versions).queryByRole('columnheader', { name: 'ACME 订单' })).not.toBeInTheDocument()
+      expect(within(versions).queryByRole('columnheader', { name: '域名' })).not.toBeInTheDocument()
+      await user.click(within(versions).getByRole('button', { name: /展开|expand/i }))
+      expect(within(versions).getByTitle(activeOrder.id)).toBeInTheDocument()
+      expect(within(versions).getByText('example.com')).toBeInTheDocument()
+    } finally {
+      window.matchMedia = original
+    }
+  })
+
+  it('keeps an uploaded certificate name as the title and lists bindings in a table', async () => {
+    authenticate()
+    vi.mocked(certificatesApi.listAssets).mockResolvedValue({ items: [asset], total: 1, counts: { all: 1, normal: 0, expiring: 1, expired: 0, auto_renew: 0, manual_renew: 1 } })
+    vi.spyOn(certificatesApi, 'getAsset').mockResolvedValue(assetDetail)
+    vi.mocked(certificatesApi.listAssetBindings).mockResolvedValue({ items: [binding] })
+    const user = userEvent.setup()
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+
+    await user.click(await screen.findByRole('button', { name: '查看详情' }))
+    const dialog = await findDialog('证书详情')
+    const summary = await within(dialog).findByRole('region', { name: '证书摘要' })
+    expect(within(summary).getByRole('heading', { name: '边缘站点证书' })).toBeInTheDocument()
+    expect(within(summary).getByText('手动上传')).toBeInTheDocument()
+    expect(within(summary).getByText('手动上传，到期前需重新上传')).toBeInTheDocument()
+    const bindings = within(dialog).getByRole('region', { name: '网站绑定（1）' })
+    expect(within(bindings).getByRole('table')).toBeInTheDocument()
+    expect(within(bindings).getByText(binding.site_id)).toBeInTheDocument()
+    expect(within(bindings).getByRole('button', { name: '绑定网站' })).toBeInTheDocument()
   })
 
   it('uses owner-bound server pagination and resets the asset page for search and page-size changes', async () => {

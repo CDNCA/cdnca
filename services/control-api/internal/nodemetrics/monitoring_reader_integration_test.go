@@ -336,6 +336,7 @@ func monitoringSnapshotPool(t *testing.T) *pgxpool.Pool {
 	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
 		return pool
 	}
+	dsn = databasetest.FreshDatabaseURL(t, dsn, "monitoring_snapshot")
 	admin, err := pgxpool.New(t.Context(), dsn)
 	if err != nil {
 		t.Fatal(err)

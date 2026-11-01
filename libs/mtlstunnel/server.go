@@ -25,9 +25,7 @@ type Server struct {
 	// IdleTimeout closes a tunnel with no bytes either way; 0 = IdleTimeout.
 	IdleTimeout time.Duration
 
-	mu      sync.Mutex
-	total   int
-	sources map[string]int
+	limiter
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -41,39 +39,52 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.SourceIP != nil {
 		source = s.SourceIP(r)
 	}
-	if !s.acquire(source) {
+	if !s.take(s.TotalLimit, source) {
 		http.Error(w, "too many tunnels", http.StatusServiceUnavailable)
 		return
 	}
-	defer s.release(source)
+	defer s.give(source)
 	_ = bridge(w, r, address, s.IdleTimeout)
 }
 
-func (s *Server) acquire(source string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	limit := s.TotalLimit
-	if limit <= 0 {
-		limit = DefaultTotalLimit
+// limiter counts open tunnels in total and per source (client IP).
+type limiter struct {
+	mu      sync.Mutex
+	total   int
+	sources map[string]int
+}
+
+func (l *limiter) take(totalLimit int, source string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if totalLimit <= 0 {
+		totalLimit = DefaultTotalLimit
 	}
-	if s.sources == nil {
-		s.sources = map[string]int{}
+	if l.sources == nil {
+		l.sources = map[string]int{}
 	}
-	if s.total >= limit || s.sources[source] >= PerSourceLimit {
+	if l.total >= totalLimit || l.sources[source] >= PerSourceLimit {
 		return false
 	}
-	s.total++
-	s.sources[source]++
+	l.total++
+	l.sources[source]++
 	return true
 }
 
-func (s *Server) release(source string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.total--
-	if s.sources[source]--; s.sources[source] <= 0 {
-		delete(s.sources, source)
+func (l *limiter) give(source string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.total--
+	if l.sources[source]--; l.sources[source] <= 0 {
+		delete(l.sources, source)
 	}
+}
+
+// Active reports the open tunnels (tests, logs).
+func (l *limiter) Active() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.total
 }
 
 func remoteHost(r *http.Request) string {
@@ -84,8 +95,13 @@ func remoteHost(r *http.Request) string {
 	return host
 }
 
+// writeBuffers lends the 32 KiB WebSocket write buffer only while a message
+// is written; an idle tunnel holds none. ReadBufferSize 0 reuses
+// the HTTP server's read buffer (the dialer gets gorilla's 4 KiB default).
+var writeBuffers = &sync.Pool{}
+
 var upgrader = websocket.Upgrader{
-	ReadBufferSize: 32 << 10, WriteBufferSize: 32 << 10,
+	WriteBufferSize: 32 << 10, WriteBufferPool: writeBuffers,
 	Subprotocols: []string{Subprotocol},
 	// The outer layer carries no identity (the inner mTLS does) and non-browser
 	// clients send no Origin.

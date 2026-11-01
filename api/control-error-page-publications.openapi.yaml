@@ -15,7 +15,8 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/error-page-publications:
     post:
       operationId: publishErrorPageConfiguration
-      summary: 发布租户作用域的错误页配置
+      summary: "Publish the tenant scope's error page configuration"
+      x-summary-zh: 发布租户作用域的错误页配置
       description: >-
         Requires a platform session with edge_publications.manage. If-Match is the exact current source
         revision. Target nodes or an immutable line-group snapshot, health
@@ -41,7 +42,8 @@ paths:
               $ref: '#/components/schemas/PublishRequest'
       responses:
         '201':
-          description: 创建成功，或返回完全相同请求的持久化结果
+          description: "Created, or the persisted result of the exact same request"
+          x-description-zh: 创建成功，或返回完全相同请求的持久化结果
           headers:
             X-Request-ID: {$ref: '#/components/headers/RequestID'}
             ETag: {$ref: '#/components/headers/ArtifactETag'}
@@ -62,7 +64,8 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/error-page-publications/{publication_id}:
     get:
       operationId: getErrorPagePublication
-      summary: 读取一个不可变错误页发布结果
+      summary: "Read one immutable error page publication"
+      x-summary-zh: 读取一个不可变错误页发布结果
       description: >-
         Requires edge_publications.read. The session and RBAC grant are checked
         again in the read transaction. The selected publication must belong to
@@ -78,7 +81,8 @@ paths:
         - $ref: '#/components/parameters/ReadRequestID'
       responses:
         '200':
-          description: 不可变发布结果
+          description: "Immutable publication result"
+          x-description-zh: 不可变发布结果
           headers:
             X-Request-ID: {$ref: '#/components/headers/RequestID'}
             ETag: {$ref: '#/components/headers/ArtifactETag'}
@@ -113,7 +117,8 @@ components:
       name: If-Match
       in: header
       required: true
-      description: 当前源配置 revision 的强 ETag，例如 "7"。
+      description: "Strong ETag of the current source configuration revision, e.g. \"7\"."
+      x-description-zh: 当前源配置 revision 的强 ETag，例如 "7"。
       schema:
         type: string
         pattern: '^"[1-9][0-9]*"$'
@@ -295,41 +300,52 @@ components:
         error: {$ref: '#/components/schemas/ErrorDetail'}
   responses:
     BadRequest:
-      description: 请求或强前置条件格式无效
+      description: "The request or strong precondition is malformed"
+      x-description-zh: 请求或强前置条件格式无效
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     Unauthorized:
-      description: 会话无效或已撤销
+      description: "The session is invalid or revoked"
+      x-description-zh: 会话无效或已撤销
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     Forbidden:
-      description: 当前实时 RBAC 或作用域绑定拒绝访问
+      description: "Live RBAC or scope binding denies access"
+      x-description-zh: 当前实时 RBAC 或作用域绑定拒绝访问
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     NotFound:
-      description: 该作用域中不存在指定的错误页发布
+      description: "No such error page publication in this scope"
+      x-description-zh: 该作用域中不存在指定的错误页发布
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     MethodNotAllowed:
-      description: 方法不受支持
+      description: "Method not supported"
+      x-description-zh: 方法不受支持
       headers:
         Allow: {schema: {type: string}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     Conflict:
-      description: 幂等或目标快照冲突
+      description: "Idempotency or target snapshot conflict"
+      x-description-zh: 幂等或目标快照冲突
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     PreconditionFailed:
-      description: If-Match 与当前源 revision 不一致
+      description: "If-Match does not match the current source revision"
+      x-description-zh: If-Match 与当前源 revision 不一致
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     UnprocessableEntity:
-      description: 节点状态或 entitlement 不允许发布
+      description: "Node state or entitlement does not allow publishing"
+      x-description-zh: 节点状态或 entitlement 不允许发布
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     InvalidUpstreamResponse:
-      description: 生产发布器或持久化 readback 身份不一致
+      description: "Production publisher or persisted readback identity mismatch"
+      x-description-zh: 生产发布器或持久化 readback 身份不一致
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     OutcomeUnknown:
-      description: >-
+      description: "The write outcome is unknown. Retry only with the method, path, if_match, idempotency_key and body_sha256 from the response's retry, unchanged."
+      x-description-zh: >-
         写入结果未知。客户端只可使用响应 retry 中的 method、path、
         if_match、idempotency_key 和 body_sha256 原样重试。
       headers:
         Retry-After: {schema: {type: integer, const: 1}}
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
     Unavailable:
-      description: 依赖暂不可用；GET 可安全重试
+      description: "A dependency is temporarily unavailable; GET is safe to retry"
+      x-description-zh: 依赖暂不可用；GET 可安全重试
       content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}

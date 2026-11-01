@@ -44,7 +44,7 @@ func TestSecurityQueryUsesPrecomputedStateOnly(t *testing.T) {
 		"argMaxMerge(latest_payload_state) AS latest",
 		"uniqExactMerge(version_pair_state)",
 		"uniqExactMerge(ingested_at_state)",
-		"INNER JOIN candidate_event_ids USING (event_id)",
+		"AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
 		"tupleElement(latest_filter, 9) IN ('block', 'challenge', 'log', 'temporary_ban')",
 		"({has_action:UInt8} = 0 OR tupleElement(latest_filter, 9) = {action:String})",
 		"event_id IN (SELECT event_id FROM selected_rows)",

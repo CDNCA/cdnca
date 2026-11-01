@@ -124,6 +124,41 @@ describe('protected login return navigation', () => {
     expect(screen.queryByText(/需要(普通用户|管理员)权限|属于管理员端|当前账号为管理员/)).not.toBeInTheDocument()
   })
 
+  // omreturnTo 属于另一角色的任何路由（按 App.tsx 路由树的 RoleRoute 判定，
+  // 不只两个首页），登录后静默落到本角色首页；同角色的角色专属路由原样保留。
+  it.each([
+    ['user', '/sys/user?status=active#user-row', '/home', 'user-home-page'],
+    ['user', '/node/list/42', '/home', 'user-home-page'],
+    ['admin', '/sys/plugin-market?tab=installed', '/admin-home', 'admin-home-page'],
+    ['admin', '/site/7/dns-reconcile', '/admin-home', 'admin-home-page'],
+  ] as const)('lands a %s login from another role route %s on its own home without a role warning', async (role, returnTo, home, heading) => {
+    const actor = mockLogin(role)
+    const user = userEvent.setup()
+    renderRoutes(returnTo)
+
+    expect(await screen.findByRole('button', { name: '登录' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('用户名、手机或邮箱'), actor.username)
+    await user.type(screen.getByLabelText('密码'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: '登录' }))
+
+    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(screen.getByTestId('login-return-location')).toHaveTextContent(new RegExp(`^${home}$`))
+    expect(screen.queryByText(/需要(普通用户|管理员)权限|属于管理员端|属于用户端|当前账号为管理员/)).not.toBeInTheDocument()
+  })
+
+  it('keeps a same-role role-scoped return target', async () => {
+    const actor = mockLogin('user')
+    const user = userEvent.setup()
+    renderRoutes('/sys/plugin-market?tab=installed')
+
+    expect(await screen.findByRole('button', { name: '登录' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('用户名、手机或邮箱'), actor.username)
+    await user.type(screen.getByLabelText('密码'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: '登录' }))
+
+    await waitFor(() => expect(screen.getByTestId('login-return-location')).toHaveTextContent('/sys/plugin-market?tab=installed'))
+  })
+
   it('lets an authenticated public-only route consume a valid internal return target', async () => {
     const actor = actorFor('admin')
     useSessionStore.getState().setSession(authResponse(actor), actor)

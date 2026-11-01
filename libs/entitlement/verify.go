@@ -60,6 +60,23 @@ func (ring *KeyRing) Add(keyID string, publicKey ed25519.PublicKey) error {
 	return nil
 }
 
+// VerifyDetached checks a raw Ed25519 signature over payload with the named
+// key (ipintel.Verifier). The ring has no key validity windows, so signedAt
+// and now are not used; callers check timing on the signed document itself.
+func (ring *KeyRing) VerifyDetached(keyID string, payload, signature []byte, _, _ time.Time) error {
+	if ring == nil {
+		return ErrUnknownKey
+	}
+	publicKey, exists := ring.keys[keyID]
+	if !exists {
+		return ErrUnknownKey
+	}
+	if len(signature) != ed25519.SignatureSize || !ed25519.Verify(publicKey, payload, signature) {
+		return ErrInvalidSignature
+	}
+	return nil
+}
+
 func (ring *KeyRing) Verify(signed SignedLease, options VerifyOptions) (Result, error) {
 	if ring == nil {
 		return Result{}, ErrUnknownKey

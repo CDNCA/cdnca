@@ -1,4 +1,5 @@
 import { ApiError, networkApiError } from './auth'
+import { responseETag } from './etag'
 
 export type DNSReconcileRecordType = 'A' | 'AAAA' | 'CNAME'
 export type DNSReconcileStatus =
@@ -524,7 +525,7 @@ async function request(
 
 function taskResponse(value: { body: unknown; response: Response }, siteID: string, taskID?: string): DNSReconcileTask {
   if (!validTask(value.body) || value.body.site_id !== siteID || (taskID !== undefined && value.body.id !== taskID) ||
-    value.response.headers.get('ETag') !== `"${value.body.revision}"`) throw responseInvalid()
+    responseETag(value.response) !== `"${value.body.revision}"`) throw responseInvalid()
   const replay = value.response.headers.get('X-Idempotent-Replay')
   if ((value.body.replayed && replay !== 'true') || (!value.body.replayed && replay !== null)) throw responseInvalid()
   return value.body

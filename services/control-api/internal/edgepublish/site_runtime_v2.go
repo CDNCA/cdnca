@@ -759,9 +759,15 @@ func compileSiteRuntimeV2SiteFactWith(
 		return siteRuntimeV2Site{}, false, err
 	}
 	httpsPorts, err := parseSiteRuntimeV2Ports(fact.httpsPorts)
-	if err != nil || fact.httpsEnabled != (len(httpsPorts) != 0) || len(httpPorts)+len(httpsPorts) == 0 ||
-		fact.failoverTries < 1 || fact.failoverTries >= 8 {
-		return siteRuntimeV2Site{}, false, ErrInvalidInput
+	switch {
+	case err != nil:
+		return siteRuntimeV2Site{}, false, &SiteConfigInvalidError{SiteID: fact.id, Reason: "https_ports_invalid"}
+	case fact.httpsEnabled != (len(httpsPorts) != 0):
+		return siteRuntimeV2Site{}, false, &SiteConfigInvalidError{SiteID: fact.id, Reason: "https_ports_mismatch"}
+	case len(httpPorts)+len(httpsPorts) == 0:
+		return siteRuntimeV2Site{}, false, &SiteConfigInvalidError{SiteID: fact.id, Reason: "no_listen_ports"}
+	case fact.failoverTries < 1 || fact.failoverTries >= 8:
+		return siteRuntimeV2Site{}, false, &SiteConfigInvalidError{SiteID: fact.id, Reason: "failover_tries_invalid"}
 	}
 	trueValue, falseValue := true, false
 	addressFamily := "ipv4"

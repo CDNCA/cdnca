@@ -47,7 +47,8 @@ components:
       properties:
         cname_domains:
           type: array
-          description: CNAME domains of 节点管理 > DNS配置; the package CNAME domain must be one of them to allocate.
+          description: "CNAME domains of Node management > DNS settings; the package CNAME domain must be one of them to allocate."
+          x-description-zh: CNAME domains of 节点管理 > DNS配置; the package CNAME domain must be one of them to allocate.
           items: {type: string, minLength: 1, maxLength: 253}
         regions:
           type: array

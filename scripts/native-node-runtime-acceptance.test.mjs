@@ -11,7 +11,7 @@ const repository = path.resolve(import.meta.dirname, '..')
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const checks = ['native_loader', 'dynamic_modules', 'http1', 'http2', 'http3', 'stream_tcp', 'lua', 'same_master_reload', 'new_worker', 'http3_after_reload']
 const acceptanceChecks = ['source_signature', 'patches', 'build_inputs', 'configure', 'native_loader', 'h3probe', 'http1', 'http2', 'http3', 'stream', 'lua', 'reload']
-const runtimeMembers = ['runtime/openresty/bin/openresty', 'runtime/openresty/nginx/sbin/nginx', 'runtime/lib/ld-musl-x86_64.so.1', 'runtime/openresty/nginx/modules/ngx_http_geoip_module.so']
+const runtimeMembers = ['runtime/openresty/bin/openresty', 'runtime/openresty/nginx/sbin/nginx', 'runtime/lib/ld-musl-x86_64.so.1', 'runtime/openresty/nginx/modules/ngx_http_geoip_module.so', 'runtime/openresty/luajit/bin/luajit']
 // Native Dockerfile build-context files (container path -> repository path); patches are added per file.
 const contract = {
   '/source-contract/verify-sources.mjs': 'edge/openresty/native/verify-sources.mjs',

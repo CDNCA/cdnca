@@ -256,7 +256,7 @@ func TestNodePresencePostgresRedisJetStreamLifecycle(t *testing.T) {
 
 	fourth := validPresenceHeartbeat(1, 4, time.Now())
 	publishPresenceHeartbeat(t, js, subjectPrefix, nodeID, fourth)
-	brokenPool := openPresenceSchemaPool(t, databaseURL, schema)
+	brokenPool := openPresenceSchemaPool(t, pool.Config().ConnString(), schema)
 	brokenStore, err := NewStore(brokenPool, leaseTTL)
 	if err != nil {
 		t.Fatal(err)
@@ -624,6 +624,7 @@ func assertNodePresenceEvents(t *testing.T, pool *pgxpool.Pool, nodeID uuid.UUID
 
 func openPresenceTestDatabase(t *testing.T, databaseURL string) (*pgxpool.Pool, *pgxpool.Pool, string) {
 	t.Helper()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "node_presence")
 	ctx := context.Background()
 	adminPool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {

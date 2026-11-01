@@ -357,6 +357,18 @@ describe('systemConfigurationApi node monitoring', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ value: defaults })
   })
 
+  // Cloudflare 压缩 JSON 把强 ETag "4" 改成 W/"4"，73 监控配置/Nginx 配置/网站默认等页因此“响应无效”。
+  it('accepts the weak form a compressing gateway gives the same revision ETag', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(document, 'W/"4"'))
+    await expect(systemConfigurationApi.get('access-token', 'node_monitoring')).resolves.toEqual(document)
+  })
+
+  it('still rejects a weak ETag of another revision', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(document, 'W/"3"'))
+    await expect(systemConfigurationApi.get('access-token', 'node_monitoring'))
+      .rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
   it('rejects an ETag that does not match the document head revision', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(document, '"3"'))
     await expect(systemConfigurationApi.get('access-token', 'node_monitoring'))

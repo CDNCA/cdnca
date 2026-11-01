@@ -1387,6 +1387,11 @@ components:
         max_attempts: {type: integer, minimum: 1, maximum: 10}
         state: {$ref: '#/components/schemas/DeploymentState'}
         error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Z0-9_]+$'}
+        error_message:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: The node's own failure text beside error_code (protocol error message, else the failed check's summary), control characters collapsed, at most 512 bytes. Only for a failed or rollback_failed deployment that is not superseded or frozen.
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         can_retry: {type: boolean}
@@ -1400,10 +1405,10 @@ components:
           description: The node refused this release while frozen (error_code ERROR_CODE_FAILED_PRECONDITION, installation_frozen). Waiting for redelivery after the node renews its ticket; not a failure and not retried by hand. Once redelivered it reads as superseded.
         warnings:
           type: array
-          description: Faults the node reported with a successful deployment (the release runs). post_activation_maintenance_failed = activated, the node's state save or retention afterwards failed; ddos_protection_fault = the node DDoS protection table failed to apply or the node cannot run one.
-          maxItems: 2
+          description: Faults the node reported with a successful deployment (the release runs). post_activation_maintenance_failed = activated, the node's state save or retention afterwards failed; ddos_protection_fault = the node DDoS protection table failed to apply or the node cannot run one; l4_stream_degraded = some L4 forwards run degraded (origin unreachable or unresolved), the release and the other forwards run.
+          maxItems: 3
           uniqueItems: true
-          items: {type: string, enum: [ddos_protection_fault, post_activation_maintenance_failed]}
+          items: {type: string, enum: [ddos_protection_fault, l4_stream_degraded, post_activation_maintenance_failed]}
     TenantDeployment:
       type: object
       additionalProperties: false
@@ -1414,6 +1419,11 @@ components:
         max_attempts: {type: integer, minimum: 1, maximum: 10}
         state: {$ref: '#/components/schemas/DeploymentState'}
         error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Z0-9_]+$'}
+        error_message:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: The node's own failure text beside error_code (protocol error message, else the failed check's summary), control characters collapsed, at most 512 bytes. Only for a failed or rollback_failed deployment that is not superseded or frozen.
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         can_retry: {type: boolean}
@@ -1471,9 +1481,9 @@ components:
       type: object
       additionalProperties: false
       required: [reason, source_revision, failed_at]
-      description: The scope's latest automatic publication published nothing and no later publication exists. no_target_nodes means no enabled node serves the sites' line groups (their own or their package's primary/backup group); node_capability_unavailable means every target node's agent lacks a capability or JS challenge policy the release needs; node_artifacts_syncing means the target nodes are refused only because a node artifact the release needs (a rule pack, the IP library) is still reaching them through their node artifact set; node_scope_conflict means a target node carries another tenant's configuration this one cannot share (such as its managed WAF), so the request ended instead of retrying, and the next configuration change or a manual publish tries again. The first three are republished automatically once they change. Omitted otherwise.
+      description: The scope's latest automatic publication published nothing and no later publication exists. no_target_nodes means no enabled node serves the sites' line groups (their own or their package's primary/backup group); node_capability_unavailable means every target node's agent lacks a capability or JS challenge policy the release needs; node_artifacts_syncing means the target nodes are refused only because a node artifact the release needs (a rule pack, the IP library) is still reaching them through their node artifact set; node_scope_conflict means a target node carries another tenant's configuration this one cannot share (such as its managed WAF), so the request ended instead of retrying, and the next configuration change or a manual publish tries again; site_config_invalid means a site's stored configuration cannot be compiled (such as HTTPS off with HTTPS ports), the request ended instead of retrying, the site and rule are in the edge_publication.site_config_invalid audit event, and the site's next save publishes again. The first three are republished automatically once they change. Omitted otherwise.
       properties:
-        reason: {type: string, enum: [no_target_nodes, node_capability_unavailable, node_artifacts_syncing, node_scope_conflict]}
+        reason: {type: string, enum: [no_target_nodes, node_capability_unavailable, node_artifacts_syncing, node_scope_conflict, site_config_invalid]}
         source_revision: {type: integer, format: int64, minimum: 1}
         failed_at: {type: string, format: date-time}
         artifact_sync: {$ref: '#/components/schemas/NodeArtifactSyncProgress'}

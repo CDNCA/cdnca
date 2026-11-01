@@ -4,7 +4,10 @@
 // console theme renderer, for console_theme). It is what the kit's tests
 // use to prove its scaffold and examples pass the real checks.
 //
-//	GOWORK=off go -C packages/site-theme-kit/sitetheme-check run . <content.json>...
+//	GOWORK=off go -C packages/site-theme-kit/sitetheme-check run . [-official] <content.json>...
+//
+// -official checks as the official publisher io.cdnca (official.* ids, the
+// built-in website themes); the default is a third-party seller.
 //
 // It prints one JSON line per file: {"file","ok","code","field","applies_to","files"}.
 package main
@@ -28,14 +31,14 @@ type result struct {
 	Files     int      `json:"files,omitempty"`
 }
 
-func check(path string) result {
+func check(path string, publisher sitetheme.Publisher) result {
 	out := result{File: path}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		out.Code = "read: " + err.Error()
 		return out
 	}
-	theme, err := sitetheme.Parse(raw, sitetheme.ParseOptions{Publisher: sitetheme.PublisherThirdParty})
+	theme, err := sitetheme.Parse(raw, sitetheme.ParseOptions{Publisher: publisher})
 	if err != nil {
 		var invalid *sitetheme.Error
 		if errors.As(err, &invalid) {
@@ -72,14 +75,18 @@ func check(path string) result {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: sitetheme-check <content.json>...")
+	args, publisher := os.Args[1:], sitetheme.PublisherThirdParty
+	if len(args) > 0 && args[0] == "-official" {
+		args, publisher = args[1:], sitetheme.PublisherOfficial
+	}
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: sitetheme-check [-official] <content.json>...")
 		os.Exit(2)
 	}
 	failed := false
 	encoder := json.NewEncoder(os.Stdout)
-	for _, path := range os.Args[1:] {
-		r := check(path)
+	for _, path := range args {
+		r := check(path, publisher)
 		failed = failed || !r.OK
 		_ = encoder.Encode(r)
 	}

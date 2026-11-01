@@ -77,6 +77,9 @@ describe('node list real probe monitoring', function nodeMonitoringPageRegressio
     })
   })
   afterEach(() => {
+    // jsdom 的 requestAnimationFrame 靠 setInterval 驱动：假 setInterval 期间排进去的帧必须先跑完，
+    // 否则恢复真计时器后丢失，下一例 antd Modal 入场动画（rc-motion）停在 appear-prepare，表单校验提示不渲染。
+    if (vi.isFakeTimers()) vi.runOnlyPendingTimers()
     vi.useRealTimers()
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth })
   })

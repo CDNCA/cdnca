@@ -48,14 +48,14 @@ func validListFilters(filters ListFilters) bool {
 // latest publication state of that binding revision and whether its rollout
 // is fully applied: an apply rollout with deployments whose latest attempts
 // are all healthy (as edgedeployment reports a succeeded rollout).
-const currentBindingPublications = `SELECT latest.state, rollout_done.applied
+const currentBindingPublications = `SELECT current_binding.site_id, latest.state, latest.failure_code, rollout_done.applied
 	FROM (SELECT DISTINCT ON (binding.site_id) binding.site_id,binding.sequence,binding.action,binding.asset_id
 		FROM certificate_site_binding_facts binding
 		WHERE binding.tenant_scope_id=asset.tenant_scope_id AND binding.site_id IN (
 			SELECT ever.site_id FROM certificate_site_binding_facts ever
 			WHERE ever.tenant_scope_id=asset.tenant_scope_id AND ever.asset_id=asset.id)
 		ORDER BY binding.site_id,binding.sequence DESC) current_binding
-	LEFT JOIN LATERAL (SELECT state.state,state.rollout_id FROM certificate_publication_intent_state_facts state
+	LEFT JOIN LATERAL (SELECT state.state,state.rollout_id,state.failure_code FROM certificate_publication_intent_state_facts state
 		WHERE state.tenant_scope_id=asset.tenant_scope_id AND state.site_id=current_binding.site_id
 		  AND state.binding_revision=current_binding.sequence
 		ORDER BY state.sequence DESC LIMIT 1) latest ON true
@@ -152,3 +152,16 @@ func listFilterSQL(filters ListFilters, arguments *[]any, nowPosition int) strin
 	}
 	return " AND " + strings.Join(clauses, " AND ")
 }
+
+// listSyncLateral is the list row's sync state, as the sync
+// filter above decides it: failed when a current binding's publication
+// permanently failed (with the first such failure code by site), complete
+// when every one succeeded and its rollout applied, pending otherwise; NULL
+// for an asset bound to no site.
+const listSyncLateral = ` LEFT JOIN LATERAL (SELECT CASE WHEN count(*)=0 THEN NULL
+		WHEN bool_or(binding_publication.state='permanent_failed') THEN 'failed'
+		WHEN bool_and(COALESCE(binding_publication.state='succeeded' AND binding_publication.applied,false)) THEN 'complete'
+		ELSE 'pending' END AS state,
+		(array_agg(binding_publication.failure_code ORDER BY binding_publication.site_id)
+			FILTER (WHERE binding_publication.state='permanent_failed'))[1] AS failure_code
+	FROM (` + currentBindingPublications + `) binding_publication) sync_state ON true`

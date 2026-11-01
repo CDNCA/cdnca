@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2099,42 +2098,7 @@ func openIntegrationDatabaseThrough063(t *testing.T) *pgxpool.Pool {
 
 func openIntegrationSchema(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	admin, err := pgxpool.New(t.Context(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "acme_edge_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^acme_edge_[a-f0-9]{32}$`).MatchString(schema) {
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(t.Context(), "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop integration schema: %v", err)
-		}
-		admin.Close()
-	})
-	return pool
+	return databasetest.FreshSchemaPool(t, "acme_edge", nil, nil)
 }
 
 func applyIntegrationMigrations(t *testing.T, pool *pgxpool.Pool, target int) {

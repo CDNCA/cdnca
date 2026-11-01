@@ -61,6 +61,9 @@ func run(ctx context.Context, cfg config, output logger) error {
 	if r.gatewayAddressErr != nil {
 		output.Printf("gateway address change delivery disabled: %v", r.gatewayAddressErr)
 	}
+	if r.sshAccessErr != nil {
+		output.Printf("SSH access delivery disabled: %v", r.sshAccessErr)
+	}
 	if r.l4LiveErr != nil {
 		output.Printf("L4 live connection relay disabled: %v", r.l4LiveErr)
 	}

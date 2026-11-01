@@ -34,6 +34,9 @@ type Lock struct {
 	// master IP was changed to another server, so this controller gets no new
 	// lease or ticket (fix-ipswitch). Shown even before the lease runs out.
 	Rebound bool `json:"rebound,omitempty"`
+	// Reinstalled (with Rebound): the license holder retired this installation
+	// with 我的授权 → 重装主控; same freeze as a rebind.
+	Reinstalled bool `json:"reinstalled,omitempty"`
 }
 
 var (
@@ -45,7 +48,7 @@ var (
 // Set replaces the current lock (the installationban runtime).
 func Set(lock Lock) {
 	if !lock.Locked {
-		lock = Lock{Rebound: lock.Rebound}
+		lock = Lock{Rebound: lock.Rebound, Reinstalled: lock.Reinstalled}
 	}
 	previous := current.Swap(&lock)
 	if previous != nil && previous.Locked && !lock.Locked {

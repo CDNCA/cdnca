@@ -35,7 +35,8 @@ paths:
   /v1/node-line-groups:
     get:
       operationId: listNodeLineGroups
-      summary: 查询线路组当前修订列表
+      summary: "List the current revisions of line groups"
+      x-summary-zh: 查询线路组当前修订列表
       parameters:
         - $ref: '#/components/parameters/TargetScopeID'
       responses:
@@ -48,8 +49,10 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     post:
       operationId: createNodeLineGroup
-      summary: 创建线路组首个不可变修订
-      description: 租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。
+      summary: "Create the first immutable revision of a line group"
+      x-summary-zh: 创建线路组首个不可变修订
+      description: "A tenant session manages its own scope; a platform session without target_scope_id manages this control plane's platform scope, and writes naming a tenant scope are refused."
+      x-description-zh: 租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。
       parameters:
         - $ref: '#/components/parameters/TargetScopeID'
         - $ref: '#/components/parameters/IfMatchCreate'
@@ -77,7 +80,8 @@ paths:
       - $ref: '#/components/parameters/LineGroupID'
     get:
       operationId: getNodeLineGroup
-      summary: 查询线路组当前修订
+      summary: "Read the current revision of a line group"
+      x-summary-zh: 查询线路组当前修订
       parameters:
         - $ref: '#/components/parameters/TargetScopeID'
       responses:
@@ -92,8 +96,10 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     put:
       operationId: updateNodeLineGroup
-      summary: 创建线路组下一不可变修订
-      description: 租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。
+      summary: "Create the next immutable revision of a line group"
+      x-summary-zh: 创建线路组下一不可变修订
+      description: "A tenant session manages its own scope; a platform session without target_scope_id manages this control plane's platform scope, and writes naming a tenant scope are refused."
+      x-description-zh: 租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。
       parameters:
         - $ref: '#/components/parameters/TargetScopeID'
         - $ref: '#/components/parameters/IfMatchUpdate'
@@ -118,8 +124,10 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     delete:
       operationId: deleteNodeLineGroup
-      summary: 软删除线路组并保留不可变修订历史
-      description: 租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。
+      summary: "Soft-delete a line group and keep its immutable revision history"
+      x-summary-zh: 软删除线路组并保留不可变修订历史
+      description: "A tenant session deletes line groups of its own scope; a platform session without target_scope_id deletes line groups of this control plane's platform scope, and naming a tenant scope returns 403. After deletion the line group is hidden from the list, current detail, history detail, probes and new topology snapshots; the same idempotency key can be replayed."
+      x-description-zh: 租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。
       parameters:
         - $ref: '#/components/parameters/TargetScopeID'
         - $ref: '#/components/parameters/IfMatchUpdate'
@@ -140,7 +148,8 @@ paths:
   /v1/node-line-groups/{id}/revisions/{revision}:
     get:
       operationId: getNodeLineGroupRevision
-      summary: 查询线路组历史修订
+      summary: "Read a historical revision of a line group"
+      x-summary-zh: 查询线路组历史修订
       parameters:
         - $ref: '#/components/parameters/LineGroupID'
         - $ref: '#/components/parameters/Revision'
@@ -158,7 +167,8 @@ paths:
   /v1/node-line-groups/{id}/decisions:
     post:
       operationId: decideNodeLineGroupEndpoint
-      summary: 计算可审计的区域健康调度决策
+      summary: "Compute an auditable region health scheduling decision"
+      x-summary-zh: 计算可审计的区域健康调度决策
       parameters:
         - $ref: '#/components/parameters/LineGroupID'
         - $ref: '#/components/parameters/TargetScopeID'
@@ -179,7 +189,8 @@ paths:
   /v1/node-line-groups/{id}/target-snapshots:
     get:
       operationId: getNodeLineGroupTargetSnapshot
-      summary: 按来源修订查询 L1/L2 拓扑快照
+      summary: "Read the L1/L2 topology snapshot by source revision"
+      x-summary-zh: 按来源修订查询 L1/L2 拓扑快照
       parameters:
         - $ref: '#/components/parameters/LineGroupID'
         - $ref: '#/components/parameters/SourceRevision'
@@ -196,7 +207,8 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     post:
       operationId: createNodeLineGroupTargetSnapshot
-      summary: 创建 L1 目标与 L2 候选拓扑快照
+      summary: "Create an L1 target and L2 candidate topology snapshot"
+      x-summary-zh: 创建 L1 目标与 L2 候选拓扑快照
       parameters:
         - $ref: '#/components/parameters/LineGroupID'
         - $ref: '#/components/parameters/TargetScopeID'
@@ -220,7 +232,8 @@ paths:
   /v1/node-line-groups/{id}/rollback:
     post:
       operationId: rollbackNodeLineGroup
-      summary: 将历史配置复制为新的当前修订
+      summary: "Copy a historical configuration as the new current revision"
+      x-summary-zh: 将历史配置复制为新的当前修订
       parameters:
         - $ref: '#/components/parameters/LineGroupID'
         - $ref: '#/components/parameters/TargetScopeID'
@@ -247,8 +260,10 @@ paths:
   /v1/node-line-groups/{id}/platform-default:
     post:
       operationId: setNodeLineGroupPlatformDefault
-      summary: 设为或取消平台默认线路组
-      description: 只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。
+      summary: "Set or clear the platform default line group"
+      x-summary-zh: 设为或取消平台默认线路组
+      description: "Normal line groups of the platform scope only; setting a default clears the previous one. Does not advance the line group revision. Websites without a package use it to freeze their CNAME target IPs."
+      x-description-zh: 只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。
       parameters:
         - $ref: '#/components/parameters/LineGroupID'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -280,18 +295,103 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}/smart-schedule:
+    parameters:
+      - $ref: '#/components/parameters/LineGroupID'
+      - $ref: '#/components/parameters/TargetScopeID'
+    get:
+      operationId: getNodeLineGroupSmartSchedule
+      summary: "Read the smart scheduling configuration and current line selections"
+      x-summary-zh: 查询线路组智能调度配置与各线路当前选中节点
+      description: "Defaults (disabled) when never configured. Each line lists the selected endpoints with p50 latency, health and load; fallback_from names the level a line fell back from. probe_source says whether dnspup checkpoints and peer node probes produced latency in the last hour; with neither, every line keeps its static endpoints."
+      x-description-zh: 从未配置时返回默认值（关闭）。每条线路列出选中端点及 p50 延迟、健康、负载；fallback_from 表示该线路从哪一级回退。probe_source 表示最近一小时 dnspup 检查点与对端节点探测是否产生了延迟数据；两者都没有时各线路沿用静态端点。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.read]
+      responses:
+        '200':
+          description: Smart schedule view.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SmartSchedule'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putNodeLineGroupSmartSchedule
+      summary: "Configure smart scheduling of a line group"
+      x-summary-zh: 配置线路组智能调度
+      description: "Replaces the configuration (audited as node_scheduling.group.smart_schedule). Disabling drops the selections at once; the DNS lines return to the static endpoint sets on the next publication tick, identical to a line group that never enabled it. fallback is always carrier_then_default."
+      x-description-zh: 整体替换配置（审计动作 node_scheduling.group.smart_schedule）。关闭时立即清除选中结果，DNS 线路在下一轮发布时恢复静态端点集合，与从未开启一致。fallback 固定为 carrier_then_default。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SmartScheduleWrite'}
+      responses:
+        '200':
+          description: Smart schedule view after the change.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SmartSchedule'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}/latency-matrix:
+    parameters:
+      - $ref: '#/components/parameters/LineGroupID'
+      - $ref: '#/components/parameters/TargetScopeID'
+    get:
+      operationId: getNodeLineGroupLatencyMatrix
+      summary: "Read the latency matrix of a line group"
+      x-summary-zh: 查询线路组延迟矩阵
+      description: "p50 latency of every endpoint per province and carrier over the window (minutes, 1-60, default 15). province is empty for checkpoints of unknown province."
+      x-description-zh: 窗口内（分钟，1-60，默认 15）各端点按省份与运营商的 p50 延迟。检查点省份未知时 province 为空。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.read]
+      parameters:
+        - name: window
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 60, default: 15}
+      responses:
+        '200':
+          description: Latency matrix; rows is an empty array without samples.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LatencyMatrix'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
   /v1/l2-configs:
     parameters:
       - $ref: '#/components/parameters/TargetScopeID'
     get:
       operationId: listL2Configs
-      summary: 查询 L2 配置列表
-      description: 返回当前作用域未删除的全部配置，按 display_id 排序，不分页。
+      summary: "List L2 configurations"
+      x-summary-zh: 查询 L2 配置列表
+      description: "Returns every undeleted configuration of the current scope, ordered by display_id, without paging."
+      x-description-zh: 返回当前作用域未删除的全部配置，按 display_id 排序，不分页。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.read]
       responses:
         '200':
-          description: L2 配置列表；无数据时 items 为空数组。
+          description: "L2 configurations; items is an empty array when there are none."
+          x-description-zh: L2 配置列表；无数据时 items 为空数组。
           content:
             application/json:
               schema: {$ref: '#/components/schemas/L2ConfigList'}
@@ -301,8 +401,10 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     post:
       operationId: createL2Config
-      summary: 创建 L2 配置
-      description: 写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，须为单个 UTF-8 JSON 对象，拒绝未知字段。
+      summary: "Create an L2 configuration"
+      x-summary-zh: 创建 L2 配置
+      description: "Writes to the caller's own scope; a platform session cannot write to another tenant's scope. The same idempotency key with the same normalised request replays the original result. The body is limited to 128 KiB and must be a single UTF-8 JSON object; unknown fields are rejected."
+      x-description-zh: 写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，须为单个 UTF-8 JSON 对象，拒绝未知字段。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -316,7 +418,8 @@ paths:
             schema: {$ref: '#/components/schemas/L2ConfigWrite'}
       responses:
         '201':
-          description: 返回修订 1 的配置对象；名称或幂等键冲突返回 409。
+          description: "Returns the configuration at revision 1; a name or idempotency key conflict returns 409."
+          x-description-zh: 返回修订 1 的配置对象；名称或幂等键冲突返回 409。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -337,12 +440,14 @@ paths:
       - $ref: '#/components/parameters/TargetScopeID'
     get:
       operationId: getL2Config
-      summary: 查询 L2 配置
+      summary: "Read an L2 configuration"
+      x-summary-zh: 查询 L2 配置
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.read]
       responses:
         '200':
-          description: 返回当前配置对象及其修订。
+          description: "Returns the current configuration and its revision."
+          x-description-zh: 返回当前配置对象及其修订。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
           content:
@@ -355,8 +460,10 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     put:
       operationId: updateL2Config
-      summary: 替换 L2 配置
-      description: 完整替换可编辑字段并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。
+      summary: "Replace an L2 configuration"
+      x-summary-zh: 替换 L2 配置
+      description: "Replaces every editable field and increments the revision; omitting remark clears it. Writes are bound by the caller's own scope, live manage permission, revision and idempotency key. Known limitation: a missing resource and a stale revision both return 404/node_scheduling_not_found and cannot be told apart, unlike the 412 revision conflict of the node update and delete endpoints."
+      x-description-zh: 完整替换可编辑字段并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -370,7 +477,8 @@ paths:
             schema: {$ref: '#/components/schemas/L2ConfigWrite'}
       responses:
         '200':
-          description: 返回更新后的配置对象或已完成请求的原结果。
+          description: "Returns the updated configuration or the original result of a completed request."
+          x-description-zh: 返回更新后的配置对象或已完成请求的原结果。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -385,8 +493,10 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     delete:
       operationId: deleteL2Config
-      summary: 删除 L2 配置
-      description: 存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
+      summary: "Delete an L2 configuration"
+      x-summary-zh: 删除 L2 配置
+      description: "Returns 409 while undeleted L2 node members reference it; nothing is deleted in cascade. Success or an idempotent replay returns 204 with no body; ETag keeps the revision at deletion. A missing resource returns 404, a revision conflict 412."
+      x-description-zh: 存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -395,7 +505,8 @@ paths:
         - $ref: '#/components/parameters/RequestID'
       responses:
         '204':
-          description: 软删除完成或已完成请求的结果被重放。
+          description: "Soft-deleted, or the result of a completed request replayed."
+          x-description-zh: 软删除完成或已完成请求的结果被重放。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -411,13 +522,16 @@ paths:
       - $ref: '#/components/parameters/TargetScopeID'
     get:
       operationId: listL2Conditions
-      summary: 查询 L2 匹配条件列表
-      description: 返回当前作用域未删除的全部匹配条件，按 display_id 排序，不分页。
+      summary: "List L2 match conditions"
+      x-summary-zh: 查询 L2 匹配条件列表
+      description: "Returns every undeleted match condition of the current scope, ordered by display_id, without paging."
+      x-description-zh: 返回当前作用域未删除的全部匹配条件，按 display_id 排序，不分页。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.read]
       responses:
         '200':
-          description: L2 匹配条件列表；无数据时 items 为空数组。
+          description: "L2 match conditions; items is an empty array when there are none."
+          x-description-zh: L2 匹配条件列表；无数据时 items 为空数组。
           content:
             application/json:
               schema: {$ref: '#/components/schemas/L2ConditionList'}
@@ -427,8 +541,10 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     post:
       operationId: createL2Condition
-      summary: 创建 L2 匹配条件
-      description: 写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，拒绝非 JSON、无效 UTF-8、未知字段及额外 JSON 值。
+      summary: "Create an L2 match condition"
+      x-summary-zh: 创建 L2 匹配条件
+      description: "Writes to the caller's own scope; a platform session cannot write to another tenant's scope. The same idempotency key with the same normalised request replays the original result. The body is limited to 128 KiB; non-JSON, invalid UTF-8, unknown fields and extra JSON values are rejected."
+      x-description-zh: 写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，拒绝非 JSON、无效 UTF-8、未知字段及额外 JSON 值。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -442,7 +558,8 @@ paths:
             schema: {$ref: '#/components/schemas/L2ConditionWrite'}
       responses:
         '201':
-          description: 返回修订 1 的匹配条件对象；名称或幂等键冲突返回 409。
+          description: "Returns the match condition at revision 1; a name or idempotency key conflict returns 409."
+          x-description-zh: 返回修订 1 的匹配条件对象；名称或幂等键冲突返回 409。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -463,8 +580,10 @@ paths:
       - $ref: '#/components/parameters/TargetScopeID'
     put:
       operationId: updateL2Condition
-      summary: 替换 L2 匹配条件
-      description: 完整替换名称、备注和规则并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。此单项路径不支持 GET。
+      summary: "Replace an L2 match condition"
+      x-summary-zh: 替换 L2 匹配条件
+      description: "Replaces the name, remark and rules and increments the revision; omitting remark clears it. Writes are bound by the caller's own scope, live manage permission, revision and idempotency key. Known limitation: a missing resource and a stale revision both return 404/node_scheduling_not_found and cannot be told apart, unlike the 412 revision conflict of the node update and delete endpoints. This item path does not support GET."
+      x-description-zh: 完整替换名称、备注和规则并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。此单项路径不支持 GET。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -478,7 +597,8 @@ paths:
             schema: {$ref: '#/components/schemas/L2ConditionWrite'}
       responses:
         '200':
-          description: 返回更新后的匹配条件对象或已完成请求的原结果。
+          description: "Returns the updated match condition or the original result of a completed request."
+          x-description-zh: 返回更新后的匹配条件对象或已完成请求的原结果。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -493,8 +613,10 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     delete:
       operationId: deleteL2Condition
-      summary: 删除 L2 匹配条件
-      description: 存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
+      summary: "Delete an L2 match condition"
+      x-summary-zh: 删除 L2 匹配条件
+      description: "Returns 409 while undeleted L2 node members reference it; nothing is deleted in cascade. Success or an idempotent replay returns 204 with no body; ETag keeps the revision at deletion. A missing resource returns 404, a revision conflict 412."
+      x-description-zh: 存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -503,7 +625,8 @@ paths:
         - $ref: '#/components/parameters/RequestID'
       responses:
         '204':
-          description: 软删除完成或已完成请求的结果被重放。
+          description: "Soft-deleted, or the result of a completed request replayed."
+          x-description-zh: 软删除完成或已完成请求的结果被重放。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -519,25 +642,30 @@ paths:
       - $ref: '#/components/parameters/TargetScopeID'
     get:
       operationId: listL2Nodes
-      summary: 查询 L2 节点成员或可添加节点
-      description: 未指定 available 或值为空时，按 sort、display_id 返回该配置的成员（不存在的配置得到空列表）；available=true 时，配置必须存在，返回本作用域未退役且尚未加入任何 L2 配置的节点，按 display_id 排序。两种模式均不分页；available=false 不合法。
+      summary: "List L2 node members or nodes that can be added"
+      x-summary-zh: 查询 L2 节点成员或可添加节点
+      description: "Without available, or with it empty, returns the configuration's members ordered by sort and display_id (a missing configuration gives an empty list); with available=true the configuration must exist and the result is the scope's nodes that are not retired and not yet in any L2 configuration, ordered by display_id. Neither mode pages; available=false is invalid."
+      x-description-zh: 未指定 available 或值为空时，按 sort、display_id 返回该配置的成员（不存在的配置得到空列表）；available=true 时，配置必须存在，返回本作用域未退役且尚未加入任何 L2 配置的节点，按 display_id 排序。两种模式均不分页；available=false 不合法。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.read]
       parameters:
         - name: config_id
           in: query
           required: true
-          description: 只允许一个非零配置 UUID。
+          description: "Exactly one non-zero configuration UUID."
+          x-description-zh: 只允许一个非零配置 UUID。
           schema: {$ref: '#/components/schemas/L2UUID'}
         - name: available
           in: query
           required: false
           allowEmptyValue: true
-          description: 最多出现一次；仅 true 或空字符串合法。
+          description: "At most once; only true or an empty string is valid."
+          x-description-zh: 最多出现一次；仅 true 或空字符串合法。
           schema: {type: string, enum: ['true', '']}
       responses:
         '200':
-          description: available=true 返回候选节点列表，否则返回成员列表；无数据时 items 为空数组。
+          description: "available=true returns the candidate nodes, otherwise the members; items is an empty array when there are none."
+          x-description-zh: available=true 返回候选节点列表，否则返回成员列表；无数据时 items 为空数组。
           content:
             application/json:
               schema:
@@ -551,8 +679,10 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     post:
       operationId: addL2Nodes
-      summary: 批量添加 L2 节点成员
-      description: 原子添加 1 至 512 个不重复节点；配置、可选条件和未退役节点必须属于自身作用域。已加入任一 L2 配置的节点冲突返回 409。每个成员初始 revision=1、enabled=true、weight=100，node_ids 排序后 sort 从 0 按 10 递增；不返回 ETag 或 Location。写入受实时管理权限和幂等键约束，If-Match 必须为 "0"。
+      summary: "Bulk add L2 node members"
+      x-summary-zh: 批量添加 L2 节点成员
+      description: "Atomically adds 1 to 512 distinct nodes; the configuration, the optional condition and the non-retired nodes must belong to the caller's own scope. A node already in any L2 configuration returns 409. Each member starts at revision=1, enabled=true, weight=100, with sort from 0 in steps of 10 over the sorted node_ids; no ETag or Location is returned. Writes are bound by live manage permission and the idempotency key; If-Match must be \"0\"."
+      x-description-zh: 原子添加 1 至 512 个不重复节点；配置、可选条件和未退役节点必须属于自身作用域。已加入任一 L2 配置的节点冲突返回 409。每个成员初始 revision=1、enabled=true、weight=100，node_ids 排序后 sort 从 0 按 10 递增；不返回 ETag 或 Location。写入受实时管理权限和幂等键约束，If-Match 必须为 "0"。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -566,7 +696,8 @@ paths:
             schema: {$ref: '#/components/schemas/L2NodeAdd'}
       responses:
         '201':
-          description: 返回创建的成员列表或已完成请求的原结果。
+          description: "Returns the created members or the original result of a completed request."
+          x-description-zh: 返回创建的成员列表或已完成请求的原结果。
           headers:
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
           content:
@@ -583,8 +714,10 @@ paths:
       - $ref: '#/components/parameters/TargetScopeID'
     put:
       operationId: updateL2Node
-      summary: 替换 L2 节点成员设置
-      description: id 为成员 UUID，不是 node_id。完整替换条件、启用状态、权重和排序并递增修订；省略或传 null 的 condition_id 清除条件。enabled、weight、sort 不可省略或为 null；写入受自身作用域、实时管理权限、修订和幂等键约束。此单项路径不支持 GET。
+      summary: "Replace an L2 node member's settings"
+      x-summary-zh: 替换 L2 节点成员设置
+      description: "id is the member UUID, not node_id. Replaces the condition, enabled state, weight and sort and increments the revision; an omitted or null condition_id clears the condition. enabled, weight and sort may not be omitted or null; writes are bound by the caller's own scope, live manage permission, revision and idempotency key. This item path does not support GET."
+      x-description-zh: id 为成员 UUID，不是 node_id。完整替换条件、启用状态、权重和排序并递增修订；省略或传 null 的 condition_id 清除条件。enabled、weight、sort 不可省略或为 null；写入受自身作用域、实时管理权限、修订和幂等键约束。此单项路径不支持 GET。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -598,7 +731,8 @@ paths:
             schema: {$ref: '#/components/schemas/L2NodeWrite'}
       responses:
         '200':
-          description: 返回更新后的成员对象或已完成请求的原结果。
+          description: "Returns the updated member or the original result of a completed request."
+          x-description-zh: 返回更新后的成员对象或已完成请求的原结果。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -614,8 +748,10 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     delete:
       operationId: deleteL2Node
-      summary: 删除 L2 节点成员
-      description: id 为成员 UUID，只软删除成员关系，不删除节点。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
+      summary: "Delete an L2 node member"
+      x-summary-zh: 删除 L2 节点成员
+      description: "id is the member UUID; only the membership is soft-deleted, not the node. Success or an idempotent replay returns 204 with no body; ETag keeps the revision at deletion. A missing resource returns 404, a revision conflict 412."
+      x-description-zh: id 为成员 UUID，只软删除成员关系，不删除节点。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
       security: [{tenantBearer: []}, {tenantAPIKey: []}]
       x-required-permissions: [node_scheduling.manage]
       parameters:
@@ -624,7 +760,8 @@ paths:
         - $ref: '#/components/parameters/RequestID'
       responses:
         '204':
-          description: 软删除完成或已完成请求的结果被重放。
+          description: "Soft-deleted, or the result of a completed request replayed."
+          x-description-zh: 软删除完成或已完成请求的结果被重放。
           headers:
             ETag: {$ref: '#/components/headers/ETag'}
             Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
@@ -652,19 +789,22 @@ components:
       name: id
       in: path
       required: true
-      description: 非零 L2 配置 UUID。
+      description: "Non-zero L2 configuration UUID."
+      x-description-zh: 非零 L2 配置 UUID。
       schema: {$ref: '#/components/schemas/L2UUID'}
     L2ConditionID:
       name: id
       in: path
       required: true
-      description: 非零 L2 匹配条件 UUID。
+      description: "Non-zero L2 match condition UUID."
+      x-description-zh: 非零 L2 匹配条件 UUID。
       schema: {$ref: '#/components/schemas/L2UUID'}
     L2MembershipID:
       name: id
       in: path
       required: true
-      description: 非零 L2 节点成员 UUID；不同于节点 node_id。
+      description: "Non-zero L2 node member UUID; not the node's node_id."
+      x-description-zh: 非零 L2 节点成员 UUID；不同于节点 node_id。
       schema: {$ref: '#/components/schemas/L2UUID'}
     NodeID:
       name: id
@@ -729,12 +869,84 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}
   schemas:
+    SmartScheduleWrite:
+      type: object
+      additionalProperties: false
+      required: [enabled, top_n, granularity, latency_window_minutes, max_load_percent]
+      properties:
+        enabled: {type: boolean}
+        top_n: {type: integer, minimum: 1, maximum: 20}
+        granularity: {type: string, enum: [carrier, province_carrier]}
+        latency_window_minutes: {type: integer, minimum: 5, maximum: 60}
+        max_load_percent: {type: integer, minimum: 1, maximum: 100}
+    SmartSchedulePick:
+      type: object
+      additionalProperties: false
+      required: [address, endpoint_id, latency_ms, healthy, load_percent]
+      properties:
+        address: {type: string}
+        endpoint_id: {type: string, format: uuid}
+        latency_ms: {type: [integer, 'null'], minimum: 1}
+        healthy: {type: boolean}
+        load_percent: {type: [number, 'null'], minimum: 0, maximum: 100}
+    SmartScheduleLine:
+      type: object
+      additionalProperties: false
+      required: [scope, dns_line, source, selected, updated_at]
+      properties:
+        scope: {type: string, description: "telecom / unicom / mobile, or <province>:<carrier> such as 广东:mobile."}
+        dns_line: {type: string, description: "Unified DNS line written; empty when the province line has no provider line."}
+        source: {type: string, enum: [latency, static, fallback]}
+        selected: {type: array, maxItems: 512, items: {$ref: '#/components/schemas/SmartSchedulePick'}}
+        fallback_from: {type: string, enum: [province_carrier, carrier]}
+        updated_at: {type: string, format: date-time}
+    SmartSchedule:
+      type: object
+      additionalProperties: false
+      required: [enabled, top_n, granularity, latency_window_minutes, max_load_percent, fallback, province_lines_supported, lines, probe_source, revision]
+      properties:
+        enabled: {type: boolean}
+        top_n: {type: integer, minimum: 1, maximum: 20}
+        granularity: {type: string, enum: [carrier, province_carrier]}
+        latency_window_minutes: {type: integer, minimum: 5, maximum: 60}
+        max_load_percent: {type: integer, minimum: 1, maximum: 100}
+        fallback: {type: string, enum: [carrier_then_default]}
+        province_lines_supported: {type: boolean, description: "False when a DNS provider of the line group's sites cannot write province lines; only carrier lines are written then."}
+        lines: {type: array, items: {$ref: '#/components/schemas/SmartScheduleLine'}}
+        probe_source:
+          type: object
+          additionalProperties: false
+          required: [dnspup, peer_nodes]
+          properties:
+            dnspup: {type: boolean}
+            peer_nodes: {type: boolean}
+        revision: {type: integer, minimum: 0}
+    LatencyMatrix:
+      type: object
+      additionalProperties: false
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [province, carrier, endpoint_id, address, p50_ms, samples, last_at]
+            properties:
+              province: {type: string}
+              carrier: {type: string, enum: [telecom, unicom, mobile]}
+              endpoint_id: {type: string, format: uuid}
+              address: {type: string}
+              p50_ms: {type: integer, minimum: 1}
+              samples: {type: integer, minimum: 1}
+              last_at: {type: string, format: date-time}
     L2UUID:
       type: string
       format: uuid
       not: {const: '00000000-0000-0000-0000-000000000000'}
     L2ConditionReference:
-      description: 同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。
+      description: "An undeleted match condition in the same scope; omitted or null means no condition, a zero UUID is invalid."
+      x-description-zh: 同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。
       anyOf:
         - $ref: '#/components/schemas/L2UUID'
         - type: 'null'
@@ -742,16 +954,19 @@ components:
       type: string
       minLength: 1
       maxLength: 128
-      description: 名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。
+      description: "Name; trimmed on write, then checked by Unicode character count; control characters are rejected."
+      x-description-zh: 名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。
     L2Region:
       type: string
       minLength: 0
       maxLength: 64
-      description: 必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。
+      description: "Required region name; an explicit empty string is the default region, the same as a line group's default region, not a region UUID. A non-empty string of only whitespace is invalid; other names are trimmed on write, then checked by Unicode character count; control characters are rejected. An existing non-empty name (including the built-in default region name) keeps its value and is not the same as the empty string."
+      x-description-zh: 必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。
     L2Remark:
       type: string
       maxLength: 1024
-      description: 备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。
+      description: "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string."
+      x-description-zh: 备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。
     L2ConfigWrite:
       type: object
       additionalProperties: false
@@ -878,7 +1093,8 @@ components:
         name: {type: string}
         ip_address:
           type: string
-          description: 优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。
+          description: "IPv4 first, then IPv6; an empty string when there is neither."
+          x-description-zh: 优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。
         admin_state: {type: string, enum: [pending, active, draining, disabled, retired]}
         online_status: {type: string, enum: [online, offline, unknown]}
         enabled: {type: boolean}
@@ -902,7 +1118,8 @@ components:
         name: {type: string}
         ip_address:
           type: string
-          description: 优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。
+          description: "IPv4 first, then IPv6; an empty string when there is neither."
+          x-description-zh: 优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。
         admin_state: {type: string, enum: [pending, active, draining, disabled]}
         online_status: {type: string, enum: [online, offline, unknown]}
     L2NodeCandidateList:
@@ -1051,21 +1268,25 @@ components:
           type: string
           maxLength: 63
           pattern: '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)?$'
-          description: 留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。
+          description: "When empty the server generates a stable lower-case DNS label; do not enter a domain suffix, port or IP."
+          x-description-zh: 留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。
         ipv4_resolved_value:
           type: string
           maxLength: 63
           pattern: '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)?$'
-          description: IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。
+          description: "Record value for IPv4 only; when empty the server generates a stable lower-case DNS label from the line group ID."
+          x-description-zh: IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。
         l2_config_id:
           type: [string, 'null']
           format: uuid
-          description: 同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。
+          description: "An active line group in the same scope and region that is not referenced by another L2 configuration; empty means a standalone line group."
+          x-description-zh: 同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。
         failover_mode:
           type: string
           enum: [primary_offline, online_less_than_backup_count]
           default: primary_offline
-          description: 有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。
+          description: "When a primary IP goes offline its backup IPs are enabled one by one, or all backup IPs are enabled when fewer primary IPs are online than there are backup IPs."
+          x-description-zh: 有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。
         note: {type: string, maxLength: 512, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
         sort_order: {type: integer, format: int32, minimum: 1, default: 100}
         health_policy: {$ref: '#/components/schemas/HealthPolicy'}
@@ -1097,17 +1318,19 @@ components:
           items: {$ref: '#/components/schemas/Endpoint'}
         statistics:
           $ref: '#/components/schemas/LineGroupStatistics'
-          description: 仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。
+          description: "Current resource counts, in list responses only; detail, write and history revision responses may omit them."
+          x-description-zh: 仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。
         configuration_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
         created_by_user_id: {type: string, format: uuid}
         created_at: {type: string, format: date-time}
         sealed_at: {type: string, format: date-time}
-        is_platform_default: {type: boolean, description: 平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。}
+        is_platform_default: {type: boolean, description: "Platform default line group; websites without a package use it to freeze their CNAME target IPs (at most one on the platform).", x-description-zh: 平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。}
         backup_states:
           type: array
           maxItems: 2
           readOnly: true
-          description: 各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。
+          description: "Whether each address family is currently resolving to backup IPs (node_line_group_backup_states, migration 571); returned only by the list and the current revision detail. Address families that never used backups are absent (that is, normal)."
+          x-description-zh: 各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。
           items: {$ref: '#/components/schemas/LineBackupState'}
     LineBackupState:
       type: object

@@ -1576,6 +1576,7 @@ func isolatedCertificateAssetPoolWith(t *testing.T, migrate func(context.Context
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "certificate_asset_test")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

@@ -10,14 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/migrations"
 	"github.com/google/uuid"
@@ -837,54 +834,10 @@ func seedFormalSchedulerRole(
 
 func openNodeSchedulingDatabase(t *testing.T, migrate bool) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := admin.Ping(ctx); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	schema := "node_scheduling_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^node_scheduling_test_[a-f0-9]{32}$`).MatchString(schema) {
-		admin.Close()
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		_, _ = admin.Exec(ctx, "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		if _, err := admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop node scheduling schema: %v", err)
-		}
-		admin.Close()
-	})
 	if migrate {
-		if err := database.Migrate(ctx, pool, "up"); err != nil {
-			t.Fatal(err)
-		}
+		return databasetest.MigratedPool(t, nil)
 	}
-	return pool
+	return databasetest.FreshSchemaPool(t, "node_scheduling_test", nil, nil)
 }
 
 func applyNodeSchedulingMigration(t *testing.T, pool *pgxpool.Pool, direction string) {

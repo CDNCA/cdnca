@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { gzipSync } from 'node:zlib'
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib'
 
 import react from '@vitejs/plugin-react'
 import { loadEnv, type Plugin } from 'vite'
@@ -31,8 +31,9 @@ function consoleI18nChunk(id: string, getModuleInfo: ModuleInfoLookup): string |
   return 'console-i18n'
 }
 
-// 给每个文本产物写一份 <file>.gz，主控 nginx 的 gzip_static 直接发，不必每次请求现压
-// （只用 node 自带 zlib，同 operator-console）。
+// 给每个文本产物写一份 <file>.gz 和 <file>.br，主控 nginx 的 gzip_static 直接发 .gz，
+// 不必每次请求现压；.br 留给带 brotli_static 的前端（主控 nginx 没有 brotli 模块，不发它）。
+// 只用 node 自带 zlib，同 operator-console。
 function precompress(): Plugin {
   return {
     name: 'cdnca-precompress',
@@ -44,6 +45,8 @@ function precompress(): Plugin {
         if (source.length < 1024) continue
         const gz = gzipSync(source, { level: 9 })
         if (gz.length < source.length) writeFileSync(join(options.dir!, `${fileName}.gz`), gz)
+        const br = brotliCompressSync(source, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11 } })
+        if (br.length < source.length) writeFileSync(join(options.dir!, `${fileName}.br`), br)
       }
     },
   }
@@ -61,6 +64,13 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), precompress()],
     build: {
       rollupOptions: {
+        // @cdnca/ui modules only declare (reviewRules.ts builds a Map at load,
+        // FormGrid.Full is a property): treat them as side-effect free so unused
+        // ones, e.g. review-rules.json from apps/www, stay out of the first load
+        //. Its stylesheets keep their side effects.
+        treeshake: {
+          moduleSideEffects: (id) => !/\/packages\/cdnca-ui\/src\/[^/]+\.(?:tsx?|json)$/.test(id),
+        },
         output: {
           // Stable vendor chunks keep their content hash across business-only
           // releases, so the immutable /assets/ cache survives upgrades.
@@ -81,6 +91,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
+      // vitest loads antd as CJS (antd/lib); send the antd/es deep imports of @cdnca/ui (app.tsx) to the same copy so AppContext is shared.
+      alias: [{ find: /^antd\/es\//, replacement: 'antd/lib/' }],
       environment: 'jsdom',
       setupFiles: './src/test/setup.ts',
       // scripts/*.test.mjs run under node --test; src/tests/DefaultLookLock.test.ts covers them here.

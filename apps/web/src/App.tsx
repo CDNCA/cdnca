@@ -1,9 +1,19 @@
-import { lazy, Suspense, useEffect } from 'react'
-import { Button, Result, Spin } from 'antd'
+import { isValidElement, lazy, Suspense, useEffect } from 'react'
+import { Result, Spin } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import {
+  createRoutesFromChildren,
+  matchRoutes,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+  useSearchParams,
+  type RouteObject,
+} from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import './i18n/dnsConfig'
 
 import {
   homeForPrincipal,
@@ -12,7 +22,7 @@ import {
   useSessionStore,
   type AppRole,
 } from './auth/session'
-import { loginDestination, safeLoginReturnTo } from './auth/loginNavigation'
+import { loginDestination, safeLoginReturnTo, setLoginRouteRoleResolver } from './auth/loginNavigation'
 import { loadFullResources } from './i18n'
 import type { SystemConfigurationCategory } from './api/systemConfiguration'
 import { marketAccess } from './api/marketAccess'
@@ -60,6 +70,7 @@ if (typeof window !== 'undefined') {
 }
 const AdminHomePage = lazy(() => import('./pages/AdminHomePage').then((module) => ({ default: module.AdminHomePage })))
 const UserHomePage = lazy(() => import('./pages/UserHomePage').then((module) => ({ default: module.UserHomePage })))
+const InstallationDNSForbidden = lazy(() => import('./components/InstallationDNSForbidden'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage').then((module) => ({ default: module.RegisterPage })))
 const ImpersonationStatusBanner = lazy(() => import('./components/ImpersonationStatusBanner').then((module) => ({ default: module.ImpersonationStatusBanner })))
 const InstallationLockBanner = lazy(() => import('./components/InstallationLockBanner').then((module) => ({ default: module.InstallationLockBanner })))
@@ -241,16 +252,10 @@ function PermissionRoute({
 // URL gets a no-permission page with the way to their own DNS API; the page
 // and its platform requests are never mounted.
 function InstallationDNSRoute({ children }: { children: React.ReactNode }) {
-  const { t } = useTranslation('dnsConfig')
   const principal = useSessionStore((state) => state.principal)
-  const navigate = useNavigate()
   if (!principal) return <Navigate to="/login" replace />
   if (principal.scope_kind !== 'platform') {
-    return <Result status="403" title="403" subTitle={t('installationOnly.description')} extra={
-      principal.permissions.includes('dns.read')
-        ? <Button type="primary" onClick={() => navigate('/site/list', { state: { siteSubnav: 'dnsApi' } })}>{t('installationOnly.ownDnsApi')}</Button>
-        : <Button type="primary" onClick={() => navigate('/')}>{t('installationOnly.home')}</Button>
-    } />
+    return <Suspense fallback={<RouteFallback />}><InstallationDNSForbidden canReadDNS={principal.permissions.includes('dns.read')} /></Suspense>
   }
   return <PermissionRoute permission="dns.read" platformAdminFallback={false}>{children}</PermissionRoute>
 }
@@ -375,10 +380,9 @@ function ImpersonationRouteBoundary() {
   )
 }
 
-export function AppRoutes() {
-  return (
-    <RouteErrorBoundary>
-      <Routes>
+// om路由树放在模块级，渲染与「路径属于哪个角色」共用同一棵树，不另写清单。
+const appRouteTree = (
+  <>
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<Suspense fallback={<RouteFallback />}><LoginPage /></Suspense>} />
         <Route path="/register" element={<Suspense fallback={<RouteFallback />}><RegisterPage /></Suspense>} />
@@ -1377,7 +1381,30 @@ export function AppRoutes() {
       <Route path="/403" element={<RouteStatusPage status="403" />} />
       <Route path="/500" element={<RouteStatusPage status="500" />} />
       <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+  </>
+)
+
+let appRouteObjects: RouteObject[] | undefined
+
+/** 按路由树里沿途的 RoleRoute 判定路径所属角色；不属于任何角色（两端共用或未知路径）返回 null。 */
+function routeRoleForPath(pathname: string): AppRole | null {
+  appRouteObjects ??= createRoutesFromChildren(appRouteTree.props.children)
+  const matches = matchRoutes(appRouteObjects, pathname) ?? []
+  for (let index = matches.length - 1; index >= 0; index -= 1) {
+    const element = matches[index].route.element
+    if (isValidElement<{ role?: AppRole }>(element) && element.type === RoleRoute && element.props.role) {
+      return element.props.role
+    }
+  }
+  return null
+}
+
+setLoginRouteRoleResolver(routeRoleForPath)
+
+export function AppRoutes() {
+  return (
+    <RouteErrorBoundary>
+      <Routes>{appRouteTree}</Routes>
     </RouteErrorBoundary>
   )
 }

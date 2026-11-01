@@ -152,7 +152,7 @@ CDNCA 是独立的开源核心（open-core）CDN 平台，控制面与边缘数�
 
 ## 安装（从主控到第一个网站）
 
-需要两台 x86_64 Linux 服务器（Ubuntu 24.04 正式支持；Ubuntu 22.04、Debian 12/13、Rocky/AlmaLinux/RHEL 9/10 兼容）：一台装主控，一台装节点，都用 root 执行。点击截图可查看原图。终端截图按安装器真实的进度格式生成，用时为示例。
+需要两台 x86_64 Linux 服务器（Ubuntu 24.04 正式支持；Ubuntu 22.04、Debian 12/13、Rocky/AlmaLinux/RHEL 9/10 兼容）：一台装主控，一台装节点，都用 root 执行。点击截图可查看原图。终端截图按安装器真实输出生成，用时与地址为示例。安装器支持中英文：按 `--lang zh|en`，未指定时跟随系统语言。
 
 ### 第 1 步：安装主控
 
@@ -163,10 +163,10 @@ curl -fsSLO https://www.cdnca.com/downloads/ce/install-control.sh
 ```
 
 ```bash
-bash install-control.sh --release-server https://www.cdnca.com/downloads/ce
+bash install-control.sh --release-server https://www.cdnca.com/downloads/ce --lang zh
 ```
 
-安装器共 12 步，会依次询问管理端公网域名或 IP、HTTPS 端口（默认 443）、证书联系邮箱、首个管理员用户名和密码（密码不回显）。结束时打印管理端地址，以及节点通道（网关）的两个端口：**请在防火墙/安全组放行这两个端口和 443**。
+安装器共 12 步，会依次询问管理端公网域名或 IP、HTTPS 端口（默认 443）、证书联系邮箱、首个管理员用户名和密码（密码不回显）。结束时打印安装摘要（同时保存到 `/root/cdnca-install-summary.txt`，仅 root 可读），列出管理端地址与需要放行的端口：**443 和节点通道（网关）的两个端口**。之后可随时用 `install-control.sh check` 核对安装状态。
 
 <a href="docs/images/readme/install-1-control.png"><img src="docs/images/readme/install-1-control.png" width="720" alt="主控安装进度"></a>
 
@@ -184,7 +184,7 @@ bash install-control.sh --release-server https://www.cdnca.com/downloads/ce
 
 ### 第 4 步：在节点服务器上执行
 
-在节点服务器上以 root 粘贴执行这条命令。安装器共 8 步，最后与主控网关建立会话即完成；OpenResty 在主控下发首个配置后由 Agent 启动。
+在节点服务器上以 root 粘贴执行这条命令。安装器共 8 步，与主控网关建立会话后完成，并打印安装摘要和下一步提示；OpenResty 在主控下发首个配置后由 Agent 启动。
 
 <a href="docs/images/readme/install-4-node.png"><img src="docs/images/readme/install-4-node.png" width="720" alt="节点安装进度"></a>
 

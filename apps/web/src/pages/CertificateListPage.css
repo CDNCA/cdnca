@@ -516,6 +516,23 @@
   white-space: nowrap;
 }
 
+/* DNS API 页签目标用户与按钮同一行；选择框约 320px，总数靠右，窄屏换行。 */
+.certificate-dns-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 8px;
+}
+
+.certificate-dns-toolbar .certificate-dns-target {
+  grid-template-columns: auto minmax(0, 320px);
+  gap: 12px;
+  min-height: 0;
+}
+
+.certificate-dns-toolbar .certificate-dns-total {
+  margin-left: auto;
+}
+
 .certificate-dns-pagination {
   justify-content: flex-end !important;
   margin-top: 18px !important;
@@ -776,4 +793,212 @@
 .certificate-blocked-action {
   display: inline-flex;
   cursor: not-allowed;
+}
+
+/* 证书详情弹窗 —— 头部摘要卡 + 版本 / 网站绑定两节；表格不横向滚动，<576 单列。 */
+.certificate-detail {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.certificate-detail-summary {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 18px;
+  background: var(--cdnca-color-bg-subtle);
+  border: 1px solid var(--cdnca-color-border-panel);
+  border-radius: 8px;
+}
+
+.certificate-detail-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.certificate-detail-head > h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.certificate-detail-head > .ant-tag {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.certificate-detail-sub {
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.certificate-detail-mono {
+  font-family: var(--cdnca-font-family-mono);
+  font-size: 12px;
+}
+
+.certificate-detail-id {
+  justify-self: start;
+}
+
+.certificate-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 8px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--cdnca-color-border-panel);
+}
+
+.certificate-detail-facts > div {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 2px;
+}
+
+.certificate-detail-facts dt {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.certificate-detail-facts dd {
+  margin: 0;
+  color: var(--cdnca-color-text);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.certificate-detail-facts > .certificate-detail-sync {
+  grid-column: 1 / -1;
+}
+
+.certificate-detail-facts > .certificate-detail-sync dd {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.certificate-detail-facts dd.is-warning {
+  color: var(--cdnca-color-warning);
+}
+
+.certificate-detail-facts dd.is-error {
+  color: var(--cdnca-color-error);
+}
+
+.certificate-detail-facts small {
+  color: var(--cdnca-color-text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.certificate-detail-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.certificate-detail-section h4 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.certificate-detail-section-head {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.certificate-detail-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.certificate-detail-tags > .ant-tag {
+  margin: 0;
+}
+
+.certificate-detail-empty {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  color: var(--cdnca-color-text-secondary);
+  border: 1px dashed var(--cdnca-color-border-panel);
+  border-radius: 8px;
+}
+
+.certificate-detail-more {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.certificate-detail-more > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.certificate-detail-more dt {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.certificate-detail-more dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 575px) {
+  .certificate-detail-summary {
+    padding: 14px;
+  }
+
+  .certificate-detail-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .certificate-detail-empty {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .certificate-detail-empty .ant-btn {
+    min-height: 40px;
+  }
+}
+
+.certificate-detail-nowrap {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.certificate-status-cell {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.certificate-status-cell .ant-tag {
+  margin-inline-end: 0;
 }

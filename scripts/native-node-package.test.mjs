@@ -18,7 +18,7 @@ const metadata = {
 
 const required = [
   'bin/edge-agent', 'runtime/openresty/bin/openresty', 'runtime/openresty/nginx/sbin/nginx', 'runtime/openresty/lualib/resty/ipmatcher.lua',
-  'runtime/lib/ld-musl-x86_64.so.1', 'runtime/bin/h3probe',
+  'runtime/lib/ld-musl-x86_64.so.1', 'runtime/bin/h3probe', 'runtime/openresty/luajit/bin/luajit',
   'lua/share/cdnca/range/guard.lua', 'lua/share/cdnca/security/cdnca_waf.lua', 'lua/share/cdnca/security/cdnca_rule_interp.lua', 'lua/share/cdnca/security/cdnca_banlist.lua', 'lua/share/cdnca/dynroute/cdnca_site.lua', 'lua/share/cdnca/dynroute/cdnca_site_admin.lua', 'lua/share/cdnca/dynroute/cdnca_tls.lua', 'lua/share/cdnca/dynroute/cdnca_origin.lua', 'lua/share/cdnca/dynroute/cdnca_originauth.lua', 'lua/share/cdnca/dynroute/cdnca_origintls.lua', 'lua/share/cdnca/dynroute/cdnca_cache.lua', 'lua/share/cdnca/dynroute/cdnca_filters.lua', 'lua/share/cdnca/dynroute/cdnca_limits.lua',
   'lua/share/cdnca/security/cc.lua', 'lua/share/cdnca/security/cc_adaptive.lua',
   'lua/share/cdnca/security/url_auth.lua', 'lua/share/cdnca/challenge/engine.lua',

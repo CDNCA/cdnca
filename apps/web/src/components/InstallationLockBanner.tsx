@@ -20,12 +20,14 @@ export function InstallationLockBanner() {
   // fix-ipswitch: shown as soon as the license service refuses this controller,
   // also while the current lease is still valid.
   if (value?.rebound) {
+    // 重装主控 retired this controller; otherwise the master IP moved.
+    const kind = value.reinstalled ? 'reinstalled' : 'rebound'
     return (
-      <Alert type={value.locked ? 'error' : 'warning'} showIcon banner role="alert" style={{ marginBottom: 12 }} message={t('lock.rebound.title')}
+      <Alert type={value.locked ? 'error' : 'warning'} showIcon banner role="alert" style={{ marginBottom: 12 }} message={t(`lock.${kind}.title`)}
         description={<Space direction="vertical" size={2}>
-          <span>{t('lock.rebound.body')}</span>
+          <span>{t(`lock.${kind}.body`)}</span>
           {value.locked ? <Typography.Text type="secondary">{t('lock.readonly')}</Typography.Text> : null}
-          <span>{t('lock.rebound.action')}</span>
+          <span>{t(`lock.${kind}.action`)}</span>
         </Space>}
         action={checkButton} />
     )

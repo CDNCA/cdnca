@@ -315,7 +315,8 @@ paths:
         - name: grant_id
           in: query
           required: false
-          description: 只看该流量包（授予）的分录，amount_bytes 只计该包承担的部分。
+          description: "Only entries of this traffic package (grant); amount_bytes counts only the part this package covers."
+          x-description-zh: 只看该流量包（授予）的分录，amount_bytes 只计该包承担的部分。
           schema: {$ref: '#/components/schemas/CanonicalUUID'}
       responses:
         '200': {$ref: '#/components/responses/UsagePageOK'}

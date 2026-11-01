@@ -163,3 +163,28 @@ func TestRuntimeReportsMasterIPRebound(t *testing.T) {
 		t.Fatal("a successful fetch clears rebound")
 	}
 }
+
+// 授权端回 master_ip_rebound + retired_reason=reinstall 时同样冻结，
+// 横幅改为"授权已用于重装"；成功拉取后清除。
+func TestRuntimeReportsReinstall(t *testing.T) {
+	t.Cleanup(func() { installationlock.Set(installationlock.Lock{}) })
+	store := &fakeStore{state: State{LeasePresent: true, LeaseStatus: "valid", LeaseGrace: testNow.Add(time.Hour)}}
+	fetcher := &fakeFetcher{err: &HTTPError{StatusCode: 403, Code: CodeMasterIPRebound, RetiredReason: RetiredReasonReinstall}}
+	runtime := &Runtime{Fetcher: fetcher, Store: store, Now: func() time.Time { return testNow }}
+	_ = runtime.SyncOnce(t.Context())
+	if lock := installationlock.Current(); lock.Locked || !lock.Rebound || !lock.Reinstalled {
+		t.Fatalf("reinstall: lock %+v, want rebound+reinstalled without lock", lock)
+	}
+	fetcher.err = &HTTPError{StatusCode: 403, Code: CodeMasterIPRebound}
+	_ = runtime.SyncOnce(t.Context())
+	if lock := installationlock.Current(); !lock.Rebound || lock.Reinstalled {
+		t.Fatalf("plain rebound after reinstall: lock %+v", lock)
+	}
+	fetcher.err = nil
+	if err := runtime.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if lock := installationlock.Current(); lock.Rebound || lock.Reinstalled {
+		t.Fatalf("a successful fetch clears both: %+v", lock)
+	}
+}

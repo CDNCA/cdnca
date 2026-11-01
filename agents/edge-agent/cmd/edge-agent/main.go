@@ -39,6 +39,8 @@ func main() {
 	var code int
 	if len(os.Args) > 1 && os.Args[1] == "enroll" {
 		code = executeEnrollment(ctx, os.Args[2:], os.Stdin, os.Stdout, os.Stderr, runEnrollment)
+	} else if len(os.Args) > 1 && os.Args[1] == "set-gateway" {
+		code = setGatewayCommand(os.Args[2:], os.LookupEnv, os.Stdout, os.Stderr)
 	} else if len(os.Args) > 1 && os.Args[1] == "xdp-probe" {
 		code = xdpProbeCommand(os.Args[2:], os.Stdout)
 	} else {

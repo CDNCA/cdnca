@@ -872,6 +872,7 @@ func openDNSReconcileStoreDatabase(t *testing.T) *pgxpool.Pool {
 	if pool := databasetest.ClonedMigratedPool(t, func(config *pgxpool.Config) { config.MaxConns = 16 }); pool != nil {
 		return pool
 	}
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "dnsreconcile_store")
 	admin, err := pgxpool.New(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

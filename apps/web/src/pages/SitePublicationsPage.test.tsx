@@ -510,6 +510,22 @@ describe('SitePublicationsPage', () => {
     expect(notice).toHaveTextContent('源修订 11')
   })
 
+  // fix-https443-scope (73): a site whose saved configuration cannot be
+  // compiled (HTTPS off with HTTPS ports) ended retrying silently; the page
+  // says why and that saving the site publishes again.
+  it('explains a publication refused for an invalid site configuration', async () => {
+    setTenant()
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({
+      ...publicationPage(),
+      automatic_failure: { reason: 'site_config_invalid', source_revision: 9, failed_at: '2026-10-30T12:00:00Z' },
+    }))
+    renderWithProviders(<SitePublicationsPage />, ['/site/publications'])
+    const notice = (await screen.findByText('设置已保存，本次未发布：网站配置无法发布', { selector: '.cdnca-feedback-title span' }))
+      .closest('.cdnca-feedback') as HTMLElement
+    expect(notice).toHaveTextContent('源修订 9')
+    expect(notice).toHaveTextContent('关闭 HTTPS 却仍带 HTTPS 端口')
+  })
+
   it('requires a canonical explicit tenant target before platform reads', async () => {
     setPlatform(['edge_publications.read'])
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(publicationPage(true)))
@@ -792,6 +808,33 @@ describe('SitePublicationsPage', () => {
     const deployments = await screen.findByRole('dialog')
     expect(within(deployments).getByText('冻结中待补发')).toBeInTheDocument()
     expect(within(deployments).queryByText('失败')).not.toBeInTheDocument()
+  })
+
+  // a failed deployment shows the node's own failure text under its code.
+  it('shows the node failure text beside the deployment error code', async () => {
+    setTenant()
+    const cause = 'L4 configuration precheck failed: OpenResty command failed: nginx: [emerg] bind() to 0.0.0.0:7001 failed'
+    const failed = {
+      id: deploymentID, attempt: 1, max_attempts: 5, state: 'failed', error_code: 'ERROR_CODE_FAILED_PRECONDITION',
+      error_message: cause, created_at: '2026-08-01T08:01:00Z', updated_at: '2026-08-01T08:02:00Z', can_retry: false,
+    }
+    const rollout = Object.fromEntries(Object.entries({ ...adminRollout, state: 'failed', can_retry: false })
+      .filter(([key]) => key !== 'configuration_scope_id'))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url === '/v1/site-rollouts?limit=20') return json({ items: [rollout] })
+      if (url === `/v1/site-rollouts/${rolloutID}`) return json(rollout)
+      if (url === `/v1/site-rollouts/${rolloutID}/deployments?limit=20`) return json({ items: [failed] })
+      return json(publicationPage())
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<SitePublicationsPage />)
+
+    await user.click(await screen.findByRole('tab', { name: '部署进度' }))
+    await user.click(await screen.findByRole('button', { name: '查看部署' }))
+    const deployments = await screen.findByRole('dialog')
+    expect(within(deployments).getByText('ERROR_CODE_FAILED_PRECONDITION')).toBeInTheDocument()
+    expect(within(deployments).getByLabelText(`节点报告的失败原因：${cause}`)).toHaveTextContent(cause)
   })
 
 	it.each([

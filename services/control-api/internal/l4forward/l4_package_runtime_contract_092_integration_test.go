@@ -764,6 +764,8 @@ func l4Package092Pool(t *testing.T, maximum int64) *pgxpool.Pool {
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
 	}
+	// 独立库：共享库里兄弟 schema 已在更高迁移头时，580 守卫按全库 information_schema 拒绝（P5800）。
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "l4_package_092")
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancel()
 	admin, err := pgxpool.New(ctx, databaseURL)

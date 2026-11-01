@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { ApiError } from '../../api/auth'
 import { checkoutURL, marketApi, type MarketOrder, type MarketPlugin, type MarketPricePlan } from '../../api/market'
 import { activePlans, saleRevision, terminalOrderStates } from '../plugin-market/pluginStoreModel'
+import { pluginTitle } from '../plugin-market/usePluginCatalog'
 import { planPrice } from './marketModel'
 import './messages'
 import { useFeedback } from '@cdnca/ui'
@@ -28,7 +29,7 @@ const inProgress = (error: unknown) => error instanceof ApiError && error.status
 export function PurchaseModal({ plugin, plans, token, onClose, onDone }: {
   plugin: MarketPlugin; plans: MarketPricePlan[]; token: string; onClose: () => void; onDone: () => void
 }) {
-  const { t } = useTranslation('marketStore')
+  const { t, i18n } = useTranslation('marketStore')
   const { message } = App.useApp()
   const feedback = useFeedback()
   const onSale = activePlans(plans)
@@ -94,7 +95,7 @@ export function PurchaseModal({ plugin, plans, token, onClose, onDone }: {
   const pay = () => (unknown ? (unknown === 'prepaid' ? prepaid.mutate() : createOrder.mutate(unknown === 'trial'))
     : plan?.kind === 'free' ? createOrder.mutate(false) : method === 'balance' ? prepaid.mutate() : createOrder.mutate(false))
   return (
-    <Modal open title={t('pay.title', { name: plugin.title })} onCancel={onClose} destroyOnHidden
+    <Modal open title={t('pay.title', { name: pluginTitle(plugin, i18n.resolvedLanguage) })} onCancel={onClose} destroyOnHidden
       okText={unknown ? t('pay.checkResult') : t('pay.confirm')} cancelText={t('actions.cancel')} okButtonProps={{ disabled: !plan || !!order, loading: prepaid.isPending || createOrder.isPending }}
       onOk={pay}>
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>

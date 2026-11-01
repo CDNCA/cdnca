@@ -563,3 +563,72 @@ func TestRevocationSyncerRefreshesLeaseOnlyWhenGenerationChanges(t *testing.T) {
 		t.Fatalf("no lease refresher: %v", err)
 	}
 }
+
+// LongPollOnce sends the wait header only with a known set, and
+// the plain SyncOnce never waits.
+func TestRevocationSyncerLongPollSendsWaitOnlyWithKnownSet(t *testing.T) {
+	now := time.Unix(1_900_000_000, 0).UTC()
+	installationID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+	_, privateKey, _ := ed25519.GenerateKey(rand.Reader)
+	artifact := mustSignedRevocationArtifact(t, now)
+	store := &memoryRevocationStore{}
+	fetcher := &scriptedRevocationFetcher{responses: []RevocationFetchResponse{{Artifact: artifact},
+		{NotModified: true}, {NotModified: true}}}
+	syncer, err := NewRevocationSyncer(RevocationSyncConfig{
+		Client: fetcher, Store: store, InstallationID: installationID, PrivateKey: privateKey,
+		Now: func() time.Time { return now }, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No current set yet: a long poll must not wait (the 304 it would hold needs one).
+	if _, err := syncer.LongPollOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := syncer.LongPollOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := syncer.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if fetcher.requests[0].Wait != 0 || fetcher.requests[1].Wait != RevocationWaitSeconds*time.Second ||
+		fetcher.requests[2].Wait != 0 {
+		t.Fatalf("waits = %v %v %v", fetcher.requests[0].Wait, fetcher.requests[1].Wait, fetcher.requests[2].Wait)
+	}
+}
+
+func TestRevocationClientSendsWaitHeaderAndRejectsBadWait(t *testing.T) {
+	now := time.Unix(1_900_000_000, 0).UTC()
+	installationID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+	_, installationPrivate, _ := ed25519.GenerateKey(rand.Reader)
+	artifact := mustSignedRevocationArtifact(t, now)
+	var waits []string
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		waits = append(waits, strings.Join(request.Header.Values(RevocationWaitHeader), ","))
+		return &http.Response{StatusCode: http.StatusOK, Header: revocationArtifactHeaders(t, artifact),
+			Body: io.NopCloser(strings.NewReader(string(artifact)))}, nil
+	})
+	base, _ := NewClient("https://license.example.test", &http.Client{Transport: transport})
+	client, _ := NewRevocationClient(base)
+	for _, wait := range []time.Duration{0, 50 * time.Second} {
+		if _, err := client.Fetch(t.Context(), RevocationFetchRequest{InstallationID: installationID,
+			PrivateKey: installationPrivate, Now: now, Wait: wait}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(waits) != 2 || waits[0] != "" || waits[1] != "50" {
+		t.Fatalf("wait headers = %q", waits)
+	}
+	for _, wait := range []time.Duration{-time.Second, 51 * time.Second, 1500 * time.Millisecond} {
+		if _, err := client.Fetch(t.Context(), RevocationFetchRequest{InstallationID: installationID,
+			PrivateKey: installationPrivate, Now: now, Wait: wait}); !errors.Is(err, ErrInvalidConfiguration) {
+			t.Fatalf("wait %v error = %v", wait, err)
+		}
+	}
+	// The default client's long poll timeout covers the wait.
+	plain, _ := NewClient("https://license.example.test", nil)
+	short, long := plain.longPollHTTP(false).(*http.Client), plain.longPollHTTP(true).(*http.Client)
+	if short.Timeout != 15*time.Second || long.Timeout <= RevocationWaitSeconds*time.Second || long.Transport != short.Transport {
+		t.Fatalf("timeouts plain=%v long=%v same transport=%v", short.Timeout, long.Timeout, long.Transport == short.Transport)
+	}
+}

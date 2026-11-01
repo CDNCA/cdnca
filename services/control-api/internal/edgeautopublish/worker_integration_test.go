@@ -10,8 +10,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"os"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,7 +18,6 @@ import (
 	"github.com/cdnca/cdnca/libs/edgeconfig"
 	"github.com/cdnca/cdnca/libs/entitlement"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
@@ -1237,50 +1234,7 @@ func automaticPublicationActor(t *testing.T) edgepublish.Actor {
 
 func openAutomaticDatabase(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "edge_auto_086_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^edge_auto_086_test_[a-f0-9]{32}$`).MatchString(schema) {
-		admin.Close()
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		cleanupCtx, cleanupCancel := databasetest.CleanupContext()
-		defer cleanupCancel()
-		if _, err := admin.Exec(cleanupCtx, "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop automatic publication schema: %v", err)
-		}
-		admin.Close()
-	})
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 // adm-fix-a (73, 10-25): automatic publications create non-v2 rollouts, whose

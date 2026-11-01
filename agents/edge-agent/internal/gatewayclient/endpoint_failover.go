@@ -109,16 +109,27 @@ func (d *FailoverDialer) entries() []GatewayEndpoint {
 	return append(append([]GatewayEndpoint(nil), d.extra...), d.learned...)
 }
 
+// endpointID is address|transport with the default transport spelled out:
+// a configured primary has transport "" and the published list names the
+// same Gateway "grpc" (migrate-ip: otherwise the node keeps a duplicate of
+// its primary and, once it stops answering, spends a second dial on it).
+func endpointID(address, transport string) string {
+	if transport == "" {
+		transport = gatewaytunnel.TransportGRPC
+	}
+	return address + "|" + transport
+}
+
 // setLearned keeps the valid, new entries (caller holds no lock or the lock
 // is not yet shared).
 func (d *FailoverDialer) setLearned(endpoints []GatewayEndpoint, version string) bool {
-	seen := map[string]bool{d.base.Address + "|" + d.base.Transport: true}
+	seen := map[string]bool{endpointID(d.base.Address, d.base.Transport): true}
 	for _, endpoint := range d.extra {
-		seen[endpoint.Address+"|"+endpoint.Transport] = true
+		seen[endpointID(endpoint.Address, endpoint.Transport)] = true
 	}
 	kept := []GatewayEndpoint{}
 	for _, endpoint := range endpoints {
-		key := endpoint.Address + "|" + endpoint.Transport
+		key := endpointID(endpoint.Address, endpoint.Transport)
 		if seen[key] || validateEndpoint(d.base, endpoint, d.newMTLS) != nil || len(kept) == MaxLearnedGatewayEndpoints {
 			continue
 		}
@@ -162,7 +173,7 @@ func (d *FailoverDialer) Learn(endpoints []*agentv1.GatewayEndpointV1, version s
 	if version != d.learnedVersion {
 		// A Gateway named again by a new list (re-enabled) is no longer avoided.
 		for _, endpoint := range converted {
-			delete(d.avoided, endpoint.Address+"|"+endpoint.Transport)
+			delete(d.avoided, endpointID(endpoint.Address, endpoint.Transport))
 		}
 	}
 	changed := d.setLearned(converted, version)
@@ -293,7 +304,7 @@ func (d *FailoverDialer) endpointKey(index int) string {
 			state := active.store.Active()
 			config.Address = state.Address
 		}
-		return config.Address + "|" + config.Transport
+		return endpointID(config.Address, config.Transport)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -301,7 +312,7 @@ func (d *FailoverDialer) endpointKey(index int) string {
 	if index > len(entries) {
 		return ""
 	}
-	return entries[index-1].Address + "|" + entries[index-1].Transport
+	return endpointID(entries[index-1].Address, entries[index-1].Transport)
 }
 
 func (d *FailoverDialer) isAvoided(index int) bool {

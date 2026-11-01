@@ -51,14 +51,20 @@ function setSession(permissions = ['plugin_installations.read', 'plugin_installa
 }
 
 function mockApi(item = installation()) {
+  // Like the server, a detail read after a successful write returns the written state.
+  let current = item
+  const written = (installation: PluginInstallation) => {
+    current = installation
+    return { installation }
+  }
   vi.spyOn(pluginInstallationsApi, 'list').mockResolvedValue({ items: [item] })
-  vi.spyOn(pluginInstallationsApi, 'get').mockResolvedValue(item)
-  vi.spyOn(pluginInstallationsApi, 'confirm').mockResolvedValue({ installation: { ...item, status: 'authorized', revision: item.revision + 1 } })
-  vi.spyOn(pluginInstallationsApi, 'upgrade').mockResolvedValue({ installation: { ...item, revision: item.revision + 1 } })
-  vi.spyOn(pluginInstallationsApi, 'disable').mockResolvedValue({ installation: { ...item, status: 'disabled', revision: item.revision + 1 } })
-  vi.spyOn(pluginInstallationsApi, 'uninstall').mockResolvedValue({ installation: { ...item, status: 'uninstalled', revision: item.revision + 1 } })
-  vi.spyOn(pluginInstallationsApi, 'resume').mockResolvedValue({ installation: { ...item, status: 'enabled', revision: item.revision + 1,
-    authorization_status: 'enabled', paused_by: undefined, paused_reason: undefined } })
+  vi.spyOn(pluginInstallationsApi, 'get').mockImplementation(async () => current)
+  vi.spyOn(pluginInstallationsApi, 'confirm').mockImplementation(async () => written({ ...item, status: 'authorized', revision: item.revision + 1 }))
+  vi.spyOn(pluginInstallationsApi, 'upgrade').mockImplementation(async () => written({ ...item, revision: item.revision + 1 }))
+  vi.spyOn(pluginInstallationsApi, 'disable').mockImplementation(async () => written({ ...item, status: 'disabled', revision: item.revision + 1 }))
+  vi.spyOn(pluginInstallationsApi, 'uninstall').mockImplementation(async () => written({ ...item, status: 'uninstalled', revision: item.revision + 1 }))
+  vi.spyOn(pluginInstallationsApi, 'resume').mockImplementation(async () => written({ ...item, status: 'enabled', revision: item.revision + 1,
+    authorization_status: 'enabled', paused_by: undefined, paused_reason: undefined }))
 }
 
 describe('PluginMarketPage', () => {
@@ -78,6 +84,8 @@ describe('PluginMarketPage', () => {
     await userEvent.click(screen.getByRole('button', { name: '查询' }))
     await waitFor(() => expect(pluginInstallationsApi.list).toHaveBeenLastCalledWith(expect.any(String), scopeID, expect.objectContaining({ plugin_id: 'cache' })))
     fireEvent.click(screen.getByRole('button', { name: '查看详情' }))
+    // 内部编号与指纹折在“诊断信息”里。
+    fireEvent.click(await screen.findByRole('button', { name: /诊断信息/ }))
     expect(await screen.findByText('插件清单指纹（SHA-256）')).toBeInTheDocument()
     expect(screen.getAllByText('1.2.3').length).toBeGreaterThan(0)
   })
@@ -139,6 +147,19 @@ describe('PluginMarketPage', () => {
     expect(pluginLabel.closest('tr')).not.toBe(versionLabel.closest('tr'))
   })
 
+  it('explains in Chinese what dns.records.manage lets a plugin do and names known permissions', async () => {
+    mockApi(installation({
+      status: 'pending_confirmation', manifest_scopes: ['dns.records.manage', 'sites.read'], approved_scopes: [],
+      sensitive_scopes: [], new_scopes: [], revision: 1, lkg_verification_id: null, lkg_version: null,
+    }))
+    renderWithProviders(<PluginMarketPage />)
+    await userEvent.click(await screen.findByRole('button', { name: '安装' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('dns.records.manage')).toBeInTheDocument()
+    expect(within(dialog).getByText(/改你自己 DNS 账号下的解析记录/)).toBeInTheDocument()
+    expect(within(dialog).getByText('查看网站')).toBeInTheDocument()
+  })
+
   it('requires separate sensitive and new-permission consent before installation confirmation', async () => {
     const pending = installation({
       status: 'pending_confirmation', approved_scopes: [], new_scopes: ['sites.read'], revision: 1,
@@ -153,7 +174,7 @@ describe('PluginMarketPage', () => {
     const submit = within(dialog).getByRole('button', { name: '确认安装' })
     expect(submit).toBeDisabled()
     await userEvent.click(within(dialog).getByRole('checkbox', { name: '我已了解这些权限可以读取或修改重要数据' }))
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: '我同意新版本新增的权限' }))
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: '我已确认本次安装所需的权限' }))
     expect(submit).toBeEnabled()
     await userEvent.click(submit)
     await waitFor(() => expect(pluginInstallationsApi.confirm).toHaveBeenCalledWith(
@@ -225,7 +246,7 @@ describe('PluginMarketPage', () => {
     const ok = within(dialog).getByRole('button', { name: '确认安装' })
     expect(ok).toBeDisabled()
     await userEvent.click(within(dialog).getByRole('checkbox', { name: '我已了解这些权限可以读取或修改重要数据' }))
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: '我同意新版本新增的权限' }))
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: '我已确认本次安装所需的权限' }))
     await userEvent.click(ok)
     await waitFor(() => expect(pluginInstallationsApi.confirm).toHaveBeenCalledWith(expect.any(String), scopeID,
       authorizationID, 1, expect.objectContaining({ verification_id: verificationID, approved_scopes: ['edge.health_beacon'],
@@ -263,7 +284,7 @@ describe('PluginMarketPage', () => {
     const resume = within(state).getByRole('button', { name: '恢复使用' })
     expect(within(drawer).queryByRole('button', { name: '暂停' })).not.toBeInTheDocument()
     // 状态区在详情表之前，卸载在详情之后。
-    const details = within(drawer).getByText('插件清单指纹（SHA-256）')
+    const details = within(drawer).getByRole('button', { name: /诊断信息/ })
     const uninstall = within(drawer).getByRole('button', { name: '卸载' })
     expect(state.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(details.compareDocumentPosition(uninstall) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -306,7 +327,7 @@ describe('PluginMarketPage', () => {
     const drawer = await findDialogTitled('acme.cache')
     await userEvent.click(within(drawer).getByRole('button', { name: '恢复使用' }))
     expect(await screen.findByText('不确定恢复使用是否完成', OUTCOME_BAR)).toBeInTheDocument()
-    expect(screen.getByText('插件可能已经恢复。点“重新恢复”会原样再提交这次恢复，不会重复恢复，也不需要重新购买或卸载。')).toBeInTheDocument()
+    expect(screen.getByText('插件可能已经恢复。点“重新恢复”会原样再提交这次恢复，不会重复恢复，也不需要重新购买或卸载。放弃只丢弃本页的重试入口，不会撤销已经提交给服务端的操作。')).toBeInTheDocument()
     const first = vi.mocked(pluginInstallationsApi.resume).mock.calls[0]
     await userEvent.click(screen.getByRole('button', { name: '重新恢复' }))
     await waitFor(() => expect(pluginInstallationsApi.resume).toHaveBeenCalledTimes(2))
@@ -355,8 +376,10 @@ describe('PluginMarketPage', () => {
       severity: 'critical', action: 'disable', title: '缓存投毒', body: '', published_at: '2026-10-16T00:00:00Z', acknowledgement: null }
     const fetchMock = vi.fn(async (path: string) => ({
       ok: true, status: 200,
+      // 市场目录（插件名称）另走 /plugins，这里只答公告。
       text: async () => JSON.stringify(path.endsWith('/acknowledge')
-        ? { disposition: 'disabled', note: '', acknowledged_by: 'u', acknowledged_at: '2026-10-16T01:00:00Z' } : { items: [advisory] }),
+        ? { disposition: 'disabled', note: '', acknowledged_by: 'u', acknowledged_at: '2026-10-16T01:00:00Z' }
+        : { items: path.startsWith('/v1/admin/market/plugins') ? [] : [advisory] }),
     }) as unknown as Response)
     vi.stubGlobal('fetch', fetchMock)
     try {
@@ -379,7 +402,8 @@ describe('PluginMarketPage', () => {
     mockApi()
     const advisory = { id: '018cc251-f400-7def-8000-000000000031', plugin_id: 'acme.cache', affected_versions: '*', fixed_version: '',
       severity: 'low', action: 'notify', title: '提示', body: '', published_at: '2026-10-16T00:00:00Z', acknowledgement: null }
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ items: [advisory] }) }) as unknown as Response))
+    vi.stubGlobal('fetch', vi.fn(async (path: string) => ({ ok: true, status: 200,
+      text: async () => JSON.stringify({ items: path.startsWith('/v1/admin/market/plugins') ? [] : [advisory] }) }) as unknown as Response))
     try {
       const { unmount } = renderWithProviders(<PluginMarketPage />)
       expect(await screen.findByText('提示')).toBeInTheDocument()

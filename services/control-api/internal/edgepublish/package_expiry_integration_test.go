@@ -25,6 +25,10 @@ func newPackageExpiryScope(t *testing.T) (*edgepublish.SystemRepublishScope, uui
 	scope := edgepublish.NewSystemRepublishScope(t)
 	other := scope.AddSite(t, "package-expiry-other.example.com", 18082)
 	scope.BindSiteToSubscription(t, scope.SiteID)
+	// Every fixture site lands on the scope's subscription, so
+	// the other site gets a subscription of its own that EndSubscription
+	// leaves running.
+	scope.BindSiteTo(t, other, scope.AddSubscription(t))
 	node := scope.AddNode(t, 6)
 	scope.DeclareErrorPageSlots(t, node)
 	if err := scope.PublishManually(t, "package-expiry-baseline", node); err != nil {

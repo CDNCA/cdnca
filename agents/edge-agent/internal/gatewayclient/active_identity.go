@@ -184,7 +184,7 @@ func ensureActiveConfigIdentityCapability(capabilities *agentv1.AgentCapabilitie
 		}
 		return nil
 	}
-	if len(capabilities.Features) >= 64 {
+	if len(capabilities.Features) >= agentv1.MaxCapabilities {
 		return ErrInvalidConfiguration
 	}
 	capabilities.Features = append(capabilities.Features, activeConfigIdentityCapability())
@@ -201,7 +201,7 @@ func ensureDeploymentStatusAckReceiptCapability(capabilities *agentv1.AgentCapab
 		}
 		return nil
 	}
-	if len(capabilities.Features) >= 64 {
+	if len(capabilities.Features) >= agentv1.MaxCapabilities {
 		return ErrInvalidConfiguration
 	}
 	capabilities.Features = append(capabilities.Features, deploymentStatusAckReceiptCapability())

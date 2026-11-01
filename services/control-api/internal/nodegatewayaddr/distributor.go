@@ -12,6 +12,7 @@ import (
 	contract "github.com/cdnca/cdnca/libs/edgeconfig/gatewayaddr"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
+	"github.com/cdnca/cdnca/services/control-api/internal/natsready"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -162,7 +163,7 @@ func (d *Distributor) consumeReceipts(ctx context.Context) {
 		delivery, err := d.config.Transport.NextReceipt(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				d.config.Logger.Warn("gateway address change receipts unavailable", "error", err)
+				natsready.LogUnbound(d.config.Logger, "gateway address change receipts unavailable", err)
 				select {
 				case <-ctx.Done():
 				case <-time.After(d.config.Interval):

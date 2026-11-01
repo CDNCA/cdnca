@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { ThemeDocument } from '../api/theme'
 import { brandCandidates, useThemeRuntime } from '../theme/runtime'
@@ -106,9 +107,10 @@ export function PublicBrandAssetImage({ alt, slot = 'logo', className }: {
   className?: string
 }) {
   const { document, scope, brandAssets } = useThemeRuntime()
+  const { i18n } = useTranslation()
   // Keyed by content: an identical reloaded theme keeps the image (and the
   // candidate it fell back to) instead of requesting the first one again.
-  const key = brandCandidates(slot, document, scope === 'tenant' ? noUploads : brandAssets).join('\n')
+  const key = brandCandidates(slot, document, scope === 'tenant' ? noUploads : brandAssets, i18n.resolvedLanguage).join('\n')
   const candidates = useMemo(() => key.split('\n'), [key])
   const [index, setIndex] = useState(0)
   useEffect(() => setIndex(0), [key])

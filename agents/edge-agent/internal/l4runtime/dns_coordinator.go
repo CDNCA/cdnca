@@ -95,12 +95,13 @@ func (c *DNSCoordinator) Resolve(ctx context.Context, config ConfigV2, streamID 
 	}
 	if listener.Endpoint.Address != "" {
 		addresses := []netip.Addr{netip.MustParseAddr(listener.Endpoint.Address)}
-		if c.health != nil {
-			if err := c.health(ctx, listener, addresses); err != nil {
-				return ResolvedAddressSet{}, fmt.Errorf("%w: %v", ErrDNSUnavailable, err)
-			}
+		// origin reachability is runtime health, not a release
+		// gate; an unreachable origin degrades only this forward.
+		reason := DNSReasonStaticAddress
+		if c.health != nil && c.health(ctx, listener, addresses) != nil {
+			reason = DNSReasonStaticUnreachable
 		}
-		return resolvedSet(listener, revision, "", addresses, time.Time{}, time.Time{}, DNSReasonStaticAddress), nil
+		return resolvedSet(listener, revision, "", addresses, time.Time{}, time.Time{}, reason), nil
 	}
 
 	lock := c.scopeLock(listener)
@@ -169,7 +170,13 @@ func (c *DNSCoordinator) Resolve(ctx context.Context, config ConfigV2, streamID 
 	lock.Unlock()
 	if c.health != nil {
 		if err := c.health(ctx, listener, addresses); err != nil {
-			return c.keepLKG(listener, revision, normalized.Revision, configDigest, DNSReasonHealthRejected, false)
+			// A fresh-enough LKG is preferred over an answer that failed the
+			// probe. Without one, use the answer unverified and store nothing
+			// (the next resolution probes again) rather than no origin.
+			if exists && state.Host == listener.Endpoint.Host && len(state.Addresses) != 0 && !c.now().UTC().After(state.StaleUntil) {
+				return c.keepLKG(listener, revision, normalized.Revision, configDigest, DNSReasonHealthRejected, false)
+			}
+			return resolvedSet(listener, revision, listener.Endpoint.Host, addresses, time.Time{}, time.Time{}, DNSReasonHealthUnverified), nil
 		}
 	}
 

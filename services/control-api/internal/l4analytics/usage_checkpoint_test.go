@@ -17,7 +17,7 @@ import (
 // L4-USAGE-01：检查点写 l4_usage_checkpoints_v1（按检查点时间、会话+序号为
 // 去重键），结束事实写 checkpointed_bytes_up/down；检查点信封不写事实与会话日志。
 func TestFactWriterWritesUsageCheckpointsAndCheckpointedBytes(t *testing.T) {
-	fake := &fakeClickHouse{exists: true}
+	fake := &fakeClickHouse{}
 	server := httptest.NewServer(fake.handler(t))
 	defer server.Close()
 	source, err := NewClickHouseSource(ClickHouseConfig{Endpoint: server.URL, Database: "facts", QueryTimeout: time.Second, HTTPClient: server.Client()})

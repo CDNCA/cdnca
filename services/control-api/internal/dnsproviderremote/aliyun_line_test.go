@@ -12,7 +12,7 @@ import (
 )
 
 // aliyunLineFixture serves DescribeDomainRecords over two pages (the owner has
-// records on the default line, the telecom line and an Anhui-telecom line the
+// records on the default line, the telecom line and an East-China-telecom (大区) line the
 // unified enum does not map), DescribeDomainRecordInfo, and the three
 // mutations. Every request must be signed and carry exactly the documented
 // action parameters.
@@ -66,7 +66,7 @@ func (fixture *aliyunLineFixture) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			for index := range 100 {
 				line := "default"
 				if index == 0 {
-					line = "cn_telecom_anhui"
+					line = "cn_telecom_huadong"
 				}
 				records = append(records, map[string]any{"RecordId": "default-" + strconv.Itoa(index), "RR": "www",
 					"Type": "A", "Value": "198.51.100." + strconv.Itoa(index+1), "TTL": 300, "Line": line})
@@ -129,7 +129,7 @@ func TestAliyunLineCreateLookupSeesOnlyItsLineAcrossPages(t *testing.T) {
 	if err != nil || lookup.TargetComplete || lookup.Conflict || lookup.Ambiguous {
 		t.Fatalf("default Lookup() = (%+v, %v), want absent", lookup, err)
 	}
-	// 198.51.100.1 sits on the unmapped Anhui line; the default line does not see it.
+	// 198.51.100.1 sits on the unmapped 华东电信 (region) line; the default line does not see it.
 	operation.Value = "198.51.100.1"
 	lookup, err = remote.Lookup(t.Context(), config, operation)
 	if err != nil || lookup.TargetComplete || lookup.Conflict {
@@ -163,7 +163,7 @@ func TestAliyunLineMutationsSendMappedLine(t *testing.T) {
 		t.Fatalf("default create error = %v", err)
 	}
 	remove := base
-	remove.Action, remove.RecordID, remove.Line = dnscheck.ProviderDelete, "telecom-1", "aliyun:cn_telecom_anhui"
+	remove.Action, remove.RecordID, remove.Line = dnscheck.ProviderDelete, "telecom-1", "aliyun:cn_telecom_huadong"
 	if _, err := remote.Mutate(t.Context(), config, remove); err != nil {
 		t.Fatalf("delete of a foreign-line record error = %v", err)
 	}
@@ -205,7 +205,7 @@ func TestAliyunLineRecordLookupReadsInfoLine(t *testing.T) {
 
 func TestAliyunLineUnmappedLineFailsBeforeNetwork(t *testing.T) {
 	fixture, remote, config := newAliyunLineRemote(t)
-	for _, line := range []string{"教育网", "广东电信", "aliyun:cn_telecom_anhui"} {
+	for _, line := range []string{"教育网", "华东电信", "aliyun:cn_telecom_huadong"} {
 		operation := dnscheck.ProviderOperation{Action: dnscheck.ProviderCreate, Name: "www.example.test.",
 			Type: dnscheck.RecordA, Value: "192.0.2.10", TTL: 300, Line: line}
 		if _, err := remote.Mutate(t.Context(), config, operation); ErrorCodeOf(err) != CodeUnsupported {
@@ -227,7 +227,7 @@ func TestAliyunListZoneRecordsReportsUnifiedLines(t *testing.T) {
 	for _, record := range records {
 		lines[record.ID] = record.Line
 	}
-	if lines["telecom-1"] != LineTelecom || lines["default-1"] != LineDefault || lines["default-0"] != "aliyun:cn_telecom_anhui" {
+	if lines["telecom-1"] != LineTelecom || lines["default-1"] != LineDefault || lines["default-0"] != "aliyun:cn_telecom_huadong" {
 		t.Fatalf("lines = telecom-1:%q default-1:%q default-0:%q", lines["telecom-1"], lines["default-1"], lines["default-0"])
 	}
 }

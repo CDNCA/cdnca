@@ -11,7 +11,7 @@ import (
 // 事实写入 CH 时带上节点上报的套餐（CH 027 package_subscription_id）；
 // 无套餐的转发写零 UUID。
 func TestFactWriterWritesThePackageSubscription(t *testing.T) {
-	fake := &fakeClickHouse{exists: true}
+	fake := &fakeClickHouse{}
 	server := httptest.NewServer(fake.handler(t))
 	defer server.Close()
 	source, err := NewClickHouseSource(ClickHouseConfig{Endpoint: server.URL, Database: "facts", QueryTimeout: time.Second, HTTPClient: server.Client()})

@@ -18,6 +18,7 @@ import { regionsApi } from '../api/nodes'
 import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import LineGroupSnapshotModal from './node-scheduling/LineGroupSnapshotModal'
+import SmartScheduleDrawer from './node-scheduling/SmartScheduleDrawer'
 import './node-scheduling/messages'
 import {
   outcomeUnknown,
@@ -197,6 +198,8 @@ function NodeLineGroupsContent({
   const [fieldError, setFieldError] = useState<unknown>(null)
   const [deleteTargets, setDeleteTargets] = useState<NodeLineGroup[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  // smartsched：线路组智能调度抽屉（读权限可看，管理权限可改）。
+  const [smartGroup, setSmartGroup] = useState<NodeLineGroup | null>(null)
   // UX-LG-EMPTY-01：刚建的空线路组（还没有 IP）给出下一步。
   const [createdEmpty, setCreatedEmpty] = useState<{ id: string; name: string; ownerKey: string } | null>(null)
   const [deleteAttempt, setDeleteAttempt] = useState<LineDeleteAttempt | null>(null)
@@ -618,13 +621,24 @@ function NodeLineGroupsContent({
     {
       title: t('columns.actions'),
       className: 'node-line-group-col-actions',
-      width: 156,
+      width: 224,
       align: 'center',
-      render: (_, group) => canManageCurrentScope ? (
+      render: (_, group) => {
+        const smartSchedule = (
+          <Button
+            type="link"
+            aria-label={t('smartSchedule.actionLabel', { name: group.name })}
+            onClick={() => setSmartGroup(group)}
+          >
+            {t('smartSchedule.action')}
+          </Button>
+        )
+        return canManageCurrentScope ? (
         <div className="node-line-group-actions">
           <Button type="link" onClick={() => navigate(`/node/line-group/line/${encodeURIComponent(group.id)}`)}>
             {t('actions.configureResolution')}
           </Button>
+          {smartSchedule}
           <Button
             type="link"
             disabled={operationPending || Boolean(activeOperationAttempt)}
@@ -650,7 +664,8 @@ function NodeLineGroupsContent({
             {t('actions.delete')}
           </Button>
         </div>
-      ) : t('values.placeholder'),
+        ) : <div className="node-line-group-actions">{smartSchedule}</div>
+      },
     },
   ]
 
@@ -864,6 +879,16 @@ function NodeLineGroupsContent({
           ids: deleteTargets.map((group) => group.display_id).join(','),
         })}</p>
       </Modal>
+
+      {smartGroup && scope ? (
+        <SmartScheduleDrawer
+          group={smartGroup}
+          scope={scope}
+          accessToken={currentSessionAccess}
+          canManage={canManageCurrentScope}
+          onClose={() => setSmartGroup(null)}
+        />
+      ) : null}
 
       <LineGroupSnapshotModal
         item={editing}

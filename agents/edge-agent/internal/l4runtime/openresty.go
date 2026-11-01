@@ -30,6 +30,7 @@ import (
 type OpenResty struct {
 	mu                   sync.Mutex
 	binary               string
+	globals              string
 	pidFile              string
 	timeout              time.Duration
 	start                func(context.Context, []string, ...string) error
@@ -158,6 +159,24 @@ func NewOpenResty(binary, pidFile string, timeout time.Duration) (*OpenResty, er
 	return controller, nil
 }
 
+// ConfigureGlobals sets the directives passed with -g on every precheck and
+// start before the runtime's own (native profile: "user cdnca-runtime
+// cdnca-runtime;"). Without it the compiled-in "user nobody nobody" makes
+// nginx -t fail with getgrnam("nobody") on hosts whose nobody group is
+// named nogroup (Ubuntu/Debian; node-e2e 10-31).
+func (r *OpenResty) ConfigureGlobals(globals string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.globals = globals
+}
+
+func (r *OpenResty) withGlobals(directives string) string {
+	if r.globals == "" {
+		return directives
+	}
+	return r.globals + " " + directives
+}
+
 func (r *OpenResty) Precheck(ctx context.Context, candidatePath string) error {
 	if !safeAbsolutePath(candidatePath) {
 		return ErrInvalidPath
@@ -168,7 +187,7 @@ func (r *OpenResty) Precheck(ctx context.Context, candidatePath string) error {
 		return ErrInvalidPath
 	}
 	defer os.Remove(precheckPID)
-	if err := r.run(ctx, "-e", "stderr", "-t", "-q", "-p", withSeparator(candidatePath), "-c", "nginx.conf", "-g", "pid "+precheckPID+";"); err != nil {
+	if err := r.run(ctx, "-e", "stderr", "-t", "-q", "-p", withSeparator(candidatePath), "-c", "nginx.conf", "-g", r.withGlobals("pid "+precheckPID+";")); err != nil {
 		return err
 	}
 	return precheckListenerPorts(candidatePath)
@@ -378,7 +397,7 @@ func (r *OpenResty) activateLocked(ctx context.Context, currentPath string) (res
 	environment := []string{processStartEnvironment + "=" + startIdentity.Token}
 	arguments := []string{
 		"-e", "stderr", "-p", withSeparator(currentPath), "-c", "nginx.conf", "-g",
-		"pid " + r.pidFile + "; env " + processStartEnvironment + "=" + startIdentity.Token + ";",
+		r.withGlobals("pid " + r.pidFile + "; env " + processStartEnvironment + "=" + startIdentity.Token + ";"),
 	}
 	if err := r.start(ctx, environment, arguments...); err != nil {
 		return errors.Join(err, r.cleanupUnrecordedStart())

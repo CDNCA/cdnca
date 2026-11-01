@@ -86,6 +86,8 @@ const zhCN = {
     tenantPublish: '可稍后重试保存；仍失败请联系管理员。',
     enableSite: '启用网站后会重新发布。',
     bindCertificate: '在 HTTPS 设置里绑定或更新证书。',
+    adminDnsConfig: '平台还没有可用的 DNS 服务商或 CNAME 域名。配置后失败的 CNAME 会自动重新生成；仍未生成可在 CNAME 旁点“重新生成”。',
+    cnameRegenerate: '查看 CNAME 旁的失败原因，处理后点“重新生成”。',
   },
   actions: {
     goLineGroups: '去线路组',
@@ -93,6 +95,9 @@ const zhCN = {
     goPublications: '去发布记录',
     contactAdmin: '联系管理员（提交工单）',
     goHttps: '去 HTTPS 设置',
+    goDnsConfig: '去 DNS 配置',
+    viewReason: '查看原因',
+    viewCname: '查看 CNAME',
   },
 }
 
@@ -181,6 +186,8 @@ const enUS: typeof zhCN = {
     tenantPublish: 'Save again later; if it still fails, contact the administrator.',
     enableSite: 'Enable the site to publish it again.',
     bindCertificate: 'Bind or renew a certificate under HTTPS settings.',
+    adminDnsConfig: 'The platform has no usable DNS provider or CNAME domain yet. Once configured, failed CNAMEs are regenerated automatically; if one is still missing, choose Regenerate next to the CNAME.',
+    cnameRegenerate: 'See the failure reason next to the CNAME, fix it, then choose Regenerate.',
   },
   actions: {
     goLineGroups: 'Go to line groups',
@@ -188,6 +195,9 @@ const enUS: typeof zhCN = {
     goPublications: 'Go to publication records',
     contactAdmin: 'Contact the administrator (open a ticket)',
     goHttps: 'Go to HTTPS settings',
+    goDnsConfig: 'Go to DNS configuration',
+    viewReason: 'View reason',
+    viewCname: 'View CNAME',
   },
 }
 

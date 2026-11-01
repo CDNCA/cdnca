@@ -3,14 +3,11 @@
 package admininbox_test
 
 import (
-	"context"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/admininbox"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
+	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,37 +16,7 @@ import (
 
 func inboxPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	admin, err := pgxpool.New(t.Context(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "admin_inbox_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(t.Context(), "CREATE SCHEMA "+identifier); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(t.Context(), pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 func TestAdminInboxListReadAndReadAll(t *testing.T) {

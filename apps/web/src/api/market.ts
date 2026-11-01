@@ -363,7 +363,12 @@ export interface MarketPlugin {
   risk_class: 'sandboxed' | 'privileged'
   title: string
   summary?: string
+  /** Optional English name and summary (market 071); empty: the English interface shows title / summary. */
+  title_en?: string
+  summary_en?: string
   description_md?: string
+  /** Optional English description (market 073); empty: the English interface shows description_md. */
+  description_md_en?: string
   homepage?: string
   support_url?: string
   license_spdx?: string
@@ -420,6 +425,8 @@ export interface MarketPricePlan {
   promo_then_kind?: 'one_time' | 'subscription' | null
   promo_then_interval?: 'month' | null
   promo_then_price_minor?: number | null
+  // Buyer reads only (market 068): the edition this plan is priced for (this controller's).
+  edition?: 'commercial' | 'community'
   status: string
   // The revision on sale (M2); null while the first price is still under review.
   active_revision?: number | null
@@ -458,6 +465,9 @@ export interface MarketLicense {
   // Pricing when claimed (fixed): decides the rights when the plan is repriced (market 064).
   claim_pricing?: 'free_permanent' | 'free_promo' | 'paid_once' | 'paid_monthly' | 'paid_yearly'
   promo_first_charge_at?: string | null
+  // The licence's price (a converted promo holder: the monthly price it is billed from promo_first_charge_at).
+  price_minor?: number
+  currency?: string
 }
 export interface MarketUsageStatement {
   id: string
@@ -580,7 +590,7 @@ export interface MarketSlaPolicy {
 }
 export interface MarketSelectionLimits { max_unit_price_minor: number | null; min_quality_score: number | null }
 export type RenewalPricePolicy = 'always' | 'if_lesser' | 'if_lesser_or_equal' | 'if_equal' | 'never'
-export interface PluginFilters { q?: string; kind?: MarketPluginKind; price?: 'free' | 'paid'; sort?: 'popular' | 'newest' | 'name'; allVersions?: boolean; cursor?: string; appliesTo?: 'user' | 'site' }
+export interface PluginFilters { q?: string; kind?: MarketPluginKind; price?: 'free' | 'paid'; sort?: 'popular' | 'newest' | 'name'; allVersions?: boolean; cursor?: string; appliesTo?: 'user' | 'site'; limit?: number }
 export interface OfferFilters { region?: string; carrier?: string; billing_model?: string; max_price?: number; min_score?: number; settlement_mode?: 'direct' | 'escrow' }
 export type OrderInput =
   | { market: 'plugin'; price_plan_id: string; plan_revision: number; trial?: boolean }
@@ -646,7 +656,15 @@ export async function call<T>(accessToken: string, path: string, init: RequestIn
   }
   const text = await response.text()
   let body: unknown
-  try { body = text ? JSON.parse(text) : undefined } catch { throw new ApiError('Invalid market response', 502, 'response_invalid') }
+  try {
+    body = text ? JSON.parse(text) : undefined
+  } catch {
+    // 网关（Cloudflare）会把源站的 502 JSON 正文换成纯文本 "error code: 502"；
+    // 失败响应按状态归类，只有成功响应正文不是 JSON 才算 response_invalid。
+    if (response.ok) throw new ApiError('Invalid market response', 502, 'response_invalid')
+    const gateway = response.status === 502 || response.status === 503 || response.status === 504
+    throw new ApiError('Market request failed', response.status, gateway ? 'market_unavailable' : 'request_failed')
+  }
   if (!response.ok) {
     // control-api writes {"error": code}; the market writes {"error": reason}.
     const raw = (body as { error?: unknown } | undefined)?.error
@@ -741,7 +759,10 @@ export const marketApi = {
     call<unknown>(token, `/v1/admin/market/offers${query({ ...filters, cursor, limit: 50 })}`).then((v) => pageOf<MarketOfferListing>(v)),
   plugins: (token: string, f: PluginFilters = {}) =>
     call<unknown>(token, `/v1/admin/market/plugins${query({ q: f.q, kind: f.kind, price: f.price, sort: f.sort, applies_to: f.appliesTo,
-      all_versions: f.allVersions ? 1 : undefined, cursor: f.cursor, limit: 50 })}`).then((v) => pageOf<MarketPlugin>(v)),
+      all_versions: f.allVersions ? 1 : undefined, cursor: f.cursor, limit: f.limit ?? 50 })}`).then((v) => pageOf<MarketPlugin>(v)),
+  /** Name lookup of these plugin_ids (at most 200 and ~1 KiB per call; usePluginCatalog batches), delisted ones included. */
+  pluginsByID: (token: string, pluginIDs: readonly string[]) =>
+    call<unknown>(token, `/v1/admin/market/plugins${query({ plugin_ids: pluginIDs.join(',') })}`).then((v) => list<MarketPlugin>(v)),
   plugin: (token: string, pluginID: string) => call<MarketPluginDetail>(token, `/v1/admin/market/plugins/${id(pluginID)}`),
   /**
    * A theme plugin's package preview, relayed same-origin by control-api (checked png/jpeg/webp ≤ 512 KiB).

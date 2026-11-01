@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, Input, Table, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -62,11 +63,14 @@ export default function MarketSecurityLogPanel() {
     setCursors([undefined])
     setPageIndex(0)
   }
+  // control-log-ui：条件变了按新数据读；同一条件下翻页 30 秒内用缓存。
+  const [generation] = useLogListGeneration(applied)
   const query = useQuery({
-    queryKey: ['market-security-logs', audience, principal?.scope_id, applied, cursor],
+    queryKey: ['market-security-logs', audience, principal?.scope_id, generation, applied, cursor],
     queryFn: () => listMarketSecurityLogs(accessToken!, audience, applied!, pageSize, cursor),
     enabled: Boolean(accessToken && applied),
     retry: false,
+    ...logListQueryOptions,
   })
   const columns: TableColumnsType<MarketSecurityLog> = [
     { title: t('table.occurredAt'), dataIndex: 'occurred_at', key: 'occurred_at', width: 180, render: (value: string) => formatDateTime(value, locale) },
@@ -88,12 +92,14 @@ export default function MarketSecurityLogPanel() {
   return (
     <div className="analytics-panel" data-testid="market-security-panel">
       <Alert type="info" showIcon message={mt('hint')} />
-      <div className="analytics-filter-bar">
+      {/* 时间范围与本地节点页一样带上方标签，整栏底边对齐，按钮与输入框同一条线。 */}
+      <div className="analytics-filter-bar market-security-filter-bar">
         {audience === 'admin' ? field('tenantId', t('filters.tenant')) : null}
         {field('siteId', t('filters.site'))}
         {field('host', t('filters.domain'))}
         {field('clientIp', t('filters.clientIp'))}
-        <TimeRangeFilter allowClear={false} maxSpanMs={maximumWindowMilliseconds} value={timeRange} onChange={setTimeRange} />
+        <div className="analytics-filter-field analytics-log-range-field"><span>{t('filters.timeRange')}</span>
+          <TimeRangeFilter label={t('filters.timeRange')} allowClear={false} maxSpanMs={maximumWindowMilliseconds} value={timeRange} onChange={setTimeRange} /></div>
         <Button type="primary" onClick={apply}>{t('actions.query')}</Button>
       </div>
       {error ? <Alert className="analytics-page-error" type="error" showIcon message={error} /> : null}
@@ -101,7 +107,7 @@ export default function MarketSecurityLogPanel() {
       <div className="analytics-log-table" data-testid="market-security-table">
         <Table<MarketSecurityLog>
           rowKey="cursor" size="small" columns={columns} dataSource={query.data?.data ?? []}
-          loading={query.isFetching && !query.data} pagination={false} scroll={{ x: 1500 }}
+          loading={query.isFetching && (!query.data || query.isPlaceholderData)} pagination={false} scroll={{ x: 1500 }}
           locale={{ emptyText: applied ? t('states.empty') : t('states.selectTenant') }}
         />
       </div>

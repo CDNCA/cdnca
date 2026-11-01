@@ -2,26 +2,21 @@ package mfahttp
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/apikeycredential"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/mfa"
 	"github.com/cdnca/cdnca/services/control-api/internal/sessioncredential"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -143,53 +138,5 @@ func TestRuntimePostgresBearerEnrollmentStatusAndRevocation(t *testing.T) {
 
 func isolatedMFAHTTPPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "mfa_http_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^mfa_http_test_[a-f0-9]{32}$`).MatchString(schema) {
-		admin.Close()
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-		t.Fatal(err)
-	}
-	if err := database.Migrate(ctx, pool, "up"); err != nil {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-		t.Fatalf("migrate MFA HTTP schema: %v", err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		cleanupCtx, cleanupCancel := databasetest.CleanupContext()
-		defer cleanupCancel()
-		if _, err := admin.Exec(cleanupCtx, "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop MFA HTTP schema: %v", err)
-		}
-		admin.Close()
-	})
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }

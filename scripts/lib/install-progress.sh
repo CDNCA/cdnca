@@ -16,6 +16,9 @@
 # NO_COLOR 非空时不输出颜色。完整原始输出写入 PROGRESS_LOG_DIR 下的安装日志。
 
 PROGRESS_LOG_DIR=${PROGRESS_LOG_DIR:-/var/log}
+# 界面语言见 install-i18n；单独加载本库（测试）时按中文。阶段名写成“中文^English”。
+declare -F msg >/dev/null || msg() { if [ "${INSTALL_LANG:-zh}" = en ]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
+progress_name() { case "$1" in *^*) msg "${1%%^*}" "${1#*^}" ;; *) printf '%s' "$1" ;; esac; }
 PROGRESS_LOG=''
 PROGRESS_PREFIX=''
 PROGRESS_TTY=false
@@ -40,14 +43,14 @@ progress_clock() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
 progress_span() {
   local low=$1 high=$2 low_minutes high_minutes
   if [ "$high" -lt 60 ]; then
-    if [ "$low" -eq "$high" ]; then printf '约 %d 秒' "$high"; else printf '约 %d–%d 秒' "$low" "$high"; fi
+    if [ "$low" -eq "$high" ]; then printf "$(msg '约 %d 秒' '~%d s')" "$high"; else printf "$(msg '约 %d–%d 秒' '~%d–%d s')" "$low" "$high"; fi
     return
   fi
   low_minutes=$((low / 60)) high_minutes=$(((high + 59) / 60))
   [ "$low_minutes" -gt 0 ] || [ "$low" -lt 15 ] || low_minutes=1
-  if [ "$low_minutes" -eq 0 ]; then printf '约 %d 分钟内' "$high_minutes"
-  elif [ "$low_minutes" -ge "$high_minutes" ]; then printf '约 %d 分钟' "$high_minutes"
-  else printf '约 %d–%d 分钟' "$low_minutes" "$high_minutes"; fi
+  if [ "$low_minutes" -eq 0 ]; then printf "$(msg '约 %d 分钟内' 'under %d min')" "$high_minutes"
+  elif [ "$low_minutes" -ge "$high_minutes" ]; then printf "$(msg '约 %d 分钟' '~%d min')" "$high_minutes"
+  else printf "$(msg '约 %d–%d 分钟' '~%d–%d min')" "$low_minutes" "$high_minutes"; fi
 }
 
 progress_bar() {
@@ -91,17 +94,18 @@ progress_init() {
     IFS='|' read -r _ low high _ <<<"$entry"
     total_low=$((total_low + low)) total_high=$((total_high + high))
   done
-  progress_line "共 ${#PROGRESS_STAGES[@]} 个步骤，预计$(progress_span "$total_low" "$total_high")${PROGRESS_LOG:+；完整输出写入 ${PROGRESS_LOG}}"
+  progress_line "$(msg "共 ${#PROGRESS_STAGES[@]} 个步骤，预计" "${#PROGRESS_STAGES[@]} steps, expected ")$(progress_span "$total_low" "$total_high")${PROGRESS_LOG:+$(msg "；完整输出写入 ${PROGRESS_LOG}" "; full output in ${PROGRESS_LOG}")}"
 }
 
 progress_close_stage() {
   [ "$PROGRESS_CURRENT" -gt 0 ] || return 0
   local spent=$((SECONDS - PROGRESS_STAGE_START)) name low high flag
   IFS='|' read -r name low high flag <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
+  name=$(progress_name "$name")
   if [ "$flag" != interactive ]; then
     PROGRESS_ACTUAL=$((PROGRESS_ACTUAL + spent)) PROGRESS_NOMINAL=$((PROGRESS_NOMINAL + (low + high) / 2))
   fi
-  progress_line "✓ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} 完成（用时 $(progress_clock "$spent")）" 32
+  progress_line "✓ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "完成（用时 $(progress_clock "$spent")）" "done ($(progress_clock "$spent"))")" 32
   PROGRESS_PASSED=$PROGRESS_CURRENT PROGRESS_CURRENT=0
 }
 
@@ -126,14 +130,15 @@ progress_stage() {
     factor=$((PROGRESS_ACTUAL * 100 / PROGRESS_NOMINAL))
   fi
   IFS='|' read -r name low high flag <<<"${PROGRESS_STAGES[$((stage - 1))]}"
-  progress_line "[${stage}/${#PROGRESS_STAGES[@]}] ${name}（$(progress_span "$low" "$high")）……" 1
-  progress_line "$(progress_bar $((done_mid * 100 / total_mid)))  已用 $(progress_clock $((SECONDS - PROGRESS_START)))  预计剩余$(progress_span $((rest_low * factor / 100)) $((rest_high * factor / 100)))"
+  name=$(progress_name "$name")
+  progress_line "[${stage}/${#PROGRESS_STAGES[@]}] ${name}$(msg "（$(progress_span "$low" "$high")）……" " ($(progress_span "$low" "$high")) ...")" 1
+  progress_line "$(progress_bar $((done_mid * 100 / total_mid)))  $(msg '已用' 'elapsed') $(progress_clock $((SECONDS - PROGRESS_START)))  $(msg '预计剩余' 'remaining ')$(progress_span $((rest_low * factor / 100)) $((rest_high * factor / 100)))"
 }
 
 progress_done() {
   [ -n "$PROGRESS_PREFIX" ] || return 0
   progress_close_stage
-  progress_line "$(progress_bar 100)  全部 ${#PROGRESS_STAGES[@]} 个步骤完成，总用时 $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+。安装日志：${PROGRESS_LOG}}" 32
+  progress_line "$(progress_bar 100)  $(msg "全部 ${#PROGRESS_STAGES[@]} 个步骤完成，总用时 $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+。安装日志：${PROGRESS_LOG}}" "all ${#PROGRESS_STAGES[@]} steps done in $(progress_clock $((SECONDS - PROGRESS_START)))${PROGRESS_LOG:+. Install log: ${PROGRESS_LOG}}")" 32
 }
 
 # 由安装器的 EXIT 清理调用：中途失败时标出失败阶段、版本与日志位置。原因与下一步
@@ -143,7 +148,8 @@ progress_on_exit() {
   progress_stop_heartbeat
   if [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ]; then
     IFS='|' read -r name _ <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
-    progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} 失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" 31
+    name=$(progress_name "$name")
+    progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" "failed (${PROGRESS_VERSION:+version ${PROGRESS_VERSION}, }$(progress_clock $((SECONDS - PROGRESS_STAGE_START))) in this step, exit ${status}). The cause and fix are in the error line above${PROGRESS_LOG:+; full output: ${PROGRESS_LOG}}")" 31
     PROGRESS_CURRENT=0
   fi
   return 0
@@ -156,11 +162,11 @@ progress_on_exit() {
 progress_keep_output() {
   local file=$1 label=$2
   if [ -n "$PROGRESS_LOG" ] && [ -f "$PROGRESS_LOG" ] &&
-    { printf '>>> %s（失败输出）\n' "$label"; cat -- "$file" 2>/dev/null; } >>"$PROGRESS_LOG" 2>/dev/null; then
+    { printf '>>> %s%s\n' "$label" "$(msg '（失败输出）' ' (failed output)')"; cat -- "$file" 2>/dev/null; } >>"$PROGRESS_LOG" 2>/dev/null; then
     printf "inspect '>>> %s' in %s before retrying" "$label" "$PROGRESS_LOG"
     return 0
   fi
-  printf '%s %s 的输出无法写入安装日志，最后 30 行：\n' "${PROGRESS_LABEL:-}" "$label" >&2
+  printf "$(msg '%s %s 的输出无法写入安装日志，最后 30 行：' '%s output of %s could not be added to the install log; last 30 lines:')\n" "${PROGRESS_LABEL:-}" "$label" >&2
   tail -n 30 -- "$file" 2>/dev/null | sed 's/^/    /' >&2 || true
   printf 'its output is printed above'
   return 0
@@ -175,21 +181,21 @@ progress_tick() {
     PROGRESS_WAIT_LABEL=$label PROGRESS_WAIT_START=$SECONDS PROGRESS_WAIT_NEXT=10
   fi
   waited=$((SECONDS - PROGRESS_WAIT_START))
-  text="  等待${label}……已等 $(progress_clock "$waited")，最长 $(progress_clock "$limit")"
+  text="  $(msg "等待${label}……已等 $(progress_clock "$waited")，最长 $(progress_clock "$limit")" "waiting:${label} ... $(progress_clock "$waited") of up to $(progress_clock "$limit")")"
   if "$PROGRESS_TTY"; then progress_inline "$text"
   elif [ "$waited" -ge "$PROGRESS_WAIT_NEXT" ]; then PROGRESS_WAIT_NEXT=$((PROGRESS_WAIT_NEXT + 10)); progress_line "$text"; fi
 }
 
 # apt 输出里的 “N/M：包名”；看不出时输出为空。
 progress_apt_detail() {
-  awk '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
+  awk -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '/ newly installed/ { for (i = 2; i <= NF; i++) if ($i == "newly") total = $(i - 1) + 0; done = 0; got = 0; name = "" }
     /^Get:[0-9]+ / { got++ }
     /^Unpacking / { name = $2 }
     /^Setting up / { done++; name = $3 }
     END {
       if (total <= 0) exit
-      if (name != "") printf "  正在安装 %d/%d：%s", done, total, name
-      else if (got > 0) printf "  正在下载软件包 %d/%d", got, total
+      if (name != "") printf (en ? "  installing %d/%d: %s" : "  正在安装 %d/%d：%s"), done, total, name
+      else if (got > 0) printf (en ? "  downloading packages %d/%d" : "  正在下载软件包 %d/%d"), got, total
     }' "$1" 2>/dev/null || true
 }
 
@@ -198,7 +204,7 @@ progress_heartbeat() {
   local label=$1 output=$2 started=$SECONDS next=15 elapsed text
   while sleep 1 && kill -0 "$$" 2>/dev/null; do
     elapsed=$((SECONDS - started))
-    text="  仍在${label}……已用 $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
+    text="  $(msg "仍在${label}……已用" "still running:${label} ...") $(progress_clock "$elapsed")$(progress_apt_detail "$output")"
     if "$PROGRESS_TTY"; then progress_inline "$text"
     elif [ "$elapsed" -ge "$next" ]; then next=$((next + 15)); progress_line "$text"; fi
   done
@@ -235,7 +241,7 @@ progress_run() {
   if [ "$output" != "$PROGRESS_LOG" ]; then
     [ -z "$PROGRESS_LOG" ] || cat "$output" >>"$PROGRESS_LOG" 2>/dev/null || true
   elif [ "$status" -ne 0 ]; then
-    printf '%s %s失败（退出码 %s），输出最后 30 行：\n' "$PROGRESS_PREFIX" "$label" "$status" >&2
+    printf "$(msg '%s %s失败（退出码 %s），输出最后 30 行：' '%s %s failed (exit %s); last 30 lines of output:')\n" "$PROGRESS_PREFIX" "$label" "$status" >&2
     tail -n "+$from" "$PROGRESS_LOG" | tail -n 30 | sed 's/^/    /' >&2
   fi
   return "$status"
@@ -247,11 +253,11 @@ progress_download() {
   local label=$1
   shift
   [ -n "$PROGRESS_PREFIX" ] || { "$@"; return; }
-  { "$@" 2>&1 1>&3 3>&- | awk -v prefix="$PROGRESS_PREFIX" -v label="$label" -v tty="$PROGRESS_TTY" '
+  { "$@" 2>&1 1>&3 3>&- | awk -v prefix="$PROGRESS_PREFIX" -v label="$label" -v tty="$PROGRESS_TTY" -v en="$([ "${INSTALL_LANG:-zh}" = en ] && echo 1)" '
     BEGIN { RS = "[\r\n]"; last = -10 }
     NF == 12 && $1 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ {
       pct = $3 + 0
-      text = sprintf("   下载 %s：%d%%（%s/%s，%s/s）", label, pct, $4, $2, $12)
+      text = sprintf(en ? "   downloading %s: %d%% (%s/%s, %s/s)" : "   下载 %s：%d%%（%s/%s，%s/s）", label, pct, $4, $2, $12)
       if (tty == "true") { printf "\r\033[K%s%s", prefix, text; inline = 1; next }
       if ($2 !~ /[MG]$/) next
       if (pct < last) last = -10

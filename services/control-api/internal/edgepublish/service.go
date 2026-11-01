@@ -343,6 +343,7 @@ func (s *Service) Publish(ctx context.Context, request PublishRequest) (PublishR
 	})
 	if err != nil {
 		s.recordCrossScopeConflict(ctx, normalized.PublishRequest, err)
+		s.recordSiteConfigInvalid(ctx, normalized.PublishRequest, err)
 		s.recordCapabilityHold(ctx, normalized.PublishRequest, normalized.NodeIDs, err)
 		s.recordModuleDenial(ctx, normalized.PublishRequest, err)
 		return PublishResult{}, err
@@ -429,6 +430,7 @@ func (s *Service) PublishAutomatic(
 	})
 	if err != nil {
 		s.recordCrossScopeConflict(ctx, attempted, err)
+		s.recordSiteConfigInvalid(ctx, attempted, err)
 		s.recordCapabilityHold(ctx, attempted, attempted.NodeIDs, err)
 		s.recordModuleDenial(ctx, attempted, err)
 		return PublishResult{}, err

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -209,52 +208,10 @@ func signerRevocationPool(t *testing.T) *pgxpool.Pool {
 
 func signerRevocationSchema(t *testing.T, migrate bool) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
-	// A full migration from scratch takes minutes on a loaded machine.
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-	defer cancel()
-	admin, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "signer_revocation_lkg_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if !regexp.MustCompile(`^signer_revocation_lkg_test_[a-f0-9]{32}$`).MatchString(schema) {
-		t.Fatalf("unsafe schema %q", schema)
-	}
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if migrate {
-		if err := database.Migrate(ctx, pool, "up"); err != nil {
-			pool.Close()
-			_, _ = admin.Exec(ctx, "DROP SCHEMA "+identifier+" CASCADE")
-			admin.Close()
-			t.Fatalf("migrate to release head: %v", err)
-		}
+		return databasetest.MigratedPool(t, nil)
 	}
-	t.Cleanup(func() {
-		pool.Close()
-		cleanupCtx, cleanupCancel := databasetest.CleanupContext()
-		defer cleanupCancel()
-		if _, err := admin.Exec(cleanupCtx, "DROP SCHEMA "+identifier+" CASCADE"); err != nil {
-			t.Errorf("drop schema: %v", err)
-		}
-		admin.Close()
-	})
-	return pool
+	return databasetest.FreshSchemaPool(t, "signer_revocation_lkg_test", nil, nil)
 }
 
 func assertControlMigrationVersion(t *testing.T, pool *pgxpool.Pool, want int) {

@@ -35,8 +35,8 @@ describe('Batch M routes', () => {
 
     renderWithProviders(<AppRoutes />, [`/site/${siteID}/dns-reconcile`])
 
-    expect(await screen.findByRole('heading', { name: 'DNS 对账' })).toBeInTheDocument()
-    expect(screen.getByLabelText('面包屑')).toHaveTextContent('首页/网站管理/DNS 对账')
+    expect(await screen.findByRole('heading', { name: '修复域名解析' })).toBeInTheDocument()
+    expect(screen.getByLabelText('面包屑')).toHaveTextContent('首页/网站管理/修复域名解析')
   })
 
   it('denies the error-page route locally before any read request', async () => {

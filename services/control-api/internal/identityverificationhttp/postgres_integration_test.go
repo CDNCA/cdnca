@@ -1104,6 +1104,7 @@ func isolatedHTTPSchema(t *testing.T, migrate bool) *pgxpool.Pool {
 	// A full migration from scratch takes minutes on a loaded machine.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	databaseURL = databasetest.FreshDatabaseURL(t, databaseURL, "identity_verification_http_tes")
 	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)

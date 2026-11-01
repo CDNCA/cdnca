@@ -54,8 +54,10 @@ paths:
   /v1/package-usage/search:
     get:
       operationId: searchTenantPackageUsage
-      summary: 当前租户整体用量曲线（带宽/流量按时间桶聚合）
-      description: |
+      summary: "The current tenant's overall usage curve (bandwidth/traffic aggregated by time bucket)"
+      x-summary-zh: 当前租户整体用量曲线（带宽/流量按时间桶聚合）
+      description: "Tenant scope only, with package_subscriptions.read (or platform.admin); counts only the caller's own tenant scope. Same measure as /v1/admin/package-usage/search (access_metering_facts_v1 + l4_session_facts_v1, no new ledger); user_ids / subscription_ids are not accepted (400 when sent); service_type, domains and listen_ports work as in the administrator endpoint."
+      x-description-zh: |
         仅 tenant 作用域且具有 package_subscriptions.read（或 platform.admin）权限；只统计调用者自己的租户作用域。
         口径与 /v1/admin/package-usage/search 相同（access_metering_facts_v1 + l4_session_facts_v1，不新建账本），
         不接受 user_ids / subscription_ids（传入返回400）；service_type、domains、listen_ports 同管理员接口。
@@ -71,7 +73,8 @@ paths:
         - {name: listen_ports, in: query, schema: {type: string, maxLength: 300}}
       responses:
         '200':
-          description: 有界结果；filters.user_ids 与 subscription_ids 恒为空数组。
+          description: "Bounded result; filters.user_ids and subscription_ids are always empty arrays."
+          x-description-zh: 有界结果；filters.user_ids 与 subscription_ids 恒为空数组。
           content:
             application/json:
               schema: {$ref: '#/components/schemas/UsageSearchPage'}
@@ -84,7 +87,8 @@ paths:
   /v1/package-usage:
     get:
       operationId: queryTenantPackageUsage
-      summary: 查询当前用户套餐用量
+      summary: "Read the current user's package usage"
+      x-summary-zh: 查询当前用户套餐用量
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/SubscriptionID'
@@ -107,7 +111,8 @@ paths:
   /v1/admin/package-usage:
     get:
       operationId: queryAdminPackageUsage
-      summary: 查询指定租户套餐用量
+      summary: "Read a given tenant's package usage"
+      x-summary-zh: 查询指定租户套餐用量
       description: 平台会话需 billing.adjustments.manage 或 platform.admin；有效代理商的租户会话（reseller.customers.read 或 reseller.customers.manage）必须带 tenant_id，且该租户须是本代理商的客户，否则 403（ADR 0018 RS-05）。
       security: [{ bearerAuth: [] }]
       parameters:
@@ -132,7 +137,8 @@ paths:
   /v1/admin/package-resource-monitor:
     get:
       operationId: listAdminPackageResources
-      summary: 查询所有当前有效用户套餐的带宽与连接数资源状态
+      summary: "Read the bandwidth and connection resource state of every active user package"
+      x-summary-zh: 查询所有当前有效用户套餐的带宽与连接数资源状态
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/ResourceQueryVersion'
@@ -154,7 +160,8 @@ paths:
   /v1/admin/package-resource-monitor/nodes:
     get:
       operationId: listAdminPackageResourceNodes
-      summary: 查询一个当前有效用户套餐的节点资源状态
+      summary: "Read the node resource state of one active user package"
+      x-summary-zh: 查询一个当前有效用户套餐的节点资源状态
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/SubscriptionID'
@@ -170,7 +177,8 @@ paths:
   /v1/package-traffic-coverage:
     get:
       operationId: listTenantPackageTrafficCoverage
-      summary: 查询本人套餐每个周期由全局流量包覆盖的流量（最近周期在前）
+      summary: "Read the traffic covered by global traffic packages in each cycle of my packages (latest cycle first)"
+      x-summary-zh: 查询本人套餐每个周期由全局流量包覆盖的流量（最近周期在前）
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/SubscriptionID'
@@ -186,7 +194,8 @@ paths:
   /v1/admin/package-traffic-coverage:
     get:
       operationId: listAdminPackageTrafficCoverage
-      summary: 查询用户套餐每个周期由全局流量包覆盖的流量（最近周期在前）
+      summary: "Read the traffic covered by global traffic packages in each cycle of a user's packages (latest cycle first)"
+      x-summary-zh: 查询用户套餐每个周期由全局流量包覆盖的流量（最近周期在前）
       description: 平台会话需 billing.adjustments.manage 或 platform.admin；有效代理商的租户会话（reseller.customers.read 或 reseller.customers.manage）必须带 tenant_id，且该租户须是本代理商的客户，否则 403（ADR 0018 RS-05）。
       security: [{ bearerAuth: [] }]
       parameters:
@@ -254,12 +263,14 @@ components:
     ResourceQueryVersion:
       name: query_version
       in: query
-      description: 默认版本 1 仅返回旧字段；版本 2 返回稳定 subscription_display_id 并支持数字套餐 ID 筛选。
+      description: "Default version 1 returns only the old fields; version 2 returns the stable subscription_display_id and supports filtering by numeric package ID."
+      x-description-zh: 默认版本 1 仅返回旧字段；版本 2 返回稳定 subscription_display_id 并支持数字套餐 ID 筛选。
       schema: {type: integer, enum: [1, 2], default: 1}
     SubscriptionDisplayIDs:
       name: subscription_display_ids
       in: query
-      description: 仅版本 2；逗号分隔的持久化用户套餐数字编号，不得重复，最多 100 个，单个不超过 9223372036854775807。不能与 subscription_ids 同时使用。
+      description: "Version 2 only; comma-separated persisted numeric user package IDs, no duplicates, at most 100, each at most 9223372036854775807. Cannot be combined with subscription_ids."
+      x-description-zh: 仅版本 2；逗号分隔的持久化用户套餐数字编号，不得重复，最多 100 个，单个不超过 9223372036854775807。不能与 subscription_ids 同时使用。
       schema: {type: string, pattern: '^[1-9][0-9]{0,18}(,[1-9][0-9]{0,18}){0,99}$', maxLength: 1999}
     ResourcePage:
       name: page
@@ -285,43 +296,51 @@ components:
       name: subscription_ids
       in: query
       required: false
-      description: 逗号分隔、不得重复的套餐 UUID，最多 100 个
+      description: "Comma-separated package UUIDs without duplicates, at most 100"
+      x-description-zh: 逗号分隔、不得重复的套餐 UUID，最多 100 个
       schema: {type: string, minLength: 36, maxLength: 3699}
     NodeIDs:
       name: node_ids
       in: query
       required: false
-      description: 逗号分隔、不得重复的节点显示 ID，最多 100 个
+      description: "Comma-separated node display IDs without duplicates, at most 100"
+      x-description-zh: 逗号分隔、不得重复的节点显示 ID，最多 100 个
       schema: {type: string, pattern: '^[1-9][0-9]{0,18}(,[1-9][0-9]{0,18}){0,99}$', maxLength: 1999}
     CoverageLimit:
       name: limit
       in: query
       required: false
-      description: 返回的周期数，默认 12
+      description: "Number of cycles returned, default 12"
+      x-description-zh: 返回的周期数，默认 12
       schema: {type: integer, minimum: 1, maximum: 24, default: 12}
   responses:
     PackageTrafficCoverage:
-      description: 每个周期由流量包覆盖的流量（字节，十进制字符串）与扣量批次
+      description: "Traffic covered by traffic packages in each cycle (bytes, decimal string) and the deduction batches"
+      x-description-zh: 每个周期由流量包覆盖的流量（字节，十进制字符串）与扣量批次
       content:
         application/json:
           schema: {$ref: '#/components/schemas/PackageTrafficCoveragePage'}
     PackageUsage:
-      description: 使用冻结数据快照计算的套餐用量
+      description: "Package usage computed from a frozen data snapshot"
+      x-description-zh: 使用冻结数据快照计算的套餐用量
       content:
         application/json:
           schema: {$ref: '#/components/schemas/PackageUsagePage'}
     PackageResourceMonitor:
-      description: 套餐不可变快照、用户显示 ID 与权威监控观测组成的分页结果
+      description: "Paged result of immutable package snapshots, user display IDs and authoritative monitoring observations"
+      x-description-zh: 套餐不可变快照、用户显示 ID 与权威监控观测组成的分页结果
       content:
         application/json:
           schema: {$ref: '#/components/schemas/PackageResourceMonitorPage'}
     PackageResourceMonitorNodes:
-      description: ClickHouse 当前节点维度遥测；缺少任一指标时明确返回 unknown
+      description: "Current per-node telemetry from ClickHouse; unknown is returned explicitly when any metric is missing"
+      x-description-zh: ClickHouse 当前节点维度遥测；缺少任一指标时明确返回 unknown
       content:
         application/json:
           schema: {$ref: '#/components/schemas/PackageResourceMonitorNodes'}
     Error:
-      description: 稳定错误信封
+      description: "Stable error envelope"
+      x-description-zh: 稳定错误信封
       content:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}
@@ -396,13 +415,15 @@ components:
           type: string
           pattern: '^[0-9]+$'
           maxLength: 20
-          description: 七层与四层合计（http_traffic_bytes + l4_traffic_bytes）。
+          description: "Layer 7 and layer 4 combined (http_traffic_bytes + l4_traffic_bytes)."
+          x-description-zh: 七层与四层合计（http_traffic_bytes + l4_traffic_bytes）。
         http_traffic_bytes: {type: string, pattern: '^[0-9]+$', maxLength: 20}
         l4_traffic_bytes:
           type: string
           pattern: '^[0-9]+$'
           maxLength: 20
-          description: 四层转发字节；带 site_id 筛选时恒为 0（四层转发不属于网站）。
+          description: "Layer 4 forwarding bytes; always 0 with a site_id filter (layer 4 forwarding does not belong to a website)."
+          x-description-zh: 四层转发字节；带 site_id 筛选时恒为 0（四层转发不属于网站）。
         peak_bandwidth_bps: {type: string, pattern: '^[0-9]+$', maxLength: 20}
         bandwidth_95th_bps: {type: string, pattern: '^[0-9]+$', maxLength: 20}
         connections: {type: string, pattern: '^[0-9]+$', maxLength: 20}

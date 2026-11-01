@@ -346,7 +346,9 @@ func assertRegionCatalogManagement235Code(t *testing.T, err error, want string) 
 // concern, see TestRegionCatalogCode528).
 func addRegionCatalogCode528Column(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	if _, err := pool.Exec(t.Context(), `ALTER TABLE region_catalog ADD COLUMN code text NOT NULL DEFAULT ''`); err != nil {
+	// The store also reads/writes the geo codes of migration 576.
+	if _, err := pool.Exec(t.Context(), `ALTER TABLE region_catalog ADD COLUMN code text NOT NULL DEFAULT '',
+		ADD COLUMN country_code text NOT NULL DEFAULT '', ADD COLUMN province_code text NOT NULL DEFAULT ''`); err != nil {
 		t.Fatal(err)
 	}
 }

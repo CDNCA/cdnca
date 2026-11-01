@@ -56,7 +56,7 @@ export interface PendingModule {
  * republished automatically once that changes.
  */
 export interface AutomaticPublicationFailure {
-  reason: 'no_target_nodes' | 'node_capability_unavailable' | 'node_artifacts_syncing' | 'node_scope_conflict'
+  reason: 'no_target_nodes' | 'node_capability_unavailable' | 'node_artifacts_syncing' | 'node_scope_conflict' | 'site_config_invalid'
   source_revision: number
   failed_at: string
   /** node_artifacts_syncing: segments the refused nodes have received of their node artifact sets; omitted before any node has one. */
@@ -165,6 +165,8 @@ interface DeploymentBase {
   max_attempts: number
   state: DeploymentState
   error_code?: string
+  /** The node's own failure text beside error_code (failed deployments only, at most 512 bytes). */
+  error_message?: string
   created_at: string
   updated_at: string
   can_retry: boolean
@@ -178,8 +180,8 @@ interface DeploymentBase {
   warnings?: DeploymentWarning[]
 }
 
-export type DeploymentWarning = 'ddos_protection_fault' | 'post_activation_maintenance_failed'
-const deploymentWarnings: readonly DeploymentWarning[] = ['ddos_protection_fault', 'post_activation_maintenance_failed']
+export type DeploymentWarning = 'ddos_protection_fault' | 'l4_stream_degraded' | 'post_activation_maintenance_failed'
+const deploymentWarnings: readonly DeploymentWarning[] = ['ddos_protection_fault', 'l4_stream_degraded', 'post_activation_maintenance_failed']
 
 export type TenantSiteDeployment = DeploymentBase
 
@@ -443,11 +445,13 @@ function parseRolloutBase(
 function parseDeployment(value: unknown, platform: boolean): TenantSiteDeployment | AdminSiteDeployment {
   const required = ['id', 'attempt', 'max_attempts', 'state', 'created_at', 'updated_at', 'can_retry']
   if (platform) required.push('node_id')
-  if (!record(value) || !exactKeys(value, required, platform ? ['error_code', 'cohort', 'released', 'superseded', 'frozen', 'warnings'] : ['error_code', 'cohort', 'released', 'superseded', 'frozen']) || !canonicalUUID(value.id) ||
+  if (!record(value) || !exactKeys(value, required, platform ? ['error_code', 'error_message', 'cohort', 'released', 'superseded', 'frozen', 'warnings'] : ['error_code', 'error_message', 'cohort', 'released', 'superseded', 'frozen']) || !canonicalUUID(value.id) ||
     (platform && !canonicalUUID(value.node_id)) || !uint(value.attempt, 1, 10) ||
     !uint(value.max_attempts, 1, 10) || Number(value.attempt) > Number(value.max_attempts) ||
     typeof value.state !== 'string' || !deploymentStates.has(value.state as DeploymentState) ||
     (value.error_code !== undefined && (typeof value.error_code !== 'string' || !errorCodePattern.test(value.error_code))) ||
+    (value.error_message !== undefined && (typeof value.error_message !== 'string' || value.error_message.length === 0 ||
+      new TextEncoder().encode(value.error_message).length > 512 || /[\u0000-\u001f\u007f]/.test(value.error_message))) ||
     !timestamp(value.created_at) || !timestamp(value.updated_at) || typeof value.can_retry !== 'boolean' ||
     (value.superseded !== undefined && (value.superseded !== true || value.state !== 'failed' || value.can_retry !== false)) ||
     (value.frozen !== undefined && (value.frozen !== true || value.superseded !== undefined || value.state !== 'failed' || value.can_retry !== false)) ||
@@ -488,7 +492,8 @@ function parsePage<T>(
 function automaticFailure(value: unknown): value is AutomaticPublicationFailure {
   return record(value) && exactKeys(value, ['reason', 'source_revision', 'failed_at'], ['artifact_sync']) &&
     (value.reason === 'no_target_nodes' || value.reason === 'node_capability_unavailable' ||
-      value.reason === 'node_artifacts_syncing' || value.reason === 'node_scope_conflict') &&
+      value.reason === 'node_artifacts_syncing' || value.reason === 'node_scope_conflict' ||
+      value.reason === 'site_config_invalid') &&
     uint(value.source_revision, 1) && timestamp(value.failed_at) &&
     (value.artifact_sync === undefined || (value.reason === 'node_artifacts_syncing' && artifactSync(value.artifact_sync)))
 }

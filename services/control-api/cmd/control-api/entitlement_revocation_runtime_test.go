@@ -472,3 +472,90 @@ func TestEntitlementRevocationRuntimeRefreshesLeaseEachPollAndSurvivesFailure(t 
 		t.Fatalf("revocation syncs=%d lease refreshes=%d, want 2 and 2", syncer.calls, refreshes)
 	}
 }
+
+// longPollingRevocationSyncer scripts LongPollOnce results; SyncOnce succeeds.
+type longPollingRevocationSyncer struct {
+	fakeEntitlementRevocationSyncer
+	longPolls int
+	results   []error
+	delay     time.Duration
+	stop      func()
+}
+
+func (syncer *longPollingRevocationSyncer) LongPollOnce(context.Context) (entitlementguard.RevocationSnapshot, error) {
+	syncer.longPolls++
+	time.Sleep(syncer.delay)
+	if syncer.longPolls > len(syncer.results) {
+		syncer.stop()
+		return entitlementguard.RevocationSnapshot{}, context.Canceled
+	}
+	return entitlementguard.RevocationSnapshot{Revision: uint64(syncer.longPolls)}, syncer.results[syncer.longPolls-1]
+}
+
+// after one successful 60 s round the runtime long polls with no
+// wait between answers; a failed long poll falls back to the minute poll,
+// and the next successful poll resumes long polling.
+func TestEntitlementRevocationRuntimeLongPollsAndFallsBack(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	syncer := &longPollingRevocationSyncer{results: []error{nil, nil, temporaryRevocationNetworkError{}, nil},
+		delay: 1100 * time.Millisecond, stop: cancel}
+	refresher := &fakeEntitlementRevocationRefresher{}
+	runtime := newTestEntitlementRevocationRuntime(refresher, syncer,
+		&fakeEntitlementRevocationStore{snapshot: entitlementguard.RevocationSnapshot{Revision: 1}})
+	waits := 0
+	runtime.wait = func(ctx context.Context, delay time.Duration) error {
+		if delay != entitlementRevocationPollInterval {
+			t.Fatalf("wait %v", delay)
+		}
+		waits++
+		return ctx.Err()
+	}
+	if err := runtime.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v", err)
+	}
+	// wait+sync, long poll ×3 (third fails), wait+sync, long poll, long poll (stop).
+	if waits != 2 || syncer.calls != 2 || syncer.longPolls != 5 || refresher.calls != 6 {
+		t.Fatalf("waits=%d syncs=%d long polls=%d keyset refreshes=%d, want 2 2 5 6",
+			waits, syncer.calls, syncer.longPolls, refresher.calls)
+	}
+}
+
+// A license service that answers long polls at once (no hold) is not polled
+// in a tight loop: after entitlementRevocationQuickLimit quick unchanged
+// answers the runtime goes back to the minute poll.
+func TestEntitlementRevocationRuntimeQuickLongPollAnswersFallBack(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	syncer := &longPollingRevocationSyncer{results: make([]error, 10), stop: cancel}
+	syncer.snapshot = entitlementguard.RevocationSnapshot{Revision: 1}
+	runtime := newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{}, syncer,
+		&fakeEntitlementRevocationStore{snapshot: entitlementguard.RevocationSnapshot{Revision: 1}})
+	// Every answer is the same revision 1.
+	syncer.results = make([]error, 10)
+	same := &sameRevisionLongPoller{longPollingRevocationSyncer: syncer}
+	runtime.syncer = same
+	waits := 0
+	runtime.wait = func(ctx context.Context, _ time.Duration) error {
+		waits++
+		if waits == 3 {
+			cancel()
+		}
+		return ctx.Err()
+	}
+	if err := runtime.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if waits != 3 || syncer.longPolls != 2*entitlementRevocationQuickLimit {
+		t.Fatalf("waits=%d long polls=%d, want 3 and %d", waits, syncer.longPolls, 2*entitlementRevocationQuickLimit)
+	}
+}
+
+type sameRevisionLongPoller struct {
+	*longPollingRevocationSyncer
+}
+
+func (syncer *sameRevisionLongPoller) LongPollOnce(ctx context.Context) (entitlementguard.RevocationSnapshot, error) {
+	_, err := syncer.longPollingRevocationSyncer.LongPollOnce(ctx)
+	return entitlementguard.RevocationSnapshot{Revision: 1}, err
+}
