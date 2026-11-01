@@ -319,7 +319,8 @@ func (s *Service) Catalog(ctx context.Context, actor Actor) (CatalogView, error)
 				return err
 			}
 			if preview != nil {
-				item.PreviewURL = PluginPreviewPath + *preview
+				// cdncaCE: the control-site asset route does not exist in the
+				// community edition, so do not emit a preview URL that would 404.
 			}
 			pkg, err := Parse(body)
 			if err != nil {

@@ -132,100 +132,6 @@ paths:
       responses:
         '204': {description: Removed (can be downloaded again)}
         '409': {description: 'The active package, or one a tenant uses (theme_package_selected_by_tenant), cannot be removed'}
-  /v1/tenant-scopes/{tenant_scope_id}/theme:
-    parameters: [{name: tenant_scope_id, in: path, required: true, schema: {type: string, format: uuid}}]
-    get:
-      operationId: getTenantTheme
-      description: The caller's own tenant theme state (any tenant member) and the downloaded themes it may choose.
-      security: [{bearerAuth: []}]
-      responses:
-        '200': {description: Tenant theme, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
-        '403': {description: Not a member of this tenant scope}
-    put:
-      operationId: selectTenantTheme
-      description: >-
-        Choose the tenant theme (tenant_theme.manage). package_sha256 "" follows the platform theme. Allowed only
-        while the tenant may choose (its selection_mode allow, or inherit while the platform allows) and the
-        platform has not assigned the tenant a theme. Audited as theme.tenant.activate.
-      security: [{bearerAuth: []}]
-      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}, description: '"<revision>" from ETag'}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {type: object, additionalProperties: false, required: [package_sha256], properties: {package_sha256: {type: string, pattern: '^([0-9a-f]{64})?$'}}}
-      responses:
-        '200': {description: New tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
-        '403': {description: 'theme_permission_denied, theme_tenant_selection_denied or entitlement_feature_denied'}
-        '404': {description: Package not downloaded}
-        '412': {description: theme_revision_conflict}
-  /v1/admin/themes/tenant-policy:
-    get:
-      operationId: getTenantThemePolicy
-      security: [{bearerAuth: []}]
-      responses:
-        '200': {description: Platform default, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/TenantPolicy'}}}}
-    put:
-      operationId: updateTenantThemePolicy
-      description: Whether tenants in inherit mode may choose their theme. Audited as theme.tenant_policy.update.
-      security: [{bearerAuth: []}]
-      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {type: object, additionalProperties: false, required: [tenant_selection_allowed], properties: {tenant_selection_allowed: {type: boolean}}}
-      responses:
-        '200': {description: New policy, content: {application/json: {schema: {$ref: '#/components/schemas/TenantPolicy'}}}}
-        '412': {description: theme_revision_conflict}
-  /v1/admin/themes/tenants/{tenant_scope_id}:
-    parameters: [{name: tenant_scope_id, in: path, required: true, schema: {type: string, format: uuid}}]
-    get:
-      operationId: getTenantThemeForPlatform
-      security: [{bearerAuth: []}]
-      responses:
-        '200': {description: Tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
-        '404': {description: Unknown tenant scope}
-    put:
-      operationId: updateTenantThemeForPlatform
-      description: >-
-        Set the tenant's selection_mode (inherit | allow | deny) and, with assign, the theme the platform assigns it
-        (package_sha256 "" clears the assignment). An assigned theme applies whatever the selection mode. Audited as
-        theme.tenant.activate (assign) or theme.tenant.selection_update.
-      security: [{bearerAuth: []}]
-      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [selection_mode]
-              properties:
-                selection_mode: {enum: [inherit, allow, deny]}
-                assign: {type: boolean}
-                package_sha256: {type: string, pattern: '^([0-9a-f]{64})?$', description: Required exactly when assign is true}
-      responses:
-        '200': {description: New tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
-        '412': {description: theme_revision_conflict}
-  /v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}:
-    parameters:
-      - {name: tenant_scope_id, in: path, required: true, schema: {type: string, format: uuid}}
-      - {name: hostname, in: path, required: true, schema: {type: string}}
-    put:
-      operationId: bindTenantThemeDomain
-      description: Bind a sign-in hostname to the tenant (its sign-in page shows the tenant theme). Audited as theme.tenant_domain.bind.
-      security: [{bearerAuth: []}]
-      responses:
-        '200': {description: Tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
-        '409': {description: theme_domain_conflict (bound to another tenant)}
-    delete:
-      operationId: unbindTenantThemeDomain
-      security: [{bearerAuth: []}]
-      responses:
-        '200': {description: Tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
-        '404': {description: Not bound}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -285,23 +191,6 @@ components:
       properties:
         tenant_selection_allowed: {type: boolean}
         revision: {type: integer, minimum: 0}
-    TenantTheme:
-      type: object
-      required: [schema, tenant_scope_id, selection_mode, platform_allows, selection_allowed, effective_package_sha256, effective_theme_id, follows_platform, revision, domains, choices]
-      properties:
-        schema: {const: cdnca.theme.tenant/v1}
-        tenant_scope_id: {type: string, format: uuid}
-        selection_mode: {enum: [inherit, allow, deny]}
-        platform_allows: {type: boolean}
-        selection_allowed: {type: boolean}
-        selected_package_sha256: {$ref: '#/components/schemas/SHA256'}
-        assigned_by: {enum: [platform, tenant]}
-        effective_package_sha256: {$ref: '#/components/schemas/SHA256'}
-        effective_theme_id: {type: string}
-        follows_platform: {type: boolean}
-        revision: {type: integer, minimum: 0}
-        domains: {type: array, items: {type: string}}
-        choices: {type: array, items: {type: object}}
     Package:
       type: object
       required: [package_sha256, theme_id, version, name, source, downloaded_at, active, tokens_url, stylesheet_url]

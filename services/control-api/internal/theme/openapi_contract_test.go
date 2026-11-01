@@ -31,9 +31,6 @@ func TestThemeOpenAPIDocumentsEveryRoute(t *testing.T) {
 		"/v1/theme/auth-style": {"get"}, "/v1/theme/auth-style/assets/{sha}": {"get"},
 		"/v1/admin/themes/catalog/{theme_id}/download": {"post"}, "/v1/admin/themes/packages": {"post"},
 		"/v1/admin/themes/packages/{sha}/activate": {"post"}, "/v1/admin/themes/packages/{sha}": {"get", "delete"},
-		"/v1/tenant-scopes/{tenant_scope_id}/theme": {"get", "put"}, "/v1/admin/themes/tenant-policy": {"get", "put"},
-		"/v1/admin/themes/tenants/{tenant_scope_id}":                    {"get", "put"},
-		"/v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}": {"put", "delete"},
 	} {
 		for _, method := range methods {
 			if _, ok := spec.Paths[path][method]; !ok {
@@ -45,7 +42,7 @@ func TestThemeOpenAPIDocumentsEveryRoute(t *testing.T) {
 			t.Errorf("control.yaml does not reference %s", ref)
 		}
 	}
-	if len(spec.Paths) != 15 {
+	if len(spec.Paths) != 11 {
 		t.Errorf("documented %d theme paths", len(spec.Paths))
 	}
 }
