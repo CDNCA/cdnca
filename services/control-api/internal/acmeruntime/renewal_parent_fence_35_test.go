@@ -48,7 +48,7 @@ func TestBuildRequestFencesRenewalParentBeforeSideEffects35(t *testing.T) {
 	}
 	source := string(raw)
 	start := strings.Index(source, "func (d *Dispatcher) buildRequest")
-	end := strings.Index(source, "type managedZone struct")
+	end := strings.Index(source, "func renewalParentAuthorityAllows(")
 	if start < 0 || end <= start {
 		t.Fatal("isolate Dispatcher.buildRequest")
 	}

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -98,6 +99,46 @@ func TestHandlerSetsAssetDisabled(t *testing.T) {
 	if code, body := serve("tenant", `{"disabled":true,"expected_revision":3}`, writeHeaders(), "certificates.manage"); code != http.StatusConflict ||
 		!strings.Contains(body, `"certificate_asset_referenced"`) {
 		t.Fatalf("bound disable = %d %s", code, body)
+	}
+}
+
+// 查看证书：GET .../pem 与下载同权限、同一 Download（同一解封与审计），JSON 返回且不缓存。
+func TestHandlerShowsCertificatePEM(t *testing.T) {
+	fixture := newFixture()
+	stub := &certopsStub{serviceStub: fixture.service, download: certificateasset.Download{
+		AssetID: fixture.assetID, Name: "edge", SANs: []string{"example.com"},
+		CertificatePEM: []byte("-----BEGIN CERTIFICATE-----\nCHAIN\n-----END CERTIFICATE-----\n"),
+		PrivateKeyPEM:  []byte("-----BEGIN PRIVATE KEY-----\nKEY\n-----END PRIVATE KEY-----\n"),
+	}}
+	path := "/v1/certificate-assets/" + fixture.assetID.String() + "/pem"
+	response := fixture.serve(certopsHandler(t, stub, "tenant", "certificates.manage"), http.MethodGet, path, "", requestHeaders())
+	var body map[string]string
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" ||
+		!strings.HasPrefix(response.Header().Get("Content-Type"), "application/json") ||
+		json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body) != 2 ||
+		body["certificate_pem"] != string(stub.download.CertificatePEM) || body["private_key_pem"] != string(stub.download.PrivateKeyPEM) {
+		t.Fatalf("pem = %d %v %s", response.Code, response.Header(), response.Body.String())
+	}
+	if stub.downloadCalls != 1 || stub.downloadRequest.AssetID != fixture.assetID ||
+		stub.downloadRequest.TenantScopeID != fixture.tenantID || stub.downloadRequest.RequestID != "request-1" {
+		t.Fatalf("pem request = %+v calls=%d", stub.downloadRequest, stub.downloadCalls)
+	}
+	if response := fixture.serve(certopsHandler(t, stub, "tenant", "certificates.read"), http.MethodGet, path, "", requestHeaders()); response.Code != http.StatusForbidden {
+		t.Fatalf("read-only pem = %d", response.Code)
+	}
+	if response := fixture.serve(certopsHandler(t, stub, "tenant", "certificates.manage"), http.MethodGet, path+"?target_scope_id="+fixture.siteID.String(), "", requestHeaders()); response.Code != http.StatusForbidden {
+		t.Fatalf("cross-tenant pem = %d", response.Code)
+	}
+	if stub.downloadCalls != 1 {
+		t.Fatal("refused pem reads reached the service")
+	}
+	stub.err = certificateasset.ErrEnvelopeUnavailable
+	if response := fixture.serve(certopsHandler(t, stub, "tenant", "certificates.manage"), http.MethodGet, path, "", requestHeaders()); response.Code != http.StatusServiceUnavailable ||
+		!strings.Contains(response.Body.String(), "certificate_asset_envelope_unavailable") || strings.Contains(response.Body.String(), "PRIVATE KEY") {
+		t.Fatalf("unsealable pem = %d %s", response.Code, response.Body.String())
+	}
+	if response := fixture.serve(certopsHandler(t, stub, "tenant", "certificates.manage"), http.MethodPost, path, "{}", writeHeaders()); response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST pem = %d", response.Code)
 	}
 }
 

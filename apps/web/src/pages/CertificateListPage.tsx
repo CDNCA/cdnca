@@ -68,6 +68,7 @@ import {
   type ProviderForm,
 } from './NodeDnsPage'
 import './CertificateListPage.css'
+import { CertificatePEMDialog } from '../components/CertificatePEMDialog'
 import { AdvancedFilters, FeedbackWhen, MODAL_WIDTH, OutcomeUnknown, fieldReasonText, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply, type AdvancedFilterItem, type FormErrorMap } from '@cdnca/ui'
 import { certificateSearch, userSearch } from './idNameSources'
 
@@ -447,10 +448,18 @@ function errorMessage(error: ApiError, t: TFunction): string {
 		'certificate_asset_domain_not_covered', 'certificate_asset_auto_renew_unsupported',
     'domain_blocked', 'certificate_issuer_unavailable', 'certificate_order_in_flight', 'certificate_target_required',
     'certificate_asset_envelope_unavailable', 'certificate_asset_internal_error',
+    'certificate_dns_zone_unavailable', 'certificate_http01_not_serving', 'dns_provider_platform_managed',
   ])
   return knownCodes.has(error.code)
-    ? t(`errors.${error.code}`)
+    ? t(`errors.${error.code}`, { domain: error.domain ?? '' })
     : localizedUnknownApiError(error, t('errors.request_failed'))
+}
+
+// 受理时拒绝的申请标在对应字段下（DNS API 选择 / 域名），不弹全局错误。
+const orderRefusalFields: Record<string, keyof CertificateForm> = {
+  certificate_dns_zone_unavailable: 'dns_provider_id',
+  dns_provider_platform_managed: 'dns_provider_id',
+  certificate_http01_not_serving: 'domains_text',
 }
 
 function statusColor(status: CertificateOrderStatus): string {
@@ -780,7 +789,8 @@ function CertificateListPageContent({
   const [orderAsset, setOrderAsset] = useState<{ id: string; sans: string[] } | null>(null)
   const [sectionTab, setSectionTab] = useState<'list' | 'default' | 'dnsApi'>(initialSection)
   const initialDomainsRef = useRef(searchParams.get('domains') ?? '')
-  const initialChallengeRef = useRef<CertificateChallengeType>('dns-01')
+  // 多数域名是本平台的网站，默认 HTTP 验证；含通配符时自动切到 DNS 验证。
+  const initialChallengeRef = useRef<CertificateChallengeType>('http-01')
   const [editorOpen, setEditorOpen] = useState(() => initialDomainsRef.current.trim().length > 0)
   const [uploadOpen, setUploadOpen] = useState(false)
   // CERT-04 统一“添加证书”弹窗：单个（自己上传=uploadOpen / CA=editorOpen）与批量申请（batchOpen）
@@ -820,6 +830,8 @@ function CertificateListPageContent({
   const [defaultIssuer, setDefaultIssuer] = useState<CertificateIssuer | undefined>(undefined)
   const [defaultWriteError, setDefaultWriteError] = useState<ApiError | null>(null)
   const [accepted, setAccepted] = useState(false)
+  // 受理成功但解析未指向本平台的 HTTP-01 域名（dns_warnings，只提示不拦截）
+  const [acceptedDNSWarnings, setAcceptedDNSWarnings] = useState<string[]>([])
   const [reapplyTarget, setReapplyTarget] = useState<{ name: string, input: CreateCertificateOrderInput } | null>(null)
   const [search, setSearch] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
@@ -848,7 +860,18 @@ function CertificateListPageContent({
 		() => [...assetPrefix, page, limit, assetSearch, assetStatus ?? '', ...(assetFiltersKey ? [assetFiltersKey] : [])] as const,
 		[assetFiltersKey, assetPrefix, assetSearch, assetStatus, limit, page],
 	)
-  const challenge = Form.useWatch('challenge_type', form) ?? 'dns-01'
+  const challenge = Form.useWatch('challenge_type', form) ?? 'http-01'
+  const domainsText = Form.useWatch('domains_text', form) as string | undefined
+  // 通配符证书只能用 DNS 验证：域名里出现 *. 时自动切到 DNS 验证并提示。
+  const [wildcardSwitched, setWildcardSwitched] = useState(false)
+  useEffect(() => {
+    const wildcard = (domainsText ?? '').split(/[\s,，]+/).some((domain) => domain.trim().startsWith('*.'))
+    if (!wildcard) { setWildcardSwitched(false); return }
+    if (challenge !== 'dns-01') {
+      form.setFieldValue('challenge_type', 'dns-01')
+      setWildcardSwitched(true)
+    }
+  }, [challenge, domainsText, form])
 
   const uploadAttemptRef = useRef<AssetWriteAttempt | null>(null)
   const commandAttemptRef = useRef<AssetCommandAttempt | null>(null)
@@ -1045,7 +1068,7 @@ function CertificateListPageContent({
     form.setFieldsValue({ domains_text: initialDomains, challenge_type: initialChallenge, auto_renew: true, ...carryRef.current })
     carryRef.current = null
     initialDomainsRef.current = ''
-    initialChallengeRef.current = 'dns-01'
+    initialChallengeRef.current = 'http-01'
     defaultProviderAppliedRef.current = null
   }, [editorOpen, form])
 
@@ -1059,7 +1082,7 @@ function CertificateListPageContent({
     defaultProviderAppliedRef.current = applied
     const providerID = addDefaults.certificate_type === 'acme' ? addDefaults.dns_provider_id : undefined
     if (!providerID || form.getFieldValue('dns_provider_id')) return
-    if (providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled')) {
+    if (providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled' && item.managed_by !== 'platform')) {
       form.setFieldValue('dns_provider_id', providerID)
     }
   }, [editorOpen, isTenant, addDefaults, addTarget?.scopeID, addTargetKey, providersQuery.data, form])
@@ -1259,6 +1282,20 @@ function CertificateListPageContent({
 		link.remove()
 		URL.revokeObjectURL(url)
 	  }
+	  // 查看证书：与下载同权限、同一解封与审计；内容不缓存（gcTime 0），关闭即丢弃。
+	  const [pemTarget, setPEMTarget] = useState<CertificateAsset | null>(null)
+	  const pemQuery = useQuery({
+		queryKey: ['certificate-asset-pem', ...queryOwner, pemTarget?.id ?? ''],
+		enabled: Boolean(pemTarget) && canManage,
+		retry: false,
+		gcTime: 0,
+		staleTime: 0,
+		queryFn: async () => {
+		  const token = currentSessionAccess('certificates.manage')
+		  if (!token || !pemTarget) throw certificatePermissionDenied()
+		  return certificatesApi.viewAssetPEM(token, pemTarget.id, requestID(), assetScopeID(pemTarget))
+		},
+	  })
 	  const downloadMutation = useMutation<void, unknown, CertificateAsset>({
 		mutationFn: async (asset) => {
 		  const token = currentSessionAccess('certificates.manage')
@@ -1365,6 +1402,7 @@ function CertificateListPageContent({
       // 重新申请只弹 toast；新申请仍显示页内“证书申请已提交”。
       if (reapplyTarget) message.success(assetT('reapply.submitted'))
       else if (currentSessionAccess('certificates.manage')) setAccepted(true)
+      setAcceptedDNSWarnings(order.dns_warnings ?? [])
       orderAttemptRef.current = null
       setAttempt(null)
       setWriteError(null)
@@ -1382,6 +1420,12 @@ function CertificateListPageContent({
       if (!outcomeUnknown(error)) {
         orderAttemptRef.current = null
         setAttempt(null)
+      }
+      const refusedField = !reapplyTarget && error instanceof ApiError ? orderRefusalFields[error.code] : undefined
+      if (refusedField) {
+        form.setFields([{ name: refusedField, errors: [errorMessage(error as ApiError, t)] }])
+        setOrderFieldMarked(true)
+        return
       }
       setOrderFieldMarked(!outcomeUnknown(error) && markOrderError(error))
     },
@@ -1811,9 +1855,10 @@ function CertificateListPageContent({
     if (addDefaults.certificate_type === 'uploaded' && editorOpen && !attempt) chooseUpload()
   })
   // 可用 DNS 服务商只有一个时自动选中（两个及以上才让用户选）。
-  // 用户端列表已不含平台托管的 DNS 副本；平台管理员代申请照常可选。
-  const usableProviders = useMemo(() => (providersQuery.data?.items ?? []).filter((item) => item.status !== 'disabled'),
-    [providersQuery.data?.items])
+  // 平台托管的 DNS 副本只托管平台的解析域，谁申请都不列入证书验证选项
+  // （服务端同样拒绝），否则唯一的平台副本会被自动选中、申请只能失败。
+  const usableProviders = useMemo(() => (providersQuery.data?.items ?? []).filter((item) => item.status !== 'disabled' &&
+    item.managed_by !== 'platform'), [providersQuery.data?.items])
   useEffect(() => {
     if (usableProviders.length !== 1) return
     const only = usableProviders[0]!.id
@@ -1830,7 +1875,7 @@ function CertificateListPageContent({
     batchProviderAppliedRef.current = applied
     const providerID = addDefaults.certificate_type === 'acme' ? addDefaults.dns_provider_id : undefined
     if (providerID && !batchForm.getFieldValue('dns_provider_id') &&
-      providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled')) {
+      providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled' && item.managed_by !== 'platform')) {
       batchForm.setFieldValue('dns_provider_id', providerID)
     }
   }, [addDefaults, addTarget?.scopeID, addTargetKey, batchForm, batchOpen, isTenant, providersQuery.data])
@@ -1884,16 +1929,18 @@ function CertificateListPageContent({
     for (const item of lines) {
       const domains = normalizedDomains(item.text)
       if (!domains) { invalid.push(item.line); continue }
-      if (!values.dns_provider_id && domains.some((domain) => domain.startsWith('*.'))) { wildcardWithoutDNS.push(item.line); continue }
+      // 默认 HTTP 验证，只有含通配符的行用 DNS 验证。
+      const wildcard = domains.some((domain) => domain.startsWith('*.'))
+      if (wildcard && !values.dns_provider_id) { wildcardWithoutDNS.push(item.line); continue }
       rows.push({
         line: item.line, domains, key: writeKey(), status: 'pending',
         input: {
           domains,
-          challenge_type: values.dns_provider_id ? 'dns-01' : 'http-01',
+          challenge_type: wildcard ? 'dns-01' : 'http-01',
           auto_renew: true,
           ...(explicitIssuer ? { issuer: explicitIssuer } : {}),
           ...(orderScopeID ? { target_scope_id: orderScopeID } : {}),
-          ...(values.dns_provider_id ? { dns_provider_id: values.dns_provider_id } : {}),
+          ...(wildcard ? { dns_provider_id: values.dns_provider_id } : {}),
         },
       })
     }
@@ -1925,6 +1972,11 @@ function CertificateListPageContent({
   }
 
   const orders = useMemo(() => query.data?.items ?? [], [query.data?.items])
+  // 新申请还没有证书资产，列表里看不到；在列表上方给一行“申请中 / 失败”
+  // 并可打开申请记录。申请中的新申请总是提示；失败的只在列表为空时提示（已有证书时不一直挂着旧失败）。
+  const firstOrders = orders.filter((order) => !order.renewal_of_order_id && !order.issued_asset_id)
+  const applyingCount = firstOrders.filter((order) => inFlightOrderStatuses.has(order.status)).length
+  const failedCount = firstOrders.filter((order) => order.status === 'failed').length
   const assetRows = useMemo<CertificateAssetRow[]>(() => assetPageItems.map((asset, index) => {
     const detail = assetDetailQueries[index]?.data
     const version = latestAssetVersion(detail)
@@ -1981,7 +2033,7 @@ function CertificateListPageContent({
     setUploadOpen(false)
     setBatchOpen(false)
     initialDomainsRef.current = row.version.sans.join('\n')
-    initialChallengeRef.current = 'dns-01'
+    initialChallengeRef.current = row.version.sans.some((domain) => domain.startsWith('*.')) ? 'dns-01' : 'http-01'
     orderAttemptRef.current = null
     setAttempt(null)
     setAccepted(false)
@@ -2052,6 +2104,12 @@ function CertificateListPageContent({
     setActiveTab('orders'); setPage(1); setSearch('')
   }
   const closeOrders = () => { setOrderAsset(null); setActiveTab('assets'); setPage(1); setSearch('') }
+  // certificate_order_in_flight 报错后带“查看申请记录”入口（关闭弹窗打开申请记录）。
+  const inFlightAction = (error: ApiError | null | undefined) => error?.code === 'certificate_order_in_flight'
+    ? <Button size="small" type="link" onClick={() => {
+      setReapplyTarget(null); setWriteError(null); closeAdd(); openOrders()
+    }}>{t('editor.viewOrders')}</Button>
+    : undefined
   const assetColumns: TableColumnsType<CertificateAssetRow> = [
     {
       title: assetT('assetColumns.id'), key: 'id', width: certificateColumnWidths.assets.id, ellipsis: true,
@@ -2148,6 +2206,7 @@ function CertificateListPageContent({
             trigger={['click']}
             menu={{
               items: [
+                ...(canManage ? [{ key: 'viewPEM', label: assetT('assetActions.viewPEM'), disabled: !row.version || row.version.status === 'revoked' }] : []),
                 ...(canManage ? [{ key: 'download', label: assetT('assetActions.download'), disabled: !row.version || row.version.status === 'revoked' || downloadMutation.isPending }] : []),
                 ...(canManage ? [row.asset.disabled
                   ? { key: 'enable', label: assetT('assetActions.enable'), disabled: disabledMutation.isPending }
@@ -2160,6 +2219,7 @@ function CertificateListPageContent({
                 ] : []),
               ],
               onClick: ({ key }) => {
+                if (key === 'viewPEM' && currentSessionAccess('certificates.manage')) setPEMTarget(row.asset)
                 if (key === 'download') downloadMutation.mutate(row.asset)
                 if (key === 'enable' || key === 'disable') disabledMutation.mutate({ asset: row.asset, disabled: key === 'disable' })
                 if (key === 'orders') openOrders(row)
@@ -2536,6 +2596,16 @@ function CertificateListPageContent({
           </div>
         ) : null}
 		{accepted ? <Alert className="identity-alert" type="success" showIcon closable message={t('editor.acceptedTitle')} description={t('editor.acceptedDescription')} onClose={() => setAccepted(false)} /> : null}
+		{activeTab === 'assets' && (applyingCount > 0 || (failedCount > 0 && assetsQuery.isSuccess && (assetsQuery.data?.total ?? 0) === 0 && !hasActiveAssetFilter)) ? (() => {
+		  const showFailed = failedCount > 0 && (assetsQuery.data?.total ?? 0) === 0 && !hasActiveAssetFilter
+		  const text = applyingCount > 0 && showFailed ? assetT('pendingOrders.both', { applying: applyingCount, failed: failedCount })
+		    : applyingCount > 0 ? assetT('pendingOrders.applying', { count: applyingCount }) : assetT('pendingOrders.failed', { count: failedCount })
+		  return <Alert className="identity-alert certificate-pending-orders" type={showFailed ? 'warning' : 'info'} showIcon message={text}
+		    action={<Button size="small" type="link" onClick={() => openOrders()}>{assetT('pendingOrders.open')}</Button>} />
+		})() : null}
+		{acceptedDNSWarnings.length > 0 ? <Alert className="identity-alert" type="warning" showIcon closable
+		  message={t('editor.dnsWarningTitle', { domains: acceptedDNSWarnings.join('、') })} description={t('editor.dnsWarningDescription')}
+		  onClose={() => setAcceptedDNSWarnings([])} /> : null}
 		{detailError ? <FeedbackWhen title={errorMessage(detailError, activeTab === 'assets' ? assetT : t)} onClose={() => setDetailError(null)} /> : null}
       {activeError ? <FeedbackWhen title={activeTab === 'assets' ? assetT('errors.assetsLoadFailed') : t('errors.loadFailed')} detail={queryError ? errorMessage(queryError, activeTab === 'assets' ? assetT : t) : (activeTab === 'assets' ? assetT('errors.request_failed') : t('errors.request_failed'))} action={<Button size="small" onClick={() => {
         if (currentSessionAccess('certificates.read')) void (activeTab === 'assets' ? assetsQuery.refetch() : query.refetch())
@@ -2860,8 +2930,16 @@ function CertificateListPageContent({
 		  {reapplyTarget ? <p>{assetT('reapply.description', { name: reapplyTarget.name, domains: reapplyTarget.input.domains.join('、') })}</p> : null}
 		  {reapplyTarget && writeError ? <Alert className="identity-alert" type={uncertain ? 'warning' : 'error'} showIcon
 			message={uncertain ? t('uncertainty.title') : errorMessage(writeError, t)}
-			description={uncertain ? undefined : assetT('reapply.retryHint')} /> : null}
+			description={uncertain ? undefined : assetT('reapply.retryHint')} action={uncertain ? undefined : inFlightAction(writeError)} /> : null}
 		</Modal>
+		<CertificatePEMDialog
+		  title={pemTarget?.name ?? ''} open={canManage && pemTarget !== null} loading={pemQuery.isFetching}
+		  value={pemQuery.data}
+		  error={pemQuery.isError ? (pemQuery.error instanceof ApiError && pemQuery.error.code === 'certificate_asset_download_unavailable'
+		    ? assetT('certOps.downloadRevoked')
+		    : assetT('certOps.downloadFailed', { reason: errorMessage(pemQuery.error instanceof ApiError ? pemQuery.error : new ApiError('request failed'), assetT) })) : undefined}
+		  onClose={() => setPEMTarget(null)}
+		/>
 		<Modal
 		  className="identity-modal" title={assetT('delete.title')} open={canManage && deleteTarget !== null}
 		  okText={commandUncertain ? assetT('actions.retrySameRequest') : assetT('delete.confirm')}
@@ -2935,7 +3013,7 @@ function CertificateListPageContent({
                 action={uncertain ? <Button size="small" onClick={() => {
                   orderAttemptRef.current = null; setAttempt(null); setWriteError(null); setEditorOpen(false)
                   if (currentSessionAccess('certificates.read')) void query.refetch()
-                }}>{t('actions.closeAndRefresh')}</Button> : undefined}
+                }}>{t('actions.closeAndRefresh')}</Button> : inFlightAction(writeError)}
               />
             ) : null}
         </>}
@@ -3035,7 +3113,7 @@ function CertificateListPageContent({
                 row.status === 'accepted' ? 'success' : row.status === 'failed' ? 'error' : row.status === 'unknown' ? 'warning' : 'processing'
               }>{t(`batch.states.${row.status}`)}</Tag> },
               { title: t('batch.columns.reason'), key: 'reason', render: (_, row) => row.status === 'unknown'
-                ? t('batch.unknownReason') : row.error ? errorMessage(row.error, t) : '' },
+                ? t('batch.unknownReason') : row.error ? <>{errorMessage(row.error, t)}{inFlightAction(row.error)}</> : '' },
             ]}
           /> : null}
           {batchStarted && !batchRunning ? <Alert className="identity-alert" showIcon
@@ -3065,11 +3143,12 @@ function CertificateListPageContent({
               >
                 <Input.TextArea rows={4} placeholder={t('editor.domainsPlaceholder')} />
               </Form.Item>
-              <Form.Item name="challenge_type" label={t('editor.challenge')} rules={[{ required: true }]}>
+              <Form.Item name="challenge_type" label={t('editor.challenge')} rules={[{ required: true }]}
+                extra={wildcardSwitched ? <span className="certificate-wildcard-switched" role="status">{t('editor.wildcardSwitched')}</span> : undefined}>
                 <Select
                   options={[
-                    { value: 'dns-01', label: t('challenges.dns_01') },
                     { value: 'http-01', label: t('challenges.http_01_nodes') },
+                    { value: 'dns-01', label: t('challenges.dns_01') },
                   ]}
                   onChange={(value) => { if (value === 'http-01') form.setFieldValue('dns_provider_id', undefined) }}
                 />
@@ -3081,8 +3160,7 @@ function CertificateListPageContent({
                   {providersQuery.isError ? <Alert className="identity-alert" type="error" showIcon message={t('errors.providersLoadFailed')} action={<Button size="small" onClick={() => {
                     if (currentSessionAccess('dns.read')) void providersQuery.refetch()
                   }}>{t('actions.retry')}</Button>} /> : null}
-                  {canReadDNS && providersQuery.isSuccess &&
-                    !providersQuery.data.items.some((item) => item.status !== 'disabled')
+                  {canReadDNS && providersQuery.isSuccess && usableProviders.length === 0
                     ? <Alert className="identity-alert" type="info" showIcon message={t('editor.noDNSProvider')}
                       action={<Button size="small" type="link" disabled={writesLocked} onClick={() => {
                         // 直接去本页“DNS API”配置（关闭弹窗）。

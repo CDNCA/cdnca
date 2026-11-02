@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -1596,5 +1597,39 @@ func TestOpenRestyRuntimeHealthyWithoutTargetsChecksTheListener(t *testing.T) {
 	defer cancel()
 	if err := runtime.Healthy(ctx, nil); err == nil {
 		t.Fatal("Healthy(no targets) without a listener succeeded")
+	}
+}
+
+// Native nodes run OpenResty workers as cdnca-runtime; without these globals
+// the compiled-in "user nobody nobody" fails nginx -t on Ubuntu (no group
+// named nobody) and every certificate precheck fails.
+func TestOpenRestyRuntimePassesConfiguredGlobals(t *testing.T) {
+	root := t.TempDir()
+	runtime, err := NewOpenRestyRuntime("/usr/bin/openresty", filepath.Join(root, "nginx.pid"), "127.0.0.1:18443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls [][]string
+	runtime.run = func(_ context.Context, _ string, _ []string, arguments ...string) error {
+		calls = append(calls, arguments)
+		return nil
+	}
+	candidate := filepath.Join(root, "candidate")
+	if err := runtime.Precheck(context.Background(), candidate); err != nil {
+		t.Fatal(err)
+	}
+	runtime.ConfigureGlobals("user cdnca-runtime cdnca-runtime;")
+	if err := runtime.Precheck(context.Background(), candidate); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(calls[0], " "); got != "-t -p "+candidate+"/ -c nginx.conf" {
+		t.Fatalf("precheck without globals = %q", got)
+	}
+	if got := strings.Join(calls[1], " "); got != "-g user cdnca-runtime cdnca-runtime; -t -p "+candidate+"/ -c nginx.conf" {
+		t.Fatalf("precheck with globals = %q", got)
+	}
+	if got := runtime.globalArguments("env " + processStartEnvironment + ";"); strings.Join(got, " ") !=
+		"-g user cdnca-runtime cdnca-runtime; env "+processStartEnvironment+";" {
+		t.Fatalf("start globals = %q", got)
 	}
 }

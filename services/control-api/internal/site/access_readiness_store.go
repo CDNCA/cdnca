@@ -63,7 +63,8 @@ SELECT site.id, site.enabled, site.https_enabled,
 	EXISTS (SELECT 1 FROM certificate_asset_revocation_facts revoked WHERE revoked.tenant_scope_id=binding.tenant_scope_id
 		AND revoked.asset_id=binding.asset_id AND revoked.version_id=binding.version_id),
 	outcome.state, COALESCE(outcome.terminal_code, ''), outcome.failed_nodes,
-	check_row.ok, check_row.detail, check_row.cname, check_row.domains, check_row.checked_at, check_row.manual_requested_at
+	check_row.ok, check_row.detail, check_row.cname, check_row.domains, check_row.checked_at, check_row.manual_requested_at,
+	check_row.results
 FROM sites site
 LEFT JOIN package_subscriptions subscription
   ON subscription.tenant_scope_id=site.scope_id AND subscription.id=site.package_subscription_id
@@ -116,11 +117,11 @@ func loadAccessFacts(ctx context.Context, db accessQuerier, ids []uuid.UUID, onl
 		var checkDetail, checkCNAME *string
 		var checkDomains []string
 		var checkedAt, manualAt *time.Time
-		var failedNodes []byte
+		var failedNodes, checkResults []byte
 		if err := rows.Scan(&id, &item.Enabled, &item.HTTPSEnabled, &item.LineGroupFound, &item.OnlineNodes,
 			&bound, &item.CertNotBefore, &item.CertNotAfter, &item.CertActive, &item.CertRevoked,
 			&item.PublishState, &item.PublishFailureCode, &failedNodes,
-			&checkOK, &checkDetail, &checkCNAME, &checkDomains, &checkedAt, &manualAt); err != nil {
+			&checkOK, &checkDetail, &checkCNAME, &checkDomains, &checkedAt, &manualAt, &checkResults); err != nil {
 			return nil, err
 		}
 		item.CertBound = bound != nil && *bound
@@ -134,6 +135,9 @@ func loadAccessFacts(ctx context.Context, db accessQuerier, ids []uuid.UUID, onl
 			}
 			if checkCNAME != nil {
 				item.DNS.CNAME = *checkCNAME
+			}
+			if err := json.Unmarshal(checkResults, &item.DNS.Results); err != nil {
+				return nil, fmt.Errorf("decode site dns resolution results: %w", err)
 			}
 		}
 		facts[id] = &item

@@ -411,6 +411,8 @@ func expectedCertificateRootReferences() map[string]string {
 			"~1v1~1certificate-assets~1{asset_id}~1disabled",
 		"/v1/certificate-assets/{asset_id}/download": fragment +
 			"~1v1~1certificate-assets~1{asset_id}~1download",
+		"/v1/certificate-assets/{asset_id}/pem": fragment +
+			"~1v1~1certificate-assets~1{asset_id}~1pem",
 		"/v1/certificate-assets/{asset_id}/versions/{version_id}/activate": fragment +
 			"~1v1~1certificate-assets~1{asset_id}~1versions~1{version_id}~1activate",
 		"/v1/certificate-assets/{asset_id}/bindings": fragment +
@@ -450,6 +452,10 @@ func expectedCertificateOpenAPIOperations() map[string]certificateOpenAPIOperati
 		},
 		"GET /v1/certificate-assets/{asset_id}/download": {
 			operationID: "downloadCertificateAsset", permission: "certificates.manage",
+			responses: certificateResponseSet("200", "400", "401", "403", "404", "405", "409", "500", "503"),
+		},
+		"GET /v1/certificate-assets/{asset_id}/pem": {
+			operationID: "getCertificateAssetPEM", permission: "certificates.manage",
 			responses: certificateResponseSet("200", "400", "401", "403", "404", "405", "409", "500", "503"),
 		},
 		"POST /v1/certificate-assets/{asset_id}/versions/{version_id}/activate": {

@@ -158,6 +158,7 @@ type CertificateOrder struct {
 	// only while the order is still in progress (FX10). ListOrders only.
 	RetryErrorCode         *string    `json:"retry_error_code,omitempty"`
 	RetryErrorReason       *string    `json:"retry_error_reason,omitempty"`
+	DNSWarnings            []string   `json:"dns_warnings,omitempty"` // CreateOrder only: HTTP-01 domains whose DNS points elsewhere
 	IssuedAssetID          *uuid.UUID `json:"issued_asset_id,omitempty"`
 	IssuedVersionID        *uuid.UUID `json:"issued_version_id,omitempty"`
 	IssuedAt               *time.Time `json:"issued_at,omitempty"`

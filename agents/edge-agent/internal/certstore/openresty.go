@@ -35,6 +35,7 @@ type OpenRestyRuntime struct {
 	removeProcessFile    func(string) error
 	syncProcessDirectory func(string) error
 	identityOK           bool
+	globals              string
 }
 
 type processHandle interface {
@@ -90,11 +91,33 @@ func NewOpenRestyRuntime(binary, pidFile, dialAddress string) (*OpenRestyRuntime
 	}, nil
 }
 
+// ConfigureGlobals sets directives passed with -g on every precheck and start
+// (native profile: "user cdnca-runtime cdnca-runtime;"), as l4runtime does.
+// Without it the compiled-in "user nobody nobody" fails nginx -t with
+// getgrnam("nobody") where that group is named nogroup (Ubuntu/Debian), and
+// no certificate reaches the node. Call it before the runtime is used.
+func (runtime *OpenRestyRuntime) ConfigureGlobals(globals string) {
+	runtime.globals = globals
+}
+
+func (runtime *OpenRestyRuntime) globalArguments(directives string) []string {
+	switch {
+	case runtime.globals == "" && directives == "":
+		return nil
+	case runtime.globals == "":
+		return []string{"-g", directives}
+	case directives == "":
+		return []string{"-g", runtime.globals}
+	}
+	return []string{"-g", runtime.globals + " " + directives}
+}
+
 func (runtime *OpenRestyRuntime) Precheck(ctx context.Context, candidatePath string) error {
 	if !cleanAbsolute(candidatePath) {
 		return ErrPrecheck
 	}
-	if err := runtime.run(ctx, runtime.binary, nil, "-t", "-p", withSlash(candidatePath), "-c", "nginx.conf"); err != nil {
+	arguments := append(runtime.globalArguments(""), "-t", "-p", withSlash(candidatePath), "-c", "nginx.conf")
+	if err := runtime.run(ctx, runtime.binary, nil, arguments...); err != nil {
 		return sanitized(ctx, ErrPrecheck)
 	}
 	return nil
@@ -132,7 +155,8 @@ func (runtime *OpenRestyRuntime) Activate(ctx context.Context, currentPath strin
 		return ErrActivation
 	}
 	environment := []string{processStartEnvironment + "=" + startIdentity.Token}
-	if err := runtime.run(ctx, runtime.binary, environment, "-g", "env "+processStartEnvironment+";", "-p", withSlash(currentPath), "-c", "nginx.conf"); err != nil {
+	arguments := append(runtime.globalArguments("env "+processStartEnvironment+";"), "-p", withSlash(currentPath), "-c", "nginx.conf")
+	if err := runtime.run(ctx, runtime.binary, environment, arguments...); err != nil {
 		return errors.Join(sanitized(ctx, ErrActivation), runtime.cleanupUnrecordedStart())
 	}
 	if err := runtime.recordStartedProcess(ctx); err != nil {

@@ -34,22 +34,34 @@ func (*ActorRevalidator) AuthorizeCertificatePublication(
 		return uuid.Nil, uuid.Nil, edgedeployment.ErrUnavailable
 	}
 	var sessionUserID, sessionScopeID uuid.UUID
-	var revokedAt, expiresAt *time.Time
-	var replacedByID *uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT user_id,scope_id,revoked_at,replaced_by_id,expires_at
+	var revokedAt *time.Time
+	if err := tx.QueryRow(ctx, `SELECT user_id,scope_id,revoked_at
 		FROM auth_sessions WHERE id=$1 FOR SHARE`, actor.SessionID).Scan(
-		&sessionUserID, &sessionScopeID, &revokedAt, &replacedByID, &expiresAt,
+		&sessionUserID, &sessionScopeID, &revokedAt,
 	); errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, uuid.Nil, edgedeployment.ErrUnauthenticated
 	} else if err != nil {
 		return uuid.Nil, uuid.Nil, edgedeployment.ErrUnavailable
 	}
-	var databaseNow time.Time
-	if err := tx.QueryRow(ctx, `SELECT transaction_timestamp()`).Scan(&databaseNow); err != nil {
+	if sessionUserID != actor.UserID || sessionScopeID != actor.ScopeID || revokedAt != nil {
+		return uuid.Nil, uuid.Nil, edgedeployment.ErrUnauthenticated
+	}
+	// A publication intent keeps the session it was created in, and the
+	// console's token refresh rotates that session within minutes
+	// (a retried publication failed actor_unauthenticated
+	// after the user's next refresh). Logout, replay and suspension revoke
+	// the whole family, so the actor is still signed in while the family has
+	// a live session.
+	var live bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM auth_sessions original
+		JOIN auth_sessions current ON current.family_id=original.family_id
+		WHERE original.id=$1 AND current.user_id=$2 AND current.scope_id=$3
+		  AND current.revoked_at IS NULL AND current.replaced_by_id IS NULL
+		  AND current.expires_at>transaction_timestamp())`,
+		actor.SessionID, actor.UserID, actor.ScopeID).Scan(&live); err != nil {
 		return uuid.Nil, uuid.Nil, edgedeployment.ErrUnavailable
 	}
-	if sessionUserID != actor.UserID || sessionScopeID != actor.ScopeID || revokedAt != nil ||
-		replacedByID != nil || expiresAt == nil || !expiresAt.After(databaseNow) {
+	if !live {
 		return uuid.Nil, uuid.Nil, edgedeployment.ErrUnauthenticated
 	}
 

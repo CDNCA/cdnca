@@ -3,6 +3,9 @@ import i18n from './index'
 const zhCN = {
   action: '重新生成 CNAME',
   confirm: '确认重新生成',
+  // 重新生成前的二次确认（站点列表“…”菜单与站点详情）。
+  rotateTitle: '重新生成 {{domain}} 的 CNAME？',
+  rotateWarning: '重新生成会换成新的 CNAME 地址，旧地址约 24 小时后失效，请在此之前把域名解析改为新地址。',
   singleTitle: '重新生成 {{domain}} 的 CNAME',
   singleSummary: '将为 {{domain}} 重新生成 CNAME，生成期间状态显示为「生成中」。',
   singleResultTitle: '{{domain}} 的 CNAME 重新生成结果',
@@ -117,6 +120,8 @@ const zhCN = {
 const enUS: typeof zhCN = {
   action: 'Regenerate CNAME',
   confirm: 'Confirm regeneration',
+  rotateTitle: 'Regenerate the CNAME of {{domain}}?',
+  rotateWarning: 'Regenerating switches the site to a new CNAME address. The old address stops working in about 24 hours; point the domains at the new address before then.',
   singleTitle: 'Regenerate the CNAME of {{domain}}',
   singleSummary: 'The CNAME of {{domain}} will be regenerated; it shows "Generating" meanwhile.',
   singleResultTitle: 'CNAME regeneration of {{domain}}',

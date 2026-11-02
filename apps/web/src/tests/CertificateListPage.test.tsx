@@ -164,6 +164,15 @@ async function rowAction(user: ReturnType<typeof userEvent.setup>, item: string 
   await user.click(await screen.findByRole('menuitem', { name: item }))
 }
 
+// 申请默认 HTTP-01，DNS 服务商只在切到 DNS-01 后出现。
+async function chooseDNS01(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement) {
+  await user.click(within(dialog).getByLabelText('验证方式'))
+  // 通配符域名会自动切到 DNS-01，此时选中值与下拉项同名：点下拉项
+  const matches = await screen.findAllByText('DNS-01')
+  const option = matches.find((element) => element.closest('.ant-select-item-option')) ?? matches[matches.length - 1]!
+  await user.click(option)
+}
+
 async function openOrderHistory(user: ReturnType<typeof userEvent.setup>, more: string | RegExp = '更多操作', item: string | RegExp = '申请记录') {
   // The toolbar 更多操作 comes first; rows have their own.
   await user.click((await screen.findAllByRole('button', { name: more }))[0])
@@ -580,6 +589,7 @@ describe('CertificateListPage', () => {
     await user.click(target)
     await user.click(await screen.findByText('target-admin（ID: 17）'))
     await user.type(within(dialog).getByLabelText('域名'), 'example.com')
+    await chooseDNS01(user, dialog)
     // 唯一可用的 DNS 服务商自动选中
     expect(await within(dialog).findByTitle('Cloudflare primary')).toBeInTheDocument()
     expect(screen.queryByText('其他租户的 DNS')).not.toBeInTheDocument()
@@ -606,8 +616,8 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '申请证书' }))
     const dialog = getDialog('申请证书')
     await user.type(within(dialog).getByLabelText('域名'), 'example.com')
-    await user.click(within(dialog).getByLabelText('验证方式'))
-    await user.click(await screen.findByText('HTTP-01（文件验证）'))
+    // 默认就是 HTTP-01，不用再选。
+    expect(within(dialog).getByText('HTTP-01（文件验证）')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
     expect(await within(dialog).findByText('请选择目标用户')).toBeInTheDocument()
     expect(within(dialog).queryByText('当前账号缺少证书权限')).not.toBeInTheDocument()
@@ -626,6 +636,7 @@ describe('CertificateListPage', () => {
     vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [] })
     renderWithProviders(<CertificateListPage />, ['/site/cert?domains=www.example.com'])
     const dialog = await findDialog('申请证书')
+    await chooseDNS01(userEvent.setup(), dialog)
     expect(await within(dialog).findByText('还没有可用的 DNS API。非通配符域名可改用 HTTP-01 文件验证；需要 DNS 验证时请先在“DNS API”页添加服务商账号。')).toBeInTheDocument()
   })
 
@@ -644,8 +655,8 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '申请证书' }))
     const dialog = getDialog('申请证书')
     await user.type(within(dialog).getByLabelText('域名'), 'www.example.com')
-    await user.click(within(dialog).getByLabelText('验证方式'))
-    await user.click(await screen.findByText('HTTP-01（文件验证）'))
+    // 默认就是 HTTP-01，不用再选。
+    expect(within(dialog).getByText('HTTP-01（文件验证）')).toBeInTheDocument()
     expect(within(dialog).queryByLabelText('DNS 服务商')).not.toBeInTheDocument()
     expect(within(dialog).getByText('域名需已解析到本平台（CNAME 到站点线路组），所有节点都写入验证文件后才会请求签发机构验证。')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
@@ -667,8 +678,8 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '申请证书' }))
     const dialog = getDialog('申请证书')
     await user.type(within(dialog).getByLabelText('域名'), 'www.example.com')
-    await user.click(within(dialog).getByLabelText('验证方式'))
-    await user.click(await screen.findByText('HTTP-01（文件验证）'))
+    // 默认就是 HTTP-01，不用再选。
+    expect(within(dialog).getByText('HTTP-01（文件验证）')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
     expect(await within(dialog).findByText('格式不正确')).toBeInTheDocument()
     expect(dialog.querySelector('.identity-alert.ant-alert-error')).toBeNull()
@@ -994,6 +1005,8 @@ describe('CertificateListPage', () => {
 		await user.click(screen.getByRole('button', { name: '申请证书' }))
 		const dialog = getDialog('申请证书')
 		await user.type(within(dialog).getByLabelText('域名'), 'www.example.com')
+		// 默认 HTTP-01；切到 DNS-01 后带入保存的默认 DNS 账号
+		await chooseDNS01(user, dialog)
 		await waitFor(() => expect(within(dialog).getByText(provider.name)).toBeInTheDocument())
 		await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
 		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
@@ -1154,7 +1167,7 @@ describe('CertificateListPage', () => {
 		for (const name of ['吊销', '删除', '申请记录', '更多操作']) expect(within(actions).queryByRole('button', { name })).not.toBeInTheDocument()
 		await user.click(within(actions).getByRole('button', { name: '边缘站点证书 的更多操作' }))
 		const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent?.trim())
-		expect(items).toEqual(['下载证书', '禁用', '申请记录', '绑定网站', '删除'])
+		expect(items).toEqual(['查看证书', '下载证书', '禁用', '申请记录', '绑定网站', '删除'])
 		expect(items).not.toContain('重新申请')
 		expect(items).not.toContain('吊销')
 		expect(items).not.toContain('启用')
@@ -1406,7 +1419,12 @@ describe('CertificateListPage', () => {
 		vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
 		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
 		vi.spyOn(certificatesApi, 'listIssuers').mockResolvedValue({ items: ['lets_encrypt', 'zerossl'], default: 'zerossl' })
-		const order = (domains: string[]) => ({ ...activeOrder, domains, status: 'pending', challenge_type: 'dns-01', dns_provider_id: provider.id, auto_renew: true, issuer: 'zerossl' } as CertificateOrder)
+		// 回执与请求一致——通配符行 DNS-01 带账号，其余 HTTP-01 不带
+		const order = (domains: string[]) => {
+			const wildcard = domains.some((domain) => domain.startsWith('*.'))
+			return { ...activeOrder, domains, status: 'pending', challenge_type: wildcard ? 'dns-01' : 'http-01',
+				dns_provider_id: wildcard ? provider.id : undefined, auto_renew: true, issuer: 'zerossl' } as CertificateOrder
+		}
 		const create = vi.spyOn(certificatesApi, 'create')
 			.mockResolvedValueOnce(order(['a.example.com']))
 			.mockRejectedValueOnce(new ApiError('lost', 0, 'network_error'))
@@ -1426,7 +1444,10 @@ describe('CertificateListPage', () => {
 		await user.click(within(dialog).getByRole('button', { name: '保存证书' }))
 		await waitFor(() => expect(create).toHaveBeenCalledTimes(3))
 		expect(create.mock.calls.map((call) => call[1].domains)).toEqual([['a.example.com'], ['b.example.com', 'www.b.example.com'], ['*.c.example.com']])
-		expect(create.mock.calls[0][1]).toMatchObject({ challenge_type: 'dns-01', dns_provider_id: provider.id, issuer: 'zerossl', auto_renew: true })
+		// 普通域名默认 HTTP-01（不带 DNS 账号），通配符行才用 DNS-01
+		expect(create.mock.calls[0][1]).toMatchObject({ challenge_type: 'http-01', issuer: 'zerossl', auto_renew: true })
+		expect(create.mock.calls[0][1]).not.toHaveProperty('dns_provider_id')
+		expect(create.mock.calls[2][1]).toMatchObject({ challenge_type: 'dns-01', dns_provider_id: provider.id, issuer: 'zerossl', auto_renew: true })
 		expect(new Set(create.mock.calls.map((call) => call[2])).size).toBe(3)
 		expect(await within(dialog).findByText('已受理 1 行，未成功 2 行。')).toBeInTheDocument()
 		expect(within(dialog).getByText('结果待确认')).toBeInTheDocument()
@@ -1764,6 +1785,7 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '申请证书' }))
     const dialog = screen.getByRole('dialog')
     await user.type(within(dialog).getByLabelText('域名'), 'example.com')
+    await chooseDNS01(user, dialog)
     // 唯一可用的 DNS 服务商自动选中
     expect(await within(dialog).findByTitle('Cloudflare primary')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
@@ -1790,6 +1812,7 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '申请证书' }))
     const dialog = screen.getByRole('dialog')
     await user.type(within(dialog).getByLabelText('域名'), 'example.com')
+    await chooseDNS01(user, dialog)
     // 唯一可用的 DNS 服务商自动选中
     expect(await within(dialog).findByTitle('Cloudflare primary')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
@@ -2153,6 +2176,7 @@ describe('CertificateListPage', () => {
     expect(await within(dialog).findByDisplayValue('target-admin（ID: 17）')).toHaveAttribute('readonly')
     expect(within(dialog).queryByRole('combobox', { name: '目标用户' })).not.toBeInTheDocument()
     expect(detail).toHaveBeenCalledWith(expect.any(String), binding.site_id)
+    await chooseDNS01(user, dialog)
     // 唯一的 DNS 服务商自动选中
     await waitFor(() => expect(within(dialog).getByText('Cloudflare primary')).toBeInTheDocument())
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
@@ -2170,6 +2194,9 @@ describe('CertificateListPage', () => {
     const view = renderWithProviders(<CertificateListPage />, ['/site/cert?domains=www.example.com'])
     let dialog = await findDialog('申请证书')
     await waitFor(() => expect(list).toHaveBeenCalled())
+    // 默认 HTTP-01，切到 DNS-01 才出现 DNS 服务商选择
+    const user0 = userEvent.setup()
+    await chooseDNS01(user0, dialog)
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(within(dialog).queryByText('Cloudflare primary')).not.toBeInTheDocument()
     expect(within(dialog).getByText('选择已配置的 DNS 服务商')).toBeInTheDocument()
@@ -2178,6 +2205,7 @@ describe('CertificateListPage', () => {
     list.mockResolvedValue({ items: [] })
     renderWithProviders(<CertificateListPage />, ['/site/cert?domains=www.example.com'])
     dialog = await findDialog('申请证书')
+    await chooseDNS01(user, dialog)
     await user.click(await within(dialog).findByRole('button', { name: '去配置 DNS API' }))
     await waitFor(() => expect(queryDialog('申请证书')).not.toBeInTheDocument())
     expect(screen.getByRole('tab', { name: 'DNS API' })).toHaveAttribute('aria-selected', 'true')
@@ -2250,6 +2278,7 @@ describe('CertificateListPage', () => {
       await user.click(screen.getByRole('button', { name: '申请证书' }))
       const dialog = getDialog('申请证书')
       await user.type(within(dialog).getByLabelText('域名'), '*.Example.com.\nwww.Example.com')
+      await chooseDNS01(user, dialog)
       // 唯一可用的 DNS 服务商自动选中
       expect(await within(dialog).findByTitle('Cloudflare primary')).toBeInTheDocument()
       await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
@@ -2475,6 +2504,7 @@ describe('CertificateListPage', () => {
     await user.click(within(dialog).getByRole('combobox', { name: '目标用户' }))
     await user.click(await screen.findByText('target-admin（ID: 17）'))
     await waitFor(() => expect(defaults).toHaveBeenCalledWith('platform-certificate-token', managedTarget.scope_id, managedTarget.id))
+    await chooseDNS01(user, dialog)
     await waitFor(() => expect(within(dialog).getByText(targetProvider.name)).toBeInTheDocument())
     await user.click(within(dialog).getByRole('combobox', { name: '目标用户' }))
     await user.click(await screen.findByText('second-user（ID: 18）'))
@@ -2630,6 +2660,7 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '申请证书' }))
     const dialog = getDialog('申请证书')
     await user.type(within(dialog).getByLabelText('域名'), 'cache-identity.example.com')
+    await chooseDNS01(user, dialog)
     // 唯一可用的 DNS 服务商自动选中
     expect(await within(dialog).findByTitle('Cloudflare primary')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
@@ -2743,6 +2774,7 @@ describe('CertificateListPage', () => {
     await openOrderHistory(user)
     await screen.findByText('暂无证书申请')
     await user.click(screen.getByRole('button', { name: '申请证书' }))
+    await chooseDNS01(user, getDialog('申请证书'))
 
     expect(await screen.findByText('DNS 服务商加载失败')).toBeInTheDocument()
     expect(screen.queryByText('FOREIGN DNS PROVIDER')).not.toBeInTheDocument()

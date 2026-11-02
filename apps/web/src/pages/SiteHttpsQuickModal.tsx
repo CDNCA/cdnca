@@ -6,8 +6,9 @@ import { MODAL_WIDTH } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import { certificatesApi } from '../api/certificates'
-import { sitesApi, type SiteDetail, type SiteListItem } from '../api/sites'
+import { defaultSiteHTTPSPort, sitesApi, withDefaultHTTPSPorts, type SiteDetail, type SiteListItem } from '../api/sites'
 import '../i18n/siteHttpsQuick'
+import { siteEditErrorMessage } from './site-edit/siteErrorText'
 
 /**
  * site-parity3a：网站列表 HTTPS 列「未开启」的快捷开启。走站点 HTTPS 现有流程：
@@ -24,6 +25,7 @@ export default function SiteHttpsQuickModal({ site, accessToken, platform, onClo
   onSaved: (saved: SiteDetail) => void
 }) {
   const { t } = useTranslation('siteHttpsQuick')
+  const { t: tSites } = useTranslation(['sites', 'siteTLS'])
   const navigate = useNavigate()
   const open = site !== null && accessToken !== null
   const detail = useQuery({
@@ -50,7 +52,8 @@ export default function SiteHttpsQuickModal({ site, accessToken, platform, onClo
   const enable = useMutation({
     mutationFn: async () => {
       const current = detail.data!.value
-      const changes = { ...current.basic, https_enabled: true }
+      // HTTPS off keeps no port, so the default 443 goes with it.
+      const changes = withDefaultHTTPSPorts({ ...current.basic, https_enabled: true })
       return sitesApi.patchBasic(accessToken!, current.id, { expected_version: current.version, section: 'basic', changes }, crypto.randomUUID())
     },
     onSuccess: (saved) => { onSaved(saved); onClose() },
@@ -58,7 +61,7 @@ export default function SiteHttpsQuickModal({ site, accessToken, platform, onClo
   const close = () => { enable.reset(); onClose() }
   const domains = site?.domains?.length ? site.domains : site ? [site.domain] : []
   const bound = detail.data?.bound
-  const ports = detail.data?.value.basic.https_listen_ports.join(', ') || '443'
+  const ports = detail.data?.value.basic.https_listen_ports.join(', ') || defaultSiteHTTPSPort
   return (
     <Modal title={t('title')} open={open} width={MODAL_WIDTH.S} onCancel={close} destroyOnHidden
       footer={
@@ -82,7 +85,7 @@ export default function SiteHttpsQuickModal({ site, accessToken, platform, onClo
       {bound === true ? <Alert type="info" showIcon message={t('bound', { ports })} /> : null}
       {bound === false ? <Alert type="warning" showIcon message={t('unbound')} /> : null}
       {enable.isError ? (
-        <Alert type="error" showIcon message={t('failed', { message: enable.error instanceof ApiError ? enable.error.message : String(enable.error) })} />
+        <Alert type="error" showIcon message={t('failed', { message: enable.error instanceof ApiError ? siteEditErrorMessage(enable.error, tSites) : tSites('edit.feedback.saveFailed') })} />
       ) : null}
     </Modal>
   )

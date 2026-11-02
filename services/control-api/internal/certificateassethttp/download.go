@@ -3,6 +3,7 @@ package certificateassethttp
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -68,4 +69,25 @@ func writeDownload(response http.ResponseWriter, material certificateasset.Downl
 	header.Set("Content-Length", strconv.Itoa(archive.Len()))
 	response.WriteHeader(http.StatusOK)
 	_, _ = response.Write(archive.Bytes())
+}
+
+// writePEM is 查看证书: the same material as the zip, as JSON (Cache-Control
+// no-store comes from setSecurityHeaders).
+func writePEM(response http.ResponseWriter, material certificateasset.Download) {
+	defer clear(material.PrivateKeyPEM)
+	body, err := json.Marshal(struct {
+		CertificatePEM string `json:"certificate_pem"`
+		PrivateKeyPEM  string `json:"private_key_pem"`
+	}{string(material.CertificatePEM), string(material.PrivateKeyPEM)})
+	if err != nil {
+		writeError(response, response.Header().Get("X-Request-ID"), http.StatusInternalServerError,
+			"certificate_asset_internal_error", "证书服务暂时不可用")
+		return
+	}
+	defer clear(body)
+	header := response.Header()
+	header.Set("Content-Type", "application/json; charset=utf-8")
+	header.Set("Content-Length", strconv.Itoa(len(body)))
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(body)
 }

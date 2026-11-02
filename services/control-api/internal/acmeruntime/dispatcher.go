@@ -103,7 +103,7 @@ func (d *Dispatcher) DispatchOne(ctx context.Context) (DispatchResult, error) {
 		"outbox_id", lease.OutboxID, "order_id", lease.OrderID, "attempt", lease.Attempt,
 		"error_code", code, "retry_after", retryAfter, "detail", acmeworker.FailureDetail(err))
 	terminal := dispatchTerminal(err, code)
-	if settleErr := d.settleFailure(settleCtx, lease, code, acmeworker.PublicReason(err), retryAfter, terminal); settleErr != nil {
+	if settleErr := d.settleFailure(settleCtx, lease, code, failureReason(err), retryAfter, terminal); settleErr != nil {
 		return result, settleErr
 	}
 	if lease.Attempt >= d.config.MaxAttempts || terminal {
@@ -497,52 +497,24 @@ func renewalParentAuthorityAllows(renewalOfOrderID *uuid.UUID, parentStatus *str
 	return parentStatus != nil && (*parentStatus == "active" || *parentStatus == "renewal_due")
 }
 
-type managedZone struct {
-	id   uuid.UUID
-	name string
-}
-
+// frozenManagedZone is the order's DNS zone (dnsacme.ManagedZoneFor, the
+// same rule the order was accepted with); none is acme_dns_zone_unavailable
+// with the uncovered domain in the reason (terminal).
 func frozenManagedZone(
 	ctx context.Context,
 	tx pgx.Tx,
 	scopeID, providerID uuid.UUID,
 	domains []string,
 ) (uuid.UUID, error) {
-	rows, err := tx.Query(ctx, `SELECT zone.id,zone.name FROM dns_zones zone
-		WHERE zone.scope_id=$1 AND zone.provider_id=$2
-		ORDER BY char_length(zone.name) DESC,zone.id FOR SHARE OF zone`, scopeID, providerID)
+	zoneID, uncovered, found, err := dnsacme.ManagedZoneFor(ctx, tx, scopeID, providerID, domains)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	defer rows.Close()
-	var zones []managedZone
-	for rows.Next() {
-		var zone managedZone
-		if err := rows.Scan(&zone.id, &zone.name); err != nil {
-			return uuid.Nil, err
-		}
-		zones = append(zones, zone)
+	if !found {
+		return uuid.Nil, &runtimeError{code: codeDNSZoneUnavailable, err: ErrConflict,
+			reason: dnsacme.DNSZoneUnavailableReason(uncovered)}
 	}
-	if err := rows.Err(); err != nil {
-		return uuid.Nil, err
-	}
-	for _, zone := range zones {
-		if zone.id == uuid.Nil || zone.name == "" || zone.name != strings.ToLower(strings.TrimSpace(zone.name)) {
-			continue
-		}
-		covers := true
-		for _, domain := range domains {
-			name := strings.TrimPrefix(domain, "*.")
-			if name != zone.name && !strings.HasSuffix(name, "."+zone.name) {
-				covers = false
-				break
-			}
-		}
-		if covers {
-			return zone.id, nil
-		}
-	}
-	return uuid.Nil, codedError("acme_dns_zone_unavailable", ErrConflict)
+	return zoneID, nil
 }
 
 func (d *Dispatcher) complete(ctx context.Context, lease Lease) error {
@@ -689,8 +661,13 @@ const codeDNSProviderPlatformManaged = "acme_dns_provider_platform_managed"
 // and not a failure the user is alerted about (settleFailure).
 const codeRenewalSkipped = "acme_renewal_skipped_auto_renew_off"
 
+// codeDNSZoneUnavailable: the order's DNS account hosts no zone for its
+// domains. The domains and the account are frozen on the order, so a retry
+// only repeats it: terminal on the first attempt.
+const codeDNSZoneUnavailable = "acme_dns_zone_unavailable"
+
 func terminalFailure(code string) bool {
-	if code == codeDNSProviderPlatformManaged || code == codeRenewalSkipped {
+	if code == codeDNSProviderPlatformManaged || code == codeRenewalSkipped || code == codeDNSZoneUnavailable {
 		return true
 	}
 	switch acmeworker.ErrorCode(code) {
@@ -705,6 +682,19 @@ func terminalFailure(code string) bool {
 // operation failed (later claims could only repeat the code, fix-certstuck).
 func dispatchTerminal(err error, code string) bool {
 	return terminalFailure(code) || acmeworker.IsTerminal(err)
+}
+
+// failureReason is the CA's redacted reason (acmeworker.PublicReason), else
+// the runtime's own user-facing reason (acme_dns_zone_unavailable).
+func failureReason(err error) string {
+	if reason := acmeworker.PublicReason(err); reason != "" {
+		return reason
+	}
+	var runtimeErr *runtimeError
+	if errors.As(err, &runtimeErr) {
+		return runtimeErr.reason
+	}
+	return ""
 }
 
 func classifyFailure(err error) (string, time.Duration) {

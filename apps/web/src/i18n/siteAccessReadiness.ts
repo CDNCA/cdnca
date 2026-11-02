@@ -118,6 +118,11 @@ const zhCN = {
   republishQueued: '已重新发布，等待节点回执。',
   republishInFlight: '正在发布中，请等这次发布完成后再试。',
   republishFailed: '重新发布失败，请稍后重试。',
+  dnsMismatch: {
+    reason: '{{domain}} 当前指向 {{observed}}，请在域名 DNS 处改为 {{cname}}',
+    copy: '复制 CNAME',
+    copied: '已复制',
+  },
   advice: {
     dnsTarget: '在域名服务商处把域名的 CNAME 记录指向 {{cname}}。',
     waitDNS: '解析修改后通常几分钟到几小时生效，可点“立即检查”。',
@@ -259,6 +264,11 @@ const enUS: typeof zhCN = {
   republishQueued: 'Republished; waiting for node receipts.',
   republishInFlight: 'A publication is still running; try again when it finishes.',
   republishFailed: 'Republishing failed; try again later.',
+  dnsMismatch: {
+    reason: '{{domain}} currently points to {{observed}}. At your DNS provider, change it to {{cname}}',
+    copy: 'Copy CNAME',
+    copied: 'Copied',
+  },
   advice: {
     dnsTarget: 'At your DNS provider, point each domain’s CNAME record at {{cname}}.',
     waitDNS: 'DNS changes take minutes to hours; use “Check now” afterwards.',

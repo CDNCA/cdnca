@@ -100,34 +100,36 @@ describe('SiteEditPage HTTPS workflow', () => {
   })
 
   it('saves the HTTPS switch and listen ports through the real basic PATCH contract', async () => {
-    const saved: SiteDetail = {
-      ...detail,
-      version: 2,
-      basic: { ...detail.basic, https_enabled: true, https_listen_ports: ['443', '8443'] },
-    }
-    const patch = vi.spyOn(sitesApi, 'patchBasic').mockResolvedValue(saved)
+    const patch = vi.spyOn(sitesApi, 'patchBasic')
+      .mockResolvedValueOnce({ ...detail, version: 2, basic: { ...detail.basic, https_enabled: true, https_listen_ports: ['443'] } })
+      .mockResolvedValueOnce({ ...detail, version: 3, basic: { ...detail.basic, https_enabled: true, https_listen_ports: ['443', '8443'] } })
     const user = userEvent.setup()
     renderHttpsPage()
 
+    // the switch alone saves at once with the default port 443 (no red error for the blank port)
     await user.click(await screen.findByRole('switch', { name: 'HTTPS访问' }))
-    const ports = await screen.findByRole('textbox', { name: 'HTTPS监听端口' })
-    await user.clear(ports)
-    await user.type(ports, '443 8443')
-    // fix-siteinstant: no save button; the ports save on blur (the switch alone has no port yet and is not sent)
-    expect(screen.queryByRole('button', { name: '保存更改' })).toBeNull()
-    fireEvent.blur(ports)
-
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
     expect(patch.mock.calls[0][0]).toBe('site-token')
     expect(patch.mock.calls[0][1]).toBe(siteID)
     expect(patch.mock.calls[0][2]).toMatchObject({
       expected_version: 1,
       section: 'basic',
-      changes: {
-        https_enabled: true,
-        https_listen_ports: ['443', '8443'],
-        tls_protocols: ['TLSv1.2', 'TLSv1.3'],
-      },
+      changes: { https_enabled: true, https_listen_ports: ['443'], tls_protocols: ['TLSv1.2', 'TLSv1.3'] },
+    })
+
+    const ports = await screen.findByRole('textbox', { name: 'HTTPS监听端口' })
+    await waitFor(() => expect(ports).toHaveValue('443'))
+    await user.clear(ports)
+    await user.type(ports, '443 8443')
+    // no save button; the ports save on blur
+    expect(screen.queryByRole('button', { name: '保存更改' })).toBeNull()
+    fireEvent.blur(ports)
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(2))
+    expect(patch.mock.calls[1][2]).toMatchObject({
+      expected_version: 2,
+      section: 'basic',
+      changes: { https_enabled: true, https_listen_ports: ['443', '8443'] },
     })
     expect((await screen.findAllByText('操作成功'))[0]).toBeInTheDocument()
   })

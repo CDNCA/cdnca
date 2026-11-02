@@ -361,6 +361,18 @@ describe('SiteListPage', () => {
     const posts = vi.mocked(globalThis.fetch).mock.calls.length
     await user.click(screen.getByRole('button', { name: '更多' }))
     await user.click(await screen.findByText('重新生成 CNAME'))
+    // 先二次确认，提醒旧地址约 24 小时后失效；取消不提交。
+    const ask = async () => {
+      const dialog = await findDialog('重新生成 stalled.example.test 的 CNAME？')
+      expect(dialog).toHaveTextContent('旧地址约 24 小时后失效，请在此之前把域名解析改为新地址')
+      return dialog
+    }
+    await user.click(within(await ask()).getByRole('button', { name: /取\s*消/ }))
+    await waitFor(() => expect(queryDialog('重新生成 stalled.example.test 的 CNAME？')).toBeNull())
+    expect(vi.mocked(globalThis.fetch).mock.calls.slice(posts).some(([url]) => String(url) === '/v1/sites/batch-action')).toBe(false)
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    await user.click(await screen.findByText('重新生成 CNAME'))
+    await user.click(within(await ask()).getByRole('button', { name: '确认重新生成' }))
     await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.slice(posts)
       .some(([url, init]) => String(url) === '/v1/sites/batch-action' && init?.method === 'POST' &&
         JSON.parse(String(init.body)).action === 'regenerate_cname')).toBe(true))

@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 645,
+ "total": 646,
  "api_key_count": 141,
  "groups": [
   {
@@ -3828,7 +3828,7 @@
   {
    "id": "certificate-assets",
    "prefix": "/v1/certificate-assets",
-   "count": 11,
+   "count": 12,
    "api_key_count": 0,
    "operations": [
     {
@@ -3980,6 +3980,21 @@
      ],
      "source": "api/control-certificate-assets.openapi.yaml",
      "operation_id": "downloadCertificateAsset"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/certificate-assets/{asset_id}/pem",
+     "summary": "Show the current certificate version's chain and private key",
+     "summary_zh": "查看证书当前版本的证书链与私钥",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "tags": [
+      "Certificate assets"
+     ],
+     "source": "api/control-certificate-assets.openapi.yaml",
+     "operation_id": "getCertificateAssetPEM"
     },
     {
      "method": "POST",

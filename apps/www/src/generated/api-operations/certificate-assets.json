@@ -1435,6 +1435,91 @@
    ]
   },
   {
+   "operation_id": "getCertificateAssetPEM",
+   "method": "GET",
+   "path": "/v1/certificate-assets/{asset_id}/pem",
+   "summary": "Show the current certificate version's chain and private key",
+   "summary_zh": "查看证书当前版本的证书链与私钥",
+   "auth": [
+    "bearer"
+   ],
+   "description": "View certificate. The same material as downloadCertificateAsset (fullchain and PKCS#8 private key of the latest activated version) as JSON, for copying on the page. Requires certificates.manage; audited as certificate.asset.download in the same transaction before the key is returned; Cache-Control no-store.",
+   "description_zh": "查看证书。与下载同一取材、解封与审计（certificate.asset.download），以 JSON 返回证书链与私钥； 需要 certificates.manage，响应不缓存。",
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate chain and private key PEM.",
+     "fields": [
+      {
+       "name": "certificate_pem",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "private_key_pem",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    },
+    {
+     "status": "503",
+     "description": "Private key envelope unavailable (certificate_asset_envelope_unavailable)"
+    }
+   ]
+  },
+  {
    "operation_id": "activateCertificateAssetVersion",
    "method": "POST",
    "path": "/v1/certificate-assets/{asset_id}/versions/{version_id}/activate",

@@ -3,6 +3,7 @@ package certificatepublish
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -214,6 +215,8 @@ func TestPublisherAdapterClassifiesActorDriftAndDependencyFailureWithoutLeaks47(
 		{name: "actor", err: edgedeployment.ErrUnauthenticated, want: certificateasset.PublicationPermanent, code: "actor_unauthenticated"},
 		{name: "conflict", err: edgedeployment.ErrIdempotencyConflict, want: certificateasset.PublicationPermanent, code: "publication_conflict"},
 		{name: "unavailable", err: edgedeployment.ErrUnavailable, want: certificateasset.PublicationRetry, code: "publication_unavailable"},
+		{name: "certificate key", err: fmt.Errorf("load material: %w", certificateasset.ErrEnvelopeUnavailable),
+			want: certificateasset.PublicationPermanent, code: "certificate_key_unavailable"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service := &publicationAdapterService47{publishErr: test.err}

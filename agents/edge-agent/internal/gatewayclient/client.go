@@ -118,7 +118,8 @@ type Client struct {
 	// known_capabilities, so advertising it cannot cost the session facts
 	// on a Gateway that does not know it.
 	gatewayKnowsL4Live atomic.Bool
-	liveCapability     *liveCapability // changes at run time (XDP_FILTER)
+	liveCapabilities   []*liveCapability // change at run time (XDP_FILTER, ACME_HTTP01_OVERLAY)
+	acmeHTTP01Poll     time.Duration     // ACME_HTTP01_OVERLAY readiness re-check interval
 	extraChecks        func() []*agentv1.CheckResult
 	nodeInventory      func(context.Context) *agentv1.ReportNodeNetworkInventoryV1Request
 	portTransition     *PortTransitionRuntime
@@ -252,7 +253,7 @@ func New(config Config, dialer Dialer, manager DeploymentManager, trust *TrustSt
 	client := &Client{
 		config: config, dialer: dialer, manager: manager, trust: trust, store: store, overlayStore: overlayStore, cacheStore: cacheStore,
 		cacheCancels: newCacheCancelRegistry(),
-		journalLease: lease, now: time.Now, cacheTaskConfig: cachetask.DefaultConfig(),
+		journalLease: lease, now: time.Now, cacheTaskConfig: cachetask.DefaultConfig(), acmeHTTP01Poll: acmeHTTP01ReadyPoll,
 		jitter: func(duration time.Duration) time.Duration {
 			return time.Duration(float64(duration) * (0.8 + rand.Float64()*0.4))
 		},
@@ -262,6 +263,17 @@ func New(config Config, dialer Dialer, manager DeploymentManager, trust *TrustSt
 			return nil, fmt.Errorf("%w: client option is nil", ErrInvalidConfiguration)
 		}
 		if err := option(client); err != nil {
+			return nil, err
+		}
+	}
+	if client.acmeHTTP01 != nil {
+		// The node skeleton serving the overlay root is written by dynamic
+		// routing after the first hello: declare the capability once it is
+		// there (and withdraw it when it goes) without an agent restart.
+		if err := client.addLiveCapability(LiveCapability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_ACME_HTTP01_OVERLAY, APIVersion: 1,
+			Ready: client.acmeHTTP01.Ready, Poll: client.acmeHTTP01Poll,
+		}); err != nil {
 			return nil, err
 		}
 	}
@@ -1894,6 +1906,8 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 	}
 	heartbeatTicker := time.NewTicker(gatewayHello.HeartbeatIntervalDuration.AsDuration())
 	defer heartbeatTicker.Stop()
+	livePoll, stopLivePoll := c.liveCapabilityPoll()
+	defer stopLivePoll()
 	var heartbeatSequence uint64
 	var responseSequence uint64 = 1
 	type heartbeatEvent struct {
@@ -1928,6 +1942,10 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			if c.liveCapabilityStale() {
 				// The hello no longer says what the node runs: reconnect now
 				// (unfinished work stays in the journal and is resumed).
+				return true, errLiveCapabilityChanged
+			}
+		case <-livePoll:
+			if c.liveCapabilityStale() {
 				return true, errLiveCapabilityChanged
 			}
 		case nextWork <- nextItem:
@@ -2898,11 +2916,6 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 	}
 	c.declaredIPIntel.Store(ipIntelDeclared)
 	c.declareLiveCapability(capabilities)
-	if c.acmeHTTP01 != nil && c.acmeHTTP01.Ready() && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_ACME_HTTP01_OVERLAY) {
-		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
-			Name: agentv1.CapabilityName_CAPABILITY_NAME_ACME_HTTP01_OVERLAY, ApiVersion: 1,
-		})
-	}
 	hello := &agentv1.AgentHello{
 		NodeId: c.config.NodeID, BootId: c.config.BootID,
 		SupportedProtocolVersions: c.config.SupportedVersions,

@@ -16,7 +16,15 @@ func TestTenantProviderResolution04BuildRequestLocksFrozenAuthority(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := string(raw)
+	// The zone lookup is shared with order acceptance (dnsacme.ManagedZoneFor).
+	zone, err := os.ReadFile(strings.TrimSuffix(file, "acmeruntime/tenant_provider_resolution_04_test.go") + "dnsacme/managed_zone.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "dnsacme.ManagedZoneFor(ctx, tx, scopeID, providerID, domains)") {
+		t.Fatal("dispatcher does not resolve the zone through dnsacme.ManagedZoneFor")
+	}
+	source := string(raw) + string(zone)
 	for _, required := range []string{
 		"tenant.id", "provider.credential_key_id", "provider.credential_version",
 		"provider.credential_revoked", "zone.id", "FOR SHARE", "TenantID: tenantID",

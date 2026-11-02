@@ -240,6 +240,44 @@ paths:
         '503':
           description: Private key envelope unavailable (certificate_asset_envelope_unavailable)
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  /v1/certificate-assets/{asset_id}/pem:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    get:
+      tags: [Certificate assets]
+      operationId: getCertificateAssetPEM
+      x-summary-zh: "查看证书当前版本的证书链与私钥"
+      summary: Show the current certificate version's chain and private key
+      description: "View certificate. The same material as downloadCertificateAsset (fullchain and PKCS#8 private key of the latest activated version) as JSON, for copying on the page. Requires certificates.manage; audited as certificate.asset.download in the same transaction before the key is returned; Cache-Control no-store."
+      x-description-zh: >-
+        查看证书。与下载同一取材、解封与审计（certificate.asset.download），以 JSON 返回证书链与私钥；
+        需要 certificates.manage，响应不缓存。
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Certificate chain and private key PEM.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [certificate_pem, private_key_pem]
+                properties:
+                  certificate_pem: {type: string}
+                  private_key_pem: {type: string}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          description: Private key envelope unavailable (certificate_asset_envelope_unavailable)
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
   /v1/certificate-assets/{asset_id}/versions/{version_id}/activate:
     parameters:
       - $ref: '#/components/parameters/AssetID'

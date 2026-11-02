@@ -119,14 +119,16 @@ describe('SiteListenerDomainPanel', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('rejects missing, duplicate, out-of-range, and colliding HTTPS listener ports', () => {
+  it('rejects duplicate, out-of-range, and colliding HTTPS listener ports; a blank list means 443', () => {
     const t = i18n.getFixedT('zh-CN', ['sites', 'siteTLS', 'siteListenerDomains'])
-    expect(validateBasicConfig({ ...basic, https_listen_ports: [] }, t).https_listen_ports)
-      .toBe('启用 HTTPS 时必须填写 1 到 32 个不重复的 1-65535 端口。')
+    // HTTPS on with the ports left blank is saved as 443, not refused
+    expect(validateBasicConfig({ ...basic, https_listen_ports: [] }, t).https_listen_ports).toBeUndefined()
+    expect(validateBasicConfig({ ...basic, http_listen_ports: ['443'], https_listen_ports: [] }, t).https_listen_ports)
+      .toBe('HTTP 与 HTTPS 监听端口不能重复。')
     expect(validateBasicConfig({ ...basic, https_listen_ports: ['443', '443'] }, t).https_listen_ports)
-      .toBe('启用 HTTPS 时必须填写 1 到 32 个不重复的 1-65535 端口。')
+      .toBe('HTTPS 端口需为 1 到 32 个不重复的 1-65535 端口，留空默认 443。')
     expect(validateBasicConfig({ ...basic, https_listen_ports: ['65536'] }, t).https_listen_ports)
-      .toBe('启用 HTTPS 时必须填写 1 到 32 个不重复的 1-65535 端口。')
+      .toBe('HTTPS 端口需为 1 到 32 个不重复的 1-65535 端口，留空默认 443。')
     expect(validateBasicConfig({ ...basic, https_listen_ports: ['80'] }, t).https_listen_ports)
       .toBe('HTTP 与 HTTPS 监听端口不能重复。')
     expect(validateBasicConfig({ ...basic, https_enabled: false, https_listen_ports: [] }, t).https_listen_ports)

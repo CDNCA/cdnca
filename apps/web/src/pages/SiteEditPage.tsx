@@ -6,12 +6,12 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { ApiError, type Principal } from '../api/auth'
 import { writeOutcomeUnknown as hasUncertainWriteOutcome } from './site-edit/writeOutcome'
-import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
   sitesApi,
   operationalSiteStatus,
   originForwarding,
+  withDefaultHTTPSPorts,
   type PatchSiteBasicRequest,
   type PatchSiteOriginRequest,
   type SiteBasicConfig,
@@ -20,7 +20,6 @@ import {
 } from '../api/sites'
 import { roleForPrincipal, useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
-import { localizedUnknownApiError } from '../i18n/apiError'
 import '../i18n/siteTLS'
 import '../i18n/pluginUI'
 import '../i18n/siteEditV4'
@@ -44,6 +43,7 @@ import {
 import { OutcomeUnknown, FeedbackWhen } from '@cdnca/ui'
 import { rebaseDraft, useCommitRequest, useInstantFeedback } from './site-edit/instantSave'
 import { siteAccessGap } from './site-edit/cnameFailureText'
+import { siteEditErrorMessage } from './site-edit/siteErrorText'
 import { openTabAt } from './site-edit/siteTabSummaryJump'
 import { accessStatusLabel } from './site-edit/accessReadinessText'
 import { SiteAccessReadinessCard } from './site-edit/SiteAccessReadiness'
@@ -277,28 +277,6 @@ function serverFieldError(error: unknown): { field: (typeof inPlaceSiteFields)[n
   if (!(error instanceof ApiError) || error.code !== 'validation_error' || !error.field) return null
   const field = inPlaceSiteFields.find((known) => known === error.field)
   return field ? { field } : null
-}
-
-function errorCodeMessage(error: ApiError, t: TFunction<['sites', 'siteTLS']>): string {
-  switch (error.code) {
-    case 'site_locked':
-    case 'version_conflict':
-    case 'permission_denied':
-    case 'site_not_found':
-    case 'network_error':
-    case 'request_failed':
-      return t(`edit.errors.${error.code}`)
-    case 'validation_error':
-      // The server names the refused field (error.details.field).
-      if (error.field) {
-        return localizedUnknownApiError(error, t(`edit.errors.fields.${error.field}`, {
-          defaultValue: t('edit.errors.fieldInvalid', { field: error.field }),
-        }))
-      }
-      return localizedUnknownApiError(error, t('edit.errors.request_failed'))
-    default:
-      return localizedUnknownApiError(error, t('edit.errors.request_failed'))
-  }
 }
 
 function EditLoading() {
@@ -935,7 +913,7 @@ function SiteEditPageContent({
         revertDrafts()
         if (pinned.field === 'origins') setOriginError(text)
         else setErrors({ [pinned.field]: text })
-        serverFieldMessage.current = errorCodeMessage(error as ApiError, t)
+        serverFieldMessage.current = siteEditErrorMessage(error as ApiError, t)
         setFeedback('idle')
         setFocusErrorRequest((request) => request + 1)
         return
@@ -943,7 +921,7 @@ function SiteEditPageContent({
       setFeedback('error')
       setFeedbackMessage(
         error instanceof ApiError
-          ? errorCodeMessage(error, t)
+          ? siteEditErrorMessage(error, t)
           : t('edit.feedback.saveFailed'),
       )
       // A refusal puts back only what this attempt sent (CFG-DRAFT-01):
@@ -1011,13 +989,17 @@ function SiteEditPageContent({
         setFocusErrorRequest((request) => request + 1)
         return
       }
+      // A blank HTTPS port list is sent as 443; the draft takes the same value
+      // so the saved site is not seen as another edit.
+      const sent = withDefaultHTTPSPorts(draft)
+      if (sent !== draft) setDraft(sent)
       const changes: SiteBasicConfig = {
-        ...draft,
-        domains: [...draft.domains],
-        http_listen_ports: [...draft.http_listen_ports],
-        https_listen_ports: [...draft.https_listen_ports],
-        tls_protocols: [...(draft.tls_protocols ?? [])],
-        origins: [...draft.origins],
+        ...sent,
+        domains: [...sent.domains],
+        http_listen_ports: [...sent.http_listen_ports],
+        https_listen_ports: [...sent.https_listen_ports],
+        tls_protocols: [...(sent.tls_protocols ?? [])],
+        origins: [...sent.origins],
       }
       const request: PatchSiteBasicRequest = {
         expected_version: detail.version,
@@ -1223,7 +1205,7 @@ function SiteEditPageContent({
         <SiteEditState
           status="error"
           title={t('edit.errors.loadFailed')}
-          detail={apiError ? errorCodeMessage(apiError, t) : t('edit.errors.request_failed')}
+          detail={apiError ? siteEditErrorMessage(apiError, t) : t('edit.errors.request_failed')}
           onRetry={() => void query.refetch()}
         />
       </section>

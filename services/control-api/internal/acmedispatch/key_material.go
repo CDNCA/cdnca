@@ -76,15 +76,9 @@ func (*PGKeyMaterialLoader) LoadOpaquePrivateKey(
 		return certificateasset.OpaquePrivateKey{}, ErrConflict
 	}
 
-	metadata, err := json.Marshal(struct {
-		Schema         string `json:"schema"`
-		Algorithm      string `json:"algorithm"`
-		WrappingKeyID  string `json:"wrapping_key_id"`
-		WrappingNonce  []byte `json:"wrapping_nonce"`
-		WrappingAADSHA []byte `json:"wrapping_aad_sha256"`
-	}{
-		Schema: "cdnca.acme-wrapped-key.v1", Algorithm: algorithm,
-		WrappingKeyID: *wrappingKeyID, WrappingNonce: nonce, WrappingAADSHA: aadDigest,
+	metadata, err := json.Marshal(certificateasset.ACMEWrappedKeyMetadata{
+		Schema: certificateasset.ACMEWrappedKeySchema, Algorithm: algorithm,
+		WrappingKeyID: *wrappingKeyID, WrappingNonce: nonce, WrappingAADSHA256: aadDigest,
 	})
 	if err != nil {
 		return certificateasset.OpaquePrivateKey{}, err

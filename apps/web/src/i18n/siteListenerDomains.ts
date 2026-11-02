@@ -22,7 +22,7 @@ const zhCN = {
   runtime: { disabled: '未启用', pending: '待生效', active: '已生效', failed: '生效失败' },
   validation: {
     domains: '请输入 1 到 100 个有效且不重复的域名，可使用 *.example.com 通配符。',
-    httpsPorts: '启用 HTTPS 时必须填写 1 到 32 个不重复的 1-65535 端口。',
+    httpsPorts: 'HTTPS 端口需为 1 到 32 个不重复的 1-65535 端口，留空默认 443。',
     portConflict: 'HTTP 与 HTTPS 监听端口不能重复。',
   },
 }
@@ -49,7 +49,7 @@ const enUS: typeof zhCN = {
   runtime: { disabled: 'Disabled', pending: 'Pending', active: 'Active', failed: 'Failed' },
   validation: {
     domains: 'Enter 1 to 100 valid unique domains. Wildcards such as *.example.com are supported.',
-    httpsPorts: 'When HTTPS is enabled, enter 1 to 32 unique ports from 1 to 65535.',
+    httpsPorts: 'Enter 1 to 32 unique HTTPS ports from 1 to 65535, or leave blank for 443.',
     portConflict: 'HTTP and HTTPS listener ports must not overlap.',
   },
 }

@@ -27,6 +27,20 @@ type AESGCMPrivateKeyEnvelopeKeyring struct {
 	random   io.Reader
 }
 
+// ACMEWrappedKeySchema is the schema of the wrapped-key metadata an ACME
+// envelope carries as its source (acmedispatch.PGKeyMaterialLoader).
+const ACMEWrappedKeySchema = "cdnca.acme-wrapped-key.v1"
+
+// ACMEWrappedKeyMetadata is that metadata in the field order it is sealed
+// with. Unseal re-encodes a jsonb-reordered source in this order.
+type ACMEWrappedKeyMetadata struct {
+	Schema            string `json:"schema"`
+	Algorithm         string `json:"algorithm"`
+	WrappingKeyID     string `json:"wrapping_key_id"`
+	WrappingNonce     []byte `json:"wrapping_nonce"`
+	WrappingAADSHA256 []byte `json:"wrapping_aad_sha256"`
+}
+
 type privateKeyEnvelopeMetadata struct {
 	Schema string          `json:"schema"`
 	Kind   string          `json:"kind"`
@@ -116,7 +130,7 @@ func (keyring *AESGCMPrivateKeyEnvelopeKeyring) Unseal(
 		// The metadata column is jsonb: it reads back reordered and spaced,
 		// not as the bytes seal hashed. Seal wrote json.Marshal of the
 		// decoded struct, so that encoding is the sealed one.
-		if canonical, marshalErr := json.Marshal(metadata); marshalErr == nil &&
+		if canonical, marshalErr := sealedPrivateKeyEnvelopeMetadata(metadata); marshalErr == nil &&
 			!bytes.Equal(canonical, request.Envelope.Metadata) {
 			if aad, err = privateKeyEnvelopeAAD(request.Context, request.Envelope.KeyID, canonical); err == nil {
 				plaintext, err = aead.Open(nil, request.Envelope.Nonce, request.Envelope.Ciphertext, aad)
@@ -201,6 +215,27 @@ func privateKeyEnvelopeAAD(
 		Schema: "cdnca.acme-certificate-envelope-aad.v1", KeyID: keyID,
 		Context: canonicalContext, MetadataSHA256: metadataDigest,
 	})
+}
+
+// sealedPrivateKeyEnvelopeMetadata is the encoding seal hashed for metadata
+// read back from jsonb. jsonb also reorders the nested source, and a
+// RawMessage keeps that order, so an ACME wrapped-key source is re-encoded in
+// its sealed field order (every ACME envelope read from the
+// database failed to open). Any other source is kept as read.
+func sealedPrivateKeyEnvelopeMetadata(metadata privateKeyEnvelopeMetadata) ([]byte, error) {
+	if metadata.Kind == "opaque_wrapped" {
+		var source ACMEWrappedKeyMetadata
+		decoder := json.NewDecoder(bytes.NewReader(metadata.Source))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&source) == nil && !decoder.More() && source.Schema == ACMEWrappedKeySchema {
+			encoded, err := json.Marshal(source)
+			if err != nil {
+				return nil, err
+			}
+			metadata.Source = encoded
+		}
+	}
+	return json.Marshal(metadata)
 }
 
 func decodePrivateKeyEnvelopeMetadata(value json.RawMessage) (privateKeyEnvelopeMetadata, error) {

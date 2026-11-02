@@ -372,6 +372,39 @@ func TestACMERuntimePostgreSQL17(t *testing.T) {
 		}
 	})
 
+	// DNS API 下没有覆盖订单域名的解析域，首次即把订单置 failed，
+	// 原因写明域名与下一步，不调 CA，不再按退避重试。
+	run("dns zone unavailable fails the order on the first attempt", func(t *testing.T) {
+		fixture := seedRuntimeOrder(t, pool, "dns-01", providerVerified, payloadValid)
+		if _, err := pool.Exec(t.Context(), `DELETE FROM dns_zones WHERE id=$1`, fixture.zoneID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(t.Context(), `INSERT INTO dns_zones(id,scope_id,provider_id,name,created_by_user_id,updated_by_user_id)
+			VALUES($1,$2,$3,'cdn.example.net',$4,$4)`, uuid.New(), fixture.scopeID, fixture.providerID, fixture.actorID); err != nil {
+			t.Fatal(err)
+		}
+		issuer := &scriptedIssuer{}
+		dispatcher, _ := newRuntimeDispatcher(t, pool, issuer, 10, 20*time.Millisecond)
+		result, err := dispatcher.DispatchOne(t.Context())
+		if err != nil || result.Outcome != OutcomeExhausted || result.Attempt != 1 ||
+			result.ErrorCode != "acme_dns_zone_unavailable" || issuer.callCount() != 0 {
+			t.Fatalf("dispatch=%+v calls=%d error=%v", result, issuer.callCount(), err)
+		}
+		assertOutbox(t, pool, fixture.outboxID, "failed", 1, "acme_dns_zone_unavailable")
+		assertRuntimeOrder(t, pool, fixture.orderID, "failed", 2)
+		var reason *string
+		if err := pool.QueryRow(t.Context(), `SELECT failure_reason FROM certificate_orders WHERE id=$1`,
+			fixture.orderID).Scan(&reason); err != nil {
+			t.Fatal(err)
+		}
+		if reason == nil || *reason != dnsacme.DNSZoneUnavailableReason("example.test") {
+			t.Fatalf("failure_reason = %v", reason)
+		}
+		if next, found, err := dispatcher.claim(t.Context()); err != nil || found {
+			t.Fatalf("follow-up claim=%+v found=%t error=%v", next, found, err)
+		}
+	})
+
 	// fix-certstuck（73 订单 01a178e0）：worker 已把操作落终态（证书公钥不是本单密钥），
 	// 订单要立即转 failed 带 failure_code，不再按 acme_certificate_invalid 退避到 10 次。
 	run("worker terminal failure fails the order on the first attempt", func(t *testing.T) {

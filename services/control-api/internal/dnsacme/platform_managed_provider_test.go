@@ -61,7 +61,7 @@ func TestPlatformManagedProviderGuardsPrecedeUse(t *testing.T) {
 	service, store := read("service.go"), read("store.go")
 	zone := block(service, "func (s *Service) CreateZone(", "func (s *Service) ListZones(")
 	before(t, zone, "refusePlatformManagedUse(", "s.store.zoneProviderCredentials(")
-	order := block(store, "func (s *Store) CreateOrder(", "func refuseOrderInFlight(")
+	order := block(store, "func (s *Store) CreateOrder(", "func (s *Store) resolveOrderIssuer(")
 	before(t, order, "refusePlatformManagedUse(", "s.checkCreateOrderEntitlement(")
 	before(t, order, "refusePlatformManagedUse(", "INSERT INTO certificate_orders")
 	update := block(service, "func (s *Service) UpdateProvider(", "func (s *Service) ListProviders(")

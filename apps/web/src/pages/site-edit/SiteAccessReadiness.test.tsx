@@ -208,3 +208,40 @@ describe('SiteAccessReadinessCard (detail card)', () => {
     expect(screen.queryByRole('button', { name: /立即检查/ })).not.toBeInTheDocument()
   })
 })
+
+// 解析指向别处时写明域名、当前值与应改成的 CNAME，并可一键复制。
+describe('dns_points_elsewhere with the observed answer', () => {
+  function mismatched(observed: string[]): Readiness {
+    const base = readiness('pending', { dns_resolved: 'dns_points_elsewhere' })
+    return { ...base, checks: base.checks.map((check) => check.code === 'dns_resolved'
+      ? { ...check, dns_mismatch: { domain: 'tenant.example.com', observed, expected_cname: 'a1b2c3d4.cdn.example.net' } } : check) }
+  }
+
+  it('names the domain, its current target and the CNAME to set, with a copy button', async () => {
+    // user-event 的 setup 会装自己的剪贴板替身，之后再监听。
+    const user = userEvent.setup({ delay: null })
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText')
+    renderWithProviders(<SiteAccessReadinessCard siteID="s1" admin={false} cname="a1b2c3d4.cdn.example.net"
+      readiness={mismatched(['z9y8x7w6.other-cdn.example.net'])} onCheckNow={vi.fn()} />)
+    const [, details] = within(screen.getByRole('region', { name: '接入状态' })).getAllByRole('list')
+    const item = within(details).getByRole('listitem')
+    expect(within(item).getByText('tenant.example.com 当前指向 z9y8x7w6.other-cdn.example.net，请在域名 DNS 处改为 a1b2c3d4.cdn.example.net')).toBeInTheDocument()
+    await user.click(within(item).getByRole('button', { name: /复制 CNAME/ }))
+    expect(writeText).toHaveBeenCalledWith('a1b2c3d4.cdn.example.net')
+    expect(await within(item).findByRole('button', { name: /已复制/ })).toBeInTheDocument()
+  })
+
+  it('lists A records and keeps the list tooltip in English too', async () => {
+    await i18n.changeLanguage('en-US')
+    renderWithProviders(<SiteAccessStatus readiness={mismatched(['198.51.100.7', '198.51.100.8'])} />)
+    expect(screen.getByTestId('site-access-status')).toHaveAttribute('aria-label',
+      expect.stringContaining('tenant.example.com currently points to 198.51.100.7, 198.51.100.8. At your DNS provider, change it to a1b2c3d4.cdn.example.net'))
+  })
+
+  it('falls back to the generic reason without an observed answer', () => {
+    renderWithProviders(<SiteAccessReadinessCard siteID="s1" admin={false} cname="a1b2c3d4.cdn.example.net"
+      readiness={readiness('pending', { dns_resolved: 'dns_points_elsewhere' })} />)
+    expect(screen.getByText('域名解析指向了其他地址，没有指向本站的 CNAME。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /复制 CNAME/ })).not.toBeInTheDocument()
+  })
+})

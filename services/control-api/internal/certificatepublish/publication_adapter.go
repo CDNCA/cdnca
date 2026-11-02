@@ -332,6 +332,11 @@ func classifyPublicationAdapterError(
 		result = publicationAdapterPermanent("publication_node_not_found")
 	case errors.Is(err, edgedeployment.ErrConfigNotReleasable):
 		result = publicationAdapterPermanent("publication_config_not_releasable")
+	case errors.Is(err, certificateasset.ErrEnvelopeUnavailable):
+		// the stored private key cannot be opened or does not match the
+		// certificate: a retry reads the same rows (retried
+		// as publication_unavailable until the attempt limit)
+		result = publicationAdapterPermanent("certificate_key_unavailable")
 	case errors.Is(err, ErrInvalidInput), errors.Is(err, edgedeployment.ErrInvalidInput):
 		// raised from many places, some racing node state: bounded retry,
 		// but under its own code instead of publication_unavailable

@@ -435,6 +435,21 @@ func (handler *Handler) dispatch(response http.ResponseWriter, request *http.Req
 			return
 		}
 		writeDownload(response, material)
+	case "pem":
+		// 查看证书：与下载同一取材、解封与审计（certificate.asset.download），返回 JSON 供页面复制。
+		if request.ContentLength > 0 {
+			writeError(response, requestID, http.StatusBadRequest, "certificate_asset_invalid_request", "读取请求不能包含正文")
+			return
+		}
+		material, err := handler.service.Download(request.Context(), actor, certificateasset.DownloadRequest{
+			TenantScopeID: tenantScopeID, AssetID: matched.assetID, RequestID: requestID,
+			OpaqueResolver: handler.resolver,
+		})
+		if err != nil {
+			writeServiceError(response, requestID, err)
+			return
+		}
+		writePEM(response, material)
 	}
 }
 
@@ -478,6 +493,9 @@ func matchRoute(path string) (route, bool) {
 	}
 	if len(parts) == 2 && parts[1] == "download" {
 		return route{action: "download", assetID: assetID, methods: "GET"}, true
+	}
+	if len(parts) == 2 && parts[1] == "pem" {
+		return route{action: "pem", assetID: assetID, methods: "GET"}, true
 	}
 	if len(parts) == 2 && parts[1] == "bindings" {
 		return route{action: "bindings", assetID: assetID, methods: "GET, POST"}, true

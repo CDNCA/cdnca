@@ -9,7 +9,7 @@ describe('certificatePublicationFailureMessage', () => {
     'target_policy_not_automatic', 'target_policy_invalid', 'target_snapshot_unresolved', 'target_no_nodes',
     'target_node_missing', 'target_node_inactive', 'target_node_not_carried', 'target_node_offline',
     'target_node_identity_ineligible', 'target_node_capability_missing', 'target_invalid', 'publication_node_not_found',
-    'publication_config_not_releasable', 'publication_input_invalid', 'publication_unavailable', 'publication_pending', 'publication_node_busy',
+    'publication_config_not_releasable', 'certificate_key_unavailable', 'publication_input_invalid', 'publication_unavailable', 'publication_pending', 'publication_node_busy',
     'publication_conflict', 'publication_contract_invalid', 'publication_terminal_failed', 'actor_unauthenticated',
     'publisher_unavailable', 'publisher_timeout', 'publisher_cancelled', 'publisher_panic', 'publisher_contract_invalid',
     'legacy_reissue_required', 'node_certificate_precheck_failed', 'node_certificate_activation_failed',

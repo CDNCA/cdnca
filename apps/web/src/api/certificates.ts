@@ -32,12 +32,20 @@ export interface CertificateOrder {
   failure_reason?: string
   retry_error_code?: string
   retry_error_reason?: string
+  /** Create response only: HTTP-01 domains whose DNS points elsewhere (accepted; validation fails until fixed). */
+  dns_warnings?: string[]
   issued_asset_id?: string
   issued_version_id?: string
   issued_at?: string
   version: number
   created_at: string
   updated_at: string
+}
+
+/** 查看证书：当前版本的证书链与私钥（与下载同一取材与审计）。 */
+export interface CertificateAssetPEM {
+  certificate_pem: string
+  private_key_pem: string
 }
 
 export interface CertificateOrderList {
@@ -548,6 +556,13 @@ export const certificatesApi = {
     if (!(response.headers.get('Content-Type') ?? '').startsWith('application/zip')) throw invalidResponse()
     const match = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')
     return { blob: await response.blob(), filename: match?.[1] ?? `certificate-${assetID}.zip` }
+  },
+  // 查看证书：JSON（certificate_pem + private_key_pem），权限与审计同下载。
+  viewAssetPEM(accessToken: string, assetID: string, requestID: string, targetScopeID?: string): Promise<CertificateAssetPEM> {
+    return request(accessToken, targetPath(`/v1/certificate-assets/${encodeURIComponent(assetID)}/pem`, targetScopeID),
+      (value): value is CertificateAssetPEM => isRecord(value) && typeof value.certificate_pem === 'string' &&
+        value.certificate_pem.length > 0 && typeof value.private_key_pem === 'string' && value.private_key_pem.length > 0,
+      { headers: { 'X-Request-ID': requestID } })
   },
   deleteAsset(
     accessToken: string,

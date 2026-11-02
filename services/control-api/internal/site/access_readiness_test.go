@@ -308,3 +308,61 @@ func TestPublishFailureRedactedForTenant(t *testing.T) {
 		}
 	}
 }
+
+// 解析指向别处时记下观测值（CNAME 目标或 A/AAAA），接入状态给出域名、当前值与期望 CNAME，
+// 租户也能看到（是用户自己域名的公开解析），且不带平台节点名/ID。
+func TestDNSPointsElsewhereObserved(t *testing.T) {
+	target := dnsTarget{CNAME: "1jlpqma8.cdn.example.net", Expected: []string{"192.0.2.10"}}
+	resolver := fakeResolver{
+		cname: map[string]string{"tenant.example.com": "N0KKK8G1.cdn.example.net."},
+		ips: map[string][]string{"tenant.example.com": {"198.51.100.7"}, "a.example.com": {"192.0.2.10", "203.0.113.5", "::ffff:203.0.113.6"},
+			"ok.example.com": {"192.0.2.10"}},
+	}
+	if got := resolveDomain(context.Background(), resolver, "tenant.example.com", target); got.Code != DNSPointsElsewhere ||
+		!slices.Equal(got.Observed, []string{"n0kkk8g1.cdn.example.net"}) {
+		t.Fatalf("cname elsewhere = %+v", got)
+	}
+	if got := resolveDomain(context.Background(), resolver, "a.example.com", target); got.Code != DNSPointsElsewhere ||
+		!slices.Equal(got.Observed, []string{"192.0.2.10", "203.0.113.5", "203.0.113.6"}) {
+		t.Fatalf("a records elsewhere = %+v", got)
+	}
+	if got := resolveDomain(context.Background(), resolver, "ok.example.com", target); got.Code != "" || got.Observed != nil {
+		t.Fatalf("resolved = %+v", got)
+	}
+
+	outcome := resolveSiteDNS(context.Background(), resolver, dnsTarget{CNAME: target.CNAME, Expected: target.Expected,
+		Domains: []string{"ok.example.com", "tenant.example.com"}})
+	var stored []DNSDomainResult
+	if err := json.Unmarshal([]byte(resultsJSON(outcome)), &stored); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now()
+	facts := accessFacts{Enabled: true, CNAME: target.CNAME, Domains: []string{"ok.example.com", "tenant.example.com"},
+		PublishState: "failed", PublishFailedNodes: []PublishFailedNode{{NodeID: "node-1", NodeName: "hk-edge-1", State: "failed"}},
+		DNS: &dnsCheckRow{Detail: DNSPointsElsewhere, CNAME: target.CNAME, Domains: []string{"tenant.example.com", "ok.example.com"},
+			CheckedAt: &at, Results: stored}}
+	readiness := buildAccessReadiness(facts, at)
+	readiness.redactForActor(Actor{ScopeKind: "tenant"})
+	want := DNSMismatch{Domain: "tenant.example.com", Observed: []string{"n0kkk8g1.cdn.example.net"}, ExpectedCNAME: target.CNAME}
+	if got := readiness.Checks[3]; got.Code != AccessCheckDNS || got.DNSMismatch == nil || got.DNSMismatch.Domain != want.Domain ||
+		!slices.Equal(got.DNSMismatch.Observed, want.Observed) || got.DNSMismatch.ExpectedCNAME != want.ExpectedCNAME {
+		t.Fatalf("tenant dns check = %+v", got)
+	}
+	encoded, _ := json.Marshal(readiness)
+	for _, leak := range []string{"hk-edge-1", "node-1", "node_name", "node_id"} {
+		if strings.Contains(string(encoded), leak) {
+			t.Fatalf("tenant readiness leaks %q: %s", leak, encoded)
+		}
+	}
+
+	// 旧版本存下的结果没有观测值：不给 dns_mismatch，前端退回原来的提示。
+	facts.DNS.Results = []DNSDomainResult{{Domain: "tenant.example.com", Code: DNSPointsElsewhere}}
+	if got := buildAccessReadiness(facts, at).Checks[3]; got.Detail != DNSPointsElsewhere || got.DNSMismatch != nil {
+		t.Fatalf("legacy dns check = %+v", got)
+	}
+	// 其他失败原因不给 dns_mismatch。
+	facts.DNS.Detail, facts.DNS.Results = DNSNotFound, stored
+	if got := buildAccessReadiness(facts, at).Checks[3]; got.DNSMismatch != nil {
+		t.Fatalf("not found dns check = %+v", got)
+	}
+}

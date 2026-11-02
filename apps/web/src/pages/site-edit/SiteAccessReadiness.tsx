@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Button, Tooltip } from 'antd'
-import { CircleCheck, CircleX, RefreshCw } from 'lucide-react'
+import { CircleCheck, CircleX, Clipboard, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import type { SiteAccessCheckCode, SiteAccessReadiness as Readiness } from '../../api/sites'
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/siteAccessReadiness'
-import { accessStatusLabel, firstFailing, lookup, publishFailureReason, type Check, type Translate } from './accessReadinessText'
+import { accessStatusLabel, checkReason, firstFailing, type Check, type Translate } from './accessReadinessText'
 import { cnameFailureNeedsDnsConfig, dnsConfigPath, lineGroupsPath, tenantTicketPathFor } from './cnameFailureText'
 
 // 服务端 access_readiness 的两种呈现——列表状态列的一行（第一个未通过项），
@@ -19,7 +19,7 @@ export function SiteAccessStatus({ readiness }: { readiness: Readiness }) {
   const exists = (key: string) => i18n.exists(key)
   const failing = firstFailing(readiness)
   const label = accessStatusLabel(readiness, t, exists)
-  const reason = failing ? (publishFailureReason(t, exists, failing) ?? lookup(t, exists, 'reasons', failing)) : ''
+  const reason = failing ? checkReason(t, exists, failing) : ''
   const node = (
     <span data-testid="site-access-status" className={`site-access-status is-${readiness.state}`}
       aria-label={reason ? `${label}，${reason}` : label}>
@@ -65,6 +65,8 @@ function adviceFor(check: Check, admin: boolean, cname: string, t: Translate, go
       return { text: t('advice.cnameRegenerate'), action: { label: t('actions.viewCname'), onClick: go.basic } }
     case 'dns_resolved':
       if (check.detail === 'waiting_cname' || check.detail === 'no_domains') return null
+      // 原因里已写明改成哪个 CNAME，这里只提示生效时间。
+      if (check.dns_mismatch?.observed.length) return { text: t('advice.waitDNS') }
       return { text: cname ? `${t('advice.dnsTarget', { cname })}${t('advice.waitDNS')}` : t('advice.waitDNS') }
     case 'https_cert':
       return check.detail === 'certificate_not_active' ? null
@@ -108,6 +110,7 @@ export function SiteAccessReadinessCard({ readiness, siteID, admin, cname, cname
   const [notice, setNotice] = useState<string | null>(null)
   const [republishing, setRepublishing] = useState(false)
   const [republishNotice, setRepublishNotice] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   const checks = [...readiness.checks].sort((a, b) => checkOrder.indexOf(a.code) - checkOrder.indexOf(b.code))
   const https = () => setSearchParams((current) => {
     const next = new URLSearchParams(current)
@@ -152,7 +155,7 @@ export function SiteAccessReadinessCard({ readiness, siteID, admin, cname, cname
 
   const detailed = checks.map((check) => ({
     check,
-    reason: publishFailureReason(t, exists, check) ?? lookup(t, exists, 'reasons', check),
+    reason: checkReason(t, exists, check),
     advice: check.ok ? null : adviceFor(check, admin, cname, t, { navigate, https, basic, siteID, cnameFailureCode }),
   }))
   return (
@@ -189,6 +192,15 @@ export function SiteAccessReadinessCard({ readiness, siteID, admin, cname, cname
             <li key={check.code} className={`site-access-check-detail ${check.ok ? 'is-ok' : 'is-failed'}`}>
               <strong>{t(`checks.${check.code}`)}</strong>
               {reason ? <span className="site-access-check-reason">{reason}</span> : null}
+              {check.dns_mismatch?.observed.length ? (
+                <Button type="link" size="small" className="site-access-copy-cname" icon={<Clipboard size={13} aria-hidden="true" />}
+                  onClick={() => {
+                    if (!navigator.clipboard) return
+                    void navigator.clipboard.writeText(check.dns_mismatch!.expected_cname).then(() => setCopied(true), () => undefined)
+                  }}>
+                  {copied ? t('dnsMismatch.copied') : t('dnsMismatch.copy')}
+                </Button>
+              ) : null}
               {advice ? (
                 <span className="site-access-check-advice">
                   <span>{advice.text}</span>

@@ -35,9 +35,6 @@ func (s *Service) Create(ctx context.Context, actor Actor, request CreateRequest
 	}
 	// Reject malformed input before any store access (the defaults lookup).
 	checked := request.Fields
-	if checked.HTTPSEnabled && len(checked.HTTPSPorts) == 0 {
-		checked.HTTPSPorts = []string{"443"} // filled from the defaults below
-	}
 	if err := normalizeFields(&checked); err != nil {
 		return WriteResult{}, err
 	}
@@ -413,8 +410,10 @@ func normalizeFields(fields *SiteFields) error {
 	if err != nil {
 		return fieldError("https_listen_ports", "invalid")
 	}
+	// HTTPS turned on with no port listens on 443 (the editor
+	// and the quick switch send an empty list when the user left it blank).
 	if fields.HTTPSEnabled && len(fields.HTTPSPorts) == 0 {
-		return fieldError("https_listen_ports", "required")
+		fields.HTTPSPorts = []string{"443"}
 	}
 	// a site with HTTPS off listens on no HTTPS port (the
 	// publication requires exactly that; transfer and import already clear

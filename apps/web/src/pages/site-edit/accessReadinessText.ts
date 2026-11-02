@@ -25,6 +25,20 @@ export function accessStatusLabel(readiness: Readiness, t: Translate, exists: (k
   return t(`state.${readiness.state}`, { check: lookup(t, exists, 'short', failing) })
 }
 
+// 解析指向别处时写出域名、当前值与应改成的 CNAME（旧版本存下的检查结果没有观测值，用通用文案）。
+export function dnsMismatchReason(t: Translate, check: Check): string | null {
+  const mismatch = check.code === 'dns_resolved' && check.detail === 'dns_points_elsewhere' ? check.dns_mismatch : undefined
+  if (!mismatch?.observed.length) return null
+  return t('dnsMismatch.reason', {
+    domain: mismatch.domain, observed: mismatch.observed.join(t('publishFailure.separator')), cname: mismatch.expected_cname,
+  })
+}
+
+// 检查项原因：发布失败与解析指向别处有细节时用细节，否则按原因码。
+export function checkReason(t: Translate, exists: (key: string) => boolean, check: Check): string {
+  return publishFailureReason(t, exists, check) ?? dnsMismatchReason(t, check) ?? lookup(t, exists, 'reasons', check)
+}
+
 // 发布失败的原因写出失败节点名与原因（节点上报的 error_code，没有就用部署状态；只有平台管理员
 // 拿得到节点明细，租户只有失败节点数与归一化原因），或自动发布在下发前就失败的终态码；服务端没给细节时用通用文案。
 export function publishFailureReason(t: Translate, exists: (key: string) => boolean, check: Check): string | null {

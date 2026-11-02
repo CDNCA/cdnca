@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 886 个 operation，并包含
-861 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 888 个 operation，并包含
+862 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -10,7 +10,7 @@
 
 ## 跨契约兼容重叠
 
-以下 25 个 wire tuple 在多个契约中完全一致：
+以下 26 个 wire tuple 在多个契约中完全一致：
 
 | 方法 | 路径 | operationId | 契约 |
 | --- | --- | --- | --- |
@@ -24,6 +24,7 @@
 | `DELETE` | `/v1/certificate-assets/{asset_id}/bindings/{site_id}` | `unbindCertificateAsset` | `control.yaml`、`dns-acme.yaml` |
 | `PATCH` | `/v1/certificate-assets/{asset_id}/disabled` | `setCertificateAssetDisabled` | `control.yaml`、`dns-acme.yaml` |
 | `GET` | `/v1/certificate-assets/{asset_id}/download` | `downloadCertificateAsset` | `control.yaml`、`dns-acme.yaml` |
+| `GET` | `/v1/certificate-assets/{asset_id}/pem` | `getCertificateAssetPEM` | `control.yaml`、`dns-acme.yaml` |
 | `POST` | `/v1/certificate-assets/{asset_id}/versions/{version_id}/activate` | `activateCertificateAssetVersion` | `control.yaml`、`dns-acme.yaml` |
 | `GET` | `/v1/dns/platform-config` | `getPlatformDNSConfig` | `control.yaml`、`dns-acme.yaml` |
 | `PUT` | `/v1/dns/platform-config` | `savePlatformDNSConfig` | `control.yaml`、`dns-acme.yaml` |
@@ -42,7 +43,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，612 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，613 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -334,6 +335,7 @@
 | `control.yaml` | `DELETE` | `/v1/certificate-assets/{asset_id}/bindings/{site_id}` | `unbindCertificateAsset` |
 | `control.yaml` | `PATCH` | `/v1/certificate-assets/{asset_id}/disabled` | `setCertificateAssetDisabled` |
 | `control.yaml` | `GET` | `/v1/certificate-assets/{asset_id}/download` | `downloadCertificateAsset` |
+| `control.yaml` | `GET` | `/v1/certificate-assets/{asset_id}/pem` | `getCertificateAssetPEM` |
 | `control.yaml` | `POST` | `/v1/certificate-assets/{asset_id}/versions/{version_id}/activate` | `activateCertificateAssetVersion` |
 | `control.yaml` | `GET` | `/v1/certificate-publications` | `listCertificatePublicationStatuses` |
 | `control.yaml` | `GET` | `/v1/certificate-publications/{site_id}/revisions/{revision}` | `getCertificatePublicationStatus` |
@@ -661,7 +663,7 @@
 
 ## dns-acme.yaml
 
-源文件：[`dns-acme.yaml`](../../api/openapi/v1/dns-acme.yaml)，41 个 operation。
+源文件：[`dns-acme.yaml`](../../api/openapi/v1/dns-acme.yaml)，42 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -675,6 +677,7 @@
 | `dns-acme.yaml` | `DELETE` | `/v1/certificate-assets/{asset_id}/bindings/{site_id}` | `unbindCertificateAsset` |
 | `dns-acme.yaml` | `PATCH` | `/v1/certificate-assets/{asset_id}/disabled` | `setCertificateAssetDisabled` |
 | `dns-acme.yaml` | `GET` | `/v1/certificate-assets/{asset_id}/download` | `downloadCertificateAsset` |
+| `dns-acme.yaml` | `GET` | `/v1/certificate-assets/{asset_id}/pem` | `getCertificateAssetPEM` |
 | `dns-acme.yaml` | `POST` | `/v1/certificate-assets/{asset_id}/versions/{version_id}/activate` | `activateCertificateAssetVersion` |
 | `dns-acme.yaml` | `GET` | `/v1/certificate-defaults` | `getCertificateDefaults` |
 | `dns-acme.yaml` | `PATCH` | `/v1/certificate-defaults` | `updateCertificateDefaults` |

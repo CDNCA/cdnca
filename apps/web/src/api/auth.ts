@@ -60,6 +60,7 @@ interface ErrorEnvelope {
     capability?: unknown
     rule_packs?: unknown
     details?: unknown
+    domain?: unknown
   }
 }
 
@@ -215,6 +216,8 @@ export class ApiError extends Error {
   declare outcome?: 'not_applied' | 'unknown' | 'applied'
   /** ADD-10: the target a cache operation create refused (invalid_request error.details). */
   declare targetRejection?: { ordinal: number; reason: string }
+  /** The domain a certificate order was refused for (certificate_dns_zone_unavailable / certificate_http01_not_serving error.domain). */
+  declare domain?: string
 
   constructor(message: string, status = 0, code = 'network_error', requestId?: string, params?: LoginVerificationRequirement) {
     super(message)
@@ -301,6 +304,10 @@ export async function responseApiError(response: Response): Promise<ApiError> {
       typeof details.reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(details.reason)) {
       error.targetRejection = { ordinal: Number(details.target_ordinal), reason: details.reason }
     }
+  }
+  if (code === 'certificate_dns_zone_unavailable' || code === 'certificate_http01_not_serving') {
+    const domain = body?.error?.domain
+    if (typeof domain === 'string' && /^[a-z0-9*][a-z0-9.*-]{0,252}$/.test(domain)) error.domain = domain
   }
   attachFieldRefusal(error, body?.error?.details)
   return error

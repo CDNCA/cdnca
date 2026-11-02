@@ -1,13 +1,15 @@
 package httpapi
 
-// 同租户同域名集合已有 pending/validating/issuing
-// 订单时拒绝新单（409 certificate_order_in_flight），避免 CA 复用 order；订单结束后可再申请。
+// 同租户同域名集合已有正在签发的订单时拒绝新单
+// （409 certificate_order_in_flight），避免 CA 复用 order。只有签发任务
+// 租约有效的订单才挡；排队、等重试或卡住的旧单被新申请取代（acme_order_superseded）。
 
 import (
 	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,15 +66,51 @@ func TestCertificateOrderRefusedWhileSameDomainsInFlight(t *testing.T) {
 		}
 		return n
 	}
-	first := createCertificateOrder(t, client, server.URL, token, "inflight-first", createCertificateOrderRequest{
-		Domains: []string{"b.inflight.example.com", "a.inflight.example.com"}, ChallengeType: "http-01", AutoRenew: true,
-	})
+	order := func(key string) dnsacme.CertificateOrder {
+		t.Helper()
+		return createCertificateOrder(t, client, server.URL, token, key, createCertificateOrderRequest{
+			Domains: []string{"b.inflight.example.com", "a.inflight.example.com"}, ChallengeType: "http-01", AutoRenew: true,
+		})
+	}
+	// lease puts the order's outbox row in processing; expired: its lease ran out (the worker died).
+	lease := func(orderID any, expired bool) {
+		t.Helper()
+		// The 048 lease contract needs created_at <= updated_at < lease_expires_at.
+		window := "lease_expires_at=statement_timestamp()+interval '1 hour',updated_at=statement_timestamp()"
+		if expired {
+			window = "lease_expires_at=statement_timestamp(),updated_at=created_at"
+		}
+		for _, statement := range []string{`ALTER TABLE dns_acme_outbox DISABLE TRIGGER USER`,
+			`UPDATE dns_acme_outbox SET status='processing',attempts=attempts+1,lease_token=gen_random_uuid(),` + window + `
+				WHERE aggregate_id=$1`,
+			`ALTER TABLE dns_acme_outbox ENABLE TRIGGER USER`} {
+			args := []any{}
+			if strings.Contains(statement, "$1") {
+				args = append(args, orderID)
+			}
+			if _, err := pool.Exec(context.Background(), statement, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	state := func(orderID any) (string, *string, *string) {
+		t.Helper()
+		var status string
+		var code, reason *string
+		if err := pool.QueryRow(context.Background(), `SELECT status,failure_code,failure_reason FROM certificate_orders WHERE id=$1`,
+			orderID).Scan(&status, &code, &reason); err != nil {
+			t.Fatal(err)
+		}
+		return status, code, reason
+	}
+	running := order("inflight-first")
+	lease(running.ID, false)
 
 	for _, status := range []string{"pending", "validating", "issuing"} {
-		t.Run("same set refused while "+status, func(t *testing.T) {
+		t.Run("same set refused while running "+status, func(t *testing.T) {
 			// 新单即 pending；之后按单调顺序推进到 validating、issuing
 			if status != "pending" {
-				if _, err := pool.Exec(context.Background(), `UPDATE certificate_orders SET status=$2,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1`, first.ID, status); err != nil {
+				if _, err := pool.Exec(context.Background(), `UPDATE certificate_orders SET status=$2,revision=revision+1,updated_at=statement_timestamp() WHERE id=$1`, running.ID, status); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -97,12 +135,26 @@ func TestCertificateOrderRefusedWhileSameDomainsInFlight(t *testing.T) {
 		})
 	})
 
-	t.Run("a finished order no longer blocks", func(t *testing.T) {
-		if _, err := pool.Exec(context.Background(), `UPDATE certificate_orders SET status='failed',failure_code='test',revision=revision+1,updated_at=statement_timestamp() WHERE id=$1`, first.ID); err != nil {
-			t.Fatal(err)
+	// 失败或卡住的申请不能一直占用。租约过期（worker 已不在）的旧单被新申请取代。
+	t.Run("a stalled order is superseded", func(t *testing.T) {
+		lease(running.ID, true)
+		replacement := order("inflight-after-stall")
+		status, code, reason := state(running.ID)
+		if status != "failed" || code == nil || *code != "acme_order_superseded" || reason == nil || *reason != "申请超时未完成，已被新的申请取代" {
+			t.Fatalf("stalled order status=%s code=%v reason=%v", status, code, reason)
 		}
-		createCertificateOrder(t, client, server.URL, token, "inflight-after-failed", createCertificateOrderRequest{
-			Domains: []string{"a.inflight.example.com", "b.inflight.example.com"}, ChallengeType: "http-01", AutoRenew: true,
-		})
+		var audits int
+		if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_events WHERE resource_id=$1
+			AND action='certificate.order.transition' AND payload->>'operation'='supersede'`, running.ID.String()).Scan(&audits); err != nil || audits != 1 {
+			t.Fatalf("supersede audits=%d error=%v", audits, err)
+		}
+		// 排队中（未被领取）的申请同样不挡新申请。
+		third := order("inflight-after-queued")
+		if status, code, _ := state(replacement.ID); status != "failed" || code == nil || *code != "acme_order_superseded" {
+			t.Fatalf("queued order status=%s code=%v", status, code)
+		}
+		if status, _, _ := state(third.ID); status != "pending" {
+			t.Fatalf("new order status=%s", status)
+		}
 	})
 }

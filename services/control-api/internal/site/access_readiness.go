@@ -15,7 +15,7 @@ import (
 // 原则：显示“已就绪”必须是真的就绪；package 与
 // package_unavailable_reason 同一口径（无有效套餐不下发）；line_group 的在线节点与
 // dns_resolved 的 A/AAAA 只认已对外发布的端点；published 要求最近一次发布确实含本站。
-// 列表与详情只读库：dns_resolved 取后台检查（site_dns_resolution_checks，迁移 565）
+// 列表与详情只读库：dns_resolved 取后台检查（site_dns_resolution_checks，迁移 559）
 // 的结果，其余四项读现有事实；请求里不做 DNS 解析（详情的“立即检查”除外）。
 
 const (
@@ -74,6 +74,19 @@ type AccessCheck struct {
 	FailedNodeCount   int                 `json:"failed_node_count,omitempty"`
 	FailedNodeReasons []string            `json:"failed_node_reasons,omitempty"`
 	FailureCode       string              `json:"failure_code,omitempty"`
+	// dns_resolved / dns_points_elsewhere only: the first domain resolving
+	// elsewhere, what it resolves to now and the CNAME it should point to
+	//. Observed is the public DNS answer of the
+	// owner's own domain, so every actor gets it.
+	DNSMismatch *DNSMismatch `json:"dns_mismatch,omitempty"`
+}
+
+// DNSMismatch: Domain resolves to Observed (its CNAME target, or its A/AAAA
+// addresses) instead of ExpectedCNAME.
+type DNSMismatch struct {
+	Domain        string   `json:"domain"`
+	Observed      []string `json:"observed"`
+	ExpectedCNAME string   `json:"expected_cname"`
 }
 
 // PublishFailedNode is one node serving the site whose deployment of the
@@ -101,6 +114,8 @@ type dnsCheckRow struct {
 	Domains           []string
 	CheckedAt         *time.Time
 	ManualRequestedAt *time.Time
+	// Results: the stored per-domain outcomes (results jsonb).
+	Results []DNSDomainResult
 }
 
 // accessFacts are the per-site inputs of buildAccessReadiness.
@@ -181,6 +196,9 @@ func buildAccessReadiness(facts accessFacts, now time.Time) AccessReadiness {
 		if dns.OK {
 			dns.Detail = ""
 		}
+		if dns.Detail == DNSPointsElsewhere {
+			dns.DNSMismatch = dnsMismatch(facts.DNS.Results, facts.CNAME)
+		}
 	}
 
 	var https AccessCheck
@@ -231,6 +249,17 @@ func buildAccessReadiness(facts accessFacts, now time.Time) AccessReadiness {
 		result.State = AccessPending
 	}
 	return result
+}
+
+// dnsMismatch: the first stored domain resolving elsewhere with an observed
+// answer (checks stored before this field existed have none: nil).
+func dnsMismatch(results []DNSDomainResult, cname string) *DNSMismatch {
+	for _, result := range results {
+		if result.Code == DNSPointsElsewhere && len(result.Observed) > 0 {
+			return &DNSMismatch{Domain: result.Domain, Observed: result.Observed, ExpectedCNAME: cname}
+		}
+	}
+	return nil
 }
 
 // publishFailureReasons: the distinct normalized reasons of the failed nodes,
@@ -338,9 +367,12 @@ type dnsTarget struct {
 }
 
 // DNSDomainResult is one domain's outcome (Code empty: resolves to us).
+// Observed (dns_points_elsewhere only): the domain's CNAME target when it
+// has one, else its A/AAAA addresses (at most dnsObservedMax).
 type DNSDomainResult struct {
-	Domain string `json:"domain"`
-	Code   string `json:"code,omitempty"`
+	Domain   string   `json:"domain"`
+	Code     string   `json:"code,omitempty"`
+	Observed []string `json:"observed,omitempty"`
 }
 
 type dnsOutcome struct {
@@ -349,7 +381,10 @@ type dnsOutcome struct {
 	Results []DNSDomainResult
 }
 
-const dnsLookupTimeout = 5 * time.Second
+const (
+	dnsLookupTimeout = 5 * time.Second
+	dnsObservedMax   = 8
+)
 
 func resolveSiteDNS(ctx context.Context, resolver DNSResolver, target dnsTarget) dnsOutcome {
 	switch {
@@ -397,7 +432,17 @@ func resolveDomain(ctx context.Context, resolver DNSResolver, domain string, tar
 	for _, address := range addresses {
 		if !slices.Contains(target.Expected, address.Unmap().String()) {
 			result.Code = DNSPointsElsewhere
-			return result
+			break
+		}
+	}
+	if result.Code == DNSPointsElsewhere {
+		// LookupCNAME returns the host itself when it has no CNAME.
+		if name := strings.TrimSuffix(canonical, "."); name != "" && !dnsNameEqual(name, host) {
+			result.Observed = []string{strings.ToLower(name)}
+		} else {
+			for _, address := range addresses[:min(len(addresses), dnsObservedMax)] {
+				result.Observed = append(result.Observed, address.Unmap().String())
+			}
 		}
 	}
 	return result

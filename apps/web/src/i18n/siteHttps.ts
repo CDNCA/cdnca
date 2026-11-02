@@ -13,7 +13,7 @@ const zhCN = {
   ports: {
     label: 'HTTPS监听端口',
     help: '多个端口使用空格、英文逗号或换行分隔。',
-    placeholder: '例如：443 8443',
+    placeholder: '留空默认 443，例如：443 8443',
   },
   tls: {
     label: 'TLS协议',
@@ -70,7 +70,7 @@ const enUS = {
   ports: {
     label: 'HTTPS listen ports',
     help: 'Separate multiple ports with spaces, commas, or new lines.',
-    placeholder: 'For example: 443 8443',
+    placeholder: 'Leave blank for 443, e.g. 443 8443',
   },
   tls: { label: 'TLS protocols' },
   force: {

@@ -2756,6 +2756,7 @@ func runServer() error {
 		DNSCredentialCipher:                 credentialCipher,
 		DNSProviderVerifier:                 dnsacme.NewProviderVerifierDispatcher(),
 		DNSZoneApexResolver:                 dnsproviderremote.NewZoneApexResolver(),
+		CertificateHTTP01Readiness:          acmehttp01.OrderReadiness,
 		APIKeyPepper:                        cfg.APIKeyPepper,
 		APIKeyPepperKeyring:                 cfg.APIKeyPepperKeyring,
 		APIKeyTrustedProxyCIDRs:             cfg.APIKeyTrustedProxyCIDRs,

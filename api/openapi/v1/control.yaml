@@ -260,6 +260,8 @@ paths:
     $ref: '../../control-certificate-assets.openapi.yaml#/paths/~1v1~1certificate-assets~1{asset_id}~1disabled'
   /v1/certificate-assets/{asset_id}/download:
     $ref: '../../control-certificate-assets.openapi.yaml#/paths/~1v1~1certificate-assets~1{asset_id}~1download'
+  /v1/certificate-assets/{asset_id}/pem:
+    $ref: '../../control-certificate-assets.openapi.yaml#/paths/~1v1~1certificate-assets~1{asset_id}~1pem'
   /v1/certificate-assets/{asset_id}/versions/{version_id}/activate:
     $ref: '../../control-certificate-assets.openapi.yaml#/paths/~1v1~1certificate-assets~1{asset_id}~1versions~1{version_id}~1activate'
   /v1/certificate-assets/{asset_id}/bindings:

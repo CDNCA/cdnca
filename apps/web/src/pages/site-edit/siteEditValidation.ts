@@ -3,6 +3,7 @@ import {
   safeSiteTLSProtocolSelection,
   siteTLSNeedsLegacyCiphers,
   validSiteTLSCipherSuites,
+  withDefaultHTTPSPorts,
   type SiteBasicConfig,
 } from '../../api/sites'
 import type { TFunction } from 'i18next'
@@ -60,14 +61,15 @@ export function validateBasicConfig(
     errors.http_listen_ports = t('edit.validation.httpPorts')
   }
 
+  // A blank HTTPS port list is not an error: it saves as 443 (withDefaultHTTPSPorts).
+  const httpsPorts = withDefaultHTTPSPorts(value).https_listen_ports
   if (
-    value.https_listen_ports.length > 32 ||
-    value.https_listen_ports.some((port) => !validPort(port)) ||
-    new Set(value.https_listen_ports).size !== value.https_listen_ports.length ||
-    value.https_enabled && value.https_listen_ports.length === 0
+    httpsPorts.length > 32 ||
+    httpsPorts.some((port) => !validPort(port)) ||
+    new Set(httpsPorts).size !== httpsPorts.length
   ) {
     errors.https_listen_ports = t('siteListenerDomains:validation.httpsPorts')
-  } else if (value.https_listen_ports.some((port) => value.http_listen_ports.includes(port))) {
+  } else if (httpsPorts.some((port) => value.http_listen_ports.includes(port))) {
     errors.https_listen_ports = t('siteListenerDomains:validation.portConflict')
   }
 

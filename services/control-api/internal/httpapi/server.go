@@ -257,6 +257,9 @@ type Config struct {
 	// DNSZoneApexResolver finds the hosted domain of a saved CNAME zone
 	// (migration 473); nil stores zones without an apex (filled on first use).
 	DNSZoneApexResolver dnsproviderremote.ZoneApexResolver
+	// CertificateHTTP01Readiness refuses an HTTP-01 certificate order whose
+	// domain no node serves (acmehttp01.OrderReadiness); nil accepts unchecked.
+	CertificateHTTP01Readiness dnsacme.HTTP01Readiness
 	// DNSRecordLister lists provider records for 清除CDN无关解析 / 记录修复
 	// planning (production adapters when nil).
 	DNSRecordLister          dnsproviderremote.ZoneRecordLister
@@ -2828,6 +2831,12 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		s.writeAPIError(w, r, http.StatusConflict, "certificate_issuer_unavailable", "the certificate issuer is not configured by the platform")
 	case errors.Is(err, dnsacme.ErrOrderInFlight):
 		s.writeAPIError(w, r, http.StatusConflict, "certificate_order_in_flight", "an order for these domains is still in progress")
+	case errors.Is(err, dnsacme.ErrDNSZoneUnavailable):
+		s.writeOrderDomainError(w, r, err, "certificate_dns_zone_unavailable",
+			"the selected DNS account hosts no zone for the domain", "dns_provider_id")
+	case errors.Is(err, dnsacme.ErrHTTP01NotServing):
+		s.writeOrderDomainError(w, r, err, "certificate_http01_not_serving",
+			"the domain is not a site on this platform or its line group has no serving node", "domains")
 	case errors.Is(err, dnsacme.ErrInvalidInput), errors.Is(err, dnsacme.ErrInvalidTransition):
 		s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "request fields are invalid")
 	case errors.Is(err, dnsacme.ErrPermissionDenied):
@@ -2919,6 +2928,21 @@ func (s *Server) writeAPIError(w http.ResponseWriter, r *http.Request, status in
 		Code:      code,
 		Message:   message,
 		RequestID: requestID(r.Context()),
+	}})
+}
+
+// writeOrderDomainError is the 422 of a certificate order the dispatcher
+// could only fail: error.domain is the domain to fix and
+// details.field the request field the page marks.
+func (s *Server) writeOrderDomainError(w http.ResponseWriter, r *http.Request, err error, code, message, field string) {
+	var refused *dnsacme.OrderDomainError
+	domain := ""
+	if errors.As(err, &refused) {
+		domain = refused.Domain
+	}
+	writeJSONStatus(w, http.StatusUnprocessableEntity, map[string]any{"error": map[string]any{
+		"code": code, "message": message, "request_id": requestID(r.Context()), "domain": domain,
+		"details": siteFieldErrorDetails{Field: field, Reason: fielderr.Invalid},
 	}})
 }
 
@@ -3127,7 +3151,11 @@ func securityBanStore(pool *pgxpool.Pool, config Config) *securityban.Store {
 }
 
 func newDNSACMEService(pool *pgxpool.Pool, config Config) *dnsacme.Service {
-	service := dnsacme.NewServiceWithClockAndVerifier(dnsacme.NewStoreWithEntitlement(pool, config.Now, config.EntitlementTrust),
+	store := dnsacme.NewStoreWithEntitlement(pool, config.Now, config.EntitlementTrust)
+	if config.CertificateHTTP01Readiness != nil {
+		store.CheckHTTP01With(config.CertificateHTTP01Readiness)
+	}
+	service := dnsacme.NewServiceWithClockAndVerifier(store,
 		config.DNSCredentialCipher, config.DNSProviderVerifier, config.Now)
 	if config.DNSZoneApexResolver != nil {
 		service.UseZoneApexResolver(config.DNSZoneApexResolver)

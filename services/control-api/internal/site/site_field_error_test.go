@@ -22,7 +22,7 @@ func TestNormalizeFieldsNamesRefusedField(t *testing.T) {
 		"bad cname":         {func(f *SiteFields) { f.CNAME = "-bad-" }, "cname", "invalid"},
 		"bad http port":     {func(f *SiteFields) { f.HTTPPorts = []string{"99999"} }, "http_listen_ports", "invalid"},
 		"bad https port":    {func(f *SiteFields) { f.HTTPSPorts = []string{"abc"} }, "https_listen_ports", "invalid"},
-		"https no port":     {func(f *SiteFields) { f.HTTPSPorts = nil }, "https_listen_ports", "required"},
+		"default overlaps":  {func(f *SiteFields) { f.HTTPPorts, f.HTTPSPorts = []string{"443"}, nil }, "https_listen_ports", "overlaps_http"},
 		"port overlap":      {func(f *SiteFields) { f.HTTPSPorts = []string{"80"} }, "https_listen_ports", "overlaps_http"},
 		"force without tls": {func(f *SiteFields) { f.ForceHTTPS, f.HTTPSEnabled, f.HTTPSPorts = &enabled, false, nil }, "force_https", "requires_https"},
 		"redirect port":     {func(f *SiteFields) { f.HTTPSRedirectPort = &port }, "https_redirect_port", "not_listened"},
@@ -37,5 +37,22 @@ func TestNormalizeFieldsNamesRefusedField(t *testing.T) {
 		if !errors.As(err, &fieldErr) || fieldErr.Field != c.field || fieldErr.Reason != c.reason || !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("%s: err = %v, want field %s/%s", name, err, c.field, c.reason)
 		}
+	}
+}
+
+// HTTPS on with no port (left blank in the editor, or an API
+// call that omits it) listens on 443 instead of refusing the write.
+func TestNormalizeFieldsDefaultsHTTPSPortTo443(t *testing.T) {
+	for name, ports := range map[string][]string{"nil": nil, "empty": {}} {
+		fields := SiteFields{Domains: []string{"www.example.com"}, HTTPPorts: []string{"80"}, HTTPSPorts: ports,
+			HTTPSEnabled: true, Origins: []string{"192.0.2.1"}, Enabled: true}
+		if err := normalizeFields(&fields); err != nil || len(fields.HTTPSPorts) != 1 || fields.HTTPSPorts[0] != "443" {
+			t.Errorf("%s: err = %v, ports = %v, want [443]", name, err, fields.HTTPSPorts)
+		}
+	}
+	fields := SiteFields{Domains: []string{"www.example.com"}, HTTPPorts: []string{"80"}, HTTPSPorts: []string{"8443"},
+		HTTPSEnabled: true, Origins: []string{"192.0.2.1"}, Enabled: true}
+	if err := normalizeFields(&fields); err != nil || len(fields.HTTPSPorts) != 1 || fields.HTTPSPorts[0] != "8443" {
+		t.Errorf("explicit port: err = %v, ports = %v, want [8443]", err, fields.HTTPSPorts)
 	}
 }

@@ -70,6 +70,9 @@ type DispatchResult struct {
 type runtimeError struct {
 	code string
 	err  error
+	// reason is the user-facing failure_reason (Chinese, next step) when the
+	// code alone does not say what to fix; empty for most codes.
+	reason string
 }
 
 func (e *runtimeError) Error() string { return e.code }

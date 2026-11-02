@@ -1643,7 +1643,7 @@ function SiteListPageSession({
   const [httpsQuickSite, setHttpsQuickSite] = useState<SiteListItem | null>(null)
   const [transferSite, setTransferSite] = useState<SiteListItem | null>(null)
   const { t: tTransfer } = useTranslation('siteTransfer')
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const sessionAccessToken = useSessionStore((state) => state.accessToken)
@@ -2717,7 +2717,13 @@ function SiteListPageSession({
               }
               if (managementLocked) return
               if (key === 'regenerate-cname') {
-                if (!tenantLocked) openSiteRegenerate(item)
+                // 换 CNAME 前提醒旧地址约 24 小时后失效（CNAME 列失败弹窗里的“重新生成”本身就是确认，不再弹）。
+                if (!tenantLocked) {
+                  modal.confirm({
+                    title: tCname('rotateTitle', { domain: item.domain }), content: tCname('rotateWarning'),
+                    okText: tCname('confirm'), cancelText: t('actions.cancel'), onOk: () => openSiteRegenerate(item),
+                  })
+                }
                 return
               }
               if (key === 'lock' || key === 'unlock') {
@@ -2760,7 +2766,7 @@ function SiteListPageSession({
           )
         },
       },
-    ], [batchLocked, canManageLock, canManageSites, canReadDNSReconcile, canRegenerateCname, i18nInstance, language, loadLockDetail, managementLocked, navigate, openBatchAction, openSiteRegenerate, role, t, tCname, tQuick])
+    ], [batchLocked, canManageLock, canManageSites, canReadDNSReconcile, canRegenerateCname, i18nInstance, language, loadLockDetail, managementLocked, modal, navigate, openBatchAction, openSiteRegenerate, role, t, tCname, tQuick])
 
   const updateDraft = (key: keyof SiteFilters, value: string) => {
     setAdvancedDraft((current) => ({ ...current, [key]: value }))

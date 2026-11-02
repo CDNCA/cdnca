@@ -27,6 +27,8 @@ type Store struct {
 	pool    *pgxpool.Pool
 	auditor *audit.Log
 	guard   orderEntitlementChecker
+	// http01 is the HTTP-01 accept-time check (CheckHTTP01With); nil skips it.
+	http01 HTTP01Readiness
 }
 
 type orderEntitlementChecker interface {
@@ -893,6 +895,9 @@ func (s *Store) CreateOrder(
 			if err := refusePlatformManagedUse(ctx, tx, actor, request.TargetScopeID, *request.DNSProviderID); err != nil {
 				return err
 			}
+			if err := refusePlatformDNSCopyOrder(ctx, tx, request.TargetScopeID, *request.DNSProviderID); err != nil {
+				return err
+			}
 		}
 		if err := s.checkCreateOrderEntitlement(ctx, tx, actor, request, id); err != nil {
 			if entitlementguard.IsDenial(err) {
@@ -908,7 +913,14 @@ func (s *Store) CreateOrder(
 		if replay != nil {
 			return json.Unmarshal(replay, &result)
 		}
-		if err := refuseOrderInFlight(ctx, tx, request.TargetScopeID, request.Domains); err != nil {
+		dnsWarnings, err := s.checkOrderChallenge(ctx, tx, request)
+		if err != nil {
+			return err
+		}
+		if err := refuseOrderInFlight(ctx, tx, func(tx pgx.Tx, orderID uuid.UUID, payload map[string]any) error {
+			return s.appendAudit(ctx, tx, actor, request.TargetScopeID, request.RequestID,
+				"certificate.order.transition", "certificate_order", orderID, payload)
+		}, request.TargetScopeID, request.Domains); err != nil {
 			return err
 		}
 		issuer, err := s.resolveOrderIssuer(ctx, tx, actor, request.TargetScopeID, request.Issuer)
@@ -944,33 +956,13 @@ func (s *Store) CreateOrder(
 		if err := enqueueCertificateOrder(ctx, tx, result); err != nil {
 			return err
 		}
+		result.DNSWarnings = dnsWarnings
 		return completeWrite(ctx, tx, actor, "certificate.order.create", request.IdempotencyKey, result.ID, result)
 	})
 	if err == nil && denial != nil {
 		err = denial
 	}
 	return result, err
-}
-
-// refuseOrderInFlight: ErrOrderInFlight when the scope has a pending,
-// validating or issuing order for exactly this domain set (set equality: an
-// order's domains are unique). The advisory lock (on the sorted set
-// normalizeDomains leaves) serializes two concurrent orders for one set.
-func refuseOrderInFlight(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, domains []string) error {
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('certificate_orders.in_flight:' || $1::text || ':' || array_to_string($2::text[], ','), 0))`,
-		scopeID, domains); err != nil {
-		return err
-	}
-	var inFlight bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM certificate_orders
-		WHERE scope_id=$1 AND status IN ('pending','validating','issuing')
-		  AND domains @> $2::text[] AND domains <@ $2::text[])`, scopeID, domains).Scan(&inFlight); err != nil {
-		return err
-	}
-	if inFlight {
-		return ErrOrderInFlight
-	}
-	return nil
 }
 
 // resolveOrderIssuer is the order's frozen CA: the explicit one, else the

@@ -20,6 +20,10 @@ import (
 
 const ACMEHTTP01OverlayArtifactMediaType = acmehttp01.ArtifactMediaType
 
+// acmeHTTP01ReadyPoll is how often a session re-checks whether the node
+// skeleton serves the overlay root (ACME_HTTP01_OVERLAY is a live capability).
+const acmeHTTP01ReadyPoll = 10 * time.Second
+
 func WithACMEHTTP01OverlayConsumer(consumer acmehttp01.Consumer) ClientOption {
 	return func(client *Client) error {
 		if consumer == nil {

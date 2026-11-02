@@ -770,6 +770,36 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '500': {$ref: '#/components/responses/InternalError'}
         '503': {description: Private key envelope unavailable (certificate_asset_envelope_unavailable).}
+  /v1/certificate-assets/{asset_id}/pem:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    get:
+      operationId: getCertificateAssetPEM
+      summary: Show the current version's certificate chain and private key as JSON (same material and audit as download)
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+      responses:
+        '200':
+          description: Certificate chain and private key PEM.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [certificate_pem, private_key_pem]
+                properties:
+                  certificate_pem: {type: string}
+                  private_key_pem: {type: string}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {description: Private key envelope unavailable (certificate_asset_envelope_unavailable).}
   /v1/certificate-assets/{asset_id}/versions/{version_id}/activate:
     parameters:
       - $ref: '#/components/parameters/CertificateAssetID'
@@ -1015,7 +1045,23 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
-        '409': {$ref: '#/components/responses/Conflict'}
+        '409':
+          description: >-
+            Conflict. certificate_order_in_flight: an order for the same domain set is
+            being issued now (its issuance lease is live); an unfinished order that is
+            not running (queued, waiting for a retry, stalled) is instead failed as
+            acme_order_superseded and the new order accepted. dns_provider_platform_managed:
+            a DNS-01 order named the platform DNS copy (refused for every actor).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422':
+          description: >-
+            The order could only fail, refused with the domain to fix (error.domain) and the
+            request field (error.details). certificate_dns_zone_unavailable: the DNS-01
+            provider hosts no zone covering every domain (field dns_provider_id).
+            certificate_http01_not_serving: an HTTP-01 domain is not a live site of the
+            scope or its line groups have no serving node (field domains).
+          x-description-zh: 调度只能判失败的申请在受理时拒绝，error.domain 为要改的域名。
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
@@ -1601,6 +1647,12 @@ components:
         renewal_of_order_id: {type: string, format: uuid}
         not_after: {type: string, format: date-time}
         failure_code: {type: string, maxLength: 128}
+        dns_warnings:
+          type: array
+          maxItems: 100
+          items: {type: string, maxLength: 253}
+          description: Create response only. HTTP-01 domains whose last access check found DNS pointing elsewhere; the order is accepted but validation fails until the domain resolves to the platform.
+          x-description-zh: 仅受理响应。解析未指向本平台的 HTTP-01 域名（已受理，解析改好前验证会失败）。
         issued_asset_id: {type: string, format: uuid}
         issued_version_id: {type: string, format: uuid}
         issued_at: {type: string, format: date-time}
@@ -1668,6 +1720,10 @@ components:
             code: {type: string}
             message: {type: string}
             request_id: {type: string}
+            domain:
+              type: string
+              maxLength: 253
+              description: certificate_dns_zone_unavailable / certificate_http01_not_serving only, the domain to fix.
             details:
               description: On a validation_error that names the refused request field (JSON path as sent, domains[n] in request order) and a machine reason.
               x-description-zh: 能定位字段的 validation_error 附带 field（请求 JSON 路径，domains[n] 按请求顺序）与 reason 机器码。

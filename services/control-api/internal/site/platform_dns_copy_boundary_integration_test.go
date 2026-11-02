@@ -178,6 +178,13 @@ func TestPlatformDNSCopyServesOnlyThePlatform(t *testing.T) {
 		t.Fatalf("auto DNS with own account: %v", err)
 	}
 
+	// 平台副本只托管平台的 CNAME 解析域，平台管理员代租户
+	// 申请 DNS-01 证书时也不能选它（否则订单只能卡在申请中）。
+	_, err = dns.CreateOrder(t.Context(), platform, dnsacme.CreateOrderRequest{TargetScopeID: tenant.scopeID,
+		DNSProviderID: &copyID, Domains: []string{"tenant.example.com"}, ChallengeType: "dns-01",
+		IdempotencyKey: "admin-copy-order", RequestID: "admin-copy-order"})
+	refused("platform admin dns-01 order", err)
+
 	// 5. 平台管理员代租户：可用平台副本新增解析区（平台已批准的代办用途）。
 	if _, err := dns.CreateZone(t.Context(), platform, dnsacme.CreateZoneRequest{TargetScopeID: tenant.scopeID,
 		ProviderID: copyID, Name: "platform-approved.test", IdempotencyKey: "admin-zone", RequestID: "admin-zone"}); err != nil {

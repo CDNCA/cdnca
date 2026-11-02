@@ -70,8 +70,13 @@ func TestCertificateAssetOpenAPIFragmentMatchesRuntimeAndRedactionContract(t *te
 	if strings.Contains(contract, "/revoke:") || strings.Contains(contract, "revokeCertificateAssetVersion") {
 		t.Fatal("OpenAPI fragment still documents the retired certificate asset revoke route")
 	}
+	// private_key_pem appears in the upload body and, since 查看证书, in the
+	// certificates.manage pem response only.
+	pemRoute := contract[strings.Index(contract, "  /v1/certificate-assets/{asset_id}/pem:"):]
+	pemRoute = pemRoute[:strings.Index(pemRoute, "  /v1/certificate-assets/{asset_id}/versions/")]
 	if strings.Contains(contract, "cdncaKeyAuth") || strings.Contains(contract, "private_key_ciphertext") ||
-		strings.Contains(contract, "wrapped_key_material") || strings.Count(contract, "        private_key_pem:") != 1 {
+		strings.Contains(contract, "wrapped_key_material") || strings.Count(contract, "        private_key_pem:") != 2 ||
+		strings.Count(pemRoute, "private_key_pem:") != 1 || !strings.Contains(pemRoute, "x-required-permissions: [certificates.manage]") {
 		t.Fatal("OpenAPI fragment broadens auth or exposes private key storage fields")
 	}
 }

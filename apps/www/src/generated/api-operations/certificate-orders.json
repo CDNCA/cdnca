@@ -168,6 +168,12 @@
        "type": "string"
       },
       {
+       "name": "dns_warnings",
+       "type": "array<string>",
+       "description": "Create response only. HTTP-01 domains whose last access check found DNS pointing elsewhere; the order is accepted but validation fails until the domain resolves to the platform.",
+       "description_zh": "仅受理响应。解析未指向本平台的 HTTP-01 域名（已受理，解析改好前验证会失败）。"
+      },
+      {
        "name": "issued_asset_id",
        "type": "string(uuid)"
       },
@@ -214,7 +220,12 @@
     },
     {
      "status": "409",
-     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+     "description": "Conflict. certificate_order_in_flight: an order for the same domain set is being issued now (its issuance lease is live); an unfinished order that is not running (queued, waiting for a retry, stalled) is instead failed as acme_order_superseded and the new order accepted. dns_provider_platform_managed: a DNS-01 order named the platform DNS copy (refused for every actor)."
+    },
+    {
+     "status": "422",
+     "description": "The order could only fail, refused with the domain to fix (error.domain) and the request field (error.details). certificate_dns_zone_unavailable: the DNS-01 provider hosts no zone covering every domain (field dns_provider_id). certificate_http01_not_serving: an HTTP-01 domain is not a live site of the scope or its line groups have no serving node (field domains).",
+     "description_zh": "调度只能判失败的申请在受理时拒绝，error.domain 为要改的域名。"
     }
    ]
   }

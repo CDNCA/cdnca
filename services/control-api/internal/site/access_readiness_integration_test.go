@@ -133,6 +133,19 @@ func TestSiteAccessReadinessPostgres(t *testing.T) {
 		t.Fatalf("stale CNAME dns = %+v err=%v", detail.AccessReadiness.Checks[3], err)
 	}
 
+	// 域名还指向重新生成前的旧 CNAME：存下观测值，读出域名、当前值与期望 CNAME。
+	f.now = f.now.Add(time.Minute)
+	resolver.ips["ready.example.test"] = []string{"198.51.100.7"}
+	readiness, err = store.CheckAccessNow(ctx, f.a.siteActor(), id, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dns := readiness.Checks[3]; dns.Detail != DNSPointsElsewhere || dns.DNSMismatch == nil ||
+		dns.DNSMismatch.Domain != "ready.example.test" || len(dns.DNSMismatch.Observed) != 1 ||
+		dns.DNSMismatch.Observed[0] != "r1.cdn.example.net" || dns.DNSMismatch.ExpectedCNAME != "r2.cdn.example.net" {
+		t.Fatalf("points elsewhere dns = %+v mismatch=%+v", dns, dns.DNSMismatch)
+	}
+
 	// Another tenant cannot check (or learn of) the site.
 	if _, err := store.CheckAccessNow(ctx, f.b.siteActor(), id, resolver); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("other tenant check err=%v", err)

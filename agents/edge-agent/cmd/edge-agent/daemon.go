@@ -301,6 +301,8 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if err != nil {
 		return nil, fmt.Errorf("configure certificate OpenResty runtime: %w", err)
 	}
+	// Same worker account as dynamic routing and L4 (native: cdnca-runtime).
+	certificateRuntime.ConfigureGlobals(dynamicRoutingGlobals(config))
 	certificateManager, err := certstore.NewManager(certstore.RuntimeConfig{
 		StateRoot:     config.CertificateRuntime.StateRoot,
 		ListenAddress: config.CertificateRuntime.ListenAddress,

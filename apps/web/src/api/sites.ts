@@ -192,8 +192,12 @@ export interface SiteAccessReadiness {
     failed_node_reasons?: string[]
     /** published / publish_failed：自动发布在下发前就失败时的终态码（如 no_target_nodes）。 */
     failure_code?: string
+    /** dns_resolved / dns_points_elsewhere：第一个指向别处的域名、它当前解析到的值（CNAME 目标或 A/AAAA）与应改成的 CNAME。 */
+    dns_mismatch?: SiteDNSMismatch
   }>
 }
+
+export interface SiteDNSMismatch { domain: string; observed: string[]; expected_cname: string }
 
 export interface SitePublishFailedNode {
   node_id: string
@@ -257,6 +261,17 @@ export interface SiteDomainExport {
   blob: Blob
   filename: string
   snapshotID: string
+}
+
+// HTTPS turned on with the port left blank listens on 443 (the
+// service fills the same default); every HTTPS entry uses this one value.
+export const defaultSiteHTTPSPort = '443'
+
+/** The ports an HTTPS write sends: the blank list becomes 443 when HTTPS is on. */
+export function withDefaultHTTPSPorts<T extends Pick<SiteBasicConfig, 'https_enabled' | 'https_listen_ports'>>(value: T): T {
+  return value.https_enabled && value.https_listen_ports.length === 0
+    ? { ...value, https_listen_ports: [defaultSiteHTTPSPort] }
+    : value
 }
 
 export interface SiteBasicConfig {

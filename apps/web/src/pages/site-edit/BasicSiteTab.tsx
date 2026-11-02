@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Input, InputNumber, Modal, Popconfirm, Radio, Select, Switch, Tag, Tooltip } from 'antd'
+import { App, Button, Input, InputNumber, Modal, Popconfirm, Radio, Select, Switch, Tag, Tooltip } from 'antd'
 import { CircleHelp, Clipboard, Globe2, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import '../../i18n/siteTransfer'
@@ -25,6 +25,7 @@ import type { AppRole } from '../../auth/session'
 import { formatDateTime } from '../../i18n/formatters'
 import '../../i18n/cnameAllocations'
 import '../../i18n/siteListenerDomains'
+import '../../i18n/siteHttps'
 import type { BasicValidationErrors } from './siteEditValidation'
 import BalanceKeyFields from './BalanceKeyFields'
 import BalanceMethodChoices from './BalanceMethodChoices'
@@ -120,7 +121,9 @@ export default function BasicSiteTab({
   const { t, i18n } = useTranslation(['sites', 'cnameAllocations', 'siteOriginForwarding'])
   const { t: tW } = useTranslation('originWeight')
   const { t: tCname } = useTranslation('siteCnameRegeneration')
+  const { modal } = App.useApp()
   const { t: tV4 } = useTranslation('siteEditV4')
+  const { t: tHttps } = useTranslation('siteHttps')
   const { t: tTransfer } = useTranslation('siteTransfer')
   const cnameReason = cnameFailureText(value.cname_failure_code, value.cname_domain, tCname, i18n.exists, role === 'admin')
   const [, setSearchParams] = useSearchParams()
@@ -283,7 +286,11 @@ export default function BasicSiteTab({
               ) : null}
               {canManageDNS && value.cname_state === 'pending' && !value.cname_regenerate ? (
                 <Button type="link" size="small" data-testid="site-basic-cname-regenerate" disabled={readOnly}
-                  onClick={() => onChange({ ...value, cname_regenerate: true })}>
+                  onClick={() => modal.confirm({
+                    // 换 CNAME 前提醒旧地址约 24 小时后失效（失败弹窗里的“重新生成”本身就是确认，不再弹）。
+                    title: tCname('rotateTitle', { domain: value.domains[0] ?? value.cname }), content: tCname('rotateWarning'),
+                    okText: tCname('confirm'), cancelText: t('actions.cancel'), onOk: () => onChange({ ...value, cname_regenerate: true }),
+                  })}>
                   {tCname('action')}
                 </Button>
               ) : null}
@@ -392,7 +399,7 @@ export default function BasicSiteTab({
               {value.https_enabled ? (
                 <div className="site-basic-access-ports">
                   <span>{t('edit.basic.fields.listenPorts')}</span>
-                  <Input aria-label={t('edit.basic.aria.httpsPorts')} status={errors.https_listen_ports ? 'error' : undefined} disabled={readOnly} value={value.https_listen_ports.join(' ')} placeholder={t('edit.basic.placeholders.ports')} onChange={(event) => onChange({ ...value, https_listen_ports: splitValues(event.target.value) })} />
+                  <Input aria-label={t('edit.basic.aria.httpsPorts')} status={errors.https_listen_ports ? 'error' : undefined} disabled={readOnly} value={value.https_listen_ports.join(' ')} placeholder={tHttps('ports.placeholder')} onChange={(event) => onChange({ ...value, https_listen_ports: splitValues(event.target.value) })} />
                 </div>
               ) : (
                 <p className="site-basic-access-hint">{t(detail.https_certificate_bound === false ? 'edit.basic.help.httpsCertificateRequired' : 'edit.basic.help.httpsClosed')}</p>
