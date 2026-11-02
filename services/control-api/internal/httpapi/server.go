@@ -43,6 +43,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsproviderremote"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnssettings"
 	"github.com/cdnca/cdnca/services/control-api/internal/domaintrust"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementrefreshhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/fielderr"
@@ -342,7 +343,7 @@ type Config struct {
 	// (internal/migrateimport/job.Patterns, ADR 0016).
 	MigrateImportHandlerFactory MountedHandlerFactory
 	// NodeGatewayAddressHandlerFactory serves 维护升级 → 节点设置「更换主控连接地址」
-	// (internal/nodegatewayaddr, fix-nodegw).
+	// (internal/nodegatewayaddr).
 	NodeGatewayAddressHandlerFactory MountedHandlerFactory
 	// ProbeDNSPupHandlerFactory serves module.probe.dnspup
 	// (internal/dnspupprobe.Patterns).
@@ -423,7 +424,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 		now:                     config.Now,
 		entitlementTrust:        config.EntitlementTrust,
 		identity:                identityService,
-		nodes:                   node.NewService(node.NewStoreWithClock(pool, config.Now, config.EntitlementTrust)),
+		nodes:                   node.NewService(node.NewStoreWithClock(pool, config.Now, config.EntitlementTrust).SetLineGroupPublications(edgeautopublish.LineGroupPublisher{})),
 		nodeInventory:           nodepresence.NewInventory(pool, config.NodePresenceLeases, config.NodePresenceOfflineAfter, config.Now, logger),
 		nodeMetrics:             config.NodeMetricsReader,
 		nodePortTransitions:     nodeporttransition.NewService(nodeporttransition.NewPostgresStore(pool, config.Now), config.Now, uuid.New),
@@ -882,6 +883,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/sites/{id}/schedule302", s.handlePutSiteSchedule302)
 	mux.HandleFunc("POST /v1/sites/{id}/auto-dns/sync", s.handleSyncSiteAutoDNS)
 	mux.HandleFunc("POST /v1/sites/{id}/access-check", s.handleCheckSiteAccess)
+	mux.HandleFunc("POST /v1/sites/{id}/republish", s.handleRepublishSite)
 	mux.HandleFunc("GET /v1/site-defaults", s.handleListSiteDefaults)
 	mux.HandleFunc("POST /v1/site-defaults", s.handleCreateSiteDefault)
 	mux.HandleFunc("PATCH /v1/site-defaults/{id}", s.handleUpdateSiteDefault)
@@ -2011,7 +2013,7 @@ func authResultWithImpersonation(result identity.AuthResult, session *impersonat
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	// Signing out while impersonating ends the impersonation at once instead of
-	// leaving the cookie usable until SessionTTL (fix-pre1035, user 10-27).
+	// leaving the cookie usable until SessionTTL (user 10-27).
 	if ender, ok := s.impersonationSessionAuthorizer.(interface {
 		End(*http.Request, string) error
 	}); ok && !nilImpersonationSessionAuthorizer(s.impersonationSessionAuthorizer) {
@@ -2999,7 +3001,7 @@ type impersonationDelegate struct {
 }
 
 // WithImpersonationDelegate makes an impersonation session act as the target
-// user on every route (fix-imperson, 1.0.35). The browser keeps the
+// user on every route (1.0.35). The browser keeps the
 // administrator's access token and identifies the impersonation by the
 // cdnca_impersonation cookie; most handlers only read the Bearer, or re-verify
 // the raw token / session ID in their own transaction, so they saw the

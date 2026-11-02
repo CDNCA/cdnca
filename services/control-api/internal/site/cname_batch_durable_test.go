@@ -29,7 +29,8 @@ func TestCNAMEBatchRegenerationPlansOnlyFailedDurableBindings(t *testing.T) {
 		site Site
 		code string
 	}{
-		{name: "pending", site: func() Site { value := failed; value.CNAMEState = stringPointer("pending"); return value }(), code: "cname_not_failed"},
+		// a CNAME stuck pending can be regenerated too.
+		{name: "pending", site: func() Site { value := failed; value.CNAMEState = stringPointer("pending"); return value }(), code: ""},
 		{name: "done", site: func() Site { value := failed; value.CNAMEState = stringPointer("done"); return value }(), code: "cname_not_failed"},
 		// fix-nopkg (533): a site without a package has a per-site CNAME too.
 		{name: "no package", site: func() Site {
@@ -87,3 +88,16 @@ func TestCNAMEBatchActionPersistsIntentAndReturnsPendingTaskIdentity(t *testing.
 }
 
 func stringPointer(value string) *string { return &value }
+
+func TestSiteColumnsReadPendingCNAMECode(t *testing.T) {
+	columns := siteColumns("s")
+	for _, want := range []string{CNAMEPendingJobMissing, CNAMEPendingJobEnded, CNAMEPendingWorkerIdle,
+		CNAMEPendingStalled, "s.cname_state = 'pending'", "pending_job.id = s.cname_task_id"} {
+		if !strings.Contains(columns, want) {
+			t.Fatalf("siteColumns() does not derive the pending CNAME code (%s)", want)
+		}
+	}
+	if strings.Contains(cnamePendingCodeColumn("s"), "{s}") {
+		t.Fatal("pending CNAME code column keeps an unreplaced alias")
+	}
+}

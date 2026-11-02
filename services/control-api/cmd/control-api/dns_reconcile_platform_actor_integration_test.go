@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// fix-regen2 (73, 10-26): 平台管理员 admin 对租户站点 ikvm.asia 点"重新生成"，
+// 平台管理员对租户站点点"重新生成"时，
 // 分配任务的操作人不是该租户成员，AuthorizeDNSReconcile 只认租户成员而拒绝，
 // 被包成权益拒绝、CNAME 记成 dns_reconcile_unavailable（"DNS 服务商调用失败"）。
 // 真实 gate + 真实租约 guard + 真实 PostgresStore：

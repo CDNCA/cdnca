@@ -1,15 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, Checkbox, Form, Input, InputNumber, Radio, Segmented, Select, Space, Switch, Table, Tag, Tooltip } from 'antd'
-import { KeyRound, ListChecks, Server, ShieldCheck, TerminalSquare } from 'lucide-react'
+import { ListChecks, Server, ShieldCheck, TerminalSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { FeedbackWhen } from '@cdnca/ui'
 import { ApiError } from '../api/auth'
 import { nodesApi, type NodeInventoryItem } from '../api/nodes'
 import {
-  nodeSSHInstallApi, nodeSSHTerminalApi, parseBatchLines, type BatchLine, type NodeSSHEndpoint, type SSHAccess, type SSHInstallJob,
+  nodeSSHInstallApi, nodeSSHTerminalApi, parseBatchLines, parseCIDRList, restrictAllowOf, restrictErrorText, type BatchLine, type NodeSSHEndpoint, type SSHAccess,
+  type SSHInstallJob,
 } from '../api/nodeSSHInstall'
-import NodeSSHInstall, { SSHInstallJobsTable } from './NodeSSHInstall'
+import NodeSSHInstall, { RestrictAllowField, SSHInstallJobsTable } from './NodeSSHInstall'
 import type { TerminalLogin, TerminalStatus } from './NodeSSHTerminal'
 import './NodeSSHPanel.locale'
 
@@ -76,15 +77,15 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
   const [form] = Form.useForm<TerminalForm>()
   const [search, setSearch] = useState('')
   const [endpoint, setEndpoint] = useState<NodeSSHEndpoint | null>(null)
-  const [hostKey, setHostKey] = useState<string | null>(null)
-  const [keyConfirmed, setKeyConfirmed] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [session, setSession] = useState<{ key: number; login: TerminalLogin; token: string; socket: string } | null>(null)
   const [status, setStatus] = useState<{ value: TerminalStatus; code?: string } | null>(null)
   const nodeID = Form.useWatch('node_id', form)
   const auth = Form.useWatch('auth', form) ?? 'password'
   const port = Form.useWatch('port', form) ?? 22
+  // The login being connected (remembered once the controller saved it).
+  const pending = useRef<{ nodeID: string; remember: boolean; port: number; username: string; auth: 'password' | 'private_key' } | null>(null)
 
   const nodes = useQuery({
     queryKey: ['node-ssh-terminal-nodes', search],
@@ -98,11 +99,11 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
 
   const fail = (cause: unknown) => setError(cause instanceof ApiError ? errorText(cause) : t('errors.unavailable'))
 
-  // A node change resets what was confirmed for the previous one.
+  // A node change reads its remembered login: with one, it is preselected so
+  // the node connects without typing the password again.
   useEffect(() => {
     setEndpoint(null)
-    setHostKey(null)
-    setKeyConfirmed(false)
+    setNotice(null)
     if (!nodeID) return
     const token = getAccessToken('read')
     if (!token) return
@@ -117,34 +118,40 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeID])
 
-  useEffect(() => { setHostKey(null); setKeyConfirmed(false) }, [port])
-
-  const readHostKey = async () => {
-    const token = getAccessToken('read')
-    if (!token || !nodeID) return
-    setBusy(true)
-    setError(null)
-    try {
-      const value = await nodeSSHTerminalApi.hostKey(token, nodeID, port)
-      setHostKey(value.host_key_sha256)
-      setKeyConfirmed(false)
-    } catch (cause) {
-      fail(cause)
-    } finally {
-      setBusy(false)
-    }
-  }
-
+  // The host key is read and pinned by the controller on the first
+  // connection (trust on first use); a later change is refused (host_key_mismatch).
   const connect = (values: TerminalForm) => {
     const token = getAccessToken('read')
     if (!token || !values.node_id) return
     setError(null)
-    const login: TerminalLogin = values.auth === 'saved'
-      ? { port: values.port, use_saved: true, remember: false }
-      : { port: values.port, username: values.username.trim(), host_key_sha256: hostKey ?? '', use_saved: false, remember: values.remember === true,
+    setNotice(null)
+    const saved = values.auth === 'saved' && endpoint?.saved
+    const login: TerminalLogin = saved
+      ? { port: endpoint.saved!.port, use_saved: true, remember: false }
+      : { port: values.port, username: values.username.trim(), use_saved: false, remember: values.remember === true,
         ...(values.auth === 'password' ? { password: values.password } : { private_key: values.private_key }) }
+    pending.current = !saved && values.remember === true && values.auth !== 'saved'
+      ? { nodeID: values.node_id, remember: true, port: values.port, username: values.username.trim(), auth: values.auth }
+      : null
     setSession({ key: Date.now(), login, token, socket: nodeSSHTerminalApi.socketURL(values.node_id) })
     form.setFieldsValue({ password: undefined, private_key: undefined })
+  }
+
+  const onStatus = (value: TerminalStatus, code?: string, opened?: { remembered: boolean }) => {
+    setStatus({ value, code })
+    const remembered = pending.current
+    if (value !== 'open' || !remembered) return
+    pending.current = null
+    if (!opened?.remembered) {
+      setNotice(t('terminal.rememberFailed'))
+      return
+    }
+    // Saved on the controller: the next connection to this node uses it.
+    setEndpoint((current) => current && current.node_id === remembered.nodeID ? { ...current, saved: {
+      port: remembered.port, username: remembered.username, auth_kind: remembered.auth, host_key_sha256: '', updated_at: new Date().toISOString(),
+    } } : current)
+    form.setFieldsValue({ auth: 'saved', remember: false })
+    setNotice(t('terminal.remembered'))
   }
 
   const forget = async () => {
@@ -154,13 +161,14 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
       await nodeSSHTerminalApi.forget(token, nodeID)
       setEndpoint((current) => current ? { ...current, saved: null } : current)
       form.setFieldsValue({ auth: 'password' })
+      setNotice(t('terminal.forgotten'))
     } catch (cause) {
       fail(cause)
     }
   }
 
-  const needsKey = auth !== 'saved'
-  const canConnect = Boolean(nodeID) && (!needsKey || (hostKey && keyConfirmed))
+  const typed = auth !== 'saved'
+  const canConnect = Boolean(nodeID)
   const live = status?.value === 'connecting' || status?.value === 'open'
 
   return <div className="node-ssh-grid">
@@ -168,6 +176,7 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
       <h3 className="node-ssh-card-title">{t('terminal.title')}</h3>
       <p className="node-ssh-help">{t('terminal.description')}</p>
       {error ? <FeedbackWhen title={error} onClose={() => setError(null)} /> : null}
+      {notice ? <p className="node-ssh-help" role="status">{notice}</p> : null}
       <Form form={form} layout="vertical" requiredMark={false} onFinish={connect}
         initialValues={{ port: 22, username: 'root', auth: 'password' }} disabled={live}>
         <Form.Item name="node_id" label={t('terminal.node')} rules={[{ required: true, message: t('validation.node') }]}>
@@ -176,10 +185,10 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
             options={choices.map((node) => ({ value: node.id, label: nodeLabel(node) }))} />
         </Form.Item>
         <Space wrap align="start">
-          <Form.Item name="port" label={t('fields.port')} rules={[{ required: true, type: 'integer', min: 1, max: 65535, message: t('validation.port') }]}>
+          {typed ? <Form.Item name="port" label={t('fields.port')} rules={[{ required: true, type: 'integer', min: 1, max: 65535, message: t('validation.port') }]}>
             <InputNumber aria-label={t('fields.port')} min={1} max={65535} precision={0} />
-          </Form.Item>
-          {auth !== 'saved' ? <Form.Item name="username" label={t('fields.username')}
+          </Form.Item> : null}
+          {typed ? <Form.Item name="username" label={t('fields.username')}
             rules={[{ required: true, pattern: /^[a-z_][a-z0-9_.-]{0,31}$/, message: t('validation.username') }]}>
             <Input aria-label={t('fields.username')} autoComplete="off" spellCheck={false} />
           </Form.Item> : null}
@@ -192,6 +201,10 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
         </Form.Item>
         {auth === 'saved' && endpoint?.saved ? <p className="node-ssh-help">
           {t('terminal.savedHint', { username: endpoint.saved.username, port: endpoint.saved.port })}{' '}
+          <Button type="link" size="small" disabled={false} onClick={() => void forget()}>{t('actions.forget')}</Button>
+        </p> : null}
+        {auth !== 'saved' && endpoint?.saved ? <p className="node-ssh-help">
+          {t('terminal.savedAvailable', { username: endpoint.saved.username, port: endpoint.saved.port })}{' '}
           <Button type="link" size="small" onClick={() => void forget()}>{t('actions.forget')}</Button>
         </p> : null}
         {auth === 'password' ? <Form.Item name="password" label={t('fields.password')} rules={[{ required: true, message: t('validation.secret') }]}>
@@ -200,16 +213,8 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
         {auth === 'private_key' ? <Form.Item name="private_key" label={t('fields.privateKey')} rules={[{ required: true, message: t('validation.secret') }]}>
           <Input.TextArea aria-label={t('fields.privateKey')} rows={4} autoComplete="off" spellCheck={false} />
         </Form.Item> : null}
-        {needsKey ? <div className="node-ssh-hostkey">
-          <Button icon={<KeyRound size={14} aria-hidden="true" />} disabled={!nodeID} loading={busy} onClick={() => void readHostKey()}>
-            {t('actions.readHostKey')}
-          </Button>
-          {hostKey ? <>
-            <code className="node-ssh-fingerprint" aria-label={t('terminal.fingerprint')}>{hostKey}</code>
-            <Checkbox checked={keyConfirmed} onChange={(event) => setKeyConfirmed(event.target.checked)}>{t('terminal.confirmKey')}</Checkbox>
-          </> : <p className="node-ssh-help">{t('terminal.hostKeyHelp')}</p>}
-        </div> : null}
-        {needsKey ? <Form.Item name="remember" valuePropName="checked" extra={t('terminal.rememberHelp')}>
+        {typed ? <p className="node-ssh-help">{t('terminal.hostKeyHelp')}</p> : null}
+        {typed ? <Form.Item name="remember" valuePropName="checked" extra={t('terminal.rememberHelp')}>
           <Checkbox>{t('terminal.remember')}</Checkbox>
         </Form.Item> : null}
         <Space>
@@ -221,7 +226,7 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
     </div>
     <div className="node-ssh-card node-ssh-terminal-card">
       <div className="node-ssh-terminal-bar">
-        <span>{endpoint ? `${endpoint.node_name} · ${endpoint.host}:${port}` : t('terminal.idle')}</span>
+        <span>{endpoint ? `${endpoint.node_name} · ${endpoint.host}:${auth === 'saved' && endpoint.saved ? endpoint.saved.port : port}` : t('terminal.idle')}</span>
         {status ? <Tag color={status.value === 'open' ? 'success' : status.value === 'connecting' ? 'processing' : status.value === 'error' ? 'error' : 'default'}>
           {t(`status.${status.value}`)}</Tag> : null}
       </div>
@@ -229,14 +234,17 @@ function TerminalCard({ getAccessToken, canManage, errorText }: Omit<PanelProps,
         ? <p className="node-ssh-help" role="status">{t(`codes.${status.code}`, { defaultValue: status.code })}</p> : null}
       {session ? <Suspense fallback={<div className="node-ssh-terminal-placeholder">{t('loading')}</div>}>
         <NodeSSHTerminal key={session.key} socketURL={session.socket} accessToken={session.token} login={session.login}
-          label={t('terminal.screenLabel')} onStatus={(value, code) => setStatus({ value, code })} />
+          label={t('terminal.screenLabel')} onStatus={onStatus} />
       </Suspense> : <div className="node-ssh-terminal-placeholder">{t('terminal.placeholder')}</div>}
       <p className="node-ssh-help">{t('terminal.limits')}</p>
     </div>
   </div>
 }
 
-// AccessSwitch turns "only the controller may SSH" on or off for one node.
+// AccessSwitch turns "only the controller may SSH" on or off for one node;
+// it works before (and without) a terminal connection. Without a known
+// controller egress the "also allow" addresses are let in instead (the node
+// still reverts it unless the controller confirms within 5 minutes).
 function AccessSwitch({ nodeID, getAccessToken, errorText }: { nodeID: string; getAccessToken: () => string | null; errorText: (error: ApiError) => string }) {
   const { t } = useTranslation('nodeSSHPanel')
   const [access, setAccess] = useState<SSHAccess | null>(null)
@@ -266,20 +274,21 @@ function AccessSwitch({ nodeID, getAccessToken, errorText }: { nodeID: string; g
     setError(null)
     try {
       setAccess(await nodeSSHInstallApi.setAccess(token, nodeID, {
-        enabled, ssh_port: access.ssh_port, allow_cidrs: allow.split(/[\s,，]+/).map((value) => value.trim()).filter(Boolean),
+        enabled, ssh_port: access.ssh_port, allow_cidrs: parseCIDRList(allow),
       }))
     } catch (cause) {
-      setError(cause instanceof ApiError ? (cause.code === 'controller_egress_unknown' ? t('access.egressUnknown') : errorText(cause)) : t('errors.unavailable'))
+      setError(cause instanceof ApiError && cause.code === 'invalid_request' ? t('access.invalid') : restrictErrorText(cause, errorText))
     } finally {
       setBusy(false)
     }
   }
 
   const unknown = egress !== null && egress.length === 0
+  const allowList = parseCIDRList(allow)
   // A node whose agent does not declare SSH_ACCESS cannot apply it: say so
   // instead of leaving a revision pending forever (turning it off stays possible).
   const unsupported = access !== null && (access.supported === false || access.failure_code === 'not_supported')
-  const blocked = unknown || unsupported
+  const blocked = (unknown && allowList.length === 0) || unsupported
   const blockedText = unsupported ? t('access.unsupported') : t('access.egressUnknown')
   const failure = access && (access.state === 'failed' || access.state === 'reverted') && access.failure_code &&
     access.failure_code !== 'not_supported' ? access.failure_code : ''
@@ -298,6 +307,7 @@ function AccessSwitch({ nodeID, getAccessToken, errorText }: { nodeID: string; g
     {unsupported ? <p className="node-ssh-help" role="status">{t('access.unsupported')}</p> : null}
     {failure ? <p className="node-ssh-help" role="status">{t('access.failure', { code: failure })}</p> : null}
     {egress && egress.length > 0 ? <p className="node-ssh-help">{t('access.egress', { cidrs: egress.join(', ') })}</p> : null}
+    {unknown && !unsupported ? <p className="node-ssh-help" role="status">{t('access.egressUnknown')}</p> : null}
     <label className="node-ssh-label" htmlFor={`ssh-allow-${nodeID}`}>{t('access.allow')}</label>
     <Input.TextArea id={`ssh-allow-${nodeID}`} rows={2} value={allow} onChange={(event) => setAllow(event.target.value)}
       placeholder={t('access.allowPlaceholder')} spellCheck={false} disabled={busy} />
@@ -310,6 +320,7 @@ function BatchCard({ getAccessToken, errorText }: { getAccessToken: () => string
   const { t, i18n } = useTranslation('nodeSSHPanel')
   const [text, setText] = useState('')
   const [restrict, setRestrict] = useState(false)
+  const [restrictAllow, setRestrictAllow] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [batchID, setBatchID] = useState<string | null>(null)
@@ -320,8 +331,7 @@ function BatchCard({ getAccessToken, errorText }: { getAccessToken: () => string
   const valid = lines.filter((line) => line.target)
   const invalid = lines.filter((line) => line.error)
 
-  const fail = (cause: unknown) => setError(cause instanceof ApiError
-    ? (cause.code === 'controller_egress_unknown' ? t('access.egressUnknown') : errorText(cause)) : t('errors.unavailable'))
+  const fail = (cause: unknown) => setError(restrictErrorText(cause, errorText))
 
   useEffect(() => {
     if (!batchID || !jobs.some((job) => ['awaiting_host_key', 'pending', 'running'].includes(job.state))) return
@@ -339,7 +349,7 @@ function BatchCard({ getAccessToken, errorText }: { getAccessToken: () => string
     setError(null)
     try {
       const created = await nodeSSHInstallApi.create(token, { targets: valid.map((line) => line.target!), restrict_ssh: restrict,
-        language: i18n.resolvedLanguage ?? 'zh-CN' })
+        language: i18n.resolvedLanguage ?? 'zh-CN', ...restrictAllowOf(restrict, restrictAllow) })
       setBatchID(created[0]?.batch_id ?? null)
       setJobs(created)
       // Passwords are not kept on screen once sent.
@@ -375,7 +385,7 @@ function BatchCard({ getAccessToken, errorText }: { getAccessToken: () => string
     if (!token) return
     try {
       const created = await nodeSSHInstallApi.create(token, { batch_id: job.batch_id, restrict_ssh: job.restrict_ssh === true,
-        language: i18n.resolvedLanguage ?? 'zh-CN',
+        language: i18n.resolvedLanguage ?? 'zh-CN', ...restrictAllowOf(job.restrict_ssh === true, restrictAllow),
         targets: [{ host: job.host, port: job.port, username: job.username, password }] })
       setJobs((current) => [...created, ...current])
       setRetrying(null)
@@ -407,6 +417,7 @@ function BatchCard({ getAccessToken, errorText }: { getAccessToken: () => string
         ]} />
     </> : null}
     <Checkbox checked={restrict} onChange={(event) => setRestrict(event.target.checked)} className="node-ssh-restrict">{t('fields.restrictSSH')}</Checkbox>
+    {restrict ? <RestrictAllowField id="node-ssh-batch-allow" value={restrictAllow} onChange={setRestrictAllow} /> : null}
     <p className="node-ssh-help">{t('batch.concurrency')}</p>
     <Button type="primary" loading={busy} disabled={valid.length === 0 || invalid.length > 0} onClick={() => void submit()}>
       {t('batch.start', { count: valid.length })}

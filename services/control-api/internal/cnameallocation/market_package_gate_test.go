@@ -23,7 +23,7 @@ func TestSupplyPausedWithoutPackageSQL(t *testing.T) {
 	expression := SupplyPausedWithoutPackageSQL("supply", "site")
 	for _, want := range []string{
 		"supply.kind IN ('third_party_cdn','market_subscription')",
-		"supply.platform_scope_id<>site.scope_id",
+		"supply.owner_scope_id<>site.scope_id",
 		"valid_package.admin_enabled",
 		"valid_package.deleted_at IS NULL",
 		"valid_package.id=site.package_subscription_id",

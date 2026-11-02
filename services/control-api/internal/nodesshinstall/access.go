@@ -115,12 +115,30 @@ type AccessChange struct {
 	AllowCIDRs []string
 }
 
-// ControllerEgress is the configured egress list (empty: unknown).
-func (service *Service) ControllerEgress() []string {
-	if service.access == nil {
-		return []string{}
+// Where ControllerEgress came from.
+const (
+	EgressConfigured = "configured" // CDNCA_NODE_SSH_CONTROLLER_CIDRS
+	EgressDetected   = "detected"   // the controller's own public address (DetectEgress)
+)
+
+// UseEgressDetector sets how the controller's egress is found when
+// CDNCA_NODE_SSH_CONTROLLER_CIDRS is not set (nil: never).
+func (service *Service) UseEgressDetector(detect func(context.Context) []string) {
+	service.detectEgress = detect
+}
+
+// ControllerEgress is the controller's SSH egress: the configured list, else
+// the detected public addresses; empty (source "") when neither is known.
+func (service *Service) ControllerEgress(ctx context.Context) ([]string, string) {
+	if service.access != nil && len(service.access.ControllerCIDRs) > 0 {
+		return append([]string(nil), service.access.ControllerCIDRs...), EgressConfigured
 	}
-	return append([]string(nil), service.access.ControllerCIDRs...)
+	if service.detectEgress != nil {
+		if detected, err := normalizeCIDRs(service.detectEgress(ctx), maxControllerCIDRs); err == nil && len(detected) > 0 {
+			return detected, EgressDetected
+		}
+	}
+	return []string{}, ""
 }
 
 // GetAccess returns the node's state (not configured: disabled, port 22).
@@ -165,7 +183,10 @@ func scanAccess(row pgx.Row) (Access, error) {
 }
 
 // SetAccess records the wanted state as a new revision for the node agent.
-// Turning it on requires the controller egress to be configured.
+// Turning it on needs a controller egress: configured, detected, or else the
+// operator's allowlist taken as the controller's addresses.
+// Either way the node keeps it only after the controller confirmed it can
+// still reach sshd, otherwise it reverts by itself (AccessRollbackWindow).
 func (service *Service) SetAccess(ctx context.Context, actor Actor, nodeID uuid.UUID, change AccessChange) (Access, error) {
 	if change.SSHPort == 0 {
 		change.SSHPort = 22
@@ -177,9 +198,15 @@ func (service *Service) SetAccess(ctx context.Context, actor Actor, nodeID uuid.
 	if err != nil {
 		return Access{}, err
 	}
-	controller := service.ControllerEgress()
+	controller, _ := service.ControllerEgress(ctx)
 	if change.Enabled && len(controller) == 0 {
-		return Access{}, ErrControllerEgressUnknown
+		if len(allow) == 0 {
+			return Access{}, ErrControllerEgressUnknown
+		}
+		if len(allow) > maxControllerCIDRs {
+			return Access{}, ErrInvalidInput
+		}
+		controller = allow
 	}
 	var result Access
 	err = pgx.BeginFunc(ctx, service.pool, func(tx pgx.Tx) error {

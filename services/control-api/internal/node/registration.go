@@ -16,6 +16,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/cdnca/cdnca/services/control-api/internal/cdnranges"
 )
 
 // Self-registration follows the competitor model: every node runs the same
@@ -168,6 +170,8 @@ type normalizedRegistration struct {
 	description string
 	ipv4        string
 	ipv6        string
+	// sourceCDN: the request came from a known CDN edge address (not the node).
+	sourceCDN bool
 }
 
 func normalizeRegisterRequest(request RegisterRequest) (normalizedRegistration, error) {
@@ -195,18 +199,24 @@ func normalizeRegisterRequest(request RegisterRequest) (normalizedRegistration, 
 	result := normalizedRegistration{
 		fingerprint: fingerprint, hostname: hostname, description: strings.Join(parts, " · "),
 	}
-	// The node's public IP, in order: the observed public source address of
-	// this request, then the address the installer reported. NAT, loopback
-	// and link-local sources are left empty for the administrator or network
-	// inventory; a private source is used only when nothing better came.
+	// The node's public IP, in order: the public address the installer
+	// reported, then the observed public source address of this request. A
+	// console behind a CDN without real-ip sees the CDN edge (162.158.x.x for
+	// Cloudflare) as the source, so a source in a known CDN range is never
+	// the node's IP, and a reported public address that differs from the
+	// source wins. NAT, loopback and link-local sources are left empty for
+	// the administrator or network inventory; a private source is used only
+	// when nothing better came.
 	source := net.ParseIP(strings.TrimSpace(request.SourceIP))
 	reported := net.ParseIP(strings.TrimSpace(request.PublicIP))
+	result.sourceCDN = source != nil && cdnranges.Contains(source.String())
 	var chosen net.IP
 	switch {
+	case publicAddress(reported) && !cdnranges.Contains(reported.String()):
+		chosen = reported
+	case result.sourceCDN:
 	case publicAddress(source):
 		chosen = source
-	case publicAddress(reported):
-		chosen = reported
 	case source != nil && source.IsGlobalUnicast():
 		chosen = source
 	}

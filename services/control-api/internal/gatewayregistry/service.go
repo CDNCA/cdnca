@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/cdnranges"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,7 +36,10 @@ type Config struct {
 	// maintained (tests, gateway-only hosts). SyncNodeDefaults rewrites its
 	// gateway lines after every change of the published endpoint list.
 	NodeDefaultsFile string
-	Now              func() time.Time
+	// LookupHost resolves the co-located Gateway host to tell whether it is
+	// behind a CDN (cdnranges.HostBehindCDN); nil: the system resolver.
+	LookupHost cdnranges.LookupFunc
+	Now        func() time.Time
 }
 
 type Service struct {

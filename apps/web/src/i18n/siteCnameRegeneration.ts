@@ -61,6 +61,8 @@ const zhCN = {
     dns_zone_not_hosted: '域名不在该DNS账号',
     allocation_rejected: '分配被拒绝',
     cname_label_exhausted: 'CNAME名称重复',
+    dns_provider_remote_credentials_rejected: 'DNS账号凭据被拒',
+    dns_provider_remote_unsupported: 'DNS服务商不支持',
     unknown: '原因未知',
   },
   failures: {
@@ -91,7 +93,19 @@ const zhCN = {
     dns_zone_not_hosted: '该域名不在所选 DNS 账号下',
     allocation_rejected: 'CNAME 分配被拒绝',
     cname_label_exhausted: '自动生成的 CNAME 名称连续重名，请重新生成',
+    dns_provider_remote_credentials_rejected: 'DNS 服务商拒绝了账号凭据（AccessKey 错误、过期或权限不足），请到节点管理 → DNS配置 检查后重新生成',
+    dns_provider_remote_unsupported: 'DNS 服务商不支持该操作，请换用其他 DNS 账号后重新生成',
     unknown: '原因未知',
+  },
+  // cname_state=pending 但任务停滞的原因（cname_pending_code）。
+  pending: {
+    cname_job_missing: 'CNAME 生成任务已不存在，请重新生成',
+    cname_job_ended: 'CNAME 生成任务已结束但结果没有写回网站，请重新生成',
+    cname_worker_idle: 'CNAME 生成任务排队超过 5 分钟仍未开始，主控的 DNS 解析后台可能未启用或未运行',
+    cname_stalled: 'CNAME 生成已超过 15 分钟仍未完成，后台在反复重试（DNS 服务商调用失败、限流或域名记录配额已满等），可重新生成或到任务中心查看',
+    hint: '生成中，点击查看进度',
+    stuck: '生成中（已停滞）',
+    taskCenter: '去任务中心',
   },
   // FLOW001：普通用户没有“节点管理”菜单；平台侧配置缺失时只告诉他配置已保存、需联系管理员。
   tenantFailures: {
@@ -161,6 +175,8 @@ const enUS: typeof zhCN = {
     dns_zone_not_hosted: 'Domain not in DNS account',
     allocation_rejected: 'Allocation rejected',
     cname_label_exhausted: 'CNAME name clash',
+    dns_provider_remote_credentials_rejected: 'DNS credentials rejected',
+    dns_provider_remote_unsupported: 'DNS provider unsupported',
     unknown: 'Unknown reason',
   },
   failures: {
@@ -191,7 +207,18 @@ const enUS: typeof zhCN = {
     dns_zone_not_hosted: 'The domain is not hosted by the selected DNS account',
     allocation_rejected: 'CNAME allocation was rejected',
     cname_label_exhausted: 'Every generated CNAME name was already taken. Regenerate to try again',
+    dns_provider_remote_credentials_rejected: 'The DNS provider rejected the account credentials (wrong, expired or insufficient AccessKey); check Nodes → DNS settings, then regenerate',
+    dns_provider_remote_unsupported: 'The DNS provider does not support this operation; use another DNS account, then regenerate',
     unknown: 'Unknown reason',
+  },
+  pending: {
+    cname_job_missing: 'The CNAME generation task no longer exists; regenerate the CNAME',
+    cname_job_ended: 'The CNAME generation task ended without updating the site; regenerate the CNAME',
+    cname_worker_idle: 'The CNAME generation task has been queued for over 5 minutes without starting; the DNS reconcile worker may be disabled or down',
+    cname_stalled: 'CNAME generation has not finished after 15 minutes and keeps retrying (DNS provider errors, rate limits or a full record quota); regenerate it or check the task center',
+    hint: 'Generating, click for progress',
+    stuck: 'Generating (stalled)',
+    taskCenter: 'Open task center',
   },
   tenantFailures: {
     platform: 'The platform has no usable DNS or CNAME domain yet; contact the administrator. Your site settings are saved, and you can regenerate once it is fixed.',

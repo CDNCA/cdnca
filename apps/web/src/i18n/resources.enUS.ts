@@ -907,7 +907,7 @@ export const enUS = {
           cname_domain: 'The CNAME domain follows the site package and cannot be changed on the site. Change it on the package; its sites regenerate automatically.',
           cname_hostname: 'The CNAME hostname follows the site package and cannot be changed on the site. Change it on the package.',
           cname_mode: 'The CNAME mode follows the site package and cannot be changed on the site.',
-          cname_regenerate: 'A CNAME can only be retried after its allocation failed. Reload the page for the latest state.',
+          cname_regenerate: 'A CNAME can only be regenerated while it is failed or still generating. Reload the page for the latest state.',
           https_enabled: 'No certificate is bound, so HTTPS cannot be turned on. Bind one under HTTPS settings first.',
           force_https: 'Forced HTTPS needs HTTPS enabled with an HTTPS port and a certificate bound under HTTPS settings.',
           package_id: 'Invalid package: the user has no single active subscription of this package.',

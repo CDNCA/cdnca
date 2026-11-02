@@ -14,6 +14,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketsupplyguard"
+	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -25,6 +26,17 @@ type Store struct {
 	auditor *audit.Log
 	guard   *entitlementguard.Guard
 	now     func() time.Time
+	// lineGroupPublications queues the republication of scopes using a line
+	// group whose endpoints followed a node IP change; nil only advances the
+	// scope revision.
+	lineGroupPublications nodescheduler.PublicationTrigger
+}
+
+// SetLineGroupPublications wires the republication a node IP change triggers
+// through its line groups (edgeautopublish.LineGroupPublisher).
+func (s *Store) SetLineGroupPublications(trigger nodescheduler.PublicationTrigger) *Store {
+	s.lineGroupPublications = trigger
+	return s
 }
 
 type createStoreInput struct {
@@ -432,17 +444,27 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 				return err
 			}
 		}
-		if err := ensureLineGroupAddressesKept(ctx, tx, current); err != nil {
-			return err
-		}
 		if current.AdminState == StateActive &&
 			(beforeState != StateActive || !sameNodeAddress(beforeIPv4, current.IPv4) || !sameNodeAddress(beforeIPv6, current.IPv6)) {
 			if err := ensureActiveNodeAddressesAvailable(ctx, tx, actor.ScopeID, current); err != nil {
 				return err
 			}
 		}
-		updated, err := updateNodeRow(ctx, tx, current, request.ExpectedRevision, s.now().UTC())
+		now := s.now().UTC().Truncate(time.Microsecond)
+		updated, err := updateNodeRow(ctx, tx, current, request.ExpectedRevision, now)
 		if err != nil {
+			return err
+		}
+		// An administrator's IP change is authoritative: the current line
+		// group endpoints on the old IP move to the new one (new revisions,
+		// republication, DNS); only an address dropped without a replacement
+		// is still refused.
+		addressMoves, err := moveLineGroupAddresses(ctx, tx, s.lineGroupPublications, actor.UserID, current.ID,
+			[2]*string{beforeIPv4, beforeIPv6}, [2]*string{current.IPv4, current.IPv6}, request.RequestID, now)
+		if err != nil {
+			return err
+		}
+		if err := ensureLineGroupAddressesKept(ctx, tx, current); err != nil {
 			return err
 		}
 		if err := supply.Verify(ctx, tx); err != nil {
@@ -454,6 +476,9 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 			"from_state":     beforeState,
 			"to_state":       updated.AdminState,
 			"revision":       updated.Revision,
+		}
+		if len(addressMoves) > 0 {
+			payload["line_group_address_moves"] = addressMoves
 		}
 		if err := s.auditor.Append(ctx, tx, audit.Event{
 			ScopeID:      actor.ScopeID,
@@ -840,6 +865,36 @@ func isConstraintViolation(err error, name string) bool {
 	}
 	var detailed *pgconn.PgError
 	return errors.As(err, &detailed) && detailed.ConstraintName == name
+}
+
+// lineGroupAddressMove is one address family's IP change and the line
+// groups that followed it (audited with node.update).
+type lineGroupAddressMove struct {
+	OldIP      string                      `json:"old_ip"`
+	NewIP      string                      `json:"new_ip"`
+	LineGroups []nodescheduler.AddressMove `json:"line_groups"`
+}
+
+// moveLineGroupAddresses moves, per address family whose IP was replaced by
+// another, the node's current line group endpoints to the new IP.
+func moveLineGroupAddresses(ctx context.Context, tx pgx.Tx, publications nodescheduler.PublicationTrigger, userID, nodeID uuid.UUID,
+	before, after [2]*string, requestID string, now time.Time,
+) ([]lineGroupAddressMove, error) {
+	var moves []lineGroupAddressMove
+	for family := range before {
+		if before[family] == nil || after[family] == nil || sameNodeAddress(before[family], after[family]) {
+			continue
+		}
+		groups, err := nodescheduler.MoveNodeAddressTx(ctx, tx, publications,
+			userID, nodeID, *before[family], *after[family], requestID, now)
+		if err != nil {
+			return nil, fmt.Errorf("move line group endpoints to the new node IP: %w", err)
+		}
+		if len(groups) > 0 {
+			moves = append(moves, lineGroupAddressMove{OldIP: *before[family], NewIP: *after[family], LineGroups: groups})
+		}
+	}
+	return moves, nil
 }
 
 // ensureLineGroupAddressesKept refuses an update that removes an address a

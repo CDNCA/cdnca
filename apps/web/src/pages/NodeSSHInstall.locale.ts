@@ -7,16 +7,17 @@ const zhCN = {
   fields: {
     hosts: '服务器 IP 或域名', port: 'SSH 端口', username: 'SSH 用户', auth: '登录方式',
     password: 'SSH 密码', privateKey: 'SSH 私钥（OpenSSH 未加密）',
-    host: '服务器 IP 或域名', restrictSSH: '仅允许主控 SSH 连接该节点',
+    host: '服务器 IP 或域名', restrictSSH: '仅允许主控 SSH 连接该节点', restrictAllow: '额外允许的地址（可选）',
   },
-  placeholders: { hosts: '一行一个，或用逗号、空格分隔，最多 100 台', host: '例如 203.0.113.10' },
+  placeholders: { hosts: '一行一个，或用逗号、空格分隔，最多 100 台', host: '例如 203.0.113.10', restrictAllow: '运维跳板机 IP 或网段，一行一个，如 198.51.100.0/24' },
   help: {
     hosts: '多台服务器使用相同的端口和登录信息，每台单独安装、互不影响。',
     password: '非 root 用户需有 sudo 权限，密码同时用于 sudo（只经标准输入传给 sudo，不出现在命令行）。',
     privateKey: '粘贴完整私钥（-----BEGIN OPENSSH PRIVATE KEY----- 开头）。非 root 用户需要免密 sudo。',
     refreshedAt: '下表为最近的安装任务（含关闭弹窗前提交的），状态更新于 {{time}}。',
     hostKey: '首次连接只读取服务器的 SSH 主机指纹，请在服务器上执行 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub 核对一致后点击「确认指纹并安装」；未确认前不会发送登录信息。',
-    restrictSSH: '勾选后，节点装好即在本机防火墙只放行主控出口地址访问 SSH 端口，其他来源连不上；不勾选保持现状。需先在主控配置出口地址。',
+    restrictSSH: '勾选后，节点装好即在本机防火墙只放行主控出口地址访问 SSH 端口，其他来源连不上；不勾选保持现状。节点应用后 5 分钟内未获主控确认会自动撤销，不会锁死。',
+    restrictAllow: '不填即只放行主控出口 IP（主控自动取得）；取不到时请在这里填主控出口 IP。',
   },
   values: { password: '密码', privateKey: '私钥' },
   columns: { host: '服务器', state: '状态', hostKey: '主机指纹', detail: '进度', actions: '操作' },
@@ -47,7 +48,7 @@ const zhCN = {
     hosts: '请填写 1 到 100 个服务器地址', port: '端口为 1-65535', username: '用户名格式不正确',
     secret: '请填写登录信息', host: '请填写 1 个服务器地址',
   },
-  errors: { unavailable: 'SSH 远程安装暂不可用，请稍后重试', ssh_install_in_progress: '该服务器已有进行中的安装任务', controller_egress_unknown: '主控未配置 SSH 出口地址（CDNCA_NODE_SSH_CONTROLLER_CIDRS），不能开启「仅允许主控 SSH」', refreshFailed: '安装任务状态更新失败：{{reason}}。下表可能不是最新状态，进行中的任务会继续自动重试读取。' },
+  errors: { unavailable: 'SSH 远程安装暂不可用，请稍后重试', ssh_install_in_progress: '该服务器已有进行中的安装任务', controller_egress_unknown: '未能取得主控出口 IP，不能开启「仅允许主控 SSH」：请在「额外允许的地址」里填主控出口 IP（或在主控配置 CDNCA_NODE_SSH_CONTROLLER_CIDRS）', refreshFailed: '安装任务状态更新失败：{{reason}}。下表可能不是最新状态，进行中的任务会继续自动重试读取。' },
 }
 
 type MessageShape<T> = { [K in keyof T]: T[K] extends string ? string : MessageShape<T[K]> }
@@ -60,16 +61,17 @@ const enUS: Messages = {
   fields: {
     hosts: 'Server IPs or host names', port: 'SSH port', username: 'SSH user', auth: 'Login',
     password: 'SSH password', privateKey: 'SSH private key (unencrypted OpenSSH)',
-    host: 'Server IP or host name', restrictSSH: 'Only the controller may SSH to this node',
+    host: 'Server IP or host name', restrictSSH: 'Only the controller may SSH to this node', restrictAllow: 'Also allow (optional)',
   },
-  placeholders: { hosts: 'One per line, or separated by commas or spaces; up to 100', host: 'For example 203.0.113.10' },
+  placeholders: { hosts: 'One per line, or separated by commas or spaces; up to 100', host: 'For example 203.0.113.10', restrictAllow: 'Jump host IPs or networks, one per line, e.g. 198.51.100.0/24' },
   help: {
     hosts: 'All servers use the same port and login; each one is installed separately.',
     password: 'A non-root user needs sudo; the password is also given to sudo (on its standard input, never on the command line).',
     privateKey: 'Paste the whole key (starting with -----BEGIN OPENSSH PRIVATE KEY-----). A non-root user needs passwordless sudo.',
     refreshedAt: 'Recent install jobs, including ones submitted before the dialog was closed. Status updated at {{time}}.',
     hostKey: 'The first connection only reads the server\'s SSH host key. Compare it with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on the server, then choose Confirm and install; no login is sent before that.',
-    restrictSSH: 'When checked, the node\'s own firewall only lets the controller\'s egress addresses reach the SSH port once installed; other sources cannot connect. Unchecked keeps SSH as it is. The controller egress must be configured first.',
+    restrictSSH: 'When checked, the node\'s own firewall only lets the controller\'s egress addresses reach the SSH port once installed; other sources cannot connect. Unchecked keeps SSH as it is. If the controller does not confirm within 5 minutes after the node applies it, the node reverts by itself, so it cannot lock you out.',
+    restrictAllow: 'Empty: only the controller\'s egress IP (detected by the controller). If it cannot be detected, enter the controller\'s egress IP here.',
   },
   values: { password: 'Password', privateKey: 'Private key' },
   columns: { host: 'Server', state: 'State', hostKey: 'Host key', detail: 'Progress', actions: 'Actions' },
@@ -100,7 +102,7 @@ const enUS: Messages = {
     hosts: 'Enter 1 to 100 server addresses', port: 'Port must be 1-65535', username: 'Invalid user name',
     secret: 'Enter the login', host: 'Enter one server address',
   },
-  errors: { unavailable: 'SSH remote install is unavailable; try again later', ssh_install_in_progress: 'This server already has an install in progress', controller_egress_unknown: 'The controller has no SSH egress address configured (CDNCA_NODE_SSH_CONTROLLER_CIDRS), so controller-only SSH cannot be turned on', refreshFailed: 'Could not refresh the install jobs: {{reason}}. The table may be out of date; jobs in progress keep retrying the read.' },
+  errors: { unavailable: 'SSH remote install is unavailable; try again later', ssh_install_in_progress: 'This server already has an install in progress', controller_egress_unknown: 'The controller\'s egress IP could not be determined, so controller-only SSH cannot be turned on: enter the controller\'s egress IP under "Also allow" (or set CDNCA_NODE_SSH_CONTROLLER_CIDRS on the controller)', refreshFailed: 'Could not refresh the install jobs: {{reason}}. The table may be out of date; jobs in progress keep retrying the read.' },
 }
 
 function pseudoTree(value: unknown): unknown {

@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 644,
+ "total": 645,
  "api_key_count": 141,
  "groups": [
   {
@@ -7346,7 +7346,7 @@
   {
    "id": "sites",
    "prefix": "/v1/sites",
-   "count": 28,
+   "count": 29,
    "api_key_count": 6,
    "operations": [
     {
@@ -7522,6 +7522,18 @@
      "api_key": true,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "getSiteOriginStatus"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/sites/{id}/republish",
+     "summary": "Access status > Published to nodes > Republish",
+     "summary_zh": "接入状态 > 已发布到节点 > 重新发布",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/sites.yaml",
+     "operation_id": "republishSite"
     },
     {
      "method": "GET",

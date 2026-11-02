@@ -65,6 +65,24 @@ type AccessCheck struct {
 	OK        bool       `json:"ok"`
 	Detail    string     `json:"detail"`
 	CheckedAt *time.Time `json:"checked_at"`
+	// published / publish_failed only: the nodes now serving the site whose
+	// deployment of the current publication failed, or (FailedNodes empty)
+	// the automatic request's terminal code when it failed before publishing.
+	// Only platform actors get FailedNodes (平台节点名不给用户看);
+	// every actor gets the count and the distinct normalized reasons.
+	FailedNodes       []PublishFailedNode `json:"failed_nodes,omitempty"`
+	FailedNodeCount   int                 `json:"failed_node_count,omitempty"`
+	FailedNodeReasons []string            `json:"failed_node_reasons,omitempty"`
+	FailureCode       string              `json:"failure_code,omitempty"`
+}
+
+// PublishFailedNode is one node serving the site whose deployment of the
+// scope's current publication failed (site_publication_outcome_618).
+type PublishFailedNode struct {
+	NodeID    string  `json:"node_id"`
+	NodeName  string  `json:"node_name"`
+	State     string  `json:"state"`
+	ErrorCode *string `json:"error_code"`
 }
 
 var ErrAccessCheckThrottled = errors.New("site access check was run less than a minute ago")
@@ -90,11 +108,11 @@ type accessFacts struct {
 	// PackageUnavailable: the site's package_unavailable_reason (nil: valid).
 	PackageUnavailable *string
 	Enabled            bool
-	CNAME            string
-	CNAMEState       *string
-	CNAMEFailureCode *string
-	Domains          []string
-	HTTPSEnabled     bool
+	CNAME              string
+	CNAMEState         *string
+	CNAMEFailureCode   *string
+	Domains            []string
+	HTTPSEnabled       bool
 
 	LineGroupFound bool
 	OnlineNodes    int
@@ -102,12 +120,15 @@ type accessFacts struct {
 	CertBound, CertActive, CertRevoked bool
 	CertNotBefore, CertNotAfter        *time.Time
 
-	// PublishState: succeeded / failed / pending (publishing) / excluded (the
-	// latest publication does not carry the site), "" never published.
+	// PublishState: site_publication_outcome_618 (migration 618): succeeded /
+	// failed / pending (publishing) / excluded (the latest publication does
+	// not carry the site), "" never published. Only the current publication
+	// on the nodes now serving the site counts.
 	PublishState string
-	// the scope publication read by loadAccessFacts, folded into PublishState.
-	publication, includesSite    bool
-	deployments, healthy, failed int
+	// publish_failed details: the failed serving nodes, or the automatic
+	// request's terminal code when it failed before any publication.
+	PublishFailedNodes []PublishFailedNode
+	PublishFailureCode string
 
 	DNS *dnsCheckRow
 }
@@ -186,6 +207,8 @@ func buildAccessReadiness(facts accessFacts, now time.Time) AccessReadiness {
 		published = check(AccessCheckPublished, false, "site_disabled")
 	case facts.PublishState == "failed":
 		published = check(AccessCheckPublished, false, "publish_failed")
+		published.FailedNodes, published.FailureCode = facts.PublishFailedNodes, facts.PublishFailureCode
+		published.FailedNodeCount, published.FailedNodeReasons = len(facts.PublishFailedNodes), publishFailureReasons(facts.PublishFailedNodes)
 	case facts.PublishState == "pending":
 		published = check(AccessCheckPublished, false, "publishing")
 	case facts.PublishState == "succeeded":
@@ -210,6 +233,35 @@ func buildAccessReadiness(facts accessFacts, now time.Time) AccessReadiness {
 	return result
 }
 
+// publishFailureReasons: the distinct normalized reasons of the failed nodes,
+// sorted: the node's error code without ERROR_CODE_, lower-cased
+// (ERROR_CODE_FAILED_PRECONDITION → failed_precondition), else its state.
+func publishFailureReasons(nodes []PublishFailedNode) []string {
+	var reasons []string
+	for _, node := range nodes {
+		reason := node.State
+		if node.ErrorCode != nil && *node.ErrorCode != "" {
+			reason = strings.ToLower(strings.TrimPrefix(*node.ErrorCode, "ERROR_CODE_"))
+		}
+		if !slices.Contains(reasons, reason) {
+			reasons = append(reasons, reason)
+		}
+	}
+	slices.Sort(reasons)
+	return reasons
+}
+
+// redactForActor drops the platform's node identities from a readiness
+// returned to anyone but a platform actor.
+func (r *AccessReadiness) redactForActor(actor Actor) {
+	if r == nil || actor.ScopeKind == "platform" {
+		return
+	}
+	for index := range r.Checks {
+		r.Checks[index].FailedNodes = nil
+	}
+}
+
 // accessCheckBlocked: the failure needs someone to change something (a
 // line group, the CNAME, a certificate, the site or a failed rollout);
 // generation, DNS propagation and an in-flight rollout only need waiting.
@@ -225,35 +277,6 @@ func accessCheckBlocked(check AccessCheck) bool {
 		return check.Detail == "site_disabled" || check.Detail == "publish_failed"
 	}
 	return false
-}
-
-// publishState: the site's own automatic publication request in flight
-// reads publishing and a failed one publish failed. Otherwise the scope's
-// latest publication decides: when its config version does not carry the
-// site (config_version_telemetry_site_bindings, one row per site of a site
-// runtime v2 version) the site is not live, whatever that rollout did;
-// when it does, its node deployments' latest states decide. A succeeded
-// request alone is not enough: a later publication may have dropped the
-// site. With no publication the site was never published.
-func publishState(requestState string, publication, includesSite bool, total, healthy, failed int) string {
-	switch requestState {
-	case "failed":
-		return requestState
-	case "", "superseded", "succeeded":
-	default:
-		return "pending"
-	}
-	switch {
-	case !publication:
-		return ""
-	case !includesSite:
-		return publishExcluded
-	case failed > 0:
-		return "failed"
-	case total > 0 && healthy == total:
-		return "succeeded"
-	}
-	return "pending"
 }
 
 func sameDomains(left, right []string) bool {

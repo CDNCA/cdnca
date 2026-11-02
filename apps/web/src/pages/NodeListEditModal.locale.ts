@@ -69,7 +69,7 @@ const zhCN = {
       monthFrom: '起，统计一个月',
     },
     help: {
-      ip: '如果新旧IP是不同节点，请使用待初始化里的替换节点功能',
+      ip: '如果新旧IP是不同节点，请使用待初始化里的替换节点功能。修改后会自动更新所在线路组并重新发布 DNS',
       type: 'L1边缘节点是用户实际访问的节点；\nL2中间节点是L1与源服务器之间的节点，用于汇聚L1节点请求，提高缓存命中率，或者优化回源线路。类型只是标识，L2 是否生效取决于 L2配置 与线路分组。',
       typeLink: 'L2 是什么、怎么配置',
       ipLocation: 'L2 配置里按节点国家代码、省份、城市、ISP 设置的条件，按这里的值匹配节点。主控会用 IP 库按节点的 IPv4、IPv6、子 IP 依次查询，自动填写；新增节点、修改 IP 或 IP 库更新后约一分钟内自动刷新。IP 库查得不准，或节点实际出口与这里的 IP 不同时，直接修改对应项即可，改过的项不再被自动刷新覆盖，点“恢复自动”可改回自动查询的结果。修改后，用到这些条件的网站会自动重新发布。',
@@ -200,7 +200,7 @@ const enUS: typeof zhCN = {
       monthFrom: 'start and count one month',
     },
     help: {
-      ip: 'If the old and new IPs belong to different nodes, use Replace node under Pending initialization.',
+      ip: 'If the old and new IPs belong to different nodes, use Replace node under Pending initialization. After the change, the node\'s line groups are updated and DNS is republished automatically.',
       type: 'L1 edge nodes receive user traffic.\nL2 intermediate nodes aggregate L1 requests to improve cache hits or optimize origin routes. The type is only a label; L2 takes effect through L2 configurations and line groups.',
       typeLink: 'What L2 is and how to set it up',
       ipLocation: 'L2 conditions on node country code, province, city, or ISP match nodes by these values. The controller looks up the node\'s IPv4, IPv6, and secondary IPs in its IP library, in that order, and fills them in; they refresh within about a minute of adding the node, changing its IPs, or an IP library update. If the library is wrong or the node\'s egress differs from these IPs, edit the field: an edited field is no longer refreshed automatically, and Restore automatic brings back the looked-up value. Sites using these conditions are republished automatically.',

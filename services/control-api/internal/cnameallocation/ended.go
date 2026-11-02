@@ -110,7 +110,7 @@ func (store *Store) failEndedJobTx(ctx context.Context, tx pgx.Tx, tenantID, job
 		}
 		req.JobID, req.WorkerID, req.Attempt, req.Sequence, req.FailureCode = jobID, endedWorkerID, uint32(max(attempt, 1)), 1, failure
 		allocation, actorScopeID, actorUserID, requestID, err := lockSettlement(ctx, tx, req)
-		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrConflict) {
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrConflict) || errors.Is(err, ErrClaimLost) {
 			return 0, nil
 		}
 		if err != nil {

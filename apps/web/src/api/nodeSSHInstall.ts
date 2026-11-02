@@ -1,3 +1,4 @@
+import i18next from '../i18n'
 import { ApiError, networkApiError, responseApiError } from './auth'
 
 // SSH remote node install (control-api internal/nodesshinstall).
@@ -43,7 +44,9 @@ export type CreateSSHInstallInput = ({
   username: string
   password?: string
   private_key?: string
-} | { targets: SSHInstallTarget[] }) & { batch_id?: string; restrict_ssh?: boolean; language?: string }
+} | { targets: SSHInstallTarget[] }) & { batch_id?: string; restrict_ssh?: boolean; language?: string
+  /** With restrict_ssh: also let in (without a known controller egress, the only addresses let in). */
+  allow_cidrs?: string[] }
 
 export interface SSHAccess {
   node_id: string
@@ -62,6 +65,8 @@ export interface SSHAccess {
 export interface ControllerEgress {
   controller_cidrs: string[]
   configured: boolean
+  /** configured: CDNCA_NODE_SSH_CONTROLLER_CIDRS; detected: the controller's own public address; '': unknown. */
+  source?: 'configured' | 'detected' | ''
   rollback_seconds: number
 }
 
@@ -70,14 +75,6 @@ export interface NodeSSHEndpoint {
   node_name: string
   host: string
   saved: { port: number; username: string; auth_kind: 'password' | 'private_key'; host_key_sha256: string; updated_at: string } | null
-}
-
-export interface NodeSSHHostKey {
-  node_id: string
-  host: string
-  port: number
-  host_key_sha256: string
-  saved_host_key_matches: boolean
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -169,9 +166,6 @@ export const nodeSSHInstallApi = {
 export const nodeSSHTerminalApi = {
   endpoint: (accessToken: string, nodeID: string) => checked<NodeSSHEndpoint>(request(accessToken, nodePath(nodeID, 'ssh-endpoint')),
     (value) => typeof (value as NodeSSHEndpoint)?.host === 'string'),
-  hostKey: (accessToken: string, nodeID: string, port: number) => checked<NodeSSHHostKey>(request(accessToken,
-    nodePath(nodeID, 'ssh-host-key'), { method: 'POST', body: JSON.stringify({ port }) }),
-  (value) => hostKeyPattern.test((value as NodeSSHHostKey)?.host_key_sha256 ?? '')),
   forget: (accessToken: string, nodeID: string) => request(accessToken, nodePath(nodeID, 'ssh-credential'), { method: 'DELETE' }),
   // WebSocket URL on the page's own origin (the API sits behind the same host).
   socketURL: (nodeID: string, base: string = apiRoot || window.location.origin) => {
@@ -253,4 +247,26 @@ export function parseBatchLines(value: string, limit = 100): BatchLine[] {
 export function parseHosts(value: string): string[] {
   const hosts = [...new Set(value.split(/[\s,，]+/).map((host) => host.trim()).filter(Boolean))]
   return hosts.slice(0, 101)
+}
+
+// parseCIDRList splits the "also allow" box (newline, comma or space separated).
+export function parseCIDRList(value: string): string[] {
+  return value.split(/[\s,，]+/).map((item) => item.trim()).filter(Boolean)
+}
+
+// restrictErrorText: an install or access refusal in words. The 409
+// controller_egress_unknown says to fill in the controller's egress IP
+// instead of a generic "request failed".
+export function restrictErrorText(cause: unknown, errorText: (error: ApiError) => string): string {
+  const t = i18next.getFixedT(null, 'nodeSSHInstall')
+  if (!(cause instanceof ApiError)) return t('errors.unavailable')
+  if (cause.code === 'controller_egress_unknown') return t('errors.controller_egress_unknown')
+  if (cause.code === 'ssh_install_in_progress') return t('errors.ssh_install_in_progress')
+  return errorText(cause)
+}
+
+// restrictAllowOf: the "also allow" addresses an install request carries.
+export function restrictAllowOf(restrict: boolean, value: string): { allow_cidrs?: string[] } {
+  const cidrs = restrict ? parseCIDRList(value) : []
+  return cidrs.length > 0 ? { allow_cidrs: cidrs } : {}
 }

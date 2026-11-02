@@ -43,10 +43,12 @@ type accessQuerier interface {
 // enabled, node active/draining, primary or a standby taking over) whose
 // node is not held and heartbeating; an unpublished standby carries no
 // traffic, so it does not make the line usable. The certificate is the
-// site's current binding. The publication is the site's latest automatic
-// request plus the scope's latest publication: whether its config version
-// carries the site (config_version_telemetry_site_bindings) and its node
-// deployments.
+// site's current binding. The publication is
+// site_publication_outcome_618 (migration 618, also behind sync_status): the
+// site's latest automatic request while in flight or failed before any
+// covering publication, else the scope's latest publication on the nodes now
+// serving the site (retired, deleted or removed-from-line-group nodes do not
+// count).
 const accessReadinessSQL = `
 SELECT site.id, site.enabled, site.https_enabled,
 	line.line_group_id IS NOT NULL,
@@ -60,10 +62,7 @@ SELECT site.id, site.enabled, site.https_enabled,
 	COALESCE(active.version_id=binding.version_id, false),
 	EXISTS (SELECT 1 FROM certificate_asset_revocation_facts revoked WHERE revoked.tenant_scope_id=binding.tenant_scope_id
 		AND revoked.asset_id=binding.asset_id AND revoked.version_id=binding.version_id),
-	COALESCE(request.state, ''), publication.rollout_id IS NOT NULL,
-	COALESCE(EXISTS (SELECT 1 FROM config_version_telemetry_site_bindings carried
-		WHERE carried.config_version_id=publication.config_version_id AND carried.site_id=site.id), false),
-	COALESCE(deployment.total, 0), COALESCE(deployment.healthy, 0), COALESCE(deployment.failed, 0),
+	outcome.state, COALESCE(outcome.terminal_code, ''), outcome.failed_nodes,
 	check_row.ok, check_row.detail, check_row.cname, check_row.domains, check_row.checked_at, check_row.manual_requested_at
 FROM sites site
 LEFT JOIN package_subscriptions subscription
@@ -93,25 +92,7 @@ LEFT JOIN LATERAL (
 	WHERE binding.action='bind' AND activation.tenant_scope_id=binding.tenant_scope_id AND activation.asset_id=binding.asset_id
 	ORDER BY activation.sequence DESC LIMIT 1
 ) active ON true
-LEFT JOIN LATERAL (
-	SELECT state.state FROM edge_automatic_publication_requests request_row
-	JOIN LATERAL (SELECT state FROM edge_automatic_publication_request_state_facts
-		WHERE request_id=request_row.id ORDER BY sequence DESC LIMIT 1) state ON true
-	WHERE request_row.target_scope_id=site.scope_id AND request_row.source_kind='site' AND request_row.source_resource_id=site.id
-	ORDER BY request_row.created_at DESC, request_row.id DESC LIMIT 1
-) request ON true
-LEFT JOIN LATERAL (
-	SELECT published.rollout_id, published.config_version_id FROM edge_config_publications published
-	WHERE published.configuration_scope_id=site.scope_id
-	ORDER BY published.created_at DESC, published.id DESC LIMIT 1
-) publication ON true
-LEFT JOIN LATERAL (
-	SELECT count(*) AS total, count(*) FILTER (WHERE latest.state='healthy') AS healthy,
-		count(*) FILTER (WHERE latest.state IN ('failed','reverted','rollback_failed')) AS failed
-	FROM (SELECT DISTINCT ON (node_deployment.id) node_deployment.state FROM node_deployments node_deployment
-		WHERE node_deployment.rollout_id=publication.rollout_id
-		ORDER BY node_deployment.id, node_deployment.attempt DESC) latest
-) deployment ON publication.rollout_id IS NOT NULL
+LEFT JOIN LATERAL site_publication_outcome_618(site.scope_id, site.id) outcome ON true
 LEFT JOIN site_dns_resolution_checks check_row ON check_row.site_id=site.id
 WHERE site.id=ANY($1)`
 
@@ -135,14 +116,17 @@ func loadAccessFacts(ctx context.Context, db accessQuerier, ids []uuid.UUID, onl
 		var checkDetail, checkCNAME *string
 		var checkDomains []string
 		var checkedAt, manualAt *time.Time
+		var failedNodes []byte
 		if err := rows.Scan(&id, &item.Enabled, &item.HTTPSEnabled, &item.LineGroupFound, &item.OnlineNodes,
 			&bound, &item.CertNotBefore, &item.CertNotAfter, &item.CertActive, &item.CertRevoked,
-			&item.PublishState, &item.publication, &item.includesSite, &item.deployments, &item.healthy, &item.failed,
+			&item.PublishState, &item.PublishFailureCode, &failedNodes,
 			&checkOK, &checkDetail, &checkCNAME, &checkDomains, &checkedAt, &manualAt); err != nil {
 			return nil, err
 		}
 		item.CertBound = bound != nil && *bound
-		item.PublishState = publishState(item.PublishState, item.publication, item.includesSite, item.deployments, item.healthy, item.failed)
+		if err := json.Unmarshal(failedNodes, &item.PublishFailedNodes); err != nil {
+			return nil, fmt.Errorf("decode site publication failed nodes: %w", err)
+		}
 		if checkOK != nil {
 			item.DNS = &dnsCheckRow{OK: *checkOK, Domains: checkDomains, CheckedAt: checkedAt, ManualRequestedAt: manualAt}
 			if checkDetail != nil {
@@ -158,7 +142,7 @@ func loadAccessFacts(ctx context.Context, db accessQuerier, ids []uuid.UUID, onl
 }
 
 // projectListAccessReadiness fills access_readiness of a page of sites.
-func (s *Store) projectListAccessReadiness(ctx context.Context, db accessQuerier, items []ListItem) error {
+func (s *Store) projectListAccessReadiness(ctx context.Context, db accessQuerier, actor Actor, items []ListItem) error {
 	ids := make([]uuid.UUID, len(items))
 	for index := range items {
 		ids[index] = items[index].ID
@@ -177,12 +161,13 @@ func (s *Store) projectListAccessReadiness(ctx context.Context, db accessQuerier
 		fact.CNAME, fact.CNAMEState, fact.CNAMEFailureCode, fact.Domains = item.CNAME, item.CNAMEState, item.CNAMEFailureCode, item.Domains
 		fact.PackageUnavailable = item.PackageUnavailableReason
 		readiness := buildAccessReadiness(*fact, now)
+		readiness.redactForActor(actor)
 		item.AccessReadiness = &readiness
 	}
 	return nil
 }
 
-func (s *Store) projectAccessReadiness(ctx context.Context, db accessQuerier, item *Site) error {
+func (s *Store) projectAccessReadiness(ctx context.Context, db accessQuerier, actor Actor, item *Site) error {
 	now := s.now().UTC()
 	facts, err := loadAccessFacts(ctx, db, []uuid.UUID{item.ID}, now.Add(-s.offlineAfter()))
 	if err != nil {
@@ -195,6 +180,7 @@ func (s *Store) projectAccessReadiness(ctx context.Context, db accessQuerier, it
 	fact.CNAME, fact.CNAMEState, fact.CNAMEFailureCode, fact.Domains = item.CNAME, item.CNAMEState, item.CNAMEFailureCode, item.Domains
 	fact.PackageUnavailable = item.PackageUnavailableReason
 	readiness := buildAccessReadiness(*fact, now)
+	readiness.redactForActor(actor)
 	item.AccessReadiness = &readiness
 	return nil
 }

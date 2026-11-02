@@ -132,14 +132,14 @@ func TestGenerateLabelIsEightLowercaseAlphanumerics(t *testing.T) {
 	providerID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
 	for i := 0; i < 2000; i++ {
 		ownerID := uuid.New()
-		label, err := GenerateLabel(labelTestKey, tenantID, providerID, ownerID, ModePackage, "ikvm.asia", uint64(i%5+1))
+		label, err := GenerateLabel(labelTestKey, tenantID, providerID, ownerID, ModePackage, "tenant.example.com", uint64(i%5+1))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !pattern.MatchString(label) {
 			t.Fatalf("label %q is not 8 chars of a-z0-9", label)
 		}
-		again, err := GenerateLabel(labelTestKey, tenantID, providerID, ownerID, ModePackage, "IKVM.asia.", uint64(i%5+1))
+		again, err := GenerateLabel(labelTestKey, tenantID, providerID, ownerID, ModePackage, "TENANT.example.com.", uint64(i%5+1))
 		if err != nil || again != label {
 			t.Fatalf("same input produced %q then %q (err %v)", label, again, err)
 		}
@@ -177,15 +177,15 @@ func TestBase36PrefixKeepsFixedWidth(t *testing.T) {
 func TestFreeGeneratedHostnameAdvancesLabelGenerationOnCollision(t *testing.T) {
 	tenantID, providerID, ownerID := uuid.New(), uuid.New(), uuid.New()
 	label := func(generation uint64) string {
-		value, err := GenerateLabel(labelTestKey, tenantID, providerID, ownerID, ModePackage, "ikvm.asia", generation)
+		value, err := GenerateLabel(labelTestKey, tenantID, providerID, ownerID, ModePackage, "tenant.example.com", generation)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return value + ".ikvm.asia"
+		return value + ".tenant.example.com"
 	}
 	claimed := map[string]bool{label(4): true, label(5): true}
 	var checked []string
-	got, err := freeGeneratedHostname(labelTestKey, tenantID, providerID, ownerID, ModePackage, "ikvm.asia", 4,
+	got, err := freeGeneratedHostname(labelTestKey, tenantID, providerID, ownerID, ModePackage, "tenant.example.com", 4,
 		func(hostname string) (bool, error) {
 			checked = append(checked, hostname)
 			return claimed[hostname], nil
@@ -196,7 +196,7 @@ func TestFreeGeneratedHostnameAdvancesLabelGenerationOnCollision(t *testing.T) {
 	if got != label(6) || len(checked) != 3 {
 		t.Fatalf("hostname=%q after %d checks, want %q after 3", got, len(checked), label(6))
 	}
-	free, err := freeGeneratedHostname(labelTestKey, tenantID, providerID, ownerID, ModePackage, "ikvm.asia", 4,
+	free, err := freeGeneratedHostname(labelTestKey, tenantID, providerID, ownerID, ModePackage, "tenant.example.com", 4,
 		func(string) (bool, error) { return false, nil })
 	if err != nil || free != label(4) {
 		t.Fatalf("uncontended hostname=%q err=%v, want %q", free, err, label(4))

@@ -148,6 +148,8 @@ export interface SiteListItem {
   cname_state?: 'pending' | 'failed' | 'done' | null
   // Why the current CNAME task failed (cname_state=failed), e.g. cname_zone_not_configured.
   cname_failure_code?: string | null
+  // Why a pending CNAME has not settled (cname_state=pending), e.g. cname_stalled.
+  cname_pending_code?: string | null
   // The CNAME domain of the site ('' = the default CNAME domain).
   cname_domain?: string | null
   cname_task_id?: string | null
@@ -181,7 +183,23 @@ export type SiteAccessCheckCode = 'package' | 'line_group' | 'cname_generated' |
 /** 接入状态：ready 全部通过；blocked 需要有人处理；pending 等生成/解析/发布。 */
 export interface SiteAccessReadiness {
   state: 'ready' | 'pending' | 'blocked'
-  checks: Array<{ code: SiteAccessCheckCode; ok: boolean; detail: string; checked_at: string | null }>
+  checks: Array<{
+    code: SiteAccessCheckCode; ok: boolean; detail: string; checked_at: string | null
+    /** published / publish_failed：当前承担本站、本次发布失败的节点（已退役/移出线路组的不列）；只给平台管理员（平台节点名不给用户看）。 */
+    failed_nodes?: SitePublishFailedNode[]
+    /** published / publish_failed：失败节点数与归一化原因（去掉 ERROR_CODE_ 的小写码或部署状态），所有身份都有。 */
+    failed_node_count?: number
+    failed_node_reasons?: string[]
+    /** published / publish_failed：自动发布在下发前就失败时的终态码（如 no_target_nodes）。 */
+    failure_code?: string
+  }>
+}
+
+export interface SitePublishFailedNode {
+  node_id: string
+  node_name: string
+  state: 'failed' | 'reverted' | 'rollback_failed' | 'cancelled'
+  error_code: string | null
 }
 
 /** Why a site is not served for lack of a valid package. */
@@ -279,6 +297,8 @@ export interface SiteBasicConfig {
   cname_state?: 'pending' | 'failed' | 'done' | null
   // Why the current CNAME task failed (cname_state=failed), e.g. cname_zone_not_configured.
   cname_failure_code?: string | null
+  // Why a pending CNAME has not settled (cname_state=pending), e.g. cname_stalled.
+  cname_pending_code?: string | null
   cname_task_id?: string | null
   cname_current_revision?: number | null
   cname_lkg_revision?: number | null
@@ -1124,7 +1144,7 @@ function matchesCreatedBasic(actual: unknown, expected: CreateSiteBasic): boolea
   // Servers since 1.0.35 add the forced HTTPS facts.
   const keys = Object.keys(value).filter((key) =>
     key !== 'force_https' && key !== 'https_redirect_port' && key !== 'cache_shared_across_domains' &&
-    key !== 'cache_status_header' && key !== 'cname_failure_code' && !siteTLSProfileKeys.includes(key))
+    key !== 'cache_status_header' && key !== 'cname_failure_code' && key !== 'cname_pending_code' && !siteTLSProfileKeys.includes(key))
   if (keys.sort().join(',') !== siteBasicKeys.join(',')) return false
   if (value.force_https !== undefined && typeof value.force_https !== 'boolean') return false
   if (value.cache_shared_across_domains !== undefined && typeof value.cache_shared_across_domains !== 'boolean') return false
@@ -1488,6 +1508,13 @@ async function checkAccess(accessToken: string, id: string): Promise<SiteAccessR
   return body
 }
 
+/** 接入状态 > 已发布到节点 > 重新发布：不改配置再发布一次；发布中 409 publish_in_flight。 */
+async function republish(accessToken: string, id: string): Promise<SiteAccessReadiness> {
+  const body = await request<unknown>(accessToken, `/v1/sites/${encodeURIComponent(id)}/republish`, { method: 'POST' }, 202)
+  if (!validAccessReadiness(body)) throw new ApiError('Invalid republish response', 502, 'invalid_response')
+  return body
+}
+
 function validAccessReadiness(value: unknown): value is SiteAccessReadiness {
   if (typeof value !== 'object' || value === null) return false
   const readiness = value as SiteAccessReadiness
@@ -1496,4 +1523,4 @@ function validAccessReadiness(value: unknown): value is SiteAccessReadiness {
       typeof check.ok === 'boolean' && typeof check.detail === 'string')
 }
 
-export const sitesApi = { batchAction, checkAccess, create, detail, exportDomains, list, lock, patchBasic, patchOrigin, transfer, unlock }
+export const sitesApi = { batchAction, checkAccess, create, detail, exportDomains, list, lock, patchBasic, patchOrigin, republish, transfer, unlock }

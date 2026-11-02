@@ -123,7 +123,7 @@ func TestValidateSSHAccessCommandAndReceipt(t *testing.T) {
 	}
 }
 
-// The wire numbers are the ones the main session assigned (COORD.md):
+// The wire numbers are fixed:
 // ConnectRequest 29, ConnectResponse 32, CapabilityName 78. Changing them
 // breaks deployed agents.
 func TestSSHAccessWireNumbersAreFixed(t *testing.T) {

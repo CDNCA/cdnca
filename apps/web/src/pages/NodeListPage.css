@@ -290,7 +290,7 @@
   color: var(--cdnca-color-primary);
 }
 
-/* fix-ui1026：区域与线路组上下两行，窄列下不再叠到“节点 IP”列上。 */
+/* 区域与线路组上下两行，窄列下不再叠到“节点 IP”列上。 */
 .node-table-scroll .node-region-cell {
   display: flex;
   flex-direction: column;
@@ -395,7 +395,7 @@
   color: var(--cdnca-color-primary);
 }
 
-/* fix-stoppolicy2: 已冻结 sits after the state; wraps under it in a narrow column. */
+/* 已冻结 sits after the state; wraps under it in a narrow column. */
 .node-status-cell:has(.node-frozen-tag) {
   flex-wrap: wrap;
   row-gap: 2px;
@@ -1236,11 +1236,6 @@
 }
 .node-ssh-card-title { margin: 0 0 4px; font-size: 15px; font-weight: 600; color: var(--cdnca-color-text); }
 .node-ssh-label { font-size: 13px; font-weight: 500; color: var(--cdnca-color-text); }
-.node-ssh-hostkey { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-.node-ssh-fingerprint {
-  display: block; padding: 6px 8px; overflow-wrap: anywhere; font-size: 12px;
-  background: var(--cdnca-color-bg-page); border-radius: 4px; color: var(--cdnca-color-text);
-}
 .node-ssh-terminal-card { gap: 10px; }
 .node-ssh-terminal-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--cdnca-color-text-secondary); }
 .node-ssh-terminal-frame, .node-ssh-terminal-placeholder {
@@ -1261,6 +1256,7 @@
 .node-ssh-preview { margin-top: 4px; }
 .node-ssh-preview .node-ssh-preview-invalid > td { background: color-mix(in srgb, var(--cdnca-color-error, #ed4014) 8%, transparent); }
 .node-ssh-restrict { margin-top: 4px; }
+.node-ssh-restrict-allow { display: flex; flex-direction: column; gap: 6px; }
 .node-ssh-jobs-block { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .node-ssh-jobs-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .node-ssh-jobs { overflow-x: auto; }

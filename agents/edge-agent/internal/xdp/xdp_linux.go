@@ -133,7 +133,7 @@ func (m *Manager) probe(options Options) Status {
 		if errors.Is(err, unix.ENOSYS) || errors.Is(err, unix.EPERM) || errors.Is(err, ebpf.ErrNotSupported) {
 			return withKernel(fallback(ReasonBPFUnavailable, err))
 		}
-		return withKernel(fallback(ReasonLoadFailed, err))
+		return withKernel(fallback(ReasonLoadFailed, loadError(kernel, err)))
 	}
 	if err := m.selfTest(); err != nil {
 		return withKernel(fallback(ReasonSelfTestFailed, err))

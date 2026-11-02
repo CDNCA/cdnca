@@ -422,6 +422,7 @@ type Site struct {
 	CNAMEHostname            *string           `json:"cname_hostname"`
 	CNAMEState               *string           `json:"cname_state"`
 	CNAMEFailureCode         *string           `json:"cname_failure_code"` // why the current CNAME task failed
+	CNAMEPendingCode         *string           `json:"cname_pending_code"` // why a pending CNAME has not settled (cnamePendingCodeColumn)
 	CNAMETaskID              *uuid.UUID        `json:"cname_task_id"`
 	CNAMECurrentRevision     *int64            `json:"cname_current_revision"`
 	CNAMELKGRevision         *int64            `json:"cname_lkg_revision"`
@@ -526,6 +527,7 @@ type ListItem struct {
 	PackageSubscriptionID *uuid.UUID      `json:"package_subscription_id"`
 	CNAMEState            *string         `json:"cname_state"`
 	CNAMEFailureCode      *string         `json:"cname_failure_code"`
+	CNAMEPendingCode      *string         `json:"cname_pending_code"`
 	CNAMEDomain           *string         `json:"cname_domain"`
 	CNAMETaskID           *uuid.UUID      `json:"cname_task_id"`
 	CNAMECurrentRevision  *int64          `json:"cname_current_revision"`

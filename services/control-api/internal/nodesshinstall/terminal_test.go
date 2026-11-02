@@ -326,9 +326,45 @@ func TestTerminalLoginValidation(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// The fingerprint the operator confirmed is required.
+	// a fingerprint is optional, but a malformed one is refused.
 	if _, _, _, err := service.terminalLogin(context.Background(), Actor{}, TerminalRequest{Port: 22, Cols: 80, Rows: 24,
-		Credential: Credential{Username: "root", Password: "x"}}); !errors.Is(err, ErrHostKeyRequired) {
-		t.Fatalf("no fingerprint: %v", err)
+		Credential: Credential{Username: "root", Password: "x"}, HostKeySHA256: "SHA256:short"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("bad fingerprint: %v", err)
+	}
+	given := "SHA256:" + strings.Repeat("B", 43)
+	if _, pinned, _, err := service.terminalLogin(context.Background(), Actor{}, TerminalRequest{Port: 22, Cols: 80, Rows: 24,
+		Credential: Credential{Username: "root", Password: "x"}, HostKeySHA256: given}); err != nil || pinned != given {
+		t.Fatalf("given fingerprint: %q %v", pinned, err)
+	}
+}
+
+// Trust on first use: with no pinned key the shell is opened
+// with the key presented, which is reported for pinning; a pinned key still
+// refuses any other.
+func TestOpenShellTrustsFirstUseAndReportsTheKey(t *testing.T) {
+	server := startTestSSHD(t)
+	host, port := splitHostPort(t, server.address)
+	dialer := NewDialer(allowLoopback)
+	login := Credential{Username: "root", Password: "test-password"}
+	shell, err := dialer.OpenShell(context.Background(), host, port, login, "", 80, 24, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shell.HostKeySHA256 != server.fingerprint {
+		t.Fatalf("first use key = %q, want %q", shell.HostKeySHA256, server.fingerprint)
+	}
+	_ = shell.Close()
+	shell, err = dialer.OpenShell(context.Background(), host, port, login, server.fingerprint, 80, 24, io.Discard)
+	if err != nil || shell.HostKeySHA256 != server.fingerprint {
+		t.Fatalf("pinned: %v", err)
+	}
+	_ = shell.Close()
+	if _, err := dialer.OpenShell(context.Background(), host, port, login, "SHA256:"+strings.Repeat("C", 43), 80, 24,
+		io.Discard); !errors.Is(err, errHostKeyMismatch) {
+		t.Fatalf("changed key accepted: %v", err)
+	}
+	// Installs (Run) never trust on first use.
+	if err := dialer.Run(context.Background(), host, port, login, "", "true", nil, func(string) {}); !errors.Is(err, errHostKeyMismatch) {
+		t.Fatalf("install without a pinned key: %v", err)
 	}
 }

@@ -6,6 +6,9 @@
 #   1. generic XDP on a veth: bans, malformed flags, SYN rate, port bans, L5
 #      blocks, counters, normal traffic, verify failure -> nftables; the DDoS
 #      table with XDP in front (XDP drops first, fallback leaves no gap);
+#      the verifier complexity guard (cdnca_xdp_filter under 200000
+#      instructions as built and with static subprograms) and the site drop
+#      verdicts (CDNCA_XDP_COMPARE_OBJECT: same as another xdp.bpf.o);
 #      the Agent watch (cmd/edge-agent): fallback and reattach are each one
 #      node security event and XDP_FILTER follows the filter (xdp-events);
 #   2. a node without BPF (seccomp refuses bpf(2)): the probe reports

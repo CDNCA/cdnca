@@ -2,6 +2,7 @@ package site
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -310,4 +311,100 @@ func TestCNAMEJobEndedFailsSite(t *testing.T) {
 			t.Fatalf("second sweep added audits: %d", got)
 		}
 	})
+
+	// 「重新生成」 while the allocation job is running cancels
+	// it in the regenerate transaction and the new job starts at once (it
+	// waited on ErrConflict until the old job ended). The old worker can no
+	// longer write back, the terminal hook of the cancelled job leaves the site
+	// alone, and the site ends on the new job's CNAME.
+	// "yielded": the worker gave the lease back while its child DNS task is in
+	// flight (Worker.yield), the job is queued on attempt 1.
+	for _, variant := range []string{"running", "yielded"} {
+		t.Run("regenerate supersedes a "+variant+" allocation", func(t *testing.T) {
+			created, old := allocated("ended-supersede-" + variant)
+			oldClaim := start(old.JobID, "dns.cname.allocation")
+			if variant == "yielded" {
+				if err := cname.Yield(ctx, oldClaim, time.Minute); err != nil {
+					t.Fatal(err)
+				}
+			}
+			read, err := service.Get(ctx, owner, created.Site.ID)
+			if err != nil || read.CNAMEState == nil || *read.CNAMEState != "pending" {
+				t.Fatalf("fixture site %v err=%v", read.CNAMEState, err)
+			}
+			regenerate := fields("ended-supersede-" + variant + ".example.co.uk")
+			regenerate.CNAMERegenerate = true
+			updated, err := service.Update(ctx, owner, UpdateRequest{ID: created.Site.ID, ExpectedRevision: read.Revision,
+				Fields: regenerate, IdempotencyKey: "ended-supersede-regenerate-" + variant, RequestID: "ended-supersede-regenerate-" + variant})
+			if err != nil || updated.Site.CNAMETaskID == nil {
+				t.Fatalf("regenerate err=%v", err)
+			}
+			if err := cname.PrepareIntent(ctx, start(*updated.Site.CNAMETaskID, "dns.cname.intent")); err != nil {
+				t.Fatalf("regenerate intent while the old job runs: %v", err)
+			}
+			fresh, err := cname.Get(ctx, tenant.scopeID, created.Site.ID)
+			if err != nil || fresh.State != cnameallocation.StatePending || fresh.JobID == old.JobID {
+				t.Fatalf("regenerated allocation %+v err=%v", fresh, err)
+			}
+			if state, code := jobState(old.JobID); state != "cancelled" || code != jobstate.CodeCancelled {
+				t.Fatalf("old job state=%s code=%s, want cancelled", state, code)
+			}
+			// The new job is claimable now, not after the old one ends.
+			claims, err := jobs.Claim(ctx, jobstate.ClaimInput{TenantID: tenantID, Kind: "dns.cname.allocation",
+				WorkerID: "ended-worker", Limit: 8, LeaseDuration: time.Minute})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var claim jobstate.Claim
+			for _, candidate := range claims {
+				if candidate.Job.ID == fresh.JobID {
+					claim = candidate
+				}
+			}
+			if claim.Job.ID != fresh.JobID {
+				t.Fatalf("new job %s not claimable, claimed %d", fresh.JobID, len(claims))
+			}
+			// The old worker's write-back is refused, the site stays on the new job.
+			oldResult := cnameallocation.ResultRequest{TargetScopeID: tenant.scopeID, SiteID: created.Site.ID,
+				AllocationID: old.ID, JobID: old.JobID, ExpectedRevision: old.Revision, WorkerID: oldClaim.WorkerID,
+				Attempt: oldClaim.Job.Attempt, LeaseID: oldClaim.LeaseID, Sequence: 1}
+			if _, err := cname.Complete(ctx, oldResult); !errors.Is(err, cnameallocation.ErrClaimLost) {
+				t.Fatalf("old worker complete err=%v, want ErrClaimLost", err)
+			}
+			oldResult.FailureCode = "dns_reconcile_failed"
+			if _, err := cname.Fail(ctx, oldResult); !errors.Is(err, cnameallocation.ErrClaimLost) {
+				t.Fatalf("old worker fail err=%v, want ErrClaimLost", err)
+			}
+			if _, err := cname.LoadTarget(ctx, oldClaim); !errors.Is(err, cnameallocation.ErrClaimLost) {
+				t.Fatalf("old worker load target err=%v, want ErrClaimLost", err)
+			}
+			var siteState string
+			var siteTask uuid.UUID
+			if err := pool.QueryRow(ctx, `SELECT cname_state,cname_task_id FROM sites WHERE id=$1`, created.Site.ID).Scan(
+				&siteState, &siteTask); err != nil || siteState != "pending" || siteTask != fresh.JobID {
+				t.Fatalf("site after old write-back state=%s task=%s err=%v", siteState, siteTask, err)
+			}
+			if got := audits(created.Site.ID, "terminal"); got != 0 {
+				t.Fatalf("cancelled job's terminal hook failed the site: %d audits", got)
+			}
+			// The old owner is retired after the rotation grace (its child may
+			// still be writing), not at once.
+			var eligible time.Time
+			if err := pool.QueryRow(ctx, `SELECT eligible_at FROM cname_record_retirements
+			WHERE allocation_id=$1 AND owner_name=lower($2)`, old.ID, old.Hostname).Scan(&eligible); err != nil ||
+				eligible.Before(jobClock.Add(23*time.Hour)) {
+				t.Fatalf("old owner retirement eligible_at=%s err=%v", eligible, err)
+			}
+			if _, err := cname.Complete(ctx, cnameallocation.ResultRequest{TargetScopeID: tenant.scopeID, SiteID: created.Site.ID,
+				AllocationID: fresh.ID, JobID: fresh.JobID, ExpectedRevision: fresh.Revision, WorkerID: claim.WorkerID,
+				Attempt: claim.Job.Attempt, LeaseID: claim.LeaseID, Sequence: 1}); err != nil {
+				t.Fatal(err)
+			}
+			var siteCNAME string
+			if err := pool.QueryRow(ctx, `SELECT cname,cname_state FROM sites WHERE id=$1`, created.Site.ID).Scan(
+				&siteCNAME, &siteState); err != nil || siteState != "done" || siteCNAME != fresh.Hostname || siteCNAME == old.Hostname {
+				t.Fatalf("site cname=%q state=%s, want %q (old %q) err=%v", siteCNAME, siteState, fresh.Hostname, old.Hostname, err)
+			}
+		})
+	}
 }

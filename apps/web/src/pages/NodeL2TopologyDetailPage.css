@@ -397,11 +397,22 @@
   white-space: nowrap;
 }
 
-.node-line-resolution-detail-page .node-line-resolution-table-scroll td.node-line-resolution-name,
 .node-line-resolution-detail-page .node-line-resolution-table-scroll td.node-line-resolution-address {
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 20px;
+}
+
+/* 名称列单行省略（全名见 Tooltip）；表格宽度不够时由 scroll.x 横向滚动，不再挤列。 */
+.node-line-resolution-detail-page .node-line-resolution-table-scroll td.node-line-resolution-name {
+  white-space: nowrap;
+}
+
+.node-line-resolution-name-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .node-line-resolution-table-scroll .ant-table-cell code {

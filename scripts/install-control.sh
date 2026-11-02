@@ -4931,6 +4931,12 @@ http {
         "~^(?:200|304):/site/assets/[^/]+-[-_A-Za-z0-9]{8,}\.[^/]+\$" "public, max-age=31536000, immutable";
         "~^(?:200|304):/v1/brand-assets/(?:favicon|logo|login_ad)\$" "";
     }
+    # WebSocket upgrades under /v1/ (the console SSH terminal); other requests
+    # keep "Connection: close" to the API exactly as before.
+    map \$http_upgrade \$connection_upgrade {
+        default upgrade;
+        '' close;
+    }
 
     server {
         listen ${WEB_LISTEN} ssl http2;
@@ -5072,6 +5078,8 @@ http {
                 proxy_pass http://127.0.0.1:8080;
             }
             proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection \$connection_upgrade;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$remote_addr;

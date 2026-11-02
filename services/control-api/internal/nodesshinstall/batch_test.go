@@ -1,7 +1,10 @@
 package nodesshinstall
 
 import (
+	"context"
 	"errors"
+	"net"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -69,7 +72,58 @@ func TestControllerEgressConfig(t *testing.T) {
 	}
 	// Without a known egress, "only the controller" cannot be turned on.
 	service := &Service{}
-	if len(service.ControllerEgress()) != 0 {
+	if cidrs, source := service.ControllerEgress(context.Background()); len(cidrs) != 0 || source != "" {
 		t.Fatal("egress without config")
+	}
+	// unconfigured, the detected public address is used; the configured list wins.
+	service.UseEgressDetector(func(context.Context) []string { return []string{"203.0.113.9"} })
+	if cidrs, source := service.ControllerEgress(context.Background()); len(cidrs) != 1 || cidrs[0] != "203.0.113.9/32" ||
+		source != EgressDetected {
+		t.Fatalf("detected = %v %s", cidrs, source)
+	}
+	service.access = config
+	if cidrs, source := service.ControllerEgress(context.Background()); len(cidrs) != 3 || source != EgressConfigured {
+		t.Fatalf("configured = %v %s", cidrs, source)
+	}
+	// A detector returning junk is ignored.
+	service.access = nil
+	service.UseEgressDetector(func(context.Context) []string { return []string{"not-an-ip"} })
+	if cidrs, source := service.ControllerEgress(context.Background()); len(cidrs) != 0 || source != "" {
+		t.Fatalf("junk detected = %v %s", cidrs, source)
+	}
+}
+
+func TestDetectEgress(t *testing.T) {
+	interfaces := func(values ...string) func() ([]net.Addr, error) {
+		return func() ([]net.Addr, error) {
+			out := []net.Addr{}
+			for _, value := range values {
+				ip, network, err := net.ParseCIDR(value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				network.IP = ip
+				out = append(out, network)
+			}
+			return out, nil
+		}
+	}
+	for name, test := range map[string]struct {
+		gateway    string
+		interfaces func() ([]net.Addr, error)
+		want       string
+	}{
+		// install-control.sh writes the host's public IP as the local Gateway address.
+		"gateway public ip":       {"203.0.113.7:20407", interfaces("198.51.100.4/24"), "203.0.113.7"},
+		"gateway ipv6":            {"[2001:db8::7]:20407", nil, "2001:db8::7"},
+		"gateway domain ignored":  {"gateway.example.com:20407", interfaces("10.0.0.5/8", "198.51.100.4/24"), "198.51.100.4"},
+		"gateway private ignored": {"10.0.0.5:20407", interfaces("127.0.0.1/8", "172.16.3.4/12", "100.64.1.2/10", "fe80::1/64"), ""},
+		"nothing":                 {"", nil, ""},
+		"interfaces error":        {"", func() ([]net.Addr, error) { return nil, errors.New("x") }, ""},
+	} {
+		got := strings.Join(DetectEgress(test.gateway, test.interfaces), ",")
+		if got != test.want {
+			t.Errorf("%s: %q, want %q", name, got, test.want)
+		}
 	}
 }

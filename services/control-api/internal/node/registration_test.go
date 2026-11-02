@@ -109,21 +109,36 @@ func TestNormalizeRegistrationRequest(t *testing.T) {
 	if normalized, err := normalizeRegisterRequest(v6); err != nil || normalized.ipv6 != "2001:db8::9" || normalized.ipv4 != "" {
 		t.Fatalf("IPv6 source = %+v, %v", normalized, err)
 	}
-	// The installer's reported public IP fills in when the request came over
-	// a private network or loopback; a public source address wins.
-	for _, c := range []struct{ source, reported, want string }{
-		{"10.0.0.5", "8.8.8.8", "8.8.8.8"},
-		{"127.0.0.1", "1.1.1.1", "1.1.1.1"},
-		{"8.8.4.4", "1.1.1.1", "8.8.4.4"},
-		{"10.0.0.5", "not-an-ip", "10.0.0.5"},
-		{"10.0.0.5", "192.168.1.9", "10.0.0.5"},
-		{"127.0.0.1", "", ""},
+	// The installer's reported public IP wins over the source address (a
+	// console behind a CDN without real-ip sees the CDN edge); a source in a
+	// known CDN range is never the node's IP.
+	for _, c := range []struct {
+		source, reported, want string
+		cdn                    bool
+	}{
+		{"10.0.0.5", "8.8.8.8", "8.8.8.8", false},
+		{"127.0.0.1", "1.1.1.1", "1.1.1.1", false},
+		{"8.8.4.4", "1.1.1.1", "1.1.1.1", false},
+		{"8.8.4.4", "", "8.8.4.4", false},
+		{"10.0.0.5", "not-an-ip", "10.0.0.5", false},
+		{"10.0.0.5", "192.168.1.9", "10.0.0.5", false},
+		{"127.0.0.1", "", "", false},
+		// User 11-02: a console behind Cloudflare recorded 162.158.193.46.
+		{"162.158.193.46", "11.0.0.80", "11.0.0.80", true},
+		{"162.158.193.46", "", "", true},
+		{"162.158.193.46", "10.0.0.5", "", true},
+		{"8.8.4.4", "104.16.1.1", "8.8.4.4", false},
 	} {
 		r := valid
 		r.SourceIP, r.PublicIP = c.source, c.reported
-		if normalized, err := normalizeRegisterRequest(r); err != nil || normalized.ipv4 != c.want {
+		if normalized, err := normalizeRegisterRequest(r); err != nil || normalized.ipv4 != c.want || normalized.sourceCDN != c.cdn {
 			t.Errorf("source %s reported %s: %+v %v, want %s", c.source, c.reported, normalized, err, c.want)
 		}
+	}
+	cdn6 := valid
+	cdn6.SourceIP, cdn6.PublicIP = "2606:4700::6810:1", "2001:4860::8888"
+	if normalized, err := normalizeRegisterRequest(cdn6); err != nil || normalized.ipv6 != "2001:4860::8888" || !normalized.sourceCDN {
+		t.Fatalf("IPv6 CDN source = %+v, %v", normalized, err)
 	}
 	empty := valid
 	empty.Hostname = ""

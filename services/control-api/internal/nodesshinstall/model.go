@@ -109,7 +109,8 @@ type Target struct {
 // the node downloads install-node.sh from (https only). BatchID, when set,
 // adds the jobs to an existing batch of this scope (retrying one failed host
 // keeps it in its batch). RestrictSSH turns on "only the controller may SSH"
-// for the node each job registers. Language ("" / "zh" / "en", migration 610)
+// for the node each job registers, with AllowCIDRs also let in (without a
+// known controller egress they are its only addresses). Language ("" / "zh" / "en", migration 610)
 // is the operator's UI language; the install command carries it as --lang.
 type CreateRequest struct {
 	Targets      []Target
@@ -117,6 +118,7 @@ type CreateRequest struct {
 	ControlPlane string
 	BatchID      uuid.UUID
 	RestrictSSH  bool
+	AllowCIDRs   []string
 	Language     string
 }
 

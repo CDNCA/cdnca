@@ -87,6 +87,16 @@ type Status struct {
 	Kernel     string   `json:"kernel,omitempty"`
 }
 
+// loadError names a verifier complexity refusal (E2BIG, "BPF program is too
+// large" past the 1000000 instruction limit) up front: Detail is bounded and
+// the verifier text alone does not say what failed.
+func loadError(kernel string, err error) error {
+	if text := err.Error(); strings.Contains(text, "too large") || strings.Contains(text, "argument list too long") {
+		return fmt.Errorf("kernel %s BPF verifier refused the program (complexity limit), node runs nftables, sites unaffected: %w", kernel, err)
+	}
+	return err
+}
+
 // MaxDetail bounds Status.Detail.
 const MaxDetail = 256
 

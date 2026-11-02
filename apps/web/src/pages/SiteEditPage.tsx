@@ -964,6 +964,15 @@ function SiteEditPageContent({
     else setSearchParams({ tab }, { replace: true })
   }
 
+  // 列表状态列“接入受阻”点进来（?focus=access）时直接定位到「基本配置」的接入状态卡。
+  const focusAccess = searchParams.get('focus') === 'access'
+  const detailLoaded = detail !== null
+  useEffect(() => {
+    if (focusAccess && detailLoaded) openTabAt((tab) => setTab(tab as TabKey), 'basic', 'site-access-card')
+    // setTab 每次渲染新建，只按“带 focus 且详情已加载”触发一次（setTab 会清掉 focus）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusAccess, detailLoaded])
+
   // A change is saved at once (typed fields on blur / Enter).
   const updateDraft = (value: SiteBasicConfig) => {
     if (!canManage || uncertainWrite || batchWriteLocked) return
@@ -1429,6 +1438,13 @@ function SiteEditPageContent({
                 const readiness = await sitesApi.checkAccess(accessToken, detail.id)
                 queryClient.setQueryData<SiteDetail | null>(detailQueryKey,
                   (current) => current ? { ...current, access_readiness: readiness } : current)
+              } : undefined}
+              // “已发布到节点”未通过时重新发布（sites.manage，未被锁定）；之后重读详情让同步状态跟上。
+              onRepublish={accessToken && canManage && !lockedForTenant ? async () => {
+                const readiness = await sitesApi.republish(accessToken, detail.id)
+                queryClient.setQueryData<SiteDetail | null>(detailQueryKey,
+                  (current) => current ? { ...current, access_readiness: readiness } : current)
+                void queryClient.invalidateQueries({ queryKey: detailQueryKey })
               } : undefined} />
           ) : null}
           <BasicSiteTab

@@ -14,9 +14,10 @@ import (
 
 // The console SSH terminal (node management "SSH" tab): a platform
 // administrator opens an interactive shell on a node from the browser. The
-// controller dials the node's address with the host key the operator
-// confirmed (or the one pinned with a remembered login), so the browser never
-// talks SSH and the node never sees the browser.
+// controller dials the node's address with the host key already known for it
+// (the one pinned with a remembered login, or the one an SSH install
+// confirmed), trusting the presented key on first use, so the
+// browser never talks SSH and the node never sees the browser.
 
 // PermissionSSH: only holders of platform.admin pass identity.Authorize; no
 // role is granted it (migration 608).
@@ -36,9 +37,8 @@ const (
 const terminalCredentialDomain = "cdnca-node-ssh-terminal-credential/v1\x00"
 
 var (
-	ErrNoAddress       = errors.New("the node has no address to SSH to")
-	ErrTerminalsBusy   = errors.New("too many SSH terminals are open")
-	ErrHostKeyRequired = errors.New("the host key must be confirmed")
+	ErrNoAddress     = errors.New("the node has no address to SSH to")
+	ErrTerminalsBusy = errors.New("too many SSH terminals are open")
 )
 
 // NodeEndpoint is where a node's sshd is reached, and its remembered login
@@ -61,8 +61,11 @@ type SavedCredential struct {
 
 // TerminalRequest opens a terminal. With UseSaved the remembered login and
 // its pinned host key are used (Credential and HostKeySHA256 are ignored);
-// otherwise Credential is the login and HostKeySHA256 the fingerprint the
-// operator confirmed. Remember stores the login after it succeeded.
+// otherwise Credential is the login and HostKeySHA256 an optional expected
+// fingerprint: without it the controller uses the key already known for the
+// node (remembered login, else a confirmed SSH install), or trusts the key
+// presented on first use. Remember stores the login after it succeeded and
+// pins the key the connection was made with; a later change is refused.
 type TerminalRequest struct {
 	NodeID        uuid.UUID
 	Port          int
@@ -83,6 +86,8 @@ type Terminal struct {
 	username string
 	id       uuid.UUID
 	started  time.Time
+	// Remembered: the login was saved (Remember) for the next connection.
+	Remembered bool
 }
 
 func terminalBinding(nodeID uuid.UUID) dnsacme.CredentialBinding {
@@ -241,9 +246,12 @@ func (service *Service) OpenTerminal(ctx context.Context, actor Actor, request T
 		_ = service.terminalAudit(ctx, actor, "node.ssh.session.start", request.NodeID.String(), "failure", reason, payload)
 		return nil, err
 	}
+	// First use: the key this connection was made with is the one pinned from now on.
+	pinned = shell.HostKeySHA256
 	terminal := &Terminal{Shell: shell, service: service, actor: actor, endpoint: endpoint, port: port,
 		username: credential.Username, id: uuid.New(), started: service.now().UTC()}
 	payload["session_id"] = terminal.id.String()
+	payload["host_key_sha256"] = pinned
 	if err := service.terminalAudit(ctx, actor, "node.ssh.session.start", request.NodeID.String(), "success", "", payload); err != nil {
 		// An unaudited session is not allowed.
 		_ = shell.Close()
@@ -253,12 +261,17 @@ func (service *Service) OpenTerminal(ctx context.Context, actor Actor, request T
 	if request.Remember && !request.UseSaved {
 		if err := service.rememberCredential(ctx, actor, request.NodeID, port, credential, pinned); err != nil {
 			service.logger.Warn("remember SSH terminal credential failed", "node_id", request.NodeID, "error", err)
+		} else {
+			terminal.Remembered = true
 		}
 	}
 	return terminal, nil
 }
 
-// terminalLogin resolves the login, the pinned host key and the port.
+// terminalLogin resolves the login, the pinned host key and the port. A
+// typed login without a fingerprint uses the key already known for the node
+// on that port (the remembered login's pin, else the one a successful SSH
+// install confirmed); none known: "" (trust on first use, see OpenShell).
 func (service *Service) terminalLogin(ctx context.Context, actor Actor, request TerminalRequest) (Credential, string, int, error) {
 	if request.Cols < 1 || request.Cols > 1000 || request.Rows < 1 || request.Rows > 500 {
 		return Credential{}, "", 0, ErrInvalidInput
@@ -268,10 +281,17 @@ func (service *Service) terminalLogin(ctx context.Context, actor Actor, request 
 		if request.Port < 1 || request.Port > 65535 || normalizeCredential(&credential) != nil {
 			return Credential{}, "", 0, ErrInvalidInput
 		}
-		if !hostKeyPattern.MatchString(request.HostKeySHA256) {
-			return Credential{}, "", 0, ErrHostKeyRequired
+		if request.HostKeySHA256 != "" {
+			if !hostKeyPattern.MatchString(request.HostKeySHA256) {
+				return Credential{}, "", 0, ErrInvalidInput
+			}
+			return credential, request.HostKeySHA256, request.Port, nil
 		}
-		return credential, request.HostKeySHA256, request.Port, nil
+		pinned, err := service.knownHostKey(ctx, actor, request.NodeID, request.Port)
+		if err != nil {
+			return Credential{}, "", 0, err
+		}
+		return credential, pinned, request.Port, nil
 	}
 	var port int
 	var username, hostKey, keyID string
@@ -291,6 +311,31 @@ func (service *Service) terminalLogin(ctx context.Context, actor Actor, request 
 		return Credential{}, "", 0, ErrInvalidInput
 	}
 	return credential, hostKey, port, nil
+}
+
+// knownHostKey is the host key already trusted for the node's sshd on port:
+// the remembered login's pin, else the newest one an SSH install of this
+// node confirmed; "" when none is known.
+func (service *Service) knownHostKey(ctx context.Context, actor Actor, nodeID uuid.UUID, port int) (string, error) {
+	var key string
+	err := service.pool.QueryRow(ctx, `SELECT host_key_sha256 FROM (
+			SELECT host_key_sha256, 0 AS rank, updated_at FROM node_ssh_credentials
+			WHERE scope_id=$1 AND node_id=$2 AND port=$3
+			UNION ALL
+			SELECT host_key_sha256, 1, finished_at FROM node_ssh_install_jobs
+			WHERE scope_id=$1 AND node_id=$2 AND port=$3 AND state='succeeded' AND host_key_confirmed
+				AND host_key_sha256 <> '') known
+		ORDER BY rank, updated_at DESC LIMIT 1`, actor.ScopeID, nodeID, port).Scan(&key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !hostKeyPattern.MatchString(key) {
+		return "", ErrInvalidInput
+	}
+	return key, nil
 }
 
 func (service *Service) rememberCredential(ctx context.Context, actor Actor, nodeID uuid.UUID, port int,

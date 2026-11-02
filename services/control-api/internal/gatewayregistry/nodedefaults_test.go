@@ -108,3 +108,38 @@ func TestMoveLocalGatewayKeepsTheCDNEntry(t *testing.T) {
 		t.Fatalf("ws = %+v", got)
 	}
 }
+
+// 11-02 (73): gateway.cdnca.com resolves into Cloudflare, which forwards
+// neither 29402 nor 20407; nodes are told the 443 tunnel first, exactly the
+// lines install-control.sh writes for a ws install.
+func TestWithCDNTunnelPutsTheWebSocketTunnelFirst(t *testing.T) {
+	local := Entrypoint{Address: "gateway.cdnca.com:20407", ServerName: "gateway.cdnca.com", Transport: TransportGRPC,
+		EnrollmentAddress: "gateway.cdnca.com:29402"}
+	endpoints := WithCDNTunnel([]Entrypoint{local}, local, true)
+	d, ok := NodeGatewayDefaultsFor(endpoints, local)
+	lines, err := d.Lines()
+	if !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	want := []string{"gateway_enrollment_address=gateway.cdnca.com:443", "gateway_address=gateway.cdnca.com:443",
+		"gateway_server_name=gateway.cdnca.com", "gateway_transport=ws", "gateway_tunnel_host=gateway.cdnca.com",
+		"gateway_endpoints=gateway.cdnca.com:20407|gateway.cdnca.com|grpc"}
+	if strings.Join(lines, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("lines =\n%s", strings.Join(lines, "\n"))
+	}
+	// The copied / SSH command then passes no direct entry (node-install-defaults decides).
+	if _, ok := DirectNodeInstallGateway(endpoints, local); ok {
+		t.Fatal("a CDN Gateway must not hand out the direct entry")
+	}
+	// Not behind a CDN, or a ws entry already published: unchanged.
+	if got := WithCDNTunnel([]Entrypoint{local}, local, false); len(got) != 1 || got[0] != local {
+		t.Fatalf("direct = %+v", got)
+	}
+	page := Entrypoint{Address: "edge.example.com:443", ServerName: "gateway.cdnca.com", Transport: TransportWS, TunnelHost: "edge.example.com"}
+	if got := WithCDNTunnel([]Entrypoint{local, page}, local, true); len(got) != 2 || got[1] != page {
+		t.Fatalf("published ws = %+v", got)
+	}
+	if got := WithCDNTunnel(nil, local, true); got != nil {
+		t.Fatalf("empty = %+v", got)
+	}
+}

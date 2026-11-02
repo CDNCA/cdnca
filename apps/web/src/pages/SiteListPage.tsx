@@ -59,6 +59,7 @@ import { formatDateTime } from '../i18n/formatters'
 import '../i18n/siteCnameRegeneration'
 import { cnameFailureText, siteAccessGap } from './site-edit/cnameFailureText'
 import { SiteAccessStatus } from './site-edit/SiteAccessReadiness'
+import CnamePending from './site-edit/CnamePending'
 import CnameFailureActions from './site-edit/CnameFailureActions'
 import SiteTransferModal from './site-edit/SiteTransferModal'
 import '../i18n/siteCreate'
@@ -2531,7 +2532,8 @@ function SiteListPageSession({
               />
             </span>
           ) : item.cname_state === 'pending' && !value ? (
-            <Tag color="processing">{tCname('cell.pending')}</Tag>
+            <CnamePending code={item.cname_pending_code} taskID={item.cname_task_id} admin={role === 'admin'}
+              onRegenerate={canRegenerateCname ? () => openSiteRegenerate(item) : undefined} regenerateDisabled={batchLocked} />
           ) : value ? (
             <span className="site-cname-cell">
               <span className="site-cname-value" title={value}>{value}</span>
@@ -2641,7 +2643,15 @@ function SiteListPageSession({
                 if (item.access_readiness) {
                   const failing = item.access_readiness.checks.find((check) => !check.ok)
                   if (failing?.code === 'cname_generated' && item.cname_state === 'failed') return null
-                  return <SiteAccessStatus readiness={item.access_readiness} />
+                  // 原因可能很长，悬停看全文（SiteAccessStatus 自带 Tooltip），点击去详情页「接入状态」。
+                  if (item.access_readiness.state === 'ready') return <SiteAccessStatus readiness={item.access_readiness} />
+                  return (
+                    <button type="button" className="site-access-status-link" data-testid="site-access-status-link"
+                      disabled={managementLocked || (role === 'user' && item.lock.locked)}
+                      onClick={() => navigate(`/site/${item.id}/edit?focus=access`)}>
+                      <SiteAccessStatus readiness={item.access_readiness} />
+                    </button>
+                  )
                 }
                 const gap = siteAccessGap(item)
                 if (gap && item.cname_state !== 'failed') {
@@ -2681,6 +2691,10 @@ function SiteListPageSession({
           const menu: MenuProps = {
             items: [
               ...(canReadDNSReconcile ? [{ key: 'dns-reconcile', label: t('actions.dnsReconcile') }] : []),
+              // 生成失败或卡在生成中的 CNAME 可在这里重新生成（已生成的不给，避免换掉正在用的 CNAME）。
+              ...(canRegenerateCname && (item.cname_state === 'failed' || item.cname_state === 'pending')
+                ? [{ key: 'regenerate-cname', label: tCname('action'), disabled: tenantLocked || batchLocked }]
+                : []),
               ...(canManageLock
                 ? [
                     item.lock.locked
@@ -2702,6 +2716,10 @@ function SiteListPageSession({
                 return
               }
               if (managementLocked) return
+              if (key === 'regenerate-cname') {
+                if (!tenantLocked) openSiteRegenerate(item)
+                return
+              }
               if (key === 'lock' || key === 'unlock') {
                 void loadLockDetail(item, key)
                 return

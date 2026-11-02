@@ -527,6 +527,34 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/republish:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: republishSite
+      summary: "Access status > Published to nodes > Republish"
+      x-summary-zh: "接入状态 > 已发布到节点 > 重新发布"
+      description: >-
+        Requires sites.manage. Publishes the site's current settings again
+        without a change: an automatic scope queues the caller's site.update at
+        a new source revision; a manual scope redelivers its last publication
+        now (system channel, node_sync). 409 publish_in_flight while the site's
+        publication is still running; 409 site_disabled for a disabled site.
+        Returns the site's access_readiness after the request was queued.
+      responses:
+        '202':
+          description: The republication was queued; the site's access readiness.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteAccessReadiness'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /v1/site-defaults:
     get:
       operationId: listSiteDefaults
@@ -1038,13 +1066,38 @@ components:
             certificate_missing, certificate_expired, certificate_not_yet_valid,
             certificate_revoked, certificate_not_active. published: site_disabled,
             not_published, site_not_in_publication (the scope's latest
-            publication does not carry the site), publishing, publish_failed.
+            publication does not carry the site), publishing, publish_failed
+            (only the current publication on the nodes now serving the site
+            counts: retired, deleted or removed-from-line-group nodes do not;
+            a node already running the published version counts as published).
             dns_resolved A/AAAA answers must be addresses the line group
             publishes now. Other codes may be added.
         checked_at:
           type: [string, 'null']
           format: date-time
           description: When the fact was read; for dns_resolved, when the stored check ran (null before one ran for the current CNAME and domains).
+        failed_nodes:
+          type: array
+          maxItems: 1000
+          description: published / publish_failed only (omitted otherwise) - the nodes now serving the site whose deployment of the current publication failed.
+          items:
+            type: object
+            additionalProperties: false
+            required: [node_id, node_name, state, error_code]
+            properties:
+              node_id: {type: string, format: uuid}
+              node_name: {type: string}
+              state: {type: string, enum: [failed, reverted, rollback_failed, cancelled]}
+              error_code: {type: [string, 'null'], description: "The node's last ERROR_CODE_* for the deployment, null when it reported none (e.g. timed out)."}
+        failure_code:
+          type: string
+          pattern: '^[a-z0-9_]{1,128}$'
+          description: >-
+            published / publish_failed only (omitted otherwise): the site's
+            automatic publication request terminal code when it failed before
+            any publication covered it (no_target_nodes,
+            node_capability_unavailable, node_artifacts_syncing,
+            node_scope_conflict, site_config_invalid, ...).
         package_unavailable_reason:
           type: [string, 'null']
           enum: [no_package, package_disabled, package_deleted, null]

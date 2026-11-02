@@ -3,6 +3,7 @@ package edgeautopublish
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"reflect"
 	"strings"
 	"time"
@@ -64,7 +65,14 @@ func (worker *Worker) RunOnce(ctx context.Context) (bool, error) {
 		if errors.Is(err, ErrStaleClaim) || errors.Is(err, edgepublish.ErrAutomaticRequestExpired) {
 			return true, nil
 		}
-		if reason := permanentFailure(err); reason != "" {
+		reason := permanentFailure(err)
+		// The publication's own error is rolled back with its transaction and
+		// the request keeps only the class: log it, or a request that retries
+		// until its deadline (73: 353 times as publish_outcome_unknown, a
+		// rejoined line group's nodes never got their sites) leaves no cause.
+		slog.Warn("automatic edge publication attempt failed",
+			"request_id", reference.RequestID, "reason", reason, "error", err)
+		if reason != "" {
 			if failErr := worker.repository.FailAutomaticPublication(ctx, reference, reason); failErr != nil && !errors.Is(failErr, ErrStaleClaim) {
 				return true, failErr
 			}

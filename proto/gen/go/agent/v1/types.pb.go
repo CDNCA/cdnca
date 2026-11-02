@@ -323,7 +323,7 @@ const (
 	// it only when the OpenResty binary exports the patch's function; control
 	// refuses to publish a site with it to a node without it.
 	CapabilityName_CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY CapabilityName = 77
-	// SSH_ACCESS v1 (node-ssh-tab, number assigned by the main session): the
+	// SSH_ACCESS v1: the
 	// node applies "only the controller may SSH" (SSHAccessCommand apply: its
 	// own nft table inet cdnca_ssh_access) with a 5 minute rollback timer,
 	// keeps it on SSHAccessCommand confirm, and answers SSHAccessReceipt

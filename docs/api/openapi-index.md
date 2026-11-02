@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 885 个 operation，并包含
-860 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 886 个 operation，并包含
+861 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -926,7 +926,7 @@
 
 ## sites.yaml
 
-源文件：[`sites.yaml`](../../api/openapi/v1/sites.yaml)，22 个 operation。
+源文件：[`sites.yaml`](../../api/openapi/v1/sites.yaml)，23 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -948,6 +948,7 @@
 | `sites.yaml` | `GET` | `/v1/sites/{id}/origin-routing` | `getSiteOriginRouting` |
 | `sites.yaml` | `PUT` | `/v1/sites/{id}/origin-routing` | `replaceSiteOriginRouting` |
 | `sites.yaml` | `GET` | `/v1/sites/{id}/origin-status` | `getSiteOriginStatus` |
+| `sites.yaml` | `POST` | `/v1/sites/{id}/republish` | `republishSite` |
 | `sites.yaml` | `GET` | `/v1/sites/{id}/schedule302` | `getSiteSchedule302` |
 | `sites.yaml` | `PUT` | `/v1/sites/{id}/schedule302` | `replaceSiteSchedule302` |
 | `sites.yaml` | `POST` | `/v1/sites/{id}/transfer` | `transferSite` |

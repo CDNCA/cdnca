@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsacme"
@@ -32,7 +34,7 @@ func buildNodeSSHInstallRuntime(pool *pgxpool.Pool, identityService *identity.Se
 		}
 	}
 	// the controller's SSH egress for "only the controller may
-	// SSH" (CDNCA_NODE_SSH_CONTROLLER_CIDRS); empty refuses turning it on.
+	// SSH" (CDNCA_NODE_SSH_CONTROLLER_CIDRS); empty: detected below.
 	access, err := nodesshinstall.NewAccessConfig(controllerSSHCIDRs)
 	if err != nil {
 		return nil, nil, err
@@ -42,6 +44,12 @@ func buildNodeSSHInstallRuntime(pool *pgxpool.Pool, identityService *identity.Se
 	if err != nil {
 		return nil, nil, err
 	}
+	// Without CDNCA_NODE_SSH_CONTROLLER_CIDRS the egress is the
+	// host's public address (the co-located Gateway's, else its interfaces').
+	gatewayAddress := os.Getenv("CDNCA_GATEWAY_LOCAL_ADDRESS")
+	service.UseEgressDetector(func(context.Context) []string {
+		return nodesshinstall.DetectEgress(gatewayAddress, net.InterfaceAddrs)
+	})
 	// the management root pin of a self-signed console.
 	service.UseControlCA(nodesshinstall.RuntimeControlCA(nativebackup.Layout{Root: "/"}.Path(nativebackup.WebRuntimeConfigFile)))
 	return service, func() (http.Handler, error) {

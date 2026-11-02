@@ -70,6 +70,55 @@ func CreateForNewSiteTx(ctx context.Context, tx pgx.Tx, actorScopeID, actorUserI
 	return policyID, nil
 }
 
+// DeleteForSiteTx deletes the site's live HTTP policies inside the site
+// delete's tx, after the site row is marked deleted: one
+// delete revision each, as Delete writes it (its trigger projects
+// http_policies and advances the publication head), with the success audit
+// the revision requires. The trigger accepts the deleting actor without
+// http_policies.manage only because the site is already deleted (migration
+// 620). A policy left on a deleted site is an orphan the edge publication
+// cannot place.
+func DeleteForSiteTx(ctx context.Context, tx pgx.Tx, actorScopeID, actorUserID, scopeID, siteID uuid.UUID,
+	siteRequestID string, now time.Time) (int, error) {
+	rows, err := tx.Query(ctx, `SELECT id FROM http_policies WHERE tenant_scope_id=$1 AND site_id=$2
+		AND deleted_at IS NULL AND NOT current_deleted ORDER BY id`, scopeID, siteID)
+	if err != nil {
+		return 0, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return 0, err
+	}
+	now = now.UTC().Truncate(time.Microsecond)
+	for _, id := range ids {
+		item, err := selectPolicy(ctx, tx, Actor{ScopeKind: "platform"}, scopeID, id, false)
+		if err != nil {
+			return 0, err
+		}
+		item.Enabled, item.Deleted = false, true
+		item.Revision++
+		item.UpdatedAt = now
+		metadata := WriteMetadata{RequestID: "site-delete-" + id.String(), TraceID: "site-delete-" + siteID.String()}
+		actor := Actor{UserID: actorUserID, ScopeID: actorScopeID}
+		if err := insertRevision(ctx, tx, actor, item, metadata, "delete"); err != nil {
+			return 0, fmt.Errorf("delete HTTP policy of deleted site: %w", err)
+		}
+		if item.PublicationRevision, err = publicationRevision(ctx, tx, scopeID); err != nil {
+			return 0, err
+		}
+		if err := (audit.New(nil)).Append(ctx, tx, audit.Event{
+			ScopeID: scopeID, ActorUserID: &actorUserID, Action: "http_policy.delete", ResourceType: "http_policy",
+			ResourceID: id.String(), RequestID: metadata.RequestID, Result: "success",
+			Payload: map[string]any{"trace_id": metadata.TraceID, "revision": item.Revision,
+				"publication_revision": item.PublicationRevision, "site_id": siteID.String(), "enabled": false,
+				"source": "site_delete", "site_request_id": siteRequestID},
+		}); err != nil {
+			return 0, fmt.Errorf("audit deleted site HTTP policy: %w", err)
+		}
+	}
+	return len(ids), nil
+}
+
 // SiteConfigTx is the live, enabled HTTP policy of a site as a Config (site
 // transfer copies it to the new site); found false when the site has none.
 func SiteConfigTx(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID) (Config, bool, error) {

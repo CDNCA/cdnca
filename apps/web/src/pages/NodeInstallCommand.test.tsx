@@ -134,7 +134,7 @@ describe('reusable node installation command', () => {
 
   // the node connects to the published Gateway IP directly (same values as node-install-defaults).
   const gateway = { enrollment_address: '203.0.113.20:29402', address: '203.0.113.20:20407', server_name: '203.0.113.20' }
-  const gatewayArgs = `--gateway-enrollment-address '203.0.113.20:29402' --gateway-address '203.0.113.20:20407' --gateway-server-name '203.0.113.20'`
+  const gatewayArgs = `--gateway-enrollment-address '203.0.113.20:29402' --gateway-address '203.0.113.20:20407' --gateway-server-name '203.0.113.20' --gateway-transport grpc`
 
   it('writes the published direct Gateway entry into the command', () => {
     const plain = buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'zh-CN')

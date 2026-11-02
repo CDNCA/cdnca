@@ -20,6 +20,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/domaintrust"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
+	"github.com/cdnca/cdnca/services/control-api/internal/httppolicycontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketmanaged"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemconfig"
 	"github.com/google/uuid"
@@ -937,6 +938,12 @@ func (s *Store) deleteTx(ctx context.Context, tx pgx.Tx, actor Actor, request De
 		if command.RowsAffected() == 0 {
 			return ErrRevisionConflict
 		}
+		// a live HTTP policy left on a deleted site fails
+		// every publication of the scope.
+		if _, err := httppolicycontrol.DeleteForSiteTx(ctx, tx, actor.ScopeID, actor.UserID, scopeID, request.ID,
+			request.RequestID, now); err != nil {
+			return err
+		}
 		if err := appendSiteDomainFacts(ctx, tx, scopeID, request.ID, request.ExpectedRevision+1,
 			currentDomains, nil, actor, request.RequestID, now); err != nil {
 			return err
@@ -1239,6 +1246,10 @@ func (s *Store) BatchAction(
 				}
 				if command.RowsAffected() != 1 {
 					return ErrRevisionConflict
+				}
+				if _, err := httppolicycontrol.DeleteForSiteTx(ctx, tx, actor.ScopeID, actor.UserID, current.ScopeID,
+					current.ID, request.RequestID, now); err != nil {
+					return err
 				}
 				if err := appendSiteDomainFacts(ctx, tx, current.ScopeID, current.ID,
 					entry.request.ExpectedRevision+1, current.Domains, nil, actor, request.RequestID, now); err != nil {
@@ -2123,7 +2134,7 @@ func (s *Store) Get(ctx context.Context, actor Actor, id uuid.UUID) (Site, error
 	if err := s.projectStatusRecovery(ctx, s.pool, &item); err != nil {
 		return Site{}, fmt.Errorf("project site status: %w", err)
 	}
-	if err := s.projectAccessReadiness(ctx, s.pool, &item); err != nil {
+	if err := s.projectAccessReadiness(ctx, s.pool, actor, &item); err != nil {
 		return Site{}, err
 	}
 	return item, nil
@@ -2190,7 +2201,7 @@ func (s *Store) List(ctx context.Context, actor Actor, filter ListFilter) (ListR
 		items[index].AutoDNS = autoDNS[items[index].ID]
 	}
 	// 接入状态：一条语句读整页事实（不在请求里做解析）。
-	if err := s.projectListAccessReadiness(ctx, tx, items); err != nil {
+	if err := s.projectListAccessReadiness(ctx, tx, actor, items); err != nil {
 		return ListResult{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -2607,6 +2618,7 @@ func siteColumns(alias string) string {
 		"(SELECT CASE item.error_code WHEN 'retries_exhausted' THEN 'cname_allocation_exhausted'" +
 			" WHEN 'cancelled' THEN 'cname_allocation_cancelled' ELSE item.error_code END FROM background_job_items item JOIN access_scopes cname_scope ON cname_scope.id = " + alias + ".scope_id" +
 			" WHERE " + alias + ".cname_state = 'failed' AND item.tenant_id = cname_scope.tenant_id AND item.job_id = " + alias + ".cname_task_id LIMIT 1)",
+		cnamePendingCodeColumn(alias),
 		"(SELECT display_name FROM users WHERE id = " + alias + ".locked_by_user_id)",
 		alias + ".ipv6_enabled", alias + ".ipv6_runtime_state",
 		alias + ".ipv6_runtime_source_revision",
@@ -2672,6 +2684,7 @@ func scanSite(row rowScanner) (Site, error) {
 		&item.CNAMEDomain,
 		&item.CNAMEHostname,
 		&item.CNAMEFailureCode,
+		&item.CNAMEPendingCode,
 		&lockOperatorName,
 		&item.ListenerState.IPv6DesiredEnabled,
 		&item.ListenerState.IPv6RuntimeState,
@@ -2739,6 +2752,7 @@ func toListItem(item Site) ListItem {
 		PackageSubscriptionID: item.PackageSubscriptionID,
 		CNAMEState:            item.CNAMEState,
 		CNAMEFailureCode:      item.CNAMEFailureCode,
+		CNAMEPendingCode:      item.CNAMEPendingCode,
 		CNAMEDomain:           item.CNAMEDomain,
 		CNAMETaskID:           item.CNAMETaskID,
 		CNAMECurrentRevision:  item.CNAMECurrentRevision,
@@ -2950,8 +2964,8 @@ func prepareCNAMEWriteIntent(ctx context.Context, tx pgx.Tx, actor Actor, ownerI
 			return nil, ErrPermissionDenied
 		}
 	}
-	if fields.CNAMERegenerate && (!samePolicy || stringValue(currentState) != "failed") {
-		return nil, fieldError("cname_regenerate", "only a failed CNAME allocation can be retried")
+	if fields.CNAMERegenerate && (!samePolicy || !cnameRegenerable(stringValue(currentState))) {
+		return nil, fieldError("cname_regenerate", "only a failed or pending CNAME allocation can be retried")
 	}
 	payload, err := json.Marshal(struct {
 		SiteID, Mode, Domain, Hostname, Subscription string
@@ -3024,8 +3038,8 @@ func prepareNoPackageCNAMEIntent(ctx context.Context, tx pgx.Tx, actor Actor, te
 			return nil, ErrPermissionDenied
 		}
 	}
-	if fields.CNAMERegenerate && (!samePolicy || stringValue(currentState) != "failed") {
-		return nil, fieldError("cname_regenerate", "only a failed CNAME allocation can be retried")
+	if fields.CNAMERegenerate && (!samePolicy || !cnameRegenerable(stringValue(currentState))) {
+		return nil, fieldError("cname_regenerate", "only a failed or pending CNAME allocation can be retried")
 	}
 	payload, err := json.Marshal(struct {
 		SiteID, Mode, Domain, Hostname, Subscription string

@@ -934,7 +934,7 @@ describe('NodeListPage', () => {
     expect(within(dialog).getByLabelText('排序')).toHaveValue('100')
     expect(within(dialog).getByRole('radio', { name: 'L1边缘节点' })).toBeChecked()
     expect(within(dialog).getByRole('radio', { name: 'L2中间节点' })).not.toBeChecked()
-    expect(within(dialog).getByText('如果新旧IP是不同节点，请使用待初始化里的替换节点功能')).toBeInTheDocument()
+    expect(within(dialog).getByText('如果新旧IP是不同节点，请使用待初始化里的替换节点功能。修改后会自动更新所在线路组并重新发布 DNS')).toBeInTheDocument()
     expect(within(dialog).queryByRole('link', { name: '高级详情' })).not.toBeInTheDocument()
     // 类型说明指向 L2 配置页的说明卡
     expect(within(dialog).getByRole('link', { name: 'L2 是什么、怎么配置' })).toHaveAttribute('href', '/node/l2-config')

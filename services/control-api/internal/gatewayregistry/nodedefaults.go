@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/cdnca/cdnca/services/control-api/internal/cdnranges"
 )
 
 const maxNodeEndpoints = 8
@@ -214,17 +217,58 @@ func ParseNodeGatewayDefaults(content []byte) NodeGatewayDefaults {
 	return d
 }
 
+// CDNTunnelPort is the console HTTPS port a CDN forwards (Cloudflare proxies
+// 443; it does not forward the Gateway ports 29402/20407).
+const CDNTunnelPort = "443"
+
+// WithCDNTunnel puts the 443 WebSocket tunnel first when the co-located
+// Gateway host is behind a CDN (behindCDN) and no ws entry is published
+// (11-02, 73: gateway.cdnca.com is a Cloudflare name, enrollment on 29402
+// timed out). The tunnel is <gateway host>:443 through the management nginx
+// location ^~ /agent/v1/, inner TLS still the Gateway server name; the
+// direct entries stay as fallbacks. A published ws entry (Gateway page,
+// install-control.sh --gateway-transport ws) is left as it is.
+func WithCDNTunnel(published []Entrypoint, local Entrypoint, behindCDN bool) []Entrypoint {
+	if !behindCDN || len(published) == 0 {
+		return published
+	}
+	for _, endpoint := range published {
+		if endpoint.Transport == TransportWS {
+			return published
+		}
+	}
+	host, _, err := net.SplitHostPort(local.Address)
+	if err != nil || !nodeDefaultsTunnel.MatchString(host) || local.ServerName == "" {
+		return published
+	}
+	tunnel := Entrypoint{Address: net.JoinHostPort(host, CDNTunnelPort), ServerName: local.ServerName,
+		Transport: TransportWS, TunnelHost: host}
+	return append([]Entrypoint{tunnel}, published...)
+}
+
+// nodeEndpoints is the published list as nodes are told to use it
+// (node-install-defaults and the copied / SSH install command alike).
+func (s *Service) nodeEndpoints(ctx context.Context) ([]Entrypoint, error) {
+	published, err := s.Publish(ctx)
+	if err != nil {
+		return nil, err
+	}
+	host, _, _ := net.SplitHostPort(s.config.LocalGateway.Address)
+	behind := host != "" && cdnranges.HostBehindCDN(ctx, s.config.LookupHost, host)
+	return WithCDNTunnel(published.Endpoints, s.config.LocalGateway, behind), nil
+}
+
 // SyncNodeDefaults rewrites the gateway lines of Config.NodeDefaultsFile from
 // the current published endpoint list (control-api start and every change).
 func (s *Service) SyncNodeDefaults(ctx context.Context) (bool, error) {
 	if s.config.NodeDefaultsFile == "" {
 		return false, nil
 	}
-	published, err := s.Publish(ctx)
+	endpoints, err := s.nodeEndpoints(ctx)
 	if err != nil {
 		return false, err
 	}
-	defaults, ok := NodeGatewayDefaultsFor(published.Endpoints, s.config.LocalGateway)
+	defaults, ok := NodeGatewayDefaultsFor(endpoints, s.config.LocalGateway)
 	if !ok {
 		return false, nil
 	}
@@ -255,11 +299,11 @@ func (s *Service) NodeInstallGateway(ctx context.Context) (NodeGatewayDefaults, 
 	if s == nil {
 		return NodeGatewayDefaults{}, false, nil
 	}
-	published, err := s.Publish(ctx)
+	endpoints, err := s.nodeEndpoints(ctx)
 	if err != nil {
 		return NodeGatewayDefaults{}, false, err
 	}
-	d, ok := DirectNodeInstallGateway(published.Endpoints, s.config.LocalGateway)
+	d, ok := DirectNodeInstallGateway(endpoints, s.config.LocalGateway)
 	return d, ok, nil
 }
 

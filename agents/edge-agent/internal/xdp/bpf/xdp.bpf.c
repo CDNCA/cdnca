@@ -257,6 +257,23 @@ static __always_inline int u16_at(void *data, void *end, __u32 off)
 	return (high << 8) | low;
 }
 
+/* Scratch slots (SLOT_NAME, SLOT_WILDCARD) values pass through. A kernel
+ * that walks the SNI functions in the caller's context (static
+ * subprograms, as when it does not verify global functions on their own)
+ * otherwise walks the names once per path of the extension walk, each with
+ * its own offset range: over 1000000 instructions, refused as "BPF program
+ * is too large" (load_failed, the node fell back to nftables). Read back
+ * from a map a value is an unknown scalar on every path, so the verifier
+ * prunes the paths to one walk. */
+#define SLOT_NAME 0
+#define SLOT_WILDCARD 1
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 2);
+	__type(key, __u32);
+	__type(value, __u32);
+} cdnca_xdp_sni_slot SEC(".maps");
+
 /* The ClientHello is parsed by two global functions: the verifier checks
  * each once on its own (scalar arguments), instead of every path of the
  * extension walk times the name walk. */
@@ -320,9 +337,15 @@ __attribute__((noinline)) int cdnca_sni_verdict(struct xdp_md *ctx, __u32 start,
 	void *end = (void *)(long)ctx->data_end;
 	if (length == 0 || length > SNI_MAX_NAME || start > SNI_MAX_OFFSET + 5)
 		return 0;
+	/* The longest wildcard so far lives in its slot: in a register both
+	 * values (none, found) would be walked through every later byte. */
+	__u32 key = SLOT_WILDCARD;
+	__u32 *wildcard = bpf_map_lookup_elem(&cdnca_xdp_sni_slot, &key);
+	if (!wildcard)
+		return 0;
+	*(volatile __u32 *)wildcard = 0;
 	__u32 last = start + length - 1;
 	__u64 hash = FNV_OFFSET;
-	__u32 wildcard = 0;
 	for (__u32 i = 0; i < SNI_MAX_NAME; i++) {
 		if (i >= length)
 			break;
@@ -332,7 +355,7 @@ __attribute__((noinline)) int cdnca_sni_verdict(struct xdp_md *ctx, __u32 start,
 		if (ch == '.' && i > 0 && i + 1 < length) {
 			__u8 *flags = bpf_map_lookup_elem(&cdnca_xdp_sni, &hash);
 			if (flags && (*flags & (SNI_DROP_WILDCARD | SNI_KEEP_WILDCARD)))
-				wildcard = *flags & (SNI_DROP_WILDCARD | SNI_KEEP_WILDCARD);
+				*(volatile __u32 *)wildcard = *flags & (SNI_DROP_WILDCARD | SNI_KEEP_WILDCARD);
 		}
 		if (ch >= 'A' && ch <= 'Z')
 			ch |= 0x20;
@@ -344,7 +367,8 @@ __attribute__((noinline)) int cdnca_sni_verdict(struct xdp_md *ctx, __u32 start,
 		return 0;
 	if (flags && (*flags & SNI_DROP_EXACT))
 		return 1;
-	return (wildcard & SNI_DROP_WILDCARD) && !(wildcard & SNI_KEEP_WILDCARD);
+	__u32 found = *(volatile __u32 *)wildcard;
+	return (found & SNI_DROP_WILDCARD) && !(found & SNI_KEEP_WILDCARD);
 }
 
 /* sni_dropped: the ClientHello at off names a dropped server. Anything else
@@ -352,10 +376,76 @@ __attribute__((noinline)) int cdnca_sni_verdict(struct xdp_md *ctx, __u32 start,
  * OpenResty still closes such handshakes (esc-node §4). */
 static __always_inline int sni_dropped(struct xdp_md *ctx, __u32 off)
 {
-	int located = cdnca_sni_locate(ctx, off);
+	__u32 key = SLOT_NAME;
+	__u32 *slot = bpf_map_lookup_elem(&cdnca_xdp_sni_slot, &key);
+	if (!slot)
+		return 0;
+	/* The payload offset too: one walk of the extensions, not one per
+	 * header path (VLAN, IPv4 options, IPv6). */
+	*(volatile __u32 *)slot = off;
+	int located = cdnca_sni_locate(ctx, *(volatile __u32 *)slot);
 	if (located <= 0)
 		return 0;
-	return cdnca_sni_verdict(ctx, (__u32)located >> 8, (__u32)located & 0xff);
+	*(volatile __u32 *)slot = (__u32)located;
+	__u32 name = *(volatile __u32 *)slot;
+	return cdnca_sni_verdict(ctx, name >> 8, name & 0xff);
+}
+
+/* cdnca_site_check outcomes. */
+#define SITE_NONE 0
+#define SITE_PASS 1 /* a truncated TCP header: XDP_PASS, as before */
+#define SITE_PORT 2
+#define SITE_SNI 3
+
+/* cdnca_site_check: the level D site drop of the frame (it parses the
+ * headers itself). Only ctx goes in and only the outcome comes out, so a
+ * kernel that walks it in the caller's context does so once, not once per
+ * header path with the filter's live state (key, protocol, offsets). */
+__attribute__((noinline)) int cdnca_site_check(struct xdp_md *ctx)
+{
+	void *data = (void *)(long)ctx->data;
+	void *end = (void *)(long)ctx->data_end;
+	struct ethhdr *eth = data;
+	if ((void *)(eth + 1) > end)
+		return SITE_NONE;
+	__u16 proto = eth->h_proto;
+	void *l3 = eth + 1;
+	__u32 l4off = sizeof(*eth);
+	if (proto == bpf_htons(ETH_P_8021Q) || proto == bpf_htons(ETH_P_8021AD)) {
+		struct vlan_hdr *vlan = l3;
+		if ((void *)(vlan + 1) > end)
+			return SITE_NONE;
+		proto = vlan->proto;
+		l3 = vlan + 1;
+		l4off += sizeof(*vlan);
+	}
+	void *l4;
+	if (proto == bpf_htons(ETH_P_IP)) {
+		struct iphdr *ip = l3;
+		if ((void *)(ip + 1) > end || ip->ihl < 5)
+			return SITE_NONE;
+		if (ip->protocol != IPPROTO_TCP || (ip->frag_off & bpf_htons(0x1fff)))
+			return SITE_NONE;
+		l4 = (void *)ip + ip->ihl * 4;
+		l4off += ip->ihl * 4;
+	} else if (proto == bpf_htons(ETH_P_IPV6)) {
+		struct ipv6hdr *ip6 = l3;
+		if ((void *)(ip6 + 1) > end || ip6->nexthdr != IPPROTO_TCP)
+			return SITE_NONE;
+		l4 = ip6 + 1;
+		l4off += sizeof(*ip6);
+	} else {
+		return SITE_NONE;
+	}
+	struct tcphdr *seg = l4;
+	if ((void *)(seg + 1) > end)
+		return SITE_PASS;
+	__u16 dport = bpf_ntohs(seg->dest);
+	if (port_listed(&cdnca_xdp_site_ports, dport))
+		return SITE_PORT;
+	if (port_listed(&cdnca_xdp_sni_ports, dport) && sni_dropped(ctx, l4off + seg->doff * 4))
+		return SITE_SNI;
+	return SITE_NONE;
 }
 
 static __always_inline int drop(__u32 stat, __u64 bytes)
@@ -379,19 +469,28 @@ int cdnca_xdp_filter(struct xdp_md *ctx)
 	if (!cfg || !cfg->enabled)
 		return XDP_PASS;
 
+	/* Site drop first: a level D site is a black hole for every client
+	 * (exempt networks too; the node's own probes run on lo). */
+	switch (cdnca_site_check(ctx)) {
+	case SITE_PASS:
+		return XDP_PASS;
+	case SITE_PORT:
+		return site_drop(SITE_STAT_PORT, bytes);
+	case SITE_SNI:
+		return site_drop(SITE_STAT_SNI, bytes);
+	}
+
 	struct ethhdr *eth = data;
 	if ((void *)(eth + 1) > end)
 		return XDP_PASS;
 	__u16 proto = eth->h_proto;
 	void *l3 = eth + 1;
-	__u32 l4off = sizeof(*eth); /* frame offset of the L4 header */
 	if (proto == bpf_htons(ETH_P_8021Q) || proto == bpf_htons(ETH_P_8021AD)) {
 		struct vlan_hdr *vlan = l3;
 		if ((void *)(vlan + 1) > end)
 			return XDP_PASS;
 		proto = vlan->proto;
 		l3 = vlan + 1;
-		l4off += sizeof(*vlan);
 	}
 
 	struct cdnca_xdp_lpm_key key = {.prefixlen = 128};
@@ -407,7 +506,6 @@ int cdnca_xdp_filter(struct xdp_md *ctx)
 		__builtin_memcpy(&key.addr[12], &ip->saddr, 4);
 		l4proto = ip->protocol;
 		l4 = (void *)ip + ip->ihl * 4;
-		l4off += ip->ihl * 4;
 		if (ip->frag_off & bpf_htons(0x1fff))
 			first_fragment = 0;
 	} else if (proto == bpf_htons(ETH_P_IPV6)) {
@@ -419,25 +517,8 @@ int cdnca_xdp_filter(struct xdp_md *ctx)
 		 * address checks here, nftables still applies the rest. */
 		l4proto = ip6->nexthdr;
 		l4 = ip6 + 1;
-		l4off += sizeof(*ip6);
 	} else {
 		return XDP_PASS;
-	}
-
-	/* Site drop first: a level D site is a black hole for every client
-	 * (exempt networks too; the node's own probes run on lo). */
-	if (l4proto == IPPROTO_TCP && first_fragment) {
-		struct tcphdr *seg = l4;
-		if ((void *)(seg + 1) > end)
-			return XDP_PASS;
-		__u16 dport = bpf_ntohs(seg->dest);
-		if (port_listed(&cdnca_xdp_site_ports, dport))
-			return site_drop(SITE_STAT_PORT, bytes);
-		if (port_listed(&cdnca_xdp_sni_ports, dport)) {
-			__u32 payload = l4off + seg->doff * 4;
-			if (sni_dropped(ctx, payload))
-				return site_drop(SITE_STAT_SNI, bytes);
-		}
 	}
 
 	if (bpf_map_lookup_elem(&cdnca_xdp_exempt, &key))

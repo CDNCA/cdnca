@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"reflect"
 	"sort"
 
@@ -113,11 +114,28 @@ func loadHTTPPolicyFactsAt(
 		return 0, nil, fmt.Errorf("%w: read HTTP policy publication head", ErrPersistence)
 	}
 
+	siteIDs := make([]uuid.UUID, len(sites))
+	for index, site := range sites {
+		siteIDs[index] = uuid.MustParse(site.ID)
+	}
+	// Only the policies of the published sites are delivered (as firewall
+	// actions): a site the release leaves out (disabled, off its package,
+	// traffic exceeded, deleted) has no server to apply its policy to. A live
+	// policy on a deleted site is an orphan (the site delete
+	// before migration 620 left them); it is skipped and logged so it cannot
+	// fail the whole scope.
 	var expected int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM http_policies
-		WHERE tenant_scope_id=$1 AND current_enabled=true AND current_deleted=false
-		  AND deleted_at IS NULL`, scopeID).Scan(&expected); err != nil {
+	var orphans []uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE policy.site_id=ANY($2::uuid[])),
+		COALESCE(array_agg(policy.id ORDER BY policy.id) FILTER (WHERE site.deleted_at IS NOT NULL),'{}')
+		FROM http_policies policy JOIN sites site ON site.id=policy.site_id
+		WHERE policy.tenant_scope_id=$1 AND policy.current_enabled=true AND policy.current_deleted=false
+		  AND policy.deleted_at IS NULL`, scopeID, siteIDs).Scan(&expected, &orphans); err != nil {
 		return 0, nil, fmt.Errorf("%w: count enabled HTTP policy facts", ErrPersistence)
+	}
+	if len(orphans) > 0 {
+		slog.WarnContext(ctx, "edge publication skipped enabled HTTP policies of deleted sites",
+			"scope_id", scopeID, "policy_ids", orphans)
 	}
 	if expected > len(sites) || expected > httppolicycontrol.MaxSites {
 		return 0, nil, fmt.Errorf("%w: enabled HTTP policy site is absent from the source revision", ErrPersistence)
@@ -129,9 +147,9 @@ func loadHTTPPolicyFactsAt(
 		  ON revision.policy_id=policy.id AND revision.tenant_scope_id=policy.tenant_scope_id
 		 AND revision.site_id=policy.site_id AND revision.revision=policy.current_revision
 		WHERE policy.tenant_scope_id=$1 AND policy.current_enabled=true AND policy.current_deleted=false
-		  AND policy.deleted_at IS NULL
+		  AND policy.deleted_at IS NULL AND policy.site_id=ANY($2::uuid[])
 		ORDER BY policy.site_id::text
-		FOR SHARE OF policy,revision`, scopeID)
+		FOR SHARE OF policy,revision`, scopeID, siteIDs)
 	if err != nil {
 		return 0, nil, fmt.Errorf("%w: read enabled HTTP policy facts", ErrPersistence)
 	}

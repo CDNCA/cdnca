@@ -597,9 +597,14 @@ function LineResolutionContent({
     setError(null)
     mutation.mutate(write)
   }
+  // 名称列定宽、单行省略、悬停看全名（原先无宽度被其余定宽列挤到约 26px，逐字竖排）。
+  const nameCell = (name: string) => (
+    <Tooltip title={name} placement="topLeft"><span className="node-line-resolution-name-text">{name}</span></Tooltip>
+  )
   const availableColumns: TableColumnsType<Candidate> = [
-    { title: t('lineDetail.columns.name'), className: 'node-line-resolution-name', render: (_, item) => item.node.name },
-    { title: t('lineDetail.columns.ipAddress'), className: 'node-line-resolution-address', dataIndex: 'address' },
+    { title: t('lineDetail.columns.name'), className: 'node-line-resolution-name', width: 160, ellipsis: { showTitle: false },
+      render: (_, item) => nameCell(item.node.name) },
+    { title: t('lineDetail.columns.ipAddress'), className: 'node-line-resolution-address', dataIndex: 'address', width: 200 },
     {
       title: t('lineDetail.columns.status'),
       width: 90,
@@ -625,7 +630,9 @@ function LineResolutionContent({
     {
       title: t('lineDetail.columns.name'),
       className: 'node-line-resolution-name',
-      render: (_, endpoint) => nodes.get(endpoint.node_id)?.name ?? t('values.unavailable'),
+      width: 160,
+      ellipsis: { showTitle: false },
+      render: (_, endpoint) => nameCell(nodes.get(endpoint.node_id)?.name ?? t('values.unavailable')),
     },
     { title: t('lineDetail.columns.ipAddress'), className: 'node-line-resolution-address', dataIndex: 'address', width: 220 },
     {
@@ -859,7 +866,7 @@ function LineResolutionContent({
               dataSource={available}
               loading={nodesQuery.isLoading && canReadNodes}
               pagination={false}
-              scroll={{ x: 480 }}
+              scroll={{ x: 450 }}
               rowSelection={{
                 columnWidth: 50,
                 selectedRowKeys: availableKeys,
@@ -982,7 +989,7 @@ function LineResolutionContent({
                     onChange: () => setSelectedIDs([]) }
                   : false
               }
-              scroll={{ x: 860 }}
+              scroll={{ x: 1000 }}
               rowSelection={{
                 columnWidth: 44,
                 selectedRowKeys: selectedIDs,

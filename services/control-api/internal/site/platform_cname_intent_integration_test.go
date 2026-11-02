@@ -279,32 +279,31 @@ func TestPlatformCNAMEIntentAuthorization(t *testing.T) {
 		assertWriteFacts(t, initial.Site.ID, "site.update", request.RequestID)
 		assertIntent(t, result.Site.ID, *result.Site.CNAMETaskID)
 	})
-	// site-edit-parity2: 73 PATCH /v1/sites/01a163c0… (ikvm.asia, http 80,
-	// origin 203.0.113.14, 测试套餐, cname_state=failed) returned 400 twice. The
-	// editor's 「更改 CNAME」 dialog sent the operator's new domain (the zone
-	// ikvm.asia) with cname_regenerate, while the subscription snapshot still
+	// A site PATCH (http 80, origin 203.0.113.14, cname_state=failed) returned
+	// 400 twice. The editor's 「更改 CNAME」 dialog sent the operator's new domain
+	// (another zone) with cname_regenerate, while the subscription snapshot still
 	// says cdn.example.com: the store refuses it. The refusal must name
 	// cname_domain; an echo of the site's own facts (is_default, status,
 	// cname_state=failed, …) plus the retry must save.
-	t.Run("73-shaped edit with a different CNAME domain names the field", func(t *testing.T) {
-		initial := create(t, actor, "ikvm-shaped")
+	t.Run("an edit with a different CNAME domain names the field", func(t *testing.T) {
+		initial := create(t, actor, "other-domain")
 		markFailed(t, initial.Site.ID)
-		edited := fields("ikvm-shaped.example.co.uk")
+		edited := fields("other-domain.example.co.uk")
 		edited.Origins = []string{"203.0.113.14"}
-		edited.CNAMEMode, edited.CNAMEDomain, edited.CNAMERegenerate = "site", "ikvm.asia", true
+		edited.CNAMEMode, edited.CNAMEDomain, edited.CNAMERegenerate = "site", "other-zone.example.com", true
 		_, err := service.Update(t.Context(), actor, UpdateRequest{ID: initial.Site.ID, ExpectedRevision: initial.Site.Revision,
-			Fields: edited, IdempotencyKey: "ikvm-shaped-domain", RequestID: "ikvm-shaped-domain"})
+			Fields: edited, IdempotencyKey: "other-domain-cname", RequestID: "other-domain-cname"})
 		var fieldErr *FieldError
 		if !errors.As(err, &fieldErr) || fieldErr.Field != "cname_domain" || !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("different CNAME domain error = %v, want FieldError cname_domain", err)
 		}
 		// The editor echoes the stored facts (is_default=false, status, the
 		// failed state) and the stored domain: the retry saves.
-		echo := fields("ikvm-shaped.example.co.uk")
+		echo := fields("other-domain.example.co.uk")
 		echo.CNAMEMode, echo.CNAMEDomain, echo.CNAMERegenerate = "site", "cdn.example.com", true
 		echo.IsDefault = false
 		result, err := service.Update(t.Context(), actor, UpdateRequest{ID: initial.Site.ID, ExpectedRevision: initial.Site.Revision,
-			Fields: echo, IdempotencyKey: "ikvm-shaped-echo", RequestID: "ikvm-shaped-echo"})
+			Fields: echo, IdempotencyKey: "other-domain-echo", RequestID: "other-domain-echo"})
 		if err != nil || result.Site.CNAMETaskID == nil || *result.Site.CNAMETaskID == *initial.Site.CNAMETaskID {
 			t.Fatalf("echoed retry = %+v, %v; want a new CNAME intent", result.Site.CNAMETaskID, err)
 		}
@@ -605,7 +604,7 @@ func TestPlatformCNAMEIntentAuthorization(t *testing.T) {
 		}
 		assertRetirementCleaned(t, first.Hostname)
 	})
-	// (73): the site list's 重新生成 on a site whose
+	// The site list's 重新生成 on a site whose
 	// allocation failed in the default zone (projection cname_domain='') went
 	// through the batch action and failed the commit with P1134: the batch
 	// UPDATE wrote the projected '' while the intent row holds the package
@@ -645,7 +644,7 @@ func TestPlatformCNAMEIntentAuthorization(t *testing.T) {
 		var projectedDomain, state string
 		if err := pool.QueryRow(t.Context(), `SELECT revision,cname_domain,cname_state FROM sites WHERE id=$1`,
 			initial.Site.ID).Scan(&revision, &projectedDomain, &state); err != nil || projectedDomain != "" || state != "failed" {
-			t.Fatalf("73-shaped site cname_domain=%q state=%s err=%v, want '' failed", projectedDomain, state, err)
+			t.Fatalf("site cname_domain=%q state=%s err=%v, want '' failed", projectedDomain, state, err)
 		}
 		for _, caller := range []struct {
 			name  string
@@ -893,7 +892,7 @@ func TestPlatformCNAMEIntentAuthorization(t *testing.T) {
 		}
 		assertIntent(t, initial.Site.ID, *result.Items[0].Site.CNAMETaskID)
 	})
-	// 10-26 线上 ikvm.asia：分配失败后站点投影 cname_domain=''（默认区域），批量重新生成
+	// 分配失败后站点投影 cname_domain=''（默认区域），批量重新生成
 	// 把 '' 原样写回而意图记真实域名，412 触发器拒为 P1134，整批 500。
 	t.Run("batch regenerates a failed allocation in the default zone", func(t *testing.T) {
 		initial := create(t, owner, "platform-batch-failed-alloc")

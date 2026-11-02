@@ -329,6 +329,43 @@ describe('SiteListPage', () => {
       .toHaveTextContent('接入未就绪：域名未解析到 CNAME')
   })
 
+  // “接入受阻”全文在悬停里，点击去详情页接入状态卡。
+  it('an access-blocked status opens the site detail at its access card', async () => {
+    setSiteSession({ permissions: ['sites.read', 'sites.manage', 'dns.manage'] })
+    const checks = (['package', 'line_group', 'cname_generated', 'dns_resolved', 'https_cert', 'published'] as const)
+      .map((code) => ({ code, ok: code !== 'line_group', detail: code === 'line_group' ? 'no_online_nodes' : '', checked_at: '2026-10-27T12:00:00Z' }))
+    const blocked: SiteListItem = { ...site, id: 'site-blocked', domain: 'blocked.example.com',
+      access_readiness: { state: 'blocked', checks } }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response([blocked]))
+    function Where() { const location = useLocation(); return <div data-testid="where">{location.pathname + location.search}</div> }
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<><SiteListPage /><Where /></>, ['/site/list'])
+
+    const row = await screen.findByText('blocked.example.com').then((element) => element.closest('tr')!)
+    await user.click(within(row).getByTestId('site-access-status-link'))
+    expect(screen.getByTestId('where')).toHaveTextContent('/site/site-blocked/edit?focus=access')
+  })
+
+  // 卡在生成中的 CNAME 显示停滞原因，更多菜单可重新生成。
+  it('a stalled pending CNAME shows why and can be regenerated from the more menu', async () => {
+    setSiteSession({ permissions: ['sites.read', 'sites.manage', 'dns.manage'] })
+    const stalled: SiteListItem = { ...site, id: 'site-stalled', domain: 'stalled.example.test', cname: '', cname_state: 'pending',
+      cname_pending_code: 'cname_stalled', cname_task_id: 'task-stalled' }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response([stalled]))
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteListPage />, ['/site/list'])
+
+    const mark = await screen.findByTestId('site-cname-stalled')
+    expect(mark).toHaveTextContent('生成中（已停滞）')
+    expect(mark).toHaveAttribute('title', expect.stringContaining('超过 15 分钟仍未完成'))
+    const posts = vi.mocked(globalThis.fetch).mock.calls.length
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    await user.click(await screen.findByText('重新生成 CNAME'))
+    await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.slice(posts)
+      .some(([url, init]) => String(url) === '/v1/sites/batch-action' && init?.method === 'POST' &&
+        JSON.parse(String(init.body)).action === 'regenerate_cname')).toBe(true))
+  })
+
   it('FLOW001: a tenant whose CNAME failed for want of a line is told to contact the administrator, not sent to 节点管理', async () => {
     setSiteSession({ permissions: ['sites.read', 'sites.manage', 'dns.manage'] })
     const failed: SiteListItem = { ...site, id: 'site-noline', domain: 'noline.example.com', cname: '', cname_state: 'failed',
@@ -372,7 +409,7 @@ describe('SiteListPage', () => {
   })
 
   describe('a row CNAME regeneration with a 500 answer', () => {
-    const failed: SiteListItem = { ...site, id: 'site-failed', domain: 'ikvm.asia', cname: '',
+    const failed: SiteListItem = { ...site, id: 'site-failed', domain: 'failed.example.test', cname: '',
       cname_state: 'failed', cname_failure_code: 'dns_reconcile_unavailable', cname_domain: '' }
     const other: SiteListItem = { ...site, id: 'site-other', domain: 'other.example.com' }
     const p1134 = () => jsonResponse({ error: { code: 'internal_error', message: 'internal error' } }, 500)
@@ -406,7 +443,7 @@ describe('SiteListPage', () => {
 
         await vi.advanceTimersByTimeAsync(1000)
         // 只弹一次框：确认框不再出现，请求中也不闪结果待确认/失败态
-        expect(screen.queryByText('重新生成 ikvm.asia 的 CNAME')).not.toBeInTheDocument()
+        expect(screen.queryByText('重新生成 failed.example.test 的 CNAME')).not.toBeInTheDocument()
         expect(document.querySelector('.cdnca-outcome-bar')).toBeNull()
         expect(screen.queryByText(/重新生成结果待确认/)).not.toBeInTheDocument()
         expect(dialogsNamed(/./).filter((node) => node.closest('.cdnca-feedback'))).toHaveLength(0)
@@ -416,8 +453,8 @@ describe('SiteListPage', () => {
 
         await vi.advanceTimersByTimeAsync(3000)
         // 成功只给轻提示，不再弹结果框
-        expect(await screen.findByText('已开始重新生成 ikvm.asia 的 CNAME')).toBeInTheDocument()
-        expect(screen.queryByText('ikvm.asia 的 CNAME 重新生成结果')).not.toBeInTheDocument()
+        expect(await screen.findByText('已开始重新生成 failed.example.test 的 CNAME')).toBeInTheDocument()
+        expect(screen.queryByText('failed.example.test 的 CNAME 重新生成结果')).not.toBeInTheDocument()
         expect(document.querySelector('.cdnca-outcome-bar')).toBeNull()
         expect(sessionStorage).toHaveLength(0)
       } finally {
@@ -469,7 +506,7 @@ describe('SiteListPage', () => {
       renderWithProviders(<SiteListPage />, ['/site/list'])
       await regenerateFromRow(user)
 
-      expect(await screen.findByText('已开始重新生成 ikvm.asia 的 CNAME')).toBeInTheDocument()
+      expect(await screen.findByText('已开始重新生成 failed.example.test 的 CNAME')).toBeInTheDocument()
       const posts = fetchSpy.mock.calls.filter(([url]) => String(url) === '/v1/sites/batch-action')
       expect(posts).toHaveLength(2)
       const keys = posts.map(([, init]) => (init?.headers as Record<string, string>)['Idempotency-Key'])
@@ -491,7 +528,7 @@ describe('SiteListPage', () => {
       renderWithProviders(<SiteListPage />, ['/site/list'])
       await regenerateFromRow(user)
 
-      expect(await screen.findByText('ikvm.asia 的 CNAME 重新生成结果待确认', { selector: '.cdnca-outcome-bar .ant-alert-message' })).toBeInTheDocument()
+      expect(await screen.findByText('failed.example.test 的 CNAME 重新生成结果待确认', { selector: '.cdnca-outcome-bar .ant-alert-message' })).toBeInTheDocument()
       expect(sessionStorage).toHaveLength(1)
       // only new batch writes wait; the rest of the page stays usable
       expect(screen.getByRole('button', { name: '添加网站' })).toBeEnabled()

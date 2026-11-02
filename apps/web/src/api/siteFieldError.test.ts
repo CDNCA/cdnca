@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { responseApiError } from './auth'
 
-// site-edit-parity2: 73 PATCH /v1/sites/01a163c0… (ikvm.asia) answered 400;
-// the server now names the refused field and the editor shows it.
+// A site PATCH refused with 400 names the refused field and the editor shows it.
 describe('site field validation error', () => {
   it('keeps error.details.field of a validation_error', async () => {
     const response = new Response(JSON.stringify({ error: {
@@ -22,7 +21,7 @@ describe('site field validation error', () => {
     expect((await responseApiError(response)).field).toBeUndefined()
   })
 
-  // fix-fielderr-be: nested paths, and the resource codes that carry the same details.
+  // Nested paths, and the resource codes that carry the same details.
   it.each([
     ['validation_error', 'spec.limits.domains', 'out_of_range'],
     ['node_scheduling_invalid_request', 'endpoints[1].port', 'out_of_range'],

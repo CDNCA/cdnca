@@ -107,6 +107,8 @@ type createBody struct {
 	Targets     []targetBody `json:"targets"`
 	BatchID     string       `json:"batch_id"`
 	RestrictSSH bool         `json:"restrict_ssh"`
+	// AllowCIDRs: "also allow" addresses of the restriction.
+	AllowCIDRs []string `json:"allow_cidrs"`
 	// Language is the console UI language (i18n code such as "zh-CN" or
 	// "en"); the install command then carries --lang zh / --lang en.
 	Language string `json:"language"`
@@ -123,7 +125,7 @@ type targetBody struct {
 
 // createRequest maps the body; ok is false for a malformed one.
 func (body createBody) createRequest() (CreateRequest, bool) {
-	request := CreateRequest{RestrictSSH: body.RestrictSSH}
+	request := CreateRequest{RestrictSSH: body.RestrictSSH, AllowCIDRs: body.AllowCIDRs}
 	switch code := strings.ToLower(body.Language); {
 	case code == "":
 	case code == "zh" || strings.HasPrefix(code, "zh-") || strings.HasPrefix(code, "zh_"):
@@ -282,10 +284,10 @@ func (handler *Handler) cancel(response http.ResponseWriter, request *http.Reque
 	writeJSON(response, http.StatusOK, job)
 }
 
-func (handler *Handler) controllerEgress(response http.ResponseWriter, _ *http.Request, _ Actor) {
-	cidrs := handler.service.ControllerEgress()
+func (handler *Handler) controllerEgress(response http.ResponseWriter, request *http.Request, _ Actor) {
+	cidrs, source := handler.service.ControllerEgress(request.Context())
 	writeJSON(response, http.StatusOK, map[string]any{"controller_cidrs": cidrs, "configured": len(cidrs) > 0,
-		"rollback_seconds": int(AccessRollbackWindow / time.Second)})
+		"source": source, "rollback_seconds": int(AccessRollbackWindow / time.Second)})
 }
 
 func (handler *Handler) nodeID(response http.ResponseWriter, request *http.Request) (uuid.UUID, bool) {

@@ -59,6 +59,7 @@ type Service struct {
 	worker       string
 	terminals    chan struct{}
 	access       *AccessConfig
+	detectEgress func(context.Context) []string // see UseEgressDetector
 	// accessChanged wakes the SSH access delivery worker (nil: none runs).
 	accessChanged func()
 }
@@ -274,7 +275,17 @@ func (service *Service) Create(ctx context.Context, actor Actor, request CreateR
 	if err := normalizeCreate(&request, service.dialer.blocked); err != nil {
 		return nil, err
 	}
-	if request.RestrictSSH && len(service.ControllerEgress()) == 0 {
+	if !request.RestrictSSH && len(request.AllowCIDRs) > 0 {
+		return nil, ErrInvalidInput
+	}
+	allow, err := normalizeCIDRs(request.AllowCIDRs, maxAllowCIDRs)
+	if err != nil {
+		return nil, err
+	}
+	// Without a known controller egress the allowlist alone is let in (the
+	// node reverts by itself if the controller then cannot reach sshd).
+	if controller, _ := service.ControllerEgress(ctx); request.RestrictSSH && len(controller) == 0 &&
+		(len(allow) == 0 || len(allow) > maxControllerCIDRs) {
 		return nil, ErrControllerEgressUnknown
 	}
 	defer clear([]byte(request.Credential.Password))
@@ -304,7 +315,7 @@ func (service *Service) Create(ctx context.Context, actor Actor, request CreateR
 	}
 	wait.Wait()
 	var jobs []Job
-	err := pgx.BeginFunc(ctx, service.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, service.pool, func(tx pgx.Tx) error {
 		if err := service.requirePlatform(ctx, tx, actor); err != nil {
 			return err
 		}
@@ -343,11 +354,11 @@ func (service *Service) Create(ctx context.Context, actor Actor, request CreateR
 			}
 			_, err := tx.Exec(ctx, `INSERT INTO node_ssh_install_jobs(id,scope_id,batch_id,host,port,username,auth_kind,
 				node_name,control_plane,host_key_sha256,credential_key_id,credential_ciphertext,state,
-				failure_code,created_by_user_id,created_at,finished_at,updated_at,restrict_ssh,language)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16,$18,$19)`,
+				failure_code,created_by_user_id,created_at,finished_at,updated_at,restrict_ssh,language,restrict_ssh_allow_cidrs)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16,$18,$19,$20)`,
 				job.ID, actor.ScopeID, batchID, job.Host, job.Port, job.Username, authKind, job.NodeName,
 				request.ControlPlane, job.HostKeySHA256, keyID, ciphertext, job.State, job.FailureCode, actor.UserID,
-				now, job.FinishedAt, request.RestrictSSH, request.Language)
+				now, job.FinishedAt, request.RestrictSSH, request.Language, allow)
 			clear(ciphertext)
 			if err != nil {
 				if isUnique(err) {

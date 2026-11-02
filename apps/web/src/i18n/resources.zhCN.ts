@@ -928,7 +928,7 @@ export const zhCN = {
           cname_domain: 'CNAME 域名跟随网站套餐，不能在网站上单独修改，请到套餐里修改 CNAME 域名（保存后该套餐下的网站会自动重新生成）',
           cname_hostname: 'CNAME 主机名跟随网站套餐，不能在网站上单独修改，请到套餐里修改',
           cname_mode: 'CNAME 模式跟随网站套餐，不能在网站上单独修改',
-          cname_regenerate: 'CNAME 只有在分配失败时才能重试，请刷新页面查看最新状态',
+          cname_regenerate: 'CNAME 只有在生成失败或生成中时才能重新生成，请刷新页面查看最新状态',
           https_enabled: '还没有绑定证书，不能开启 HTTPS：请先在 HTTPS 设置中绑定证书',
           force_https: '强制跳转 HTTPS 需要先开启 HTTPS、配置 HTTPS 端口并在 HTTPS 设置中绑定证书',
           package_id: '网站套餐无效：该用户没有这个套餐的唯一有效订阅',

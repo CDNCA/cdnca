@@ -78,9 +78,8 @@ func (snapshot *OwnerSnapshot) OwnerRecords(ctx context.Context, tenantID, siteI
 		}, canonical)
 	}
 	if err != nil {
-		var remote *dnsproviderremote.Error
-		if errors.As(err, &remote) && remote.Code == dnsproviderremote.CodeZoneNotHosted {
-			return nil, OwnerSnapshotFailure{Code: string(remote.Code)}
+		if failure, ok := definitiveSnapshotFailure(err); ok {
+			return nil, failure
 		}
 		return nil, ErrUnavailable
 	}
@@ -94,6 +93,23 @@ func providerRecords(records []dnsproviderremote.ZoneRecord) []dnscheck.Provider
 			Value: record.Value, TTL: record.TTL, Line: record.Line, Weight: record.Weight})
 	}
 	return result
+}
+
+// definitiveSnapshotFailure: provider answers a retry cannot change fail the
+// CNAME job with their code (rejected credentials were retried as
+// "unavailable" until max_attempts, about 5 hours of 生成中 with no reason).
+// Rate limits, timeouts and outages stay retryable.
+func definitiveSnapshotFailure(err error) (OwnerSnapshotFailure, bool) {
+	var remote *dnsproviderremote.Error
+	if !errors.As(err, &remote) {
+		return OwnerSnapshotFailure{}, false
+	}
+	switch remote.Code {
+	case dnsproviderremote.CodeZoneNotHosted, dnsproviderremote.CodeCredentialsRejected,
+		dnsproviderremote.CodeUnsupported:
+		return OwnerSnapshotFailure{Code: string(remote.Code)}, true
+	}
+	return OwnerSnapshotFailure{}, false
 }
 
 // OwnerSnapshotFailure is a provider answer that a retry cannot change (the

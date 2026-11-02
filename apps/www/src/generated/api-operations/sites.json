@@ -1672,6 +1672,67 @@
    ]
   },
   {
+   "operation_id": "republishSite",
+   "method": "POST",
+   "path": "/v1/sites/{id}/republish",
+   "summary": "Access status > Published to nodes > Republish",
+   "summary_zh": "接入状态 > 已发布到节点 > 重新发布",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage. Publishes the site's current settings again without a change: an automatic scope queues the caller's site.update at a new source revision; a manual scope redelivers its last publication now (system channel, node_sync). 409 publish_in_flight while the site's publication is still running; 409 site_disabled for a disabled site. Returns the site's access_readiness after the request was queued.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "The republication was queued; the site's access readiness.",
+     "fields": [
+      {
+       "name": "state",
+       "type": "string: ready / pending / blocked",
+       "required": true
+      },
+      {
+       "name": "checks",
+       "type": "array<SiteAccessCheck>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
    "operation_id": "getSiteSchedule302",
    "method": "GET",
    "path": "/v1/sites/{id}/schedule302",

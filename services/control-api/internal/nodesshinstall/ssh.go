@@ -95,8 +95,13 @@ func (dialer *Dialer) FetchHostKey(ctx context.Context, host string, port int) (
 // login opens an authenticated SSH client whose host key must equal pinned.
 // With deadline the TCP connection carries it (installs); without, the
 // connection has no deadline (interactive terminals manage their own).
+// An empty pinned trusts the key the server presents on this very
+// connection (first use, terminals only) and reports it through seen.
 func (dialer *Dialer) login(ctx context.Context, host string, port int, credential Credential, pinned string,
-	deadline bool) (*ssh.Client, error) {
+	deadline bool, seen *string) (*ssh.Client, error) {
+	if pinned == "" && seen == nil {
+		return nil, errHostKeyMismatch
+	}
 	auth, err := authMethods(credential)
 	if err != nil {
 		return nil, err
@@ -113,8 +118,12 @@ func (dialer *Dialer) login(ctx context.Context, host string, port int, credenti
 	}
 	config := &ssh.ClientConfig{User: credential.Username, Auth: auth, Timeout: dialer.timeout,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
-			if HostKeySHA256(key) != pinned {
+			fingerprint := HostKeySHA256(key)
+			if pinned != "" && fingerprint != pinned {
 				return errHostKeyMismatch
+			}
+			if seen != nil {
+				*seen = fingerprint
 			}
 			return nil
 		}}
@@ -134,14 +143,18 @@ type Shell struct {
 	client  *ssh.Client
 	session *ssh.Session
 	Stdin   io.WriteCloser
+	// HostKeySHA256 is the host key the connection was made with.
+	HostKeySHA256 string
 }
 
-// OpenShell logs in with the pinned host key and starts a login shell on an
-// xterm pty of cols x rows. The shell's stdout and stderr are both copied to
-// output (from two goroutines: output must be safe for concurrent writes).
+// OpenShell logs in with the pinned host key (empty: trust the key presented
+// on this connection, first use) and starts a login shell on an xterm pty of
+// cols x rows. The shell's stdout and stderr are both copied to output (from
+// two goroutines: output must be safe for concurrent writes).
 func (dialer *Dialer) OpenShell(ctx context.Context, host string, port int, credential Credential, pinned string,
 	cols, rows int, output io.Writer) (*Shell, error) {
-	client, err := dialer.login(ctx, host, port, credential, pinned, false)
+	var seen string
+	client, err := dialer.login(ctx, host, port, credential, pinned, false, &seen)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +163,7 @@ func (dialer *Dialer) OpenShell(ctx context.Context, host string, port int, cred
 		_ = client.Close()
 		return nil, err
 	}
+	shell.HostKeySHA256 = seen
 	return shell, nil
 }
 
@@ -190,7 +204,7 @@ func (shell *Shell) Close() error {
 // It returns the exit error, if any.
 func (dialer *Dialer) Run(ctx context.Context, host string, port int, credential Credential, pinned, command string,
 	stdin []byte, line func(string)) error {
-	client, err := dialer.login(ctx, host, port, credential, pinned, true)
+	client, err := dialer.login(ctx, host, port, credential, pinned, true, nil)
 	if err != nil {
 		return err
 	}
@@ -298,8 +312,10 @@ var (
 // gateway (the node connects to the Gateway IP directly) is the
 // console's published direct Gateway entry (gatewayregistry
 // DirectNodeInstallGateway, the same values as node-install-defaults):
-// a non-zero one adds --gateway-enrollment-address, --gateway-address and
-// --gateway-server-name; the zero value (ws console, no registry) adds none.
+// a non-zero one adds --gateway-enrollment-address, --gateway-address,
+// --gateway-server-name and --gateway-transport grpc (as the copied command);
+// the zero value (ws or CDN console, no registry) adds none and the installer
+// reads transport and tunnel host from node-install-defaults.
 func InstallCommand(controlPlane, registrationKey, host, name string, root bool, sudoPassword bool,
 	controlCASHA256, language string, gateway Gateway) (string, error) {
 	parsed, err := url.Parse(controlPlane)
@@ -312,8 +328,11 @@ func InstallCommand(controlPlane, registrationKey, host, name string, root bool,
 	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
 	arguments := []string{"--control-plane", quote(controlPlane), "--registration-key-stdin", "-y"}
 	if gateway != (Gateway{}) {
+		// --gateway-transport grpc pins the direct entry: node-install-defaults
+		// may since carry ws (CDN), whose transport must not pair with it.
 		arguments = append(arguments, "--gateway-enrollment-address", quote(gateway.EnrollmentAddress),
-			"--gateway-address", quote(gateway.Address), "--gateway-server-name", quote(gateway.ServerName))
+			"--gateway-address", quote(gateway.Address), "--gateway-server-name", quote(gateway.ServerName),
+			"--gateway-transport", "grpc")
 	}
 	if address, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil && address.Is4() {
 		arguments = append(arguments, "--public-ip", quote(address.String()))

@@ -113,7 +113,7 @@ func TestInstallCommandCarriesTheDirectGateway(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "--gateway-enrollment-address '203.0.113.20:29402' --gateway-address '203.0.113.20:20407' --gateway-server-name '203.0.113.20'"
+	want := "--gateway-enrollment-address '203.0.113.20:29402' --gateway-address '203.0.113.20:20407' --gateway-server-name '203.0.113.20' --gateway-transport grpc"
 	if !strings.Contains(command, want) {
 		t.Fatalf("command missing the gateway arguments:\n%s", command)
 	}

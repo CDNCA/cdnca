@@ -51,7 +51,7 @@ export function buildNodeInstallCommand(credential: string, origin: string, runt
   if (gateway && !(gatewayAddressPattern.test(gateway.enrollment_address) && gatewayAddressPattern.test(gateway.address) &&
       gatewayServerPattern.test(gateway.server_name))) throw new Error('invalid gateway entry')
   const gatewayArgs = gateway ? ` --gateway-enrollment-address ${quote(gateway.enrollment_address)} --gateway-address ${quote(gateway.address)}` +
-    ` --gateway-server-name ${quote(gateway.server_name)}` : ''
+    ` --gateway-server-name ${quote(gateway.server_name)} --gateway-transport grpc` : ''
   return buildInstallerCommand({
     urls: [`${control}/downloads/install-node.sh`], protocols: '=https', label: '[cdnca-edge]',
     args: `--control-plane ${quote(control)} --registration-key-stdin${gatewayArgs}`, stdinSecret: credential, language,

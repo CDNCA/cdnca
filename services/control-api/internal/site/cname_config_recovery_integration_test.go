@@ -27,7 +27,7 @@ func TestCNAMEConfigFailureRecoversAfterZoneAdded(t *testing.T) {
 	testCNAMEConfigRecovery(t, false)
 }
 
-// The 73 sequence: site first, then the platform DNS configuration and the
+// The sequence: site first, then the platform DNS configuration and the
 // platform CNAME domain synced into the tenant.
 func TestCNAMEConfigFailureRecoversAfterPlatformDNSConfig(t *testing.T) {
 	testCNAMEConfigRecovery(t, true)
@@ -221,7 +221,7 @@ func testCNAMEConfigRecovery(t *testing.T, platformPath bool) {
 		// A zone that is not the package's CNAME domain does not recover the
 		// site; with the provider configured the reason becomes the zone.
 		if _, err := pool.Exec(t.Context(), `INSERT INTO dns_zones(id,scope_id,provider_id,name,is_default,created_by_user_id,updated_by_user_id)
-			VALUES($1,$2,$3,'ikvm.asia',true,$4,$4)`, uuid.New(), tenant.scopeID, providerID, tenant.userID); err != nil {
+			VALUES($1,$2,$3,'other-zone.example.com',true,$4,$4)`, uuid.New(), tenant.scopeID, providerID, tenant.userID); err != nil {
 			t.Fatal(err)
 		}
 		if requeued := requeue(t, pool, tenant.scopeID, now); requeued != 0 {

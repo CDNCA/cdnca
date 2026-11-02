@@ -31,3 +31,38 @@
   font-size: 13px;
   color: var(--cdnca-color-text);
 }
+
+/* 状态列“接入受阻：…”可点击去详情页接入状态；单元格内省略，悬停 Tooltip 看全文。 */
+.site-access-status-link {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.site-access-status-link > .site-access-status {
+  display: block;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.site-access-status-link:disabled {
+  cursor: default;
+}
+
+/* CNAME 卡在生成中（已停滞）的可点标记。 */
+.site-cname-pending-mark {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.site-cname-pending-mark .ant-tag {
+  margin-inline-end: 0;
+}

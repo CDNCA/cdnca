@@ -38,6 +38,7 @@ type siteBasicPayload struct {
 	TLSProtocols          tlsProtocolsPayload `json:"tls_protocols,omitempty"`
 	CNAMEState            *string             `json:"cname_state"`
 	CNAMEFailureCode      *string             `json:"cname_failure_code,omitempty"`
+	CNAMEPendingCode      *string             `json:"cname_pending_code,omitempty"`
 	CNAMETaskID           *string             `json:"cname_task_id"`
 	CNAMECurrentRevision  *int64              `json:"cname_current_revision"`
 	CNAMELKGRevision      *int64              `json:"cname_lkg_revision"`
@@ -896,6 +897,7 @@ func siteDetailAt(item site.Site, now time.Time) siteDetailResponse {
 			TLSProtocols:             tlsProtocolsPayload(append([]string(nil), item.TLSProtocols...)),
 			CNAMEState:               item.CNAMEState,
 			CNAMEFailureCode:         item.CNAMEFailureCode,
+			CNAMEPendingCode:         item.CNAMEPendingCode,
 			CNAMETaskID:              uuidPointerString(item.CNAMETaskID),
 			CNAMECurrentRevision:     item.CNAMECurrentRevision,
 			CNAMELKGRevision:         item.CNAMELKGRevision,
@@ -953,6 +955,33 @@ func (s *Server) handleCheckSiteAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, readiness)
+}
+
+// handleRepublishSite is 接入状态 > 已发布到节点 > 重新发布: publishes the
+// site's current settings again (sites.manage).
+func (s *Server) handleRepublishSite(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requireSitePermission(w, r, "sites.manage")
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "site ID must be a UUID")
+		return
+	}
+	readiness, err := s.sites.Republish(r.Context(), siteActor(principal), id, requestID(r.Context()))
+	switch {
+	case errors.Is(err, site.ErrPublishInFlight):
+		s.writeAPIError(w, r, http.StatusConflict, "publish_in_flight", "the site is being published; wait for it to finish")
+		return
+	case errors.Is(err, site.ErrLockStateConflict):
+		s.writeAPIError(w, r, http.StatusConflict, "site_disabled", "a disabled site is not published")
+		return
+	case err != nil:
+		s.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, readiness)
 }
 
 const siteDomainCSVContentType = "text/csv; charset=utf-8"

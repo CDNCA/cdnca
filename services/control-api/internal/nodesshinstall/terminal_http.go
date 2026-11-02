@@ -30,9 +30,12 @@ var TerminalPatterns = []string{
 // frame (text) carries the access token with the login:
 //
 //	{"type":"open","access_token":"…","port":22,"username":"root","password":"…",
-//	 "host_key_sha256":"SHA256:…","use_saved":false,"remember":false,"cols":120,"rows":32}
+//	 "use_saved":false,"remember":false,"cols":120,"rows":32}
 //
-// The server answers {"type":"opened","session_id":"…"} or
+// host_key_sha256 is optional: without it the controller uses the key known
+// for the node, or trusts the presented one on first use (and pins it when
+// remember is set). The server answers {"type":"opened","session_id":"…",
+// "host_key_sha256":"SHA256:…","remembered":true|false} or
 // {"type":"error","code":"…"} and closes. Then binary frames are terminal
 // bytes both ways, and the client sends {"type":"resize","cols":…,"rows":…}.
 // The server ends with {"type":"closed","reason":"…"}.
@@ -195,8 +198,6 @@ func terminalErrorCode(err error) string {
 		return "not_found"
 	case errors.Is(err, ErrNoAddress):
 		return "node_address_missing"
-	case errors.Is(err, ErrHostKeyRequired):
-		return "host_key_required"
 	case errors.Is(err, ErrHostKeyChanged):
 		return FailHostKeyMismatch
 	case errors.Is(err, ErrAuthFailed):
@@ -308,7 +309,8 @@ func (handler *TerminalHandler) terminal(response http.ResponseWriter, request *
 		control(map[string]string{"type": "closed", "reason": final})
 		terminal.End(final, bytesIn.Load(), bytesOut.Load())
 	}()
-	control(map[string]string{"type": "opened", "session_id": terminal.id.String()})
+	control(map[string]any{"type": "opened", "session_id": terminal.id.String(), "host_key_sha256": terminal.HostKeySHA256,
+		"remembered": terminal.Remembered})
 	_ = conn.SetReadDeadline(time.Time{})
 
 	go func() {

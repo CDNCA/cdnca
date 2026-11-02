@@ -56,6 +56,21 @@ describe('NodeSSHInstall', () => {
     expect(JSON.parse(String(confirm?.init?.body))).toEqual({ host_key_sha256: fingerprint })
   })
 
+  // The "add node -> SSH remote install" dialog: 409 controller_egress_unknown says what to fill in.
+  it('explains a controller egress refusal instead of a generic request failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) =>
+      init?.method === 'POST' ? reply({ error: { code: 'controller_egress_unknown' } }, 409) : reply({ items: [] }))
+    const user = userEvent.setup()
+    renderWithProviders(<NodeSSHInstall getAccessToken={() => 'token'} errorText={() => '请求失败，请稍后重试'} />)
+    await user.type(screen.getByLabelText('服务器 IP 或域名'), '203.0.113.7')
+    await user.type(screen.getByLabelText('SSH 密码'), 'root-secret')
+    await user.click(screen.getByLabelText('仅允许主控 SSH 连接该节点'))
+    expect(screen.getByLabelText('额外允许的地址（可选）')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '开始' }))
+    expect(await screen.findByText(/请在「额外允许的地址」里填主控出口 IP/)).toBeInTheDocument()
+    expect(screen.queryByText('请求失败，请稍后重试')).toBeNull()
+  })
+
   it('shows a readable failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
       reply({ items: [job({ state: 'failed', failure_code: 'ssh_auth_failed', host_key_sha256: fingerprint })] }, 201))

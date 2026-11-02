@@ -16,8 +16,11 @@ asset cache rule, /favicon.ico and /robots.txt, the sandboxed /site/t/ of
 theme plugin page bundles, the node installer served from the active
 release, the /dashboard console entry without a trailing slash, the log and
 website content JSON gzip, the favicon fallback, the billing bridge downloads,
-and brotli_static where libnginx-mod-http-brotli-static is installed); any
-other local drift is refused.
+WebSocket upgrades under /v1/ (the console SSH terminal), the node
+WebSocket tunnel /agent/v1/ to the local Gateway, and brotli_static
+where libnginx-mod-http-brotli-static is installed); CDN origin authentication
+enabled by install-control.sh origin-auth is kept and extends to the added
+locations; any other local drift is refused.
 """
 import argparse
 import difflib
@@ -34,6 +37,7 @@ import sys
 import time
 
 CONFIG = Path('/etc/cdnca-control/nginx.conf')
+GATEWAY_ENV = Path('/etc/cdnca-control/gateway.env')
 RUNTIME = Path('/var/lib/cdnca-control/nginx-runtime')
 LOCK = Path('/run/lock/cdnca-management-release.lock')
 NGINX = Path('/usr/sbin/nginx')
@@ -213,6 +217,76 @@ BILLING_BRIDGE = '''        # Billing integration PHP modules (ADR 0019) ship wi
             default_type application/zip;
         }
 '''
+# Node WebSocket tunnel (Q20, 547f9e6f1): nodes behind a CDN that forwards
+# only 443 enroll and connect through /agent/v1/ (edge-agent falls back to it
+# when the direct Gateway ports do not answer). Hosts installed before it got
+# none, so /agent/v1/enroll fell to the website and answered 200 HTML.
+# (proxy_ssl_name, Gateway agent port) come from gateway.env, the same values
+# install-control.sh wrote ($GATEWAY_HOST, $GATEWAY_AGENT_PORT).
+AGENT_TUNNEL_TEMPLATE = '''        # 节点 WebSocket 隧道（Q20，套 CDN 时节点经此 443 入口）：原样转给本机网关的通道端口，网关在同一端口
+        # 区分 /agent/v1/tunnel 与 /agent/v1/enroll（ADR 0013 §4.2）。直连安装也开着，网关管理页可随时切 ws。
+        location ^~ /agent/v1/ {{
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_ssl_server_name on;
+            proxy_ssl_name {name};
+            proxy_ssl_verify off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_buffering off;
+            proxy_pass https://127.0.0.1:{port};
+        }}
+'''
+AGENT_TUNNEL_BLOCK = re.compile(re.escape(AGENT_TUNNEL_TEMPLATE.format(name='\0', port='\1'))
+                                .replace(re.escape('\0'), r'[A-Za-z0-9.:-]{1,253}').replace(re.escape('\1'), r'[0-9]{1,5}'))
+DEFAULT_AGENT = ('localhost', 20407)
+AGENT_HOST = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$')
+
+
+# WebSocket upgrades under /v1/ (the console SSH terminal):
+# "Connection: upgrade" only when the client asked for it, so plain API
+# requests keep the connection header they had before.
+WS_MAP_ANCHOR = '        "~^(?:200|304):/v1/brand-assets/(?:favicon|logo|login_ad)$" "";\n    }\n'
+WS_MAP = '''    # WebSocket upgrades under /v1/ (the console SSH terminal); other requests
+    # keep "Connection: close" to the API exactly as before.
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+'''
+WS_HEADERS = '            proxy_set_header Upgrade $http_upgrade;\n            proxy_set_header Connection $connection_upgrade;\n'
+
+def agent_tunnel(agent):
+    name, port = agent
+    if not AGENT_HOST.match(name) or not 1 <= int(port) <= 65535:
+        raise ValueError('invalid Gateway agent endpoint for /agent/v1/')
+    return AGENT_TUNNEL_TEMPLATE.format(name=name, port=int(port))
+
+
+def gateway_agent(path=GATEWAY_ENV):
+    """(proxy_ssl_name, agent port) from the co-located Gateway's gateway.env;
+    the installer defaults when there is none (standalone Gateway elsewhere)."""
+    if not os.path.lexists(path):
+        return DEFAULT_AGENT
+    values = {}
+    for line in read_owned(path)[0].decode('utf-8').splitlines():
+        key, sep, value = line.partition('=')
+        if sep:
+            values[key] = value
+    try:
+        port = int(values.get('CDNCA_GATEWAY_AGENT_ADDR', '').rpartition(':')[2])
+        host = values.get('CDNCA_GATEWAY_AGENT_PUBLIC_ENDPOINT', '').rpartition(':')[0].strip('[]')
+    except ValueError:
+        raise ValueError(f'{path} has no valid CDNCA_GATEWAY_AGENT_ADDR') from None
+    agent = (host or DEFAULT_AGENT[0], port)
+    agent_tunnel(agent)
+    return agent
+
+
 # The website's precompressed .br, where the distribution's brotli_static
 # module is installed; never on a
 # BaoTa host, whose own nginx cannot load it.
@@ -223,7 +297,7 @@ STATIC_ASSETS = '''        location ~* ^/(?:dashboard/)?(?:assets/.*|.*\\.(?:css
             try_files $uri =404;
 '''
 BROTLI_STATIC = '            brotli_static on;\n'
-BAOTA_DOWNLOAD = '    # 宝塔环境节点升级下载直连端口（fix-btenv2）'
+BAOTA_DOWNLOAD = '    # 宝塔环境节点升级下载直连端口'
 # A plain host's http block ends with the empty line of node_download_server.
 HTTP_END_OLD = '\n    }\n}\n'
 HTTP_END = '\n    }\n\n}\n'
@@ -243,6 +317,47 @@ BIND_END = '    # cdnca-host-bind end\n'
 BIND_BLOCK = re.compile(r'\n' + re.escape(BIND_BEGIN) + r'(.*?)' + re.escape(BIND_END), re.S)
 MAIN_SERVER = re.compile(r'\n    server \{\n        listen [^\n]* ssl(?: http2)?;\n        server_name _;\n.*?\n    \}\n', re.S)
 CERT_LINE = re.compile(r'(?m)^        ssl_certificate(_key)? [^\n]*;\n')
+
+
+# CDN origin authentication (install-control.sh origin-auth / --origin-auth,
+# origin_auth_apply_nginx): the http block includes origin-auth.conf right
+# after the plan source include, and every proxy location's X-Real-IP /
+# X-Forwarded-For take $cdnca_client_ip, the forwarded one followed by an empty
+# X-Cdnca-Origin-Key. Convergence works on the plain form and applies the same
+# rewrite to the result, so locations it adds get the client IP too.
+PLAN_SOURCE = '    include /etc/cdnca-upgrade/plan-source-nginx.conf;\n'
+ORIGIN_AUTH_INCLUDE = '    include /etc/cdnca-control/origin-auth.conf;\n'
+REAL_IP_PEER = '            proxy_set_header X-Real-IP $remote_addr;\n'
+REAL_IP_CLIENT = '            proxy_set_header X-Real-IP $cdnca_client_ip;\n'
+XFF_CLIENT = '            proxy_set_header X-Forwarded-For $cdnca_client_ip;\n            proxy_set_header X-Cdnca-Origin-Key "";\n'
+ORIGIN_AUTH_TEXT = re.compile(r'cdnca_client_ip|X-Cdnca-Origin-Key|origin-auth', re.I)
+
+
+def replace_lines(text, old, new):
+    """Replace whole lines only (awk's $0 == ...), never a deeper-indented one."""
+    return re.sub(r'(?m)^' + re.escape(old), lambda _: new, text)
+
+
+def split_origin_auth(text):
+    """(plain installer text, whether origin-auth was enabled)."""
+    if ORIGIN_AUTH_INCLUDE not in text:
+        if ORIGIN_AUTH_TEXT.search(text):
+            raise ValueError('origin-auth lines without its include; converge manually')
+        return text, False
+    if (text.count(ORIGIN_AUTH_INCLUDE) != 1 or text.count(PLAN_SOURCE) != 1 or
+            text.count(PLAN_SOURCE + ORIGIN_AUTH_INCLUDE) != 1):
+        raise ValueError('unexpected origin-auth include; converge manually')
+    plain = text.replace(PLAN_SOURCE + ORIGIN_AUTH_INCLUDE, PLAN_SOURCE)
+    plain = replace_lines(replace_lines(plain, REAL_IP_CLIENT, REAL_IP_PEER), XFF_CLIENT, XFF_PEER)
+    if ORIGIN_AUTH_TEXT.search(plain):
+        raise ValueError('unexpected origin-auth lines; converge manually')
+    return plain, True
+
+
+def render_origin_auth(text):
+    """origin_auth_apply_nginx on the converged plain text."""
+    text = text.replace(PLAN_SOURCE, PLAN_SOURCE + ORIGIN_AUTH_INCLUDE, 1)
+    return replace_lines(replace_lines(text, REAL_IP_PEER, REAL_IP_CLIENT), XFF_PEER, XFF_CLIENT)
 
 
 def split_bind(text):
@@ -275,18 +390,21 @@ def render_bind(text, bound):
     return text[:end] + BIND_BEGIN + server + BIND_END + text[end:]
 
 
-def converge(raw, brotli=False):
+def converge(raw, brotli=False, agent=DEFAULT_AGENT):
     """Return (converged bytes, listen port). Raises ValueError for unknown input.
-    brotli: the brotli_static module is installed on this host."""
+    brotli: the brotli_static module is installed on this host; agent: the
+    local Gateway's (proxy_ssl_name, agent port) for a missing /agent/v1/."""
     if type(raw) is not bytes or not 1 <= len(raw) <= LIMIT or b'\r' in raw or b'\0' in raw:
         raise ValueError('unknown management nginx configuration')
-    text, bound = split_bind(raw.decode('utf-8'))
-    converged, port = converge_main(text.encode('utf-8'), brotli)
-    result = render_bind(converged.decode('utf-8'), bound).encode('utf-8')
+    text, origin_auth = split_origin_auth(raw.decode('utf-8'))
+    text, bound = split_bind(text)
+    converged, port = converge_main(text.encode('utf-8'), brotli, agent)
+    result = render_bind(converged.decode('utf-8'), bound)
+    result = (render_origin_auth(result) if origin_auth else result).encode('utf-8')
     return (raw if result == raw else result), port
 
 
-def converge_main(raw, brotli=False):
+def converge_main(raw, brotli=False, agent=DEFAULT_AGENT):
     text = raw.decode('utf-8')
     if text.count('\nhttp {\n') != 1 or 'root /data/cdnca-native-root/cdnca/current/static/web;' not in text:
         raise ValueError('not an installer-generated management nginx configuration')
@@ -301,7 +419,7 @@ def converge_main(raw, brotli=False):
                     all(line == XFF_PEER for line in re.findall(r'(?m)^.*X-Forwarded-For.*\n', text)))
         if not all(expected):
             raise ValueError('partially converged configuration; refusing to guess')
-        converged = converge_rest(text, brotli).encode('utf-8')
+        converged = converge_rest(text, brotli, agent).encode('utf-8')
         return (raw if converged == raw else converged), port
     if re.search(r'\bgzip|\bhttp2\b|location \^~ /v1/auth/', text):
         raise ValueError('local gzip/http2/auth customisation present; converge manually')
@@ -314,12 +432,46 @@ def converge_main(raw, brotli=False):
     if not forwarded or any(line != XFF_PEER for line in forwarded):
         raise ValueError('unexpected X-Forwarded-For configuration; converge manually')
     text = LISTEN.sub(lambda match: f'        listen {match[1]} ssl http2;', text, count=1)
-    return converge_rest(text, brotli).encode('utf-8'), port
+    return converge_rest(text, brotli, agent).encode('utf-8'), port
 
 
-def converge_rest(text, brotli):
-    text = converge_api_gzip(converge_dashboard(converge_node_installer(converge_site(text))))
-    return converge_http_end(converge_brotli(converge_billing_bridge(converge_favicon(text)), brotli))
+def converge_rest(text, brotli, agent=DEFAULT_AGENT):
+    text, tunnel = split_agent_tunnel(text, agent)
+    text = converge_websocket(converge_api_gzip(converge_dashboard(converge_node_installer(converge_site(text)))))
+    text = converge_billing_bridge(converge_favicon(text))
+    return converge_http_end(converge_brotli(converge_agent_tunnel(text, tunnel), brotli))
+
+
+def converge_websocket(text):
+    """Passes WebSocket upgrades under /v1/ (the console SSH terminal) to
+    control-api; plain requests keep "Connection: close"."""
+    if '$connection_upgrade' in text:
+        if text.count(WS_MAP_ANCHOR + WS_MAP) != 1 or text.count(API_GZIP + WS_HEADERS) != 1 or \
+                text.count('$connection_upgrade') != 2 or text.count('$http_upgrade') != 2:
+            raise ValueError('partially converged /v1/ WebSocket upgrade; converge manually')
+        return text
+    if re.search(r'\$http_upgrade|proxy_set_header +(?:Upgrade|Connection)\b', text) or \
+            text.count(WS_MAP_ANCHOR) != 1 or text.count(API_GZIP) != 1:
+        raise ValueError('unexpected /v1/ upgrade headers; converge manually')
+    return text.replace(WS_MAP_ANCHOR, WS_MAP_ANCHOR + WS_MAP).replace(API_GZIP, API_GZIP + WS_HEADERS)
+
+
+def split_agent_tunnel(text, agent):
+    """(text without the /agent/v1/ block, the block to put back): a host
+    that has it keeps its own name and port; one without it gets agent's."""
+    blocks = AGENT_TUNNEL_BLOCK.findall(text)
+    rest = AGENT_TUNNEL_BLOCK.sub('', text, count=1)
+    if len(blocks) > 1 or '/agent/v1' in rest:
+        raise ValueError('unexpected /agent/v1/ location; converge manually')
+    return rest, blocks[0] if blocks else agent_tunnel(agent)
+
+
+def converge_agent_tunnel(text, tunnel):
+    """The node WebSocket tunnel sits between the billing bridge downloads and
+    location ^~ /downloads/, as install-control.sh write_nginx_config has it."""
+    if text.count(BILLING_BRIDGE + NODE_INSTALLER_ANCHOR) != 1:
+        raise ValueError('unexpected downloads locations for /agent/v1/; converge manually')
+    return text.replace(BILLING_BRIDGE + NODE_INSTALLER_ANCHOR, BILLING_BRIDGE + tunnel + NODE_INSTALLER_ANCHOR)
 
 
 def converge_favicon(text):
@@ -555,12 +707,14 @@ def backup_path(config, original):
     return config.with_name(f'{config.name}.pre-converge-{hashlib.sha256(original).hexdigest()[:16]}')
 
 
-def apply(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0, brotli=None):
+def apply(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0, brotli=None,
+          agent=None):
     brotli = BROTLI_MODULE.is_file() if brotli is None else brotli
+    agent = gateway_agent() if agent is None else agent
     fd = locked(lock)
     try:
         original, info = read_owned(config)
-        updated, port = converge(original, brotli)
+        updated, port = converge(original, brotli, agent)
         if updated == original:
             return 'already converged'
         mode = stat.S_IMODE(info.st_mode)
@@ -580,14 +734,17 @@ def apply(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run
         os.close(fd)
 
 
-def rollback(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0, brotli=None):
+def rollback(config=CONFIG, runtime=RUNTIME, lock=LOCK, nginx=NGINX, unit=UNIT, run=subprocess.run, check=probe, wait=20.0, brotli=None,
+             agent=None):
     brotli = BROTLI_MODULE.is_file() if brotli is None else brotli
+    agent = gateway_agent() if agent is None else agent
     fd = locked(lock)
     try:
         current, info = read_owned(config)
-        _, port = converge(current, brotli)
+        _, port = converge(current, brotli, agent)
         candidates = sorted(config.parent.glob(f'{config.name}.pre-converge-*'))
-        originals = [data for data in (read_owned(path)[0] for path in candidates) if converge(data, brotli)[0] == current and data != current]
+        originals = [data for data in (read_owned(path)[0] for path in candidates)
+                     if converge(data, brotli, agent)[0] == current and data != current]
         if len(originals) != 1:
             raise ValueError('no unique backup whose convergence equals the current configuration')
         replace(config, originals[0], stat.S_IMODE(info.st_mode), run, nginx, runtime, current)
@@ -605,7 +762,7 @@ def main(argv=None):
     try:
         if action == 'check':
             original, _ = read_owned(CONFIG)
-            updated, _ = converge(original, BROTLI_MODULE.is_file())
+            updated, _ = converge(original, BROTLI_MODULE.is_file(), gateway_agent())
             sys.stdout.writelines(difflib.unified_diff(original.decode().splitlines(True), updated.decode().splitlines(True),
                                                        str(CONFIG), str(CONFIG) + ' (converged)'))
             print('already converged' if updated == original else 'convergence pending; run apply', file=sys.stderr)

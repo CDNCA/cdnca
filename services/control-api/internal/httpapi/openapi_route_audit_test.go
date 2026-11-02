@@ -199,11 +199,11 @@ func TestOpenAPIRouteAudit(t *testing.T) {
 	//    but whose sub-handler code was deleted in the community edition.
 	//    These must also be removed from control.yaml.
 	deadDespitePrefix := map[string]bool{
-		"/v1/admin/themes/tenant-policy":                                      true,
-		"/v1/admin/themes/tenants/{tenant_scope_id}":                          true,
-		"/v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}":       true,
-		"/v1/auth/bridge-sso":                                                 true,
-		"/v1/tenant-scopes/{tenant_scope_id}/theme":                           true,
+		"/v1/admin/themes/tenant-policy":                                true,
+		"/v1/admin/themes/tenants/{tenant_scope_id}":                    true,
+		"/v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}": true,
+		"/v1/auth/bridge-sso":                                           true,
+		"/v1/tenant-scopes/{tenant_scope_id}/theme":                     true,
 	}
 
 	paramRe := regexp.MustCompile(`\{[^}]+\}`)

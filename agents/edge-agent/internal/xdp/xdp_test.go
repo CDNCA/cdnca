@@ -138,6 +138,13 @@ func TestDisabledAndKindsAreKnown(t *testing.T) {
 	if status := fallback(ReasonLoadFailed, errorString(strings.Repeat("x", 1000))); len(status.Detail) != MaxDetail {
 		t.Fatal("detail not bounded")
 	}
+	tooLarge := errorString("program cdnca_xdp_filter: load program: argument list too long: BPF program is too large. Processed 1000001 insn")
+	if detail := fallback(ReasonLoadFailed, loadError("5.10.0-8", tooLarge)).Detail; !strings.HasPrefix(detail, "kernel 5.10.0-8 BPF verifier refused the program (complexity limit)") {
+		t.Fatalf("complexity detail %q", detail)
+	}
+	if other := errorString("load program: invalid argument"); loadError("6.8.0", other) != other {
+		t.Fatal("other load errors are kept as they are")
+	}
 	var nilManager *Manager
 	if nilManager.Running() || nilManager.Status().Mode != ModeNFTables {
 		t.Fatal("nil manager")

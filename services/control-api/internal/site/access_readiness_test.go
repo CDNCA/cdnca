@@ -2,6 +2,7 @@ package site
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/netip"
@@ -11,7 +12,7 @@ import (
 	"time"
 )
 
-// fix-readiness：接入状态逐项判定（套餐、线路组、CNAME、解析、证书、发布）。
+// 接入状态逐项判定（套餐、线路组、CNAME、解析、证书、发布）。
 func TestBuildAccessReadiness(t *testing.T) {
 	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
 	done, failed, pending := "done", "failed", "pending"
@@ -121,42 +122,31 @@ func TestBuildAccessReadiness(t *testing.T) {
 	}
 }
 
-// published（fix-readiness2 ③）：站点自己的自动发布请求在途=发布中、失败=发布失败；其余看作用域最近一次发布：
-// 该版本不含本站（config_version_telemetry_site_bindings 无本站行）=未发布（site_not_in_publication），
-// 含本站则按节点回执。不再用“站点创建后的最近一次发布”近似。
-func TestPublishState(t *testing.T) {
-	for name, c := range map[string]struct {
-		request                string
-		publication, includes  bool
-		total, healthy, failed int
-		want                   string
-	}{
-		"request succeeded and latest includes site": {request: "succeeded", publication: true, includes: true, total: 1, healthy: 1, want: "succeeded"},
-		"request succeeded but latest excludes site": {request: "succeeded", publication: true, total: 1, healthy: 1, want: publishExcluded},
-		"request succeeded without publication":      {request: "succeeded", want: ""},
-		"request failed beats healthy scope":          {request: "failed", publication: true, includes: true, total: 2, healthy: 2, want: "failed"},
-		"request in flight":                           {request: "reconciling", want: "pending"},
-		"request leased":                              {request: "leased", publication: true, includes: true, total: 1, healthy: 1, want: "pending"},
-		"superseded falls back healthy":               {request: "superseded", publication: true, includes: true, total: 2, healthy: 2, want: "succeeded"},
-		"manual publication healthy":                  {publication: true, includes: true, total: 3, healthy: 3, want: "succeeded"},
-		"manual publication partial":                  {publication: true, includes: true, total: 3, healthy: 2, want: "pending"},
-		"manual publication node failed":              {publication: true, includes: true, total: 3, healthy: 2, failed: 1, want: "failed"},
-		"manual publication excludes site":            {publication: true, total: 3, healthy: 3, want: publishExcluded},
-		"excluded even when its nodes failed":         {publication: true, total: 3, failed: 3, want: publishExcluded},
-		"publication without deployments":             {publication: true, includes: true, want: "pending"},
-		"never published":                             {want: ""},
-		"superseded and nothing published":            {request: "superseded", want: ""},
-	} {
-		if got := publishState(c.request, c.publication, c.includes, c.total, c.healthy, c.failed); got != c.want {
-			t.Errorf("%s: %q want %q", name, got, c.want)
-		}
+// published：判定在 site_publication_outcome_618（迁移 618，PG 集成测试覆盖）；
+// 这里只验 publish_failed 带出失败节点与失败原因，其余状态不带。
+func TestAccessReadinessPublishFailedDetails(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	code := "ERROR_CODE_PRECHECK_FAILED"
+	nodes := []PublishFailedNode{{NodeID: "n1", NodeName: "hk-1", State: "failed", ErrorCode: &code}}
+	facts := accessFacts{Enabled: true, PublishState: "failed", PublishFailedNodes: nodes, PublishFailureCode: ""}
+	published := buildAccessReadiness(facts, now).Checks[5]
+	if published.Detail != "publish_failed" || len(published.FailedNodes) != 1 || published.FailedNodes[0].NodeName != "hk-1" {
+		t.Fatalf("publish_failed check = %+v", published)
+	}
+	facts = accessFacts{Enabled: true, PublishState: "failed", PublishFailureCode: "no_target_nodes"}
+	if published := buildAccessReadiness(facts, now).Checks[5]; published.FailureCode != "no_target_nodes" || published.FailedNodes != nil {
+		t.Fatalf("request failure check = %+v", published)
+	}
+	facts = accessFacts{Enabled: true, PublishState: "succeeded", PublishFailedNodes: nodes, PublishFailureCode: "x"}
+	if published := buildAccessReadiness(facts, now).Checks[5]; !published.OK || published.FailedNodes != nil || published.FailureCode != "" {
+		t.Fatalf("succeeded check carries failure details: %+v", published)
 	}
 }
 
 // fix-readiness2 ①②③：只认已对外发布的端点（node_line_endpoint_published.published）与发布事实里的站点集合。
 func TestAccessReadinessSQLReadsPublishedFacts(t *testing.T) {
 	for _, want := range []string{"FROM node_line_endpoint_published endpoint", "endpoint.published",
-		"config_version_telemetry_site_bindings"} {
+		"site_publication_outcome_618(site.scope_id, site.id)"} {
 		if !strings.Contains(accessReadinessSQL, want) {
 			t.Errorf("accessReadinessSQL lacks %q", want)
 		}
@@ -284,5 +274,37 @@ func TestResolveSiteDNS(t *testing.T) {
 	if outcome := resolveSiteDNS(context.Background(), resolver, dnsTarget{CNAME: target.CNAME}); outcome.OK ||
 		outcome.Detail != DNSNoDomains {
 		t.Fatalf("no domains outcome = %+v", outcome)
+	}
+}
+
+// 平台节点名不给用户看：发布失败给所有身份失败节点数与归一化原因，节点明细只给平台身份。
+func TestPublishFailureRedactedForTenant(t *testing.T) {
+	precheck, internal := "ERROR_CODE_PRECHECK_FAILED", "ERROR_CODE_INTERNAL"
+	nodes := []PublishFailedNode{
+		{NodeID: "n1", NodeName: "hk-1", State: "failed", ErrorCode: &precheck},
+		{NodeID: "n2", NodeName: "hk-2", State: "failed", ErrorCode: &precheck},
+		{NodeID: "n3", NodeName: "sg-1", State: "reverted"},
+		{NodeID: "n4", NodeName: "sg-2", State: "failed", ErrorCode: &internal},
+	}
+	build := func() AccessReadiness {
+		return buildAccessReadiness(accessFacts{Enabled: true, PublishState: "failed", PublishFailedNodes: nodes}, time.Now())
+	}
+	platform := build()
+	platform.redactForActor(Actor{ScopeKind: "platform"})
+	if got := platform.Checks[5]; len(got.FailedNodes) != 4 || got.FailedNodeCount != 4 ||
+		!slices.Equal(got.FailedNodeReasons, []string{"internal", "precheck_failed", "reverted"}) {
+		t.Fatalf("platform published = %+v", got)
+	}
+	tenant := build()
+	tenant.redactForActor(Actor{ScopeKind: "tenant"})
+	if got := tenant.Checks[5]; got.Detail != "publish_failed" || got.FailedNodes != nil || got.FailedNodeCount != 4 ||
+		!slices.Equal(got.FailedNodeReasons, []string{"internal", "precheck_failed", "reverted"}) {
+		t.Fatalf("tenant published = %+v", got)
+	}
+	encoded, _ := json.Marshal(tenant)
+	for _, leak := range []string{"hk-1", "sg-1", "n1", "node_name", "node_id"} {
+		if strings.Contains(string(encoded), leak) {
+			t.Fatalf("tenant readiness leaks %q: %s", leak, encoded)
+		}
 	}
 }

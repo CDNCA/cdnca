@@ -11,7 +11,6 @@ export interface TerminalLogin {
   username?: string
   password?: string
   private_key?: string
-  host_key_sha256?: string
   use_saved: boolean
   remember: boolean
 }
@@ -23,7 +22,8 @@ export default function NodeSSHTerminal({ socketURL, accessToken, login, onStatu
   socketURL: string
   accessToken: string
   login: TerminalLogin
-  onStatus: (status: TerminalStatus, code?: string) => void
+  /** remembered: the login was saved on the controller for the next connection. */
+  onStatus: (status: TerminalStatus, code?: string, opened?: { remembered: boolean }) => void
   label: string
 }) {
   const container = useRef<HTMLDivElement>(null)
@@ -46,9 +46,19 @@ export default function NodeSSHTerminal({ socketURL, accessToken, login, onStatu
     const socket = new WebSocket(socketURL)
     socket.binaryType = 'arraybuffer'
     let opened = false
+    // The WebSocket itself came up (the open frame was sent): a close or an
+    // error before that is the handshake failing (proxy, network), not SSH.
+    let connected = false
     let pendingLogin: TerminalLogin | null = login
     const encoder = new TextEncoder()
+    let failed = false
+    const fail = (code: string) => {
+      if (failed) return
+      failed = true
+      status.current('error', code)
+    }
     socket.onopen = () => {
+      connected = true
       if (!pendingLogin) return
       socket.send(JSON.stringify({ type: 'open', access_token: accessToken, ...pendingLogin, cols: terminal.cols, rows: terminal.rows }))
       // The secret is not kept once sent.
@@ -59,16 +69,17 @@ export default function NodeSSHTerminal({ socketURL, accessToken, login, onStatu
         terminal.write(new Uint8Array(event.data))
         return
       }
-      let frame: { type?: string; code?: string; reason?: string }
+      let frame: { type?: string; code?: string; reason?: string; remembered?: boolean }
       try {
         frame = JSON.parse(String(event.data))
       } catch {
         return
       }
+      if (frame.type === 'error') failed = true
       if (frame.type === 'opened') {
         opened = true
         setReady(true)
-        status.current('open')
+        status.current('open', undefined, { remembered: frame.remembered === true })
         terminal.focus()
       } else if (frame.type === 'error') {
         status.current('error', frame.code)
@@ -79,9 +90,10 @@ export default function NodeSSHTerminal({ socketURL, accessToken, login, onStatu
     socket.onclose = () => {
       setReady(false)
       if (opened) status.current('closed')
+      else if (!connected) fail('websocket_failed')
     }
     socket.onerror = () => {
-      if (!opened) status.current('error', 'unavailable')
+      if (!opened) fail(connected ? 'unavailable' : 'websocket_failed')
     }
     const input = terminal.onData((data) => {
       if (socket.readyState === WebSocket.OPEN && opened) socket.send(encoder.encode(data))

@@ -317,6 +317,9 @@ func (s *Store) insertRegisteredNode(
 		Payload: map[string]any{
 			"admin_state": StatePending, "name": name, "registration_key_id": keyID.String(),
 			"source_ip": strings.TrimSpace(request.SourceIP), "hostname": normalized.hostname,
+			// The observed source and the installer's report, kept for diagnosis
+			// (a CDN edge source never becomes the node's IP).
+			"reported_public_ip": strings.TrimSpace(request.PublicIP), "source_is_cdn": normalized.sourceCDN,
 		},
 	}); err != nil {
 		return Node{}, err

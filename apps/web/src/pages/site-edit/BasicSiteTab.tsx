@@ -33,6 +33,7 @@ import { SiteTabSummary } from './SiteTabSummary'
 import { SiteOriginStatusCard } from './SiteOriginStatusCard'
 import CnameFailureReason from './CnameFailureReason'
 import CnameFailureActions from './CnameFailureActions'
+import CnamePending from './CnamePending'
 import { cnameFailureText } from './cnameFailureText'
 import { SiteGroupSelect } from './SitePackageGroupSelects'
 import '../../i18n/siteOriginForwarding'
@@ -269,7 +270,9 @@ export default function BasicSiteTab({
           <div className="site-basic-fact">
             <span>{t('edit.basic.fields.cname')}</span>
             <div className="site-basic-cname">
-              {value.cname || value.cname_state !== 'failed' ? <strong>{value.cname || (value.cname_state === 'pending' ? tCname('cell.pending') : t('values.placeholder'))}</strong> : null}
+              {value.cname || (value.cname_state !== 'failed' && value.cname_state !== 'pending') ? <strong>{value.cname || t('values.placeholder')}</strong> : null}
+              {/* 还没有 CNAME 的生成中显示停滞原因；生成失败或卡住时可直接重新生成。 */}
+              {!value.cname && value.cname_state === 'pending' ? <CnamePending code={value.cname_pending_code} taskID={value.cname_task_id} admin={role === 'admin'} /> : null}
               {/* CNAME state next to the CNAME itself (it used to be an Alert at the bottom of the tab). */}
               {value.cname && value.cname_state === 'pending' ? <Tag color="processing">{t('cnameAllocations:states.pending')}</Tag> : null}
               {value.cname_state === 'failed' ? <CnameFailureActions code={value.cname_failure_code} reason={cnameReason} admin={role === 'admin'} siteID={detail.id} onRegenerate={canManageDNS ? () => onChange({ ...value, cname_regenerate: true }) : undefined} regenerateDisabled={readOnly} extraDetail={accessToken && (role !== 'admin' || detail.scope_id) ? <CnameFailureReason accessToken={accessToken} siteID={detail.id} audience={role === 'admin' ? { kind: 'platform', scopeID: detail.scope_id! } : { kind: 'tenant' }} /> : null} /> : null}
@@ -277,6 +280,12 @@ export default function BasicSiteTab({
                 <Tooltip title={t('edit.basic.actions.copyCname')}>
                   <Button type="text" size="small" aria-label={t('edit.basic.actions.copyCname')} icon={<Clipboard size={14} aria-hidden="true" />} onClick={() => { if (navigator.clipboard) void navigator.clipboard.writeText(value.cname) }} />
                 </Tooltip>
+              ) : null}
+              {canManageDNS && value.cname_state === 'pending' && !value.cname_regenerate ? (
+                <Button type="link" size="small" data-testid="site-basic-cname-regenerate" disabled={readOnly}
+                  onClick={() => onChange({ ...value, cname_regenerate: true })}>
+                  {tCname('action')}
+                </Button>
               ) : null}
               {role === 'admin' ? (
                 <Button

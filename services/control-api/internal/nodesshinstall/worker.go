@@ -123,7 +123,7 @@ func (service *Service) execute(ctx context.Context, job claimed) {
 	}
 	defer clear([]byte(credential.Password))
 	registration, err := service.registration.RegistrationCredential(ctx, node.Actor{UserID: job.createdBy, ScopeID: job.scopeID},
-		"node-ssh-install/"+job.id.String())
+		"node-ssh-install-"+job.id.String())
 	if err != nil {
 		fail(FailRegistration)
 		return
@@ -279,12 +279,13 @@ func (service *Service) finish(ctx context.Context, job claimed, state, code str
 		now := service.now().UTC()
 		var nodeID *uuid.UUID
 		var restrict bool
+		var allow []string
 		err := tx.QueryRow(ctx, `UPDATE node_ssh_install_jobs SET state=$2,failure_code=$3,credential_key_id='',
 			credential_ciphertext=NULL,finished_at=$4,lease_owner='',lease_until=NULL,updated_at=$4,
 			node_id=CASE WHEN $2='succeeded' THEN (SELECT node.id FROM nodes node WHERE node.scope_id=$5
 				AND (host(node.ipv4)=$6 OR host(node.ipv6)=$6) ORDER BY node.created_at DESC LIMIT 1) END
-			WHERE id=$1 AND state='running' RETURNING node_id,restrict_ssh`, job.id, state, code, now, job.scopeID, job.host).
-			Scan(&nodeID, &restrict)
+			WHERE id=$1 AND state='running' RETURNING node_id,restrict_ssh,restrict_ssh_allow_cidrs`, job.id, state, code, now,
+			job.scopeID, job.host).Scan(&nodeID, &restrict, &allow)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -292,12 +293,21 @@ func (service *Service) finish(ctx context.Context, job claimed, state, code str
 			return err
 		}
 		// "Only the controller may SSH" chosen at install time: the node it
-		// registered gets the restriction (on the port the install used).
+		// registered gets the restriction (on the port the install used),
+		// letting in the job's allowlist too; without a known controller
+		// egress the allowlist alone (the node reverts it unless confirmed).
 		if restrict && nodeID != nil {
-			if controller := service.ControllerEgress(); len(controller) > 0 {
+			if allow == nil {
+				allow = []string{}
+			}
+			controller, _ := service.ControllerEgress(ctx)
+			if len(controller) == 0 && len(allow) <= maxControllerCIDRs {
+				controller = allow
+			}
+			if len(controller) > 0 {
 				var access Access
 				if err := service.setAccessTx(ctx, tx, Actor{ScopeID: job.scopeID}, *nodeID,
-					AccessChange{Enabled: true, SSHPort: job.port}, []string{}, controller, &access); err != nil {
+					AccessChange{Enabled: true, SSHPort: job.port}, allow, controller, &access); err != nil {
 					return err
 				}
 			}

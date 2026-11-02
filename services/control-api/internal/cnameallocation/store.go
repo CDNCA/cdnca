@@ -172,7 +172,7 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 		} else if blocked {
 			return ErrBlocked
 		}
-		// fix-cnamerand: a CNAME without a domain keeps the zone the site
+		// a CNAME without a domain keeps the zone the site
 		// already has (regenerate, re-intents), else draws a random zone.
 		var keep []uuid.UUID
 		if req.Domain == "" {
@@ -225,7 +225,12 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 			result, err = store.bindPackageSite(ctx, tx, req, digest, site, target, binding, bindingFound)
 			return err
 		}
-		if targetFound && target.state == StatePending {
+		// 「重新生成」 of the site's own pending allocation
+		// supersedes its job (cancelled below, in this transaction) instead of
+		// waiting for it to end; any other pending allocation still conflicts.
+		supersede := targetFound && target.state == StatePending && req.Regenerate &&
+			bindingFound && binding.currentID == target.id
+		if targetFound && target.state == StatePending && !supersede {
 			return ErrConflict
 		}
 		if targetFound && bindingFound && binding.currentID == target.id && !req.Regenerate {
@@ -316,9 +321,11 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 		// n12b: the owner the allocation moves past, and the site-mode
 		// allocation a site leaves, were written to the provider; the
 		// retirement worker deletes them once no live site serves them.
+		// A superseded claim keeps the rotation grace too: the cancelled
+		// job's child DNS task may still be writing under it.
 		if targetFound && claimID != target.claim.id {
 			if err := retireRotatedClaimTx(ctx, tx, req.TargetScopeID, target.id, target.claim.id, req.SiteID,
-				target.state == StateDone, store.timestamp()); err != nil {
+				target.state == StateDone || supersede, store.timestamp()); err != nil {
 				return err
 			}
 		}
@@ -366,6 +373,14 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 			lkgRevision: lkgRevision, state: StatePending, auditID: auditID, createdAt: factTime,
 		}); err != nil {
 			return err
+		}
+		// Last: the allocation already names the new job, so the cancelled
+		// job's terminal hook (failEndedJobTx) matches nothing and leaves the
+		// allocation and the site pending on the new job.
+		if supersede {
+			if err := store.supersedeJobTx(ctx, tx, req, site.tenantID, target.jobID); err != nil {
+				return err
+			}
 		}
 		result, err = loadAllocation(ctx, tx, req.TargetScopeID, req.SiteID)
 		return err
@@ -967,6 +982,30 @@ func (store *Store) bindPackageSite(
 // Subscriptions are then share-locked NOWAIT: site writers lock the
 // subscription before the scope row (checkPackageRuntime), so waiting on one
 // here would reverse their order; 55P03 is retried instead (ErrRetryable).
+// supersedeJobTx cancels the allocation job a regenerate superseded
+//, attributed to the regenerating user. Its worker loses the
+// lease: LoadTarget, AttachChild, Yield and the settlement (job_id CAS in
+// lockSettlement, lease CAS in settleBackgroundJob) all refuse it. A job that
+// already ended is left as it is.
+func (store *Store) supersedeJobTx(ctx context.Context, tx pgx.Tx, req AllocateRequest, tenantID, jobID uuid.UUID) error {
+	var actorKind string
+	if err := tx.QueryRow(ctx, `SELECT kind FROM access_scopes WHERE id=$1`, req.ActorScopeID).Scan(&actorKind); err != nil {
+		return err
+	}
+	err := CancelJobTx(ctx, tx, JobCancel{
+		ActorScopeID: req.ActorScopeID, ActorUserID: req.ActorUserID, Platform: actorKind == "platform",
+		RequestID: req.RequestID, KeyNamespace: "cdnca.cname-regenerate-cancel/v1", KeyPrefix: "cname-regenerate-cancel-",
+		WorkerID: "cname-regenerate-cancel",
+	}, tenantID, jobID, store.timestamp())
+	switch {
+	case err == nil, errors.Is(err, jobstate.ErrInvalidTransition), errors.Is(err, jobstate.ErrNotFound):
+		return nil
+	case errors.Is(err, jobstate.ErrClaimLost):
+		return ErrConflict
+	}
+	return err
+}
+
 func lockEdgeConfigurationScope(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO edge_configuration_scopes(scope_id,source_revision,updated_at)
 		VALUES($1,1,clock_timestamp()) ON CONFLICT(scope_id) DO NOTHING`, scopeID); err != nil {
@@ -1722,6 +1761,17 @@ func lockSettlement(
 		FOR UPDATE OF allocation`,
 		req.TargetScopeID, req.SiteID, req.AllocationID, req.JobID), &allocation)
 	if errors.Is(err, pgx.ErrNoRows) {
+		// the allocation moved to another job (a regenerate
+		// superseded and cancelled this one): the worker lost its claim.
+		var moved bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM cname_allocations
+			WHERE tenant_scope_id=$1 AND id=$2 AND job_id<>$3)`,
+			req.TargetScopeID, req.AllocationID, req.JobID).Scan(&moved); err != nil {
+			return allocationAuthority{}, uuid.Nil, uuid.Nil, "", err
+		}
+		if moved {
+			return allocationAuthority{}, uuid.Nil, uuid.Nil, "", ErrClaimLost
+		}
 		return allocationAuthority{}, uuid.Nil, uuid.Nil, "", ErrNotFound
 	}
 	if err != nil {

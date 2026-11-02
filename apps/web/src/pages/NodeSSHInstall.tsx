@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Radio, Space, Table, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/auth'
-import { nodeSSHInstallApi, parseHosts, type SSHInstallJob } from '../api/nodeSSHInstall'
+import { nodeSSHInstallApi, parseHosts, restrictAllowOf, restrictErrorText, type SSHInstallJob } from '../api/nodeSSHInstall'
 import './NodeSSHInstall.locale'
 import { FeedbackWhen } from '@cdnca/ui'
 
@@ -14,6 +14,7 @@ interface FormValues {
   password?: string
   private_key?: string
   restrict_ssh?: boolean
+  restrict_allow?: string
 }
 
 // A succeeded job with one of these codes: installed and connected but not
@@ -48,8 +49,9 @@ export default function NodeSSHInstall({ getAccessToken, errorText, single = fal
   const [acting, setActing] = useState<string[]>([])
   const active = useRef(true)
   const auth = Form.useWatch('auth', form) ?? 'password'
+  const restrict = Form.useWatch('restrict_ssh', form) === true
 
-  const fail = (cause: unknown) => setError(cause instanceof ApiError ? errorText(cause) : t('errors.unavailable'))
+  const fail = (cause: unknown) => setError(restrictErrorText(cause, errorText))
 
   // Install jobs run on the controller: reading the newest jobs (every
   // batch) brings back the ones started before this dialog was closed.
@@ -100,7 +102,7 @@ export default function NodeSSHInstall({ getAccessToken, errorText, single = fal
     try {
       const created = await nodeSSHInstallApi.create(accessToken, {
         hosts, port: values.port, username: values.username.trim(), restrict_ssh: values.restrict_ssh === true,
-        language: i18n.resolvedLanguage ?? 'zh-CN',
+        language: i18n.resolvedLanguage ?? 'zh-CN', ...restrictAllowOf(values.restrict_ssh === true, values.restrict_allow ?? ''),
         ...(values.auth === 'password' ? { password: values.password } : { private_key: values.private_key }),
       })
       if (!active.current) return
@@ -167,6 +169,9 @@ export default function NodeSSHInstall({ getAccessToken, errorText, single = fal
       <Form.Item name="restrict_ssh" valuePropName="checked" extra={t('help.restrictSSH')}>
         <Checkbox>{t('fields.restrictSSH')}</Checkbox>
       </Form.Item>
+      {restrict ? <Form.Item name="restrict_allow" label={t('fields.restrictAllow')} extra={t('help.restrictAllow')}>
+        <Input.TextArea aria-label={t('fields.restrictAllow')} rows={2} placeholder={t('placeholders.restrictAllow')} spellCheck={false} />
+      </Form.Item> : null}
       <Button type="primary" htmlType="submit" loading={busy}>{t('actions.start')}</Button>
     </Form>
     {refreshError ? <FeedbackWhen type="warning" title={t('errors.refreshFailed', { reason: refreshError })} /> : null}
@@ -175,6 +180,18 @@ export default function NodeSSHInstall({ getAccessToken, errorText, single = fal
       {refreshedAt ? <p className="node-install-description">{t('help.refreshedAt', { time: refreshedAt.toLocaleTimeString() })}</p> : null}
       <SSHInstallJobsTable jobs={jobs} acting={acting} onAct={(job, action) => void act(job, action)} />
     </> : null}
+  </div>
+}
+
+// RestrictAllowField: "also allow" addresses next to "only the controller may
+// SSH" (batch install); empty: the controller's egress only.
+export function RestrictAllowField({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  const { t } = useTranslation('nodeSSHInstall')
+  return <div className="node-ssh-restrict-allow">
+    <label className="node-ssh-label" htmlFor={id}>{t('fields.restrictAllow')}</label>
+    <Input.TextArea id={id} rows={2} value={value} onChange={(event) => onChange(event.target.value)}
+      placeholder={t('placeholders.restrictAllow')} spellCheck={false} />
+    <p className="node-ssh-help">{t('help.restrictAllow')}</p>
   </div>
 }
 
