@@ -83,3 +83,17 @@ test('default uninstall keeps helper units, identity and native state (purge-onl
   assert.ok(before.length > 0)
   assert.doesNotMatch(before, /cdnca-edge-agent-helper|\/opt\/cdnca-node|cdnca-node-install|systemctl/)
 })
+
+test('purge removes both BBR drop-ins the installer writes', () => {
+  const defaults = ['BBR_SYSCTL_CONF', 'BBR_MODULES_CONF'].map((name) => {
+    const m = installer.match(new RegExp(`^${name}=\\$\\{CDNCA_${name}-([^}]+)\\}$`, 'm'))
+    assert.ok(m, `installer has no ${name} default`)
+    return m[1]
+  })
+  assert.deepEqual(defaults, ['/etc/sysctl.d/90-cdnca-bbr.conf', '/etc/modules-load.d/cdnca-bbr.conf'])
+  const m = purge.match(/^  for bbr_file in ([^;]+); do\n[^]*?rm -f -- "\$\{target\}"\n  done$/m)
+  assert.ok(m, 'uninstall.sh --purge has no BBR drop-in loop')
+  assert.deepEqual(m[1].split(' '), defaults)
+  const before = uninstall.slice(0, uninstall.indexOf('if [ "${purge}" = true ]; then\n  # Units'))
+  assert.doesNotMatch(before, /cdnca-bbr/, 'a default uninstall keeps the BBR drop-ins')
+})

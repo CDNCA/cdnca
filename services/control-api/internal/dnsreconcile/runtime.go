@@ -393,7 +393,7 @@ func (runtime *Runtime) runApplyClaim(ctx context.Context, lease ApplyLease) (Ta
 			if err != nil {
 				return err
 			}
-			latest, err = runtime.checkpointApply(checkpointContext, lease, result)
+			latest, err = runtime.reconcilerCheckpoint(checkpointContext, lease, result)
 			return err
 		})
 	if err != nil {
@@ -477,11 +477,17 @@ func (runtime *Runtime) runPropagationApply(ctx context.Context, lease ApplyLeas
 				if err != nil {
 					return err
 				}
-				latest, err = runtime.checkpointApply(checkpointContext, lease, checkpoint)
+				latest, err = runtime.reconcilerCheckpoint(checkpointContext, lease, checkpoint)
 				return err
 			})
 		if err != nil {
 			return latest, err
+		}
+		if result.Status == dnscheck.TaskPropagating && !providerOperationsComplete(result) {
+			// A write still in provider recovery (provider_recovery_pending):
+			// the callback checkpointed it (and yielded for its RetryAfter).
+			// FinishApply takes only terminal results, so keep the task.
+			return latest, nil
 		}
 		result.Propagation = result.Propagation[:basePropagation]
 		result.ErrorClass = dnscheck.ProviderErrorNone
@@ -550,6 +556,21 @@ func (runtime *Runtime) checkpointApply(
 		return Task{}, ErrUnavailable
 	}
 	return store.checkpointApplyAfter(ctx, lease, result, retryAfterDelay(lease, hint))
+}
+
+// reconcilerCheckpoint writes a checkpoint the reconciler makes while it runs
+// the provider writes. The applying checkpoint right after a provider call
+// may carry the operation's RetryAfter (provider_recovery_pending, 1s); the
+// propagating checkpoint the reconciler writes next carries the same hint and
+// yields the lease. Yielding the applying one sent a result the store's
+// delayed checkpoint refuses (it takes only propagating), and the task failed
+// with dns_reconcile_checkpoint_rejected.
+func (runtime *Runtime) reconcilerCheckpoint(ctx context.Context, lease ApplyLease,
+	result dnscheck.ReconcileResult) (Task, error) {
+	if result.Status == dnscheck.TaskApplying {
+		return runtime.store.CheckpointApply(ctx, lease, result)
+	}
+	return runtime.checkpointApply(ctx, lease, result)
 }
 
 func activeRetryAfter(result dnscheck.ReconcileResult) time.Duration {

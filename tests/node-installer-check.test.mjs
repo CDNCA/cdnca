@@ -138,6 +138,28 @@ test('health port not listening before the first site is only reported', () => {
   assert.match(result.stdout, /18080/)
 })
 
+// check shows the congestion control and qdisc; anything but bbr is a note, not a failure.
+for (const [cc, qdisc, ok, pattern] of [
+  ['bbr', 'fq', true, /OK   TCP 拥塞控制 bbr，qdisc fq/],
+  ['cubic', 'fq_codel', false, /提示：TCP 拥塞控制 cubic，qdisc fq_codel/],
+]) {
+  test(`check reports TCP congestion control ${cc} without failing`, () => {
+    const proc = mkdtempSync(join(tmpdir(), 'cdnca-node-check-proc-'))
+    try {
+      mkdirSync(join(proc, 'net', 'ipv4'), { recursive: true })
+      mkdirSync(join(proc, 'net', 'core'), { recursive: true })
+      writeFileSync(join(proc, 'net', 'ipv4', 'tcp_congestion_control'), `${cc}\n`)
+      writeFileSync(join(proc, 'net', 'core', 'default_qdisc'), `${qdisc}\n`)
+      const result = check({}, { CDNCA_SYSCTL_ROOT: proc })
+      assert.equal(result.status, 0, result.stdout + result.stderr)
+      assert.match(result.stdout, pattern)
+      if (!ok) assert.doesNotMatch(result.stderr, /拥塞控制/)
+    } finally {
+      rmSync(proc, { recursive: true, force: true })
+    }
+  })
+}
+
 test('main dispatches the check subcommand before parsing install options', () => {
   const main = source.slice(source.indexOf('main() {'))
   assert.match(main, /install_lang_init "\$@"\n\s+set -- .*\n\s+if \[ "\$\{1:-\}" = check \]/)

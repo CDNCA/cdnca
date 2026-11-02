@@ -471,7 +471,9 @@ func (fixture *reconcileHTTPFixture) listPage(r *http.Request) (int, bool) {
 	case providerCloudflare:
 		if r.Method == http.MethodGet && r.URL.Path == "/zones/zone-cf/dns_records" {
 			query := r.URL.Query()
-			assert(query.Get("name") == "www.example.test." && query.Get("type") == recordType &&
+			// Cloudflare stores names without the root dot; its exact name filter
+			// never matches "www.example.test.".
+			assert(query.Get("name") == "www.example.test" && query.Get("type") == recordType &&
 				query.Get("per_page") == "100" && r.Header.Get("Authorization") == "Bearer provider-token", "cloudflare")
 			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 			return page, true

@@ -985,10 +985,108 @@ test('installer applies the kernel parameter baseline without lowering operator 
   }
 })
 
+// BBR + fq by default, --no-bbr opts out, a kernel without
+// bbr or an operator-chosen algorithm only gets a note and never fails the install.
+function bbrFixture({ available = 'reno cubic bbr', current = 'cubic', modprobe = 0 } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'cdnca-bbr-'))
+  const proc = join(root, 'proc')
+  mkdirSync(join(proc, 'net', 'ipv4'), { recursive: true })
+  mkdirSync(join(proc, 'net', 'core'), { recursive: true })
+  writeFileSync(join(proc, 'net', 'ipv4', 'tcp_available_congestion_control'), `${available}\n`)
+  writeFileSync(join(proc, 'net', 'ipv4', 'tcp_congestion_control'), `${current}\n`)
+  writeFileSync(join(proc, 'net', 'core', 'default_qdisc'), 'fq_codel\n')
+  const sysctlConf = join(root, 'etc', 'sysctl.d', '90-cdnca-bbr.conf')
+  const modulesConf = join(root, 'etc', 'modules-load.d', 'cdnca-bbr.conf')
+  const calls = join(root, 'calls')
+  // sysctl --system stub applies the drop-in to the fake /proc like the real one.
+  const stubs = `
+modprobe() { printf 'modprobe %s\\n' "$*" >>"${calls}"; return ${modprobe}; }
+sysctl() {
+  printf 'sysctl %s\\n' "$*" >>"${calls}"
+  [ -f "$BBR_SYSCTL_CONF" ] || return 0
+  sed -n 's/^net.ipv4.tcp_congestion_control=//p' "$BBR_SYSCTL_CONF" >"$SYSCTL_ROOT/net/ipv4/tcp_congestion_control"
+  sed -n 's/^net.core.default_qdisc=//p' "$BBR_SYSCTL_CONF" >"$SYSCTL_ROOT/net/core/default_qdisc"
+}`
+  const env = { ...process.env, CDNCA_SYSCTL_ROOT: proc, CDNCA_BBR_SYSCTL_CONF: sysctlConf, CDNCA_BBR_MODULES_CONF: modulesConf }
+  const run = (args = '') => spawnSync('bash', ['-c', `${script}\n${stubs}\ninstall_lang_init --lang zh\nparse_args ${args}\nenable_bbr`], { encoding: 'utf8', env })
+  const read = (path) => readFileSync(path, 'utf8')
+  const value = (name) => read(join(proc, ...name.split('.'))).trim()
+  const callLog = () => (existsSync(calls) ? read(calls) : '')
+  return { root, sysctlConf, modulesConf, run, read, value, callLog }
+}
+
+test('installer enables BBR with fq by default and persists both drop-ins', () => {
+  const fx = bbrFixture()
+  try {
+    const result = fx.run()
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(fx.read(fx.sysctlConf), 'net.core.default_qdisc=fq\nnet.ipv4.tcp_congestion_control=bbr\n')
+    assert.equal(fx.read(fx.modulesConf), 'tcp_bbr\n')
+    assert.equal(statSync(fx.sysctlConf).mode & 0o777, 0o644)
+    assert.equal(statSync(fx.modulesConf).mode & 0o777, 0o644)
+    assert.equal(fx.callLog(), 'modprobe tcp_bbr\nsysctl --system\n', 'modprobe tcp_bbr runs before sysctl --system')
+    assert.equal(fx.value('net.ipv4.tcp_congestion_control'), 'bbr')
+    assert.equal(fx.value('net.core.default_qdisc'), 'fq')
+    assert.match(result.stdout, /已开启 TCP BBR \+ fq/)
+    assert.doesNotMatch(result.stderr, /warning/)
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true })
+  }
+})
+
+test('--no-bbr leaves the congestion control and writes no drop-in', () => {
+  const fx = bbrFixture()
+  try {
+    const result = fx.run('--no-bbr')
+    assert.equal(result.status, 0, result.stderr)
+    assert.ok(!existsSync(fx.sysctlConf) && !existsSync(fx.modulesConf))
+    assert.equal(fx.callLog(), '')
+    assert.equal(fx.value('net.ipv4.tcp_congestion_control'), 'cubic')
+    assert.match(result.stdout, /--no-bbr/)
+    const skipped = fx.run('--skip-sysctl-tuning')
+    assert.equal(skipped.status, 0, skipped.stderr)
+    assert.ok(!existsSync(fx.sysctlConf), '--skip-sysctl-tuning keeps the congestion control too')
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true })
+  }
+})
+
+test('a kernel without BBR only gets a note and the install continues', () => {
+  const fx = bbrFixture({ available: 'reno cubic', modprobe: 1 })
+  try {
+    const result = fx.run()
+    assert.equal(result.status, 0, result.stderr)
+    assert.ok(!existsSync(fx.sysctlConf) && !existsSync(fx.modulesConf))
+    assert.equal(fx.callLog(), 'modprobe tcp_bbr\n', 'no sysctl --system without bbr')
+    assert.equal(fx.value('net.ipv4.tcp_congestion_control'), 'cubic')
+    assert.equal(result.stderr.trim().split('\n').length, 1, result.stderr)
+    assert.match(result.stderr, /内核不支持 BBR/)
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true })
+  }
+})
+
+test('an operator-chosen congestion control is kept and points at --no-bbr', () => {
+  const fx = bbrFixture({ current: 'htcp' })
+  try {
+    const result = fx.run()
+    assert.equal(result.status, 0, result.stderr)
+    assert.ok(!existsSync(fx.sysctlConf))
+    assert.equal(fx.callLog(), '')
+    assert.equal(fx.value('net.ipv4.tcp_congestion_control'), 'htcp')
+    assert.match(result.stderr, /htcp.*--no-bbr/)
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true })
+  }
+})
+
 test('installer runs kernel tuning after enrollment and before the service starts', () => {
   const main = script.slice(script.indexOf('\nmain() {'))
   assert.ok(main.indexOf('  enroll\n') < main.indexOf('  tune_sysctl\n'))
-  assert.ok(main.indexOf('  tune_sysctl\n') < main.indexOf('  setup_service\n'))
+  assert.ok(main.indexOf('  tune_sysctl\n') < main.indexOf('  enable_bbr\n'))
+  assert.ok(main.indexOf('  enable_bbr\n') < main.indexOf('  setup_service\n'))
   const help = spawnSync('bash', ['-c', `${script}\nusage`], { encoding: 'utf8' })
   assert.match(help.stdout, /--skip-sysctl-tuning/)
+  assert.match(help.stdout, /--no-bbr +Keep the TCP congestion control/)
+  assert.match(help.stdout, /不改 TCP 拥塞控制/)
 })

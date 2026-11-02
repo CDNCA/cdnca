@@ -167,7 +167,7 @@ func DefaultSettings() Settings {
 		VerificationBody:    "<p>您好，您的验证码为 {{captcha}}。</p>",
 		VerificationSMSBody: "您的验证码为${captcha}，在5分钟内有效。",
 		TermsTitle:          "用户协议、法律声明和隐私政策", TermsBody: "这里填写协议内容",
-		LoginFailureLimitPerHour: 30, LoginCaptchaThresholdPerHour: 3, SessionRegionCheck: true,
+		LoginFailureLimitPerHour: 30, LoginCaptchaThresholdPerHour: 3, SessionRegionCheck: false,
 		EmailAntiAbuseMode: "none", SMSAntiAbuseMode: "native", CaptchaProvider: "tencent",
 		IdentityVerificationMethod: "none", DefaultRechargeMethod: "none", RechargeRestriction: "none",
 		DefaultPhoneCountryCode: phonenumber.DefaultCountryCode,

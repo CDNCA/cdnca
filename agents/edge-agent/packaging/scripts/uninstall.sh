@@ -203,6 +203,16 @@ if [ "${purge}" = true ]; then
     assert_safe_tree "$(dirname -- "${target}")"
     if [ -L "${target}" ] && [ "$(readlink -- "${target}")" = "${native_link#*:}" ]; then rm -f -- "${target}"; fi
   done
+  # TCP BBR drop-ins (install-node.sh enable_bbr). The running congestion
+  # control is left as it is, like the other kernel parameters the installer
+  # raised: the value before install is not recorded, and the next boot
+  # without these files returns to the distribution default.
+  for bbr_file in /etc/sysctl.d/90-cdnca-bbr.conf /etc/modules-load.d/cdnca-bbr.conf; do
+    target=$(root_path "${bbr_file}")
+    assert_safe_tree "$(dirname -- "${target}")"
+    [ ! -L "${target}" ] || die "BBR drop-in target is a symbolic link"
+    rm -f -- "${target}"
+  done
   remove_tree "$(root_path /opt/cdnca-node)"
   remove_tree "$(root_path /var/lib/cdnca-node-install)"
   remove_tree "$(root_path /var/lib/cdnca-node-monitoring)"

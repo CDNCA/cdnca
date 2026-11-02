@@ -156,7 +156,10 @@ func TestRetryAfterSchedulerProductionTransactionContract(t *testing.T) {
 	}
 	for _, required := range []string{
 		"if activeRetryAfter(lease.Task.Result) > 0",
-		"latest, err = runtime.checkpointApply(checkpointContext, lease, result)",
+		// Reconciler checkpoints go through reconcilerCheckpoint,
+		// which writes applying results plainly and schedules the rest.
+		"latest, err = runtime.reconcilerCheckpoint(checkpointContext, lease, result)",
+		"return runtime.checkpointApply(ctx, lease, result)\n}",
 	} {
 		if !strings.Contains(string(runtimeSource), required) {
 			t.Fatalf("runtime retry scheduler missing %q", required)

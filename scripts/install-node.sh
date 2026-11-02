@@ -100,6 +100,10 @@ EXTERNAL_PROBE=true
 DISABLE_XDP=false
 SYSCTL_ROOT=${CDNCA_SYSCTL_ROOT-/proc/sys}
 SYSCTL_CONF=${CDNCA_SYSCTL_CONF-/etc/sysctl.d/90-cdnca-edge.conf}
+# TCP BBR + fq：默认开启并持久化；--no-bbr 关闭。
+BBR_ENABLED=true
+BBR_SYSCTL_CONF=${CDNCA_BBR_SYSCTL_CONF-/etc/sysctl.d/90-cdnca-bbr.conf}
+BBR_MODULES_CONF=${CDNCA_BBR_MODULES_CONF-/etc/modules-load.d/cdnca-bbr.conf}
 ASSUME_YES=false
 # PJ-E05: seconds to wait, after the Agent is stable, for its first Gateway session.
 GATEWAY_SESSION_WAIT_SECONDS=${GATEWAY_SESSION_WAIT_SECONDS:-120}
@@ -272,6 +276,12 @@ Connection options:
                                probe only; never joins the node market)
   --skip-sysctl-tuning         Keep kernel parameters as they are (default: raise
                                the edge baseline, never lower a larger value)
+  --no-bbr                     Keep the TCP congestion control as it is (default:
+                               enable BBR with the fq qdisc and persist it in
+                               /etc/sysctl.d/90-cdnca-bbr.conf; an algorithm other
+                               than cubic/reno set by the operator is never replaced)
+                               不改 TCP 拥塞控制（默认开启 BBR + fq 并持久化；
+                               管理员已设的非 cubic/reno 算法不会被覆盖）
   --disable-xdp                Do not attach the XDP kernel filter (default: use
                                native XDP, else generic XDP, else nftables only)
   --ssh-guard-ignoreip "A B"   fail2ban sshd: addresses/CIDRs never banned (operator egress, platform hosts)
@@ -327,6 +337,7 @@ parse_args() {
       --upgrade-trust-fallback-url) need_value "$@"; UPGRADE_TRUST_FALLBACK_URL=$2; shift 2 ;;
       --skip-firewall) SKIP_FIREWALL=true; shift ;;
       --skip-sysctl-tuning) SKIP_SYSCTL_TUNING=true; shift ;;
+      --no-bbr) BBR_ENABLED=false; shift ;;
       --no-external-probe) EXTERNAL_PROBE=false; shift ;;
       --disable-xdp) DISABLE_XDP=true; shift ;;
       --ssh-guard-ignoreip) need_value "$@"; SSH_GUARD_IGNOREIP=$2; shift 2 ;;
@@ -3489,6 +3500,44 @@ tune_sysctl() {
   log "kernel parameter baseline applied (${changed} changed); persisted in ${SYSCTL_CONF}"
 }
 
+# TCP BBR + fq: long-haul origin fetches and downloads gain throughput.
+# Never fails the install: a kernel without bbr only gets a note, and an
+# algorithm the operator chose (anything but the kernel defaults cubic/reno)
+# is kept.
+bbr_available() {
+  grep -qw bbr "${SYSCTL_ROOT}/net/ipv4/tcp_available_congestion_control" 2>/dev/null
+}
+
+enable_bbr() {
+  local current
+  [ "$BBR_ENABLED" = true ] || { log "$(msg '已按 --no-bbr 保持现有 TCP 拥塞控制' 'TCP congestion control kept as it is (--no-bbr)')"; return 0; }
+  [ "$SKIP_SYSCTL_TUNING" = true ] && { log "$(msg '已按 --skip-sysctl-tuning 保持现有 TCP 拥塞控制' 'TCP congestion control kept as it is (--skip-sysctl-tuning)')"; return 0; }
+  current=$(tr -d '[:space:]' <"${SYSCTL_ROOT}/net/ipv4/tcp_congestion_control" 2>/dev/null) || current=''
+  case "$current" in
+    ''|cubic|reno|bbr) ;;
+    *) warn "$(msg "当前 TCP 拥塞控制为 ${current}（管理员已设置），未改为 BBR；如需保持现状可加 --no-bbr，如需 BBR 请手动修改 net.ipv4.tcp_congestion_control" "TCP congestion control is ${current} (set by the operator) and was not switched to BBR; add --no-bbr to keep it, or change net.ipv4.tcp_congestion_control by hand for BBR")"
+       return 0 ;;
+  esac
+  modprobe tcp_bbr >/dev/null 2>&1 || true
+  if ! bbr_available; then
+    warn "$(msg "内核不支持 BBR（tcp_available_congestion_control 无 bbr，modprobe tcp_bbr 失败），保持 ${current:-现有} 拥塞控制" "the kernel has no BBR (bbr is not in tcp_available_congestion_control and modprobe tcp_bbr failed); keeping ${current:-the current} congestion control")"
+    return 0
+  fi
+  mkdir -p "$(dirname -- "$BBR_SYSCTL_CONF")" "$(dirname -- "$BBR_MODULES_CONF")" &&
+    printf 'net.core.default_qdisc=fq\nnet.ipv4.tcp_congestion_control=bbr\n' >"${BBR_SYSCTL_CONF}.tmp" &&
+    chmod 0644 "${BBR_SYSCTL_CONF}.tmp" && mv -f "${BBR_SYSCTL_CONF}.tmp" "$BBR_SYSCTL_CONF" &&
+    printf 'tcp_bbr\n' >"${BBR_MODULES_CONF}.tmp" &&
+    chmod 0644 "${BBR_MODULES_CONF}.tmp" && mv -f "${BBR_MODULES_CONF}.tmp" "$BBR_MODULES_CONF" ||
+    { warn "$(msg "无法写入 ${BBR_SYSCTL_CONF} / ${BBR_MODULES_CONF}，未开启 BBR" "could not write ${BBR_SYSCTL_CONF} / ${BBR_MODULES_CONF}; BBR not enabled")"; return 0; }
+  sysctl --system >/dev/null 2>&1 || true
+  current=$(tr -d '[:space:]' <"${SYSCTL_ROOT}/net/ipv4/tcp_congestion_control" 2>/dev/null) || current=''
+  if [ "$current" = bbr ]; then
+    log "$(msg "已开启 TCP BBR + fq，持久化在 ${BBR_SYSCTL_CONF}" "TCP BBR + fq enabled; persisted in ${BBR_SYSCTL_CONF}")"
+  else
+    warn "$(msg "已写入 ${BBR_SYSCTL_CONF}，但当前拥塞控制仍为 ${current:-?}（其他 sysctl 配置覆盖？），重启后生效或手动检查" "${BBR_SYSCTL_CONF} written but congestion control is still ${current:-?} (overridden by another sysctl file?); check by hand or after a reboot")"
+  fi
+}
+
 configure_firewall() {
   [ "$SKIP_FIREWALL" = true ] && return 0
   warn 'firewall was not changed; allow the configured Gateway/OpenResty ports in the host policy'
@@ -3497,7 +3546,7 @@ configure_firewall() {
 # install-node.sh check: read-only contract of a finished node. A fresh
 # install must pass every item; exit 1 otherwise.
 check_installed() {
-  local ok=true value port version path listen
+  local ok=true value port version path listen qdisc
   check_ok() { log "OK   $*"; }
   check_bad() { warn "$*"; ok=false; }
   check_info() { log "     $*"; }
@@ -3553,6 +3602,11 @@ check_installed() {
   check_info "node_id $(jq -r '.node_id // "?"' "${IDENTITY_DIR}/identity.json" 2>/dev/null)"
   value=$(ip -d link show 2>/dev/null | grep -c 'prog/xdp' || true)
   check_info "XDP: ${value:-0}"
+  # BBR is advisory: --no-bbr, an operator algorithm or an old kernel is not a failure.
+  value=$(tr -d '[:space:]' <"${SYSCTL_ROOT}/net/ipv4/tcp_congestion_control" 2>/dev/null) || value=''
+  qdisc=$(tr -d '[:space:]' <"${SYSCTL_ROOT}/net/core/default_qdisc" 2>/dev/null) || qdisc=''
+  if [ "$value" = bbr ]; then check_ok "$(msg "TCP 拥塞控制 bbr，qdisc ${qdisc:-?}" "TCP congestion control bbr, qdisc ${qdisc:-?}")"
+  else check_info "$(msg "提示：TCP 拥塞控制 ${value:-?}，qdisc ${qdisc:-?}（未开启 BBR；安装时加了 --no-bbr、管理员另设算法或内核不支持）" "note: TCP congestion control ${value:-?}, qdisc ${qdisc:-?} (BBR is off: --no-bbr, an operator algorithm or no kernel support)")"; fi
   "$ok"
 }
 
@@ -3659,6 +3713,7 @@ main() {
   detect_xdp
   configure_firewall
   tune_sysctl
+  enable_bbr
   progress_stage
   setup_service
   verify_agent_connected

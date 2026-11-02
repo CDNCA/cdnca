@@ -12,6 +12,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsreconcile"
 	"github.com/cdnca/cdnca/services/control-api/internal/jobstate"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type WorkerConfig struct {
@@ -410,7 +411,7 @@ func (worker *Worker) retrySoon(ctx context.Context, claim jobstate.Claim, err e
 	delay := retryDelay
 	switch {
 	case errors.Is(err, ErrRetryable):
-	case errors.Is(err, ErrConflict):
+	case errors.Is(err, ErrConflict), providerMutationClaimBlocks(err):
 		delay = childPollDelay(claim.Job.Attempt)
 	default:
 		return err
@@ -428,6 +429,15 @@ func (worker *Worker) retrySoon(ctx context.Context, claim jobstate.Claim, err e
 		return yieldErr
 	}
 	return err
+}
+
+// providerMutationClaimBlocks: migration 089 refuses a site authority write
+// while a DNS provider mutation claim of the site is active (P8903), e.g. the
+// uncertain claim of a failed child awaiting provider recovery (minutes).
+// Without this the job held its 16-minute lease on it.
+func providerMutationClaimBlocks(err error) bool {
+	var postgresError *pgconn.PgError
+	return errors.As(err, &postgresError) && postgresError.Code == "P8903"
 }
 
 // yield gives the lease back while the child reconcile task is in flight so

@@ -506,8 +506,11 @@ func (provider *cloudflareProvider) reconcileLookup(ctx context.Context, config 
 	seen := make(map[string]struct{})
 	total := -1
 	for pageNumber := 1; pageNumber <= recoveryMaxPages; pageNumber++ {
+		// Cloudflare stores names without the root dot and its exact name
+		// filter does not match "a.example.com.": the lookup found nothing,
+		// so a record just created looked unapplied.
 		query := url.Values{
-			"name": {operation.Name}, "type": {typeName}, "page": {strconv.Itoa(pageNumber)},
+			"name": {strings.TrimSuffix(operation.Name, ".")}, "type": {typeName}, "page": {strconv.Itoa(pageNumber)},
 			"per_page": {strconv.Itoa(recoveryPageSize)},
 		}
 		response, err := provider.adapter.http.do(ctx, http.MethodGet, provider.adapter.endpoints.cloudflare,
