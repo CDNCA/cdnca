@@ -82,8 +82,11 @@ type Config struct {
 	// Interval (O2: a new node's 21 segments took 21 minutes). Interval
 	// stays the fallback for a missed notification.
 	WakeChannel string
-	// RetryAfter a failed delivery to one node (default 30m).
-	RetryAfter time.Duration
+	// RetryAfter a failed delivery to one node (default 30m) is the longest
+	// wait; the first retry comes after FirstRetryAfter (default 1m) and the
+	// wait doubles per attempt.
+	RetryAfter      time.Duration
+	FirstRetryAfter time.Duration
 	// BatchSize bounds the deployments created and nodes announced per sweep
 	// (default 50).
 	BatchSize int
@@ -123,6 +126,9 @@ func New(config Config) (*Distributor, error) {
 	}
 	if config.RetryAfter <= 0 {
 		config.RetryAfter = 30 * time.Minute
+	}
+	if config.FirstRetryAfter <= 0 || config.FirstRetryAfter > config.RetryAfter {
+		config.FirstRetryAfter = min(time.Minute, config.RetryAfter)
 	}
 	if config.BatchSize <= 0 {
 		config.BatchSize = 50

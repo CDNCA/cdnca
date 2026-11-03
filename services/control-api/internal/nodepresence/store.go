@@ -87,13 +87,15 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 	// platform scope, which is never a node's configuration scope: an agent
 	// result for it says nothing about configuration and must not reject the
 	// whole heartbeat (it would keep the node offline forever).
-	var platformScopeID uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM access_scopes WHERE kind='platform'`).Scan(&platformScopeID); err != nil &&
-		!errors.Is(err, pgx.ErrNoRows) {
-		return ProjectionResult{}, fmt.Errorf("read platform scope: %w", err)
-	}
+	// A scope the node has not claimed yet and that has no running release
+	// only carries the result of a non-configuration delivery (a certificate
+	// can reach a node before its first site configuration): it says nothing
+	// about configuration either. Rejecting the heartbeat for it kept the node
+	// offline until the site configuration arrived, which never could (the
+	// node was offline). A current identity for an unclaimed scope is still
+	// refused below.
 	scoped = slices.DeleteFunc(scoped, func(entry normalizedScopedConfigIdentity) bool {
-		return entry.ScopeID == platformScopeID && entry.Current == nil && !slices.Contains(claimed, entry.ScopeID)
+		return entry.Current == nil && !slices.Contains(claimed, entry.ScopeID)
 	})
 	// The legacy identity fields describe the node's only scope: the one it
 	// reports, or for an agent without scoped identities the one it claimed.

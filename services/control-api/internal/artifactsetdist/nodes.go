@@ -131,7 +131,7 @@ func (distributor *Distributor) reconcile(ctx context.Context, node pendingNode,
 	if !set.lastHealthy.IsZero() {
 		return false, nil
 	}
-	if !set.lastFailed.IsZero() && now.Sub(set.lastFailed) < distributor.config.RetryAfter {
+	if !set.lastFailed.IsZero() && now.Sub(set.lastFailed) < distributor.retryWait(set.attempts) {
 		return false, nil
 	}
 	for _, configID := range configs[1:] {
@@ -142,7 +142,7 @@ func (distributor *Distributor) reconcile(ctx context.Context, node pendingNode,
 			continue
 		}
 		if !segment.lastFailed.IsZero() && segment.lastFailed.After(set.lastFailed) &&
-			now.Sub(segment.lastFailed) < distributor.config.RetryAfter {
+			now.Sub(segment.lastFailed) < distributor.retryWait(segment.attempts) {
 			return false, nil
 		}
 		return true, distributor.rollout(ctx, "segment", configID, node.nodeID, segment.attempts, map[string]any{
@@ -150,6 +150,19 @@ func (distributor *Distributor) reconcile(ctx context.Context, node pendingNode,
 	}
 	return true, distributor.rollout(ctx, "set", node.setConfigID, node.nodeID, set.attempts,
 		map[string]any{"set_revision": node.revision})
+}
+
+// retryWait is how long a failed delivery waits after its attempts-th try:
+// FirstRetryAfter, doubling per attempt, at most RetryAfter. The first
+// delivery to a new node can be refused only because its service ticket was
+// not issued yet (installation_frozen); a flat 30 minutes kept such a node
+// without its site configuration for half an hour.
+func (distributor *Distributor) retryWait(attempts int) time.Duration {
+	wait := distributor.config.FirstRetryAfter
+	for try := 1; try < attempts && wait < distributor.config.RetryAfter; try++ {
+		wait *= 2
+	}
+	return min(wait, distributor.config.RetryAfter)
 }
 
 // segmentDigest names the segment a configuration delivers.

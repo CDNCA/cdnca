@@ -287,3 +287,47 @@ func TestHeartbeatIgnoresPlatformScopeArtifactApplyResult(t *testing.T) {
 		t.Fatalf("scoped identities=%d err=%v", identities, err)
 	}
 }
+
+// A certificate can reach a node before its first site configuration: the
+// heartbeat then reports a tenant scope the node has not claimed, with only an
+// apply result. The heartbeat advances (the node stayed offline before).
+func TestHeartbeatIgnoresUnclaimedScopeApplyResultWithoutRelease(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required")
+	}
+	pool, admin, schema := openPresenceTestDatabase(t, databaseURL)
+	t.Cleanup(func() {
+		pool.Close()
+		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE")
+		admin.Close()
+	})
+	if err := database.Migrate(t.Context(), pool, "up"); err != nil {
+		t.Fatal(err)
+	}
+	nodeID, _, tenantScopeID := seedPresencePlatformNode(t, pool, false)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	validator := newTestValidator(t, now)
+	store, err := NewStore(pool, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	heartbeat := validPresenceHeartbeat(1, 1, now)
+	heartbeat.ActiveConfigIdentityCapability = activeIdentityCapability()
+	heartbeat.ScopedConfigIdentities = []*agentv1.ScopedConfigIdentity{{
+		ConfigurationScopeId: tenantScopeID.String(),
+		LastApplyResult: &agentv1.ScopedApplyResult{DeploymentId: uuid.NewString(), Attempt: 1,
+			ConfigVersionId: uuid.NewString(), State: agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_HEALTHY},
+	}}
+	envelope, err := validator.Decode("cdnca.agent.heartbeats."+nodeID.String(), marshalHeartbeat(t, heartbeat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := store.Project(t.Context(), envelope); err != nil || result.Outcome != OutcomeAdvanced {
+		t.Fatalf("unclaimed tenant scope apply result heartbeat = (%+v, %v)", result, err)
+	}
+	var rows int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM node_presence WHERE node_id=$1`, nodeID).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("presence rows=%d err=%v", rows, err)
+	}
+}
