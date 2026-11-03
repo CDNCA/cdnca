@@ -215,16 +215,66 @@ func TestManagerRecoverPristineStateIsNoOp(t *testing.T) {
 	}
 }
 
-func TestManagerRecoverRejectsIncompleteState(t *testing.T) {
+// A first activation that died before any pointer was written leaves only a
+// release and runtime files: Recover clears them back to the pristine state
+// (the node otherwise refused every restart and stayed offline).
+func TestManagerRecoverClearsIncompleteFirstActivation(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		mutate func(string) error
 	}{
 		{name: "orphan-release", mutate: func(root string) error {
-			return os.Mkdir(filepath.Join(root, "versions", "orphan"), 0o700)
+			release := filepath.Join(root, "versions", "orphan")
+			if err := os.MkdirAll(filepath.Join(release, "private"), 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(release, "private", "key.pem"), []byte("k"), 0o400); err != nil {
+				return err
+			}
+			return os.Chmod(release, 0o500)
 		}},
 		{name: "orphan-pid", mutate: func(root string) error {
-			return os.WriteFile(filepath.Join(root, "shared", "nginx.pid"), []byte("123\n"), 0o600)
+			if err := os.WriteFile(filepath.Join(root, "shared", "error.log"), []byte("x\n"), 0o600); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(root, "shared", "nginx.pid"), nil, 0o600)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := managedStateRoot(t)
+			runtime := &fakeRuntime{}
+			manager, err := newManager(RuntimeConfig{
+				StateRoot: root, ListenAddress: "127.0.0.1", ListenPort: 18443,
+			}, runtime, func() time.Time { return testNow })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := test.mutate(root); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := manager.Recover(context.Background()); err != nil {
+				t.Fatalf("Recover() incomplete first activation = %v, want cleared", err)
+			}
+			if pristine, err := manager.store.pristine(); err != nil || !pristine {
+				t.Fatalf("state after Recover pristine=%v err=%v", pristine, err)
+			}
+			if runtime.prechecks != 0 || runtime.activations != 0 || runtime.healthChecks != 0 {
+				t.Fatalf("Recover() incomplete state touched runtime: %#v", runtime)
+			}
+		})
+	}
+}
+
+func TestManagerRecoverRejectsIncompleteState(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(string) error
+	}{
+		{name: "indexed-site", mutate: func(root string) error {
+			if err := os.Mkdir(filepath.Join(root, "versions", "orphan"), 0o700); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(root, "sites", "site"), nil, 0o600)
 		}},
 		{name: "unexpected-root-entry", mutate: func(root string) error {
 			return os.WriteFile(filepath.Join(root, "unexpected"), nil, 0o600)

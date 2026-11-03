@@ -219,7 +219,13 @@ func (manager *Manager) Recover(ctx context.Context) (Result, error) {
 			return Result{}, err
 		}
 		if !pristine {
-			return Result{}, fmt.Errorf("%w: certificate state is incomplete", ErrUnsafeState)
+			// A first activation that died before current/lkg were written
+			// leaves only its staged release and runtime files: nothing ever
+			// served from them. Clearing them restores the pristine state
+			// instead of refusing every restart (the node stayed offline).
+			if err := manager.resetIncompleteFirstActivation(ctx); err != nil {
+				return Result{}, errors.Join(fmt.Errorf("%w: certificate state is incomplete", ErrUnsafeState), err)
+			}
 		}
 		return Result{}, nil
 	}
@@ -573,4 +579,94 @@ func sameActivationMetadata(left, right *ActivationMetadata) bool {
 	}
 	return sameActivationCommand(left, right) && sameCertificateRevisions(left.Certificates, right.Certificates) &&
 		slices.Equal(left.RemovedSites, right.RemovedSites)
+}
+
+// resetIncompleteFirstActivation clears what an interrupted first activation
+// left when no pointer, status or site index ever named it: releases,
+// staging, gc and the runtime's pid/log files. Anything that a pointer, the
+// version references or a site index still names is left alone (unsafe).
+func (manager *Manager) resetIncompleteFirstActivation(ctx context.Context) error {
+	store := manager.store
+	for _, path := range []string{store.sites, store.byVersion} {
+		entries, err := os.ReadDir(path)
+		if err != nil || len(entries) != 0 {
+			return fmt.Errorf("%w: certificate site index is not empty", ErrUnsafeState)
+		}
+	}
+	if _, err := os.Lstat(store.referencesPath); err == nil {
+		references, err := store.readCertificateVersionReferences()
+		if err != nil || len(references.Current) != 0 || len(references.Previous) != 0 {
+			return fmt.Errorf("%w: certificate version references are not empty", ErrUnsafeState)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: inspect certificate version references", ErrUnsafeState)
+	}
+	stopCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := manager.runtime.Stop(stopCtx, store.current); err != nil {
+		return fmt.Errorf("stop the incomplete certificate runtime: %w", err)
+	}
+	for _, path := range []string{store.versions, store.staging, store.gc} {
+		if err := clearDirectory(path); err != nil {
+			return err
+		}
+	}
+	temporary := map[string]bool{clientBodyTempDirectory: true, proxyTempDirectory: true,
+		fastCGITempDirectory: true, uWSGITempDirectory: true, scgiTempDirectory: true}
+	entries, err := os.ReadDir(store.shared)
+	if err != nil {
+		return fmt.Errorf("%w: inspect certificate shared directory", ErrUnsafeState)
+	}
+	for _, entry := range entries {
+		path := filepath.Join(store.shared, entry.Name())
+		if temporary[entry.Name()] {
+			if err := clearDirectory(path); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := removeTree(path); err != nil {
+			return err
+		}
+	}
+	if err := syncDirectory(store.root); err != nil {
+		return err
+	}
+	pristine, err := store.pristine()
+	if err != nil {
+		return err
+	}
+	if !pristine {
+		return fmt.Errorf("%w: certificate state is still incomplete after cleanup", ErrUnsafeState)
+	}
+	return nil
+}
+
+// clearDirectory removes every entry of a private state directory and keeps
+// the directory itself.
+func clearDirectory(path string) error {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return fmt.Errorf("%w: inspect certificate state directory", ErrUnsafeState)
+	}
+	for _, entry := range entries {
+		if err := removeTree(filepath.Join(path, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return syncDirectory(path)
+}
+
+// removeTree removes a release tree whose directories are read-only (0500).
+func removeTree(path string) error {
+	_ = filepath.WalkDir(path, func(child string, entry os.DirEntry, err error) error {
+		if err == nil && entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+			_ = os.Chmod(child, 0o700)
+		}
+		return nil
+	})
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("%w: remove incomplete certificate state", ErrUnsafeState)
+	}
+	return nil
 }

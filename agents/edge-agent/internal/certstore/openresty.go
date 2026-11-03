@@ -155,7 +155,12 @@ func (runtime *OpenRestyRuntime) Activate(ctx context.Context, currentPath strin
 		return ErrActivation
 	}
 	environment := []string{processStartEnvironment + "=" + startIdentity.Token}
-	arguments := append(runtime.globalArguments("env "+processStartEnvironment+";"), "-p", withSlash(currentPath), "-c", "nginx.conf")
+	// The token rides in -g ("env NAME=value;") and is matched in the
+	// master's cmdline, as http3runtime and l4runtime do: nginx rebuilds the
+	// master environment from its env directives, and with the native
+	// "user" global the inherited variable did not survive, so every start
+	// was killed as not ours and certificates never reached the node.
+	arguments := append(runtime.globalArguments("env "+processStartEnvironment+"="+startIdentity.Token+";"), "-p", withSlash(currentPath), "-c", "nginx.conf")
 	if err := runtime.run(ctx, runtime.binary, environment, arguments...); err != nil {
 		return errors.Join(sanitized(ctx, ErrActivation), runtime.cleanupUnrecordedStart())
 	}
@@ -767,18 +772,16 @@ func newProcessStartIdentity(binary string) (processStartIdentity, error) {
 }
 
 func kernelProcessStartMatches(pid int, token string) error {
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "environ"))
+	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
 	if errors.Is(err, os.ErrNotExist) {
 		return errProcessNotRunning
 	}
 	if err != nil {
 		return errors.New("inspect OpenResty start identity")
 	}
-	expected := processStartEnvironment + "=" + token
-	for _, value := range bytes.Split(raw, []byte{0}) {
-		if string(value) == expected {
-			return nil
-		}
+	expected := "env " + processStartEnvironment + "=" + token + ";"
+	if bytes.Contains(raw, []byte(expected)) {
+		return nil
 	}
 	return errors.New("OpenResty process does not match the pending start identity")
 }

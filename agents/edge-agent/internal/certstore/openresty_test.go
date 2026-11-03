@@ -215,7 +215,7 @@ func TestOpenRestyRuntimePersistsPendingIdentityBeforeDaemonStart(t *testing.T) 
 		if !reflect.DeepEqual(environment, []string{processStartEnvironment + "=" + pending.Token}) {
 			t.Fatalf("start environment=%v", environment)
 		}
-		if len(arguments) < 2 || arguments[0] != "-g" || arguments[1] != "env "+processStartEnvironment+";" {
+		if len(arguments) < 2 || arguments[0] != "-g" || arguments[1] != "env "+processStartEnvironment+"="+pending.Token+";" {
 			t.Fatalf("start arguments=%v", arguments)
 		}
 		return os.WriteFile(pidFile, []byte("43\n"), 0o600)
@@ -1628,8 +1628,8 @@ func TestOpenRestyRuntimePassesConfiguredGlobals(t *testing.T) {
 	if got := strings.Join(calls[1], " "); got != "-g user cdnca-runtime cdnca-runtime; -t -p "+candidate+"/ -c nginx.conf" {
 		t.Fatalf("precheck with globals = %q", got)
 	}
-	if got := runtime.globalArguments("env " + processStartEnvironment + ";"); strings.Join(got, " ") !=
-		"-g user cdnca-runtime cdnca-runtime; env "+processStartEnvironment+";" {
+	if got := runtime.globalArguments("env " + processStartEnvironment + "=t;"); strings.Join(got, " ") !=
+		"-g user cdnca-runtime cdnca-runtime; env "+processStartEnvironment+"=t;" {
 		t.Fatalf("start globals = %q", got)
 	}
 }

@@ -149,9 +149,29 @@ func certificateRunningUnchanged(err error, result certstore.Result) bool {
 
 func (c *Client) finishCertificateFailure(key string, command *agentv1.DeploymentCommand, err error, unchanged bool) error {
 	code, summary := classifyCertificateError(err)
+	if !unchanged {
+		// FAILED promises the running configuration is unchanged; the
+		// gateway and controller refuse it otherwise and end the session on
+		// every reconnect (the node went offline for good). A failure that
+		// may have changed it is reported as ROLLBACK_FAILED through the
+		// path both sides accept.
+		return c.store.appendStatuses(key, certificateRollbackFailedStatuses(command, c.now(), code, summary), true)
+	}
 	status := failedStatus(command, 2, c.now(), code, summary, false)
-	status.RunningConfigUnchanged = unchanged
+	status.RunningConfigUnchanged = true
 	return c.store.appendStatuses(key, []*agentv1.DeploymentStatus{status}, true)
+}
+
+func certificateRollbackFailedStatuses(command *agentv1.DeploymentCommand, at time.Time, code commonv1.ErrorCode, summary string) []*agentv1.DeploymentStatus {
+	failed := statusFor(command, 6, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_ROLLBACK_FAILED, at, false, "ROLLBACK_FAILED", summary, 0)
+	failed.Error = &commonv1.ProtocolError{Code: code, Message: sanitizeSummary(summary)}
+	return []*agentv1.DeploymentStatus{
+		statusFor(command, 2, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_STAGED, at, false, "CERTIFICATE_STAGED", "certificate artifact staged", 0),
+		statusFor(command, 3, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_PRECHECKED, at, false, "CERTIFICATE_PRECHECKED", "certificate precheck passed", 0),
+		statusFor(command, 4, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_ACTIVATED, at, false, "CERTIFICATE_ACTIVATED", "certificate version activated", 0),
+		statusFor(command, 5, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_REVERTING, at, false, "CERTIFICATE_REVERTING", "certificate activation failed; restoring the previous version", 0),
+		failed,
+	}
 }
 
 func isCertificateCandidateError(err error) bool {

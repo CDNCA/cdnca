@@ -48,7 +48,10 @@ func TestCertificateGatewayRejectsUnverifiedSuccessResult27(t *testing.T) {
 
 			statuses := harness.execute(t, command, wire)
 			failed := lastStatus(t, statuses)
-			if failed.State != agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_FAILED ||
+			// The running configuration may have changed: FAILED would promise
+			// it did not (the gateway ends the session on that), so the
+			// failure is ROLLBACK_FAILED.
+			if failed.State != agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_ROLLBACK_FAILED ||
 				failed.Error == nil || failed.Error.Code != commonv1.ErrorCode_ERROR_CODE_INTERNAL ||
 				failed.RunningConfigUnchanged {
 				t.Fatalf("invalid success status = %#v", failed)
