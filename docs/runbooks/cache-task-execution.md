@@ -1,5 +1,7 @@
 # Edge cache task execution
 
+> The `internal/cachetask` executor this document describes (Manager, Carrier, journal, scan budgets, prewarm), its tests and `scripts/edge-cache-task-smoke.sh` were deleted; they had been off the production path since dynamic routing became the only node runtime. Node cache tasks run in `agents/edge-agent/internal/dynroute/cachetasks.go` (`dynroute.CacheTasks`).
+
 > Historical contract only. This document describes the retired schema v1
 > prototype and must not be used by control, Gateway, daemon, or Agent runtime
 > integrations. The current executor accepts only schema v2; use

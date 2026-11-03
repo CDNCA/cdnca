@@ -332,7 +332,8 @@ function _M.configure(opts)
     require("cdnca_origintls").configure({ system_ca_file = opts.system_ca_file })
     require("cdnca_originauth").configure({ secrets_root = opts.origin_auth_root })
     if cdnca_cache then
-        cdnca_cache.configure({ zones = opts.cache_zones, zone_suffix = opts.cache_zone_suffix, lru_items = opts.lru_items })
+        cdnca_cache.configure({ zones = opts.cache_zones, zone_suffix = opts.cache_zone_suffix, lru_items = opts.lru_items,
+            chunk_bytes = opts.cache_chunk_bytes, chunk_inactive = opts.cache_chunk_inactive })
     end
     sched302_table = opts.schedule302_table
     cdnca_managed_waf.configure({ detect_profiles = opts.managed_waf_detect, grey_profiles = opts.managed_waf_grey,
@@ -562,6 +563,11 @@ end
 -- (dynroute-filters.md §2): error page, HTTP policy, cache status, HSTS,
 -- Alt-Svc.
 function _M.header_filter()
+    if cdnca_cache and ngx.is_subrequest then
+        -- a chunk of a chunked range response (ADR 0021): same object version
+        -- as the first chunk, or the response ends here
+        cdnca_cache.chunk_subrequest_filter()
+    end
     cdnca_origin.header_filter()
     cdnca_filters.header_filter()
     if cdnca_webp then
@@ -603,6 +609,9 @@ end
 -- so its position only matters for failures, which it isolates. Only a
 -- request whose site was selected is logged (docs/edge/dynroute-telemetry.md §2.4).
 function _M.log()
+    if cdnca_cache then
+        cdnca_cache.log()
+    end
     cdnca_managed_waf.log()
     cdnca_limits.leave()
     cdnca_origin.log()

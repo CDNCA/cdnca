@@ -667,7 +667,7 @@ func Render(input Input) ([]byte, error) {
 		input.Node.IngressSourceIPv6, input.System != nil && input.System.Nginx.ServerAddrOutgoing, strings.Join(quoted, ", "), cache.Zones,
 		filepath.Join(paths.StateRoot, ChallengeDirectory), filepath.Join(paths.LuaRoot, "challenge"), challengeList(input.Challenges),
 		systemCABundle(input.Node), filepath.Join(paths.StateRoot, OriginAuthDirectory), nodePageLua(input.UnknownSite), nodePageLua(input.NoHost),
-		slotPagesLua(input.SlotPages), cacheZoneSuffixConfigure(paths)+schedule302Configure(input)+rulePlanConfigure(paths)+managedWAFConfigure(input)+siteGzipConfigure(input)+siteBrotliConfigure(input)+securityAggregateConfigure(input)+nodeNetworksConfigure(input))
+		slotPagesLua(input.SlotPages), cacheZoneSuffixConfigure(paths)+cacheChunkConfigure(cache)+schedule302Configure(input)+rulePlanConfigure(paths)+managedWAFConfigure(input)+siteGzipConfigure(input)+siteBrotliConfigure(input)+securityAggregateConfigure(input)+nodeNetworksConfigure(input))
 	fmt.Fprintf(&output, "  init_worker_by_lua_block { require(%q).init_worker() }\n", EntryModule)
 	if waf := input.ManagedWAF; waf != nil {
 		// The node rules are the parent of every tier location's rule set
@@ -892,6 +892,10 @@ func writeServer(output *bytes.Buffer, port edgesite.PortProfile, input Input) {
 	if input.Cache.Zones > 0 {
 		// cacheable requests: the cache module ngx.exec's into a variant
 		output.WriteString(edgecache.Variants("    ", proxy))
+		if input.Cache.ChunkBytes > 0 {
+			// chunked range cache (ADR 0021)
+			output.WriteString(edgecache.ChunkVariants("    ", proxy, input.Cache.ChunkBytes))
+		}
 	}
 	// origin redirect following (ge36): a following site's request the
 	// cache does not serve
@@ -1325,7 +1329,8 @@ func validate(input Input) ([]edgesite.PortProfile, error) {
 	if cache.Zones > 0 && (cache.Zones&(cache.Zones-1) != 0 || cache.KeysZoneBytes < 1<<20 || cache.KeysZoneBytes > 1<<34 || cache.KeysZoneBytes%(1<<20) != 0 ||
 		cache.MaxBytes < 1<<20 || cache.MaxBytes > 1<<50 || cache.MaxBytes%(1<<20) != 0 ||
 		cache.MinFreeBytes < 0 || cache.MinFreeBytes%(1<<20) != 0 ||
-		cache.Inactive < time.Minute || cache.Inactive > 365*24*time.Hour || cache.Inactive%time.Second != 0) {
+		cache.Inactive < time.Minute || cache.Inactive > 365*24*time.Hour || cache.Inactive%time.Second != 0 ||
+		cache.ChunkBytes != 0 && (cache.ChunkBytes < 256<<10 || cache.ChunkBytes > 64<<20 || cache.ChunkBytes&(cache.ChunkBytes-1) != 0)) {
 		return nil, fmt.Errorf("%w: cache pool %+v", ErrInvalid, cache)
 	}
 	if cache.Zones == 0 && cache != (CachePool{}) {
@@ -1574,6 +1579,15 @@ func cacheZoneSuffixConfigure(paths Paths) string {
 		return fmt.Sprintf("      cache_zone_suffix = %q,\n", suffix)
 	}
 	return ""
+}
+
+// cacheChunkConfigure: the chunked range cache's chunk size (ADR 0021),
+// nothing when it is off.
+func cacheChunkConfigure(cache CachePool) string {
+	if cache.ChunkBytes == 0 {
+		return ""
+	}
+	return fmt.Sprintf("      cache_chunk_bytes = %d,\n      cache_chunk_inactive = %d,\n", cache.ChunkBytes, int64(cache.Inactive/time.Second))
 }
 
 func schedule302Configure(input Input) string {

@@ -194,12 +194,18 @@ func TestVariantsRenderTheV7CacheDirectives(t *testing.T) {
 	}
 	stale := block("@cdnca_cache_follow_stalebg_s256")
 	for _, want := range []string{"proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;",
-		"proxy_cache_background_update on;", "slice 262144;", "proxy_set_header Range $slice_range;",
+		"proxy_cache_background_update off;", "slice 262144;", "proxy_set_header Range $slice_range;",
 		"proxy_cache_key $cdnca_cache_key|slice=$slice_range;", "proxy_cache_lock on;", "proxy_cache_revalidate on;",
 		"proxy_force_ranges on;", "proxy_no_cache $cdnca_cache_response_cookie $cdnca_cache_response_control $cdnca_cache_size_bypass $cdnca_cache_rule_bypass;"} {
 		if !strings.Contains(stale, want) {
 			t.Fatalf("missing %q in\n%s", want, stale)
 		}
+	}
+	// a slice's background update would fetch the whole object without Range
+	// (no slice context) and store it under "|slice=": only whole objects
+	// update in the background
+	if whole := block("@cdnca_cache_follow_stalebg"); !strings.Contains(whole, "proxy_cache_background_update on;") {
+		t.Fatalf("whole object stalebg variant\n%s", whole)
 	}
 	plain := block("@cdnca_cache_override")
 	if strings.Contains(plain, "use_stale") || strings.Contains(plain, "slice ") || !strings.Contains(plain, "proxy_force_ranges on;") ||

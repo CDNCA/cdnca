@@ -61,7 +61,14 @@ var (
 	workers  = flag.Int("workers", 2, "worker_processes")
 	scale    = flag.Int("scale", 10000, "sites on the shared pool")
 	requests = flag.Int("requests", 100000, "requests of the hit rate workload")
-	only     = flag.String("only", "", "comma separated parts: functional,extensions,rulematch,ruleextras,follow,statusheader,scale")
+	// chunked: every node with cache zones caches large objects in chunks
+	// (ADR 0021, on by default), unless a part sets its own pool
+	chunked = flag.Bool("chunked", false, "nodes run the chunked range cache")
+	only    = flag.String("only", "", "comma separated parts: functional,extensions,rulematch,ruleextras,follow,statusheader,scale; rangebase, chunk, chunkbase, chunksizes, slicebg, purgeindex only when named")
+	// purgeindex: rounds of fill + purge, each fillTime long
+	rounds    = flag.Int("rounds", 5, "purgeindex rounds")
+	fillTime  = flag.Duration("fill", 20*time.Second, "purgeindex traffic per round")
+	purgeScan = flag.Bool("purgescan", false, "purgeindex control run: purges scan, no index")
 )
 
 const (
@@ -256,6 +263,9 @@ func startNode(sites []edgesite.Site, pool edgecache.Pool) (*node, error) {
 // startNodeWith: referenced objects (error page bodies) are supplied with
 // every site object.
 func startNodeWith(sites []edgesite.Site, pool edgecache.Pool, referenced map[string][]byte) (*node, error) {
+	if *chunked && pool.Zones > 0 && pool.ChunkBytes == 0 {
+		pool.ChunkBytes = edgecache.ChunkBytes
+	}
 	n := &node{root: *state, pool: pool}
 	_ = n.openresty("-s", "stop")
 	time.Sleep(200 * time.Millisecond)
@@ -483,10 +493,16 @@ func functional(o *originServer) {
 	check("RANGE-FROM-CACHE", a.status == 206 && a.contentRange == "bytes 10-19/1000" && len(a.body) == 10 && a.cache == "MISS" &&
 		b.status == 206 && b.cache == "HIT" && b.contentRange == "bytes 100-199/1000" && c.status == 200 && c.cache == "HIT" && len(c.body) == 1000,
 		"%v / %v / %v", a, b, c)
-	check("RANGE-ORIGIN-ONCE-WHOLE", o.count("range.d8.test", "/v.bin") == 1 && o.lastRange("range.d8.test", "/v.bin") == "",
+	// the origin is asked once: without Range (whole object), or for the
+	// object's one aligned chunk on a chunking node (ADR 0021)
+	check("RANGE-ORIGIN-ONCE-WHOLE", o.count("range.d8.test", "/v.bin") == 1 && (o.lastRange("range.d8.test", "/v.bin") == "" ||
+		*chunked && o.lastRange("range.d8.test", "/v.bin") == fmt.Sprintf("bytes=0-%d", edgecache.ChunkBytes-1)),
 		"origin %d range %q", o.count("range.d8.test", "/v.bin"), o.lastRange("range.d8.test", "/v.bin"))
 	a = get("range.d8.test", "/v.bin?size=1000", map[string]string{"Range": "bytes=0-1,4-5"})
-	check("RANGE-MULTI-FROM-CACHE", a.status == 206 && a.cache == "HIT", "%v", a)
+	// a chunked object (ADR 0021: a small object first asked with a Range is
+	// its one chunk) answers several ranges with the whole object (nginx
+	// slice serves one range; RFC 9110 allows ignoring Range)
+	check("RANGE-MULTI-FROM-CACHE", (a.status == 206 || *chunked && a.status == 200 && len(a.body) == 1000) && a.cache == "HIT", "%v", a)
 	a = get("range.d8.test", "/v.bin?size=1000", map[string]string{"Range": "bytes=5000-6000"})
 	check("RANGE-416-FROM-CACHE", a.status == 416 && a.cache == "HIT", "%v", a)
 	// range off: a cached request is still cut from the cached object (v7
@@ -494,8 +510,11 @@ func functional(o *originServer) {
 	// setting only decides what a bypassed request forwards)
 	a = get("norange.d8.test", "/w.bin?size=100", map[string]string{"Range": "bytes=2-5"})
 	b = get("norange.d8.test", "/w.bin?size=100", map[string]string{"Range": "bytes=2-5"})
+	// on a chunking node the edge's own fetch is the aligned chunk, whatever
+	// the site's Range setting (as a slice variant's)
 	check("RANGE-OFF-FROM-CACHE", a.status == 206 && len(a.body) == 4 && b.cache == "HIT" && b.status == 206 &&
-		o.lastRange("norange.d8.test", "/w.bin") == "", "%v / %v range %q", a, b, o.lastRange("norange.d8.test", "/w.bin"))
+		(o.lastRange("norange.d8.test", "/w.bin") == "" || *chunked && o.lastRange("norange.d8.test", "/w.bin") == fmt.Sprintf("bytes=0-%d", edgecache.ChunkBytes-1)),
+		"%v / %v range %q", a, b, o.lastRange("norange.d8.test", "/w.bin"))
 	a = get("norange.d8.test", "/wb.bin?size=100", map[string]string{"Range": "bytes=2-5", "Authorization": "Bearer x"})
 	// bypassed on a range-off site: the origin gets no Range, the edge cuts
 	// the client's range from the full response (v7 proxy_force_ranges)
@@ -1234,6 +1253,38 @@ func main() {
 	if len(parts) == 0 || parts["statusheader"] {
 		fmt.Println("== statusheader")
 		statusHeader(o)
+	}
+	// large object runs only on request (minutes, GiBs through the cache)
+	if parts["rangebase"] || parts["chunk"] || parts["chunkbase"] || parts["chunksizes"] || parts["slicebg"] {
+		ro, err := startRangeOrigin()
+		if err != nil {
+			panic(err)
+		}
+		if parts["rangebase"] {
+			fmt.Println("== rangebase")
+			rangeBase(ro)
+		}
+		if parts["slicebg"] {
+			fmt.Println("== slicebg")
+			sliceBackground(ro)
+		}
+		if parts["chunk"] {
+			fmt.Println("== chunk")
+			chunkRun(ro)
+		}
+		if parts["chunkbase"] {
+			fmt.Println("== chunkbase")
+			chunkBase(ro, []int64{edgecache.ChunkBytes})
+		}
+		if parts["chunksizes"] {
+			fmt.Println("== chunksizes")
+			chunkBase(ro, []int64{1 << 20, 2 << 20, 4 << 20, 8 << 20})
+		}
+	}
+	// the purge index soak runs only on request (minutes of traffic)
+	if parts["purgeindex"] {
+		fmt.Println("== purgeindex")
+		purgeIndexRun(o)
 	}
 	if *scale > 0 && (len(parts) == 0 || parts["scale"]) {
 		fmt.Println("== scale")

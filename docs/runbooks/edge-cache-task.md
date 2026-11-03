@@ -1,5 +1,7 @@
 # 边缘缓存刷新与预热执行内核
 
+> 本文描述的 `internal/cachetask` 执行器（Manager/Carrier/扫盘与预算、journal、预热）及其测试、`scripts/edge-cache-task-smoke.sh`、`scripts/edge-cachetask-benchmark.sh` 已删除，它们从动态路由成为唯一节点运行时起就不在生产路径上。节点缓存任务现由 `agents/edge-agent/internal/dynroute/cachetasks.go`（`dynroute.CacheTasks`）执行，上限只有任务 deadline，没有扫盘预算。本文仅作历史记录，其中命令不再可运行。
+
 状态：已实现并验证节点本地执行内核；**CACHE-03 尚未闭环**。
 
 ## 当前范围

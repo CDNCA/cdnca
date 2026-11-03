@@ -27,6 +27,12 @@ var Variables = []string{
 	"cdnca_cache_signature",   // the request's rule candidate set when a content_types rule is in it
 	"cdnca_cache_follow",      // "1": a redirect is being followed, the cache is not read (ge36)
 	"cdnca_follow_hops",       // origin redirects followed so far ("" = not entered, ge36)
+	// chunked range cache (ADR 0021): the request's mode ("w"/"wp" whole
+	// object, "c"/"cp" chunks; "p" = the object's prober), the object's
+	// metadata key, its chunk generation suffix ("" or "|e=<n>") and the
+	// first chunk's validators the other chunks are compared with
+	"cdnca_chunk", "cdnca_chunk_hash", "cdnca_chunk_epoch",
+	"cdnca_chunk_etag", "cdnca_chunk_lm", "cdnca_chunk_total",
 }
 
 // FollowLocation is the named location of a request whose site follows
@@ -169,6 +175,9 @@ func VariantNames() []string {
 func HTTP(pool Pool, cacheRoot, zoneSuffix string, sites int) string {
 	var output strings.Builder
 	fmt.Fprintf(&output, "  lua_shared_dict %s %dm;\n", PurgeDictionary, PurgeDictionaryBytes(sites)>>20)
+	if pool.ChunkBytes > 0 {
+		fmt.Fprintf(&output, "  lua_shared_dict %s %dm;\n  lua_capture_error_log %dm;\n", ChunkDictionary, ChunkDictionaryBytes>>20, ChunkErrorLogBytes>>20)
+	}
 	for index := range pool.Zones {
 		fmt.Fprintf(&output, "  proxy_cache_path %q levels=1:2 keys_zone=%s:%dm max_size=%dm",
 			filepath.Join(cacheRoot, "cdnca-"+strconv.Itoa(index)), ZoneName(index, zoneSuffix), pool.KeysZoneBytes>>20, pool.MaxBytes>>20)
@@ -182,6 +191,13 @@ func HTTP(pool Pool, cacheRoot, zoneSuffix string, sites int) string {
 	output.WriteString("  map \"$upstream_status|$cdnca_cache_ttls\" $cdnca_cache_valid {\n    volatile;\n" +
 		"    \"~^(?:[^|]*, )?(?<cdnca_cache_s>[0-9]{3})\\|.* \\k<cdnca_cache_s>=(?<cdnca_cache_t>[0-9]+) \" $cdnca_cache_t;\n" +
 		"    \"~^[^|]*\\|.* any=(?<cdnca_cache_t>[0-9]+) \" $cdnca_cache_t;\n    default \"\";\n  }\n")
+	if pool.ChunkBytes > 0 {
+		// a chunk is a 206: the rule's 206 entry, else its 200 entry, else any
+		output.WriteString("  map \"$upstream_status|$cdnca_cache_ttls\" $cdnca_chunk_valid {\n    volatile;\n" +
+			"    \"~^(?:[^|]*, )?206\\|.* 206=(?<cdnca_cache_t>[0-9]+) \" $cdnca_cache_t;\n" +
+			"    \"~^(?:[^|]*, )?206\\|.* 200=(?<cdnca_cache_t>[0-9]+) \" $cdnca_cache_t;\n" +
+			"    \"~^(?:[^|]*, )?206\\|.* any=(?<cdnca_cache_t>[0-9]+) \" $cdnca_cache_t;\n    default \"\";\n  }\n")
+	}
 	output.WriteString("  map \"$status|$cdnca_cache_browsers\" $cdnca_cache_expires {\n    volatile;\n" +
 		"    \"~^(?<cdnca_cache_s>[0-9]{3})\\|.* \\k<cdnca_cache_s>=(?<cdnca_cache_b>[a-z0-9]+) \" $cdnca_cache_b;\n" +
 		"    \"~^[0-9]{3}\\|.* any=(?<cdnca_cache_b>[a-z0-9]+) \" $cdnca_cache_b;\n    default \"\";\n  }\n")
@@ -202,6 +218,13 @@ func HTTP(pool Pool, cacheRoot, zoneSuffix string, sites int) string {
 		"    volatile;\n    \"~^\\|\" \"\";\n")
 	for _, status := range []string{"HIT", "STALE", "UPDATING", "REVALIDATED", "MISS", "EXPIRED"} {
 		fmt.Fprintf(&output, "    \"~^1\\|%s\\|0000\\|%s$\" %s;\n", zone, status, status)
+	}
+	if pool.ChunkBytes > 0 {
+		// fetched but kept as chunks, or not chunkable (ADR 0021,
+		// $cdnca_cache_size_bypass 3): the origin answered, nothing is wrong
+		for _, status := range []string{"MISS", "EXPIRED"} {
+			fmt.Fprintf(&output, "    \"~^1\\|%s\\|0030\\|%s$\" %s;\n", zone, status, status)
+		}
 	}
 	// a followed redirect's final response (ge36): fetched with the lookup
 	// skipped (proxy_cache_bypass, only in the follow variants) and stored
@@ -307,7 +330,12 @@ func Variants(indent, proxy string) string {
 		fmt.Fprintf(&output, "%sproxy_cache_revalidate on;\n", inner)
 		if variant.stale != staleNone {
 			fmt.Fprintf(&output, "%sproxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;\n", inner)
-			fmt.Fprintf(&output, "%sproxy_cache_background_update %s;\n", inner, map[bool]string{true: "on", false: "off"}[variant.stale == staleBackground])
+			// a slice is never updated in the background: nginx's background
+			// subrequest has no slice context ($slice_range empty) and would
+			// store the whole object under "<key>|slice=" (ADR 0021 section 7);
+			// an expired slice is revalidated by its request
+			fmt.Fprintf(&output, "%sproxy_cache_background_update %s;\n", inner,
+				map[bool]string{true: "on", false: "off"}[variant.stale == staleBackground && variant.sliceBytes == 0])
 		}
 		if variant.sliceBytes > 0 {
 			fmt.Fprintf(&output, "%sslice %d;\n%sproxy_set_header Range $slice_range;\n%sproxy_set_header If-Range \"\";\n",
@@ -326,6 +354,89 @@ func Variants(indent, proxy string) string {
 // LockTimeout bounds how long concurrent misses of one key wait for the
 // first fill (v7 cacheLockTimeout / cacheLockAge).
 const LockTimeout = 5 * time.Second
+
+// Chunked range cache (ADR 0021): a large object is cached in chunks of
+// ChunkBytes (fixed, never a setting: a new size renews the chunks once, at
+// a release), fetched from the origin aligned and only where missing.
+const (
+	// ChunkBytes is the chunk size (ADR 0021 section 6.3).
+	ChunkBytes int64 = 4 << 20
+	// ChunkSuffix names the chunk variant of a whole object variant.
+	ChunkSuffix = "_c"
+	// ChunkLockTimeout: concurrent misses of one chunk wait for its fill
+	// this long (a chunk at 140 KiB/s still fills once).
+	ChunkLockTimeout = 30 * time.Second
+	// ChunkDictionary holds the objects' chunk metadata (cdnca_cache.lua):
+	// ~200 bytes an object, LRU evicted.
+	ChunkDictionary      = "cdnca_cache_chunks"
+	ChunkDictionaryBytes = 32 << 20
+	// ChunkErrorLogBytes: lua_capture_error_log, where cdnca_cache finds
+	// nginx slice's "etag mismatch in slice response" of its connection
+	ChunkErrorLogBytes = 1 << 20
+)
+
+// WholeVariant is a variant without its slice size (the chunked range cache
+// replaces slices: an object is whole or chunks).
+func WholeVariant(variant string) string {
+	if index := strings.LastIndex(variant, "_s"); index > 0 && strings.Trim(variant[index+2:], "0123456789") == "" && len(variant) > index+2 {
+		return variant[:index]
+	}
+	return variant
+}
+
+// ChunkVariant is the chunk variant of a cacheable variant.
+func ChunkVariant(variant string) string { return WholeVariant(variant) + ChunkSuffix }
+
+// ChunkVariants are the chunk variant locations (Pool.ChunkBytes > 0): one
+// per whole object variant that does not follow redirects. Each caches
+// chunkBytes slices of an object under <key>|slice=<range><chunk
+// generation>, asks the origin for one aligned chunk (identity encoding:
+// every chunk must be the same representation; edge compression applies to
+// the assembled 200), stores 206 only, and locks a chunk's concurrent
+// misses for ChunkLockTimeout. nginx slice ends a response whose chunks'
+// ETags differ (before any lua filter runs); cdnca_cache compares
+// Last-Modified and the total length too, and finds slice's ETag mismatch
+// in the captured error log (ChunkErrorLogBytes) to renew the object's
+// chunks. The stale variants keep stale-if-error but
+// never update in the background (nginx's background subrequest has no
+// slice context and would store the whole object under "slice=").
+func ChunkVariants(indent, proxy string, chunkBytes int64) string {
+	var output strings.Builder
+	inner := indent + "  "
+	for _, variant := range variants() {
+		if variant.follow || variant.sliceBytes != 0 {
+			continue
+		}
+		fmt.Fprintf(&output, "%slocation %s {\n", indent, variant.name+ChunkSuffix)
+		output.WriteString(proxy)
+		responseHeaders(&output, inner)
+		fmt.Fprintf(&output, "%sproxy_cache $cdnca_cache_zone;\n", inner)
+		fmt.Fprintf(&output, "%sproxy_cache_key $cdnca_cache_key|slice=$slice_range$cdnca_chunk_epoch;\n", inner)
+		fmt.Fprintf(&output, "%sproxy_cache_valid any $cdnca_chunk_valid;\n", inner)
+		fmt.Fprintf(&output, "%sproxy_no_cache $cdnca_cache_response_cookie $cdnca_cache_response_control $cdnca_cache_size_bypass $cdnca_cache_rule_bypass;\n", inner)
+		fmt.Fprintf(&output, "%sexpires $cdnca_cache_expires;\n", inner)
+		switch {
+		case variant.override && variant.ignoreVary:
+			fmt.Fprintf(&output, "%sproxy_ignore_headers X-Accel-Expires Expires Cache-Control Vary;\n", inner)
+		case variant.override:
+			fmt.Fprintf(&output, "%sproxy_ignore_headers X-Accel-Expires Expires Cache-Control;\n", inner)
+		case variant.ignoreVary:
+			fmt.Fprintf(&output, "%sproxy_ignore_headers Vary;\n", inner)
+		}
+		seconds := int64(ChunkLockTimeout / time.Second)
+		fmt.Fprintf(&output, "%sproxy_cache_lock on;\n%sproxy_cache_lock_timeout %ds;\n%sproxy_cache_lock_age %ds;\n", inner, inner, seconds, inner, seconds)
+		fmt.Fprintf(&output, "%sproxy_cache_revalidate on;\n", inner)
+		if variant.stale != staleNone {
+			fmt.Fprintf(&output, "%sproxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;\n", inner)
+			fmt.Fprintf(&output, "%sproxy_cache_background_update off;\n", inner)
+		}
+		fmt.Fprintf(&output, "%sslice %d;\n%sproxy_set_header Range $slice_range;\n%sproxy_set_header If-Range \"\";\n", inner, chunkBytes, inner, inner)
+		fmt.Fprintf(&output, "%sproxy_set_header Accept-Encoding \"\";\n", inner)
+		fmt.Fprintf(&output, "%sproxy_force_ranges on;\n", inner)
+		fmt.Fprintf(&output, "%s}\n", indent)
+	}
+	return output.String()
+}
 
 // AdminLocation routes /cache/ on the dynamic routing control socket server
 // (dynroute contract section 5.4) to the cache module.

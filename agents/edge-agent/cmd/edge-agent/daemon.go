@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/acmehttp01"
-	"github.com/cdnca/cdnca/agents/edge-agent/internal/cachetask"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/certstore"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/challenge"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/ddos"
@@ -467,21 +466,9 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if err != nil {
 		return nil, fmt.Errorf("configure URL auth artifact runtime: %w", err)
 	}
-	cacheResolver, err := cachetask.NewActiveReleaseResolver(config.DeploymentRoot)
-	if err != nil {
-		return nil, fmt.Errorf("configure cache task release resolver: %w", err)
-	}
 	cacheTaskConfig, err := config.CacheTask.config()
 	if err != nil {
 		return nil, err
-	}
-	cacheManager, err := cachetask.NewManager(config.DeploymentRoot, cacheResolver, cacheTaskConfig)
-	if err != nil {
-		return nil, fmt.Errorf("configure cache task manager: %w", err)
-	}
-	cacheCarrier, err := cachetask.NewCarrier(cacheManager, cacheResolver)
-	if err != nil {
-		return nil, fmt.Errorf("configure cache task carrier: %w", err)
 	}
 	// The node skeleton (dynroute writes it to its shared root) serves the
 	// tokens from its own overlay root (dynroute.New created it).
@@ -549,7 +536,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		// snapshots with slots (cdnca_site, cdnca_filters, cdnca_limits,
 		// cdnca_banlist, errorpage)
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_ERROR_PAGE_SLOTS, ApiVersion: siteobject.ErrorPageSlotsAPIVersion},
-		// fp-site2 (user Q4): both cache task paths (cachetask, dyncache) purge
+		// fp-site2 (user Q4): the cache task path (dyncache) purges
 		// "*.<suffix>" target hosts.
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_CACHE_WILDCARD_PURGE, ApiVersion: 1},
 		// tls-custom: the custom cipher preset is SSL_set_cipher_list in
@@ -614,10 +601,9 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if dynamicRouting != nil {
 		runtimeStatusProbe.ErrorLog = dynamicRouting.ErrorLogProto
 	}
-	var cacheTasks gatewayclient.CacheTaskManager = cacheCarrier
-	if dynamicRouting != nil {
-		cacheTasks = dynroute.CacheTasks{Runtime: dynamicRouting, RequestTimeout: cacheTaskConfig.RequestTimeout}
-	}
+	// Cache tasks run on the dynamic routing runtime (assembleDynamicRouting
+	// never returns nil without an error).
+	cacheTasks := dynroute.CacheTasks{Runtime: dynamicRouting, RequestTimeout: cacheTaskConfig.RequestTimeout}
 	clientOptions := []gatewayclient.ClientOption{
 		gatewayclient.WithSiteObjectStore(siteObjects),
 		gatewayclient.WithACMEHTTP01OverlayConsumer(overlayManager),

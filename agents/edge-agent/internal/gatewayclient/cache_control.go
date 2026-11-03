@@ -224,9 +224,6 @@ func localCacheBudgetFor(action cachetask.Action, config cachetask.Config) cache
 	}
 	budget.MaxConcurrency = 1
 	budget.MaxPurgeEntries = config.MaxPurgeEntries
-	budget.MaxScanEntries = config.MaxScanEntries
-	budget.MaxScanBytes = config.MaxScanBytes
-	budget.MaxScanDuration = config.MaxScanDuration
 	return budget
 }
 

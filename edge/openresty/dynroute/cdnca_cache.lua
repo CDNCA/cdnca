@@ -52,7 +52,7 @@ local site_mod = require "cdnca_site"
 local bit = require "bit"
 
 local ngx_var = ngx.var
-local byte, sub, find, match, lower = string.byte, string.sub, string.find, string.match, string.lower
+local byte, sub, find, match, lower, gsub = string.byte, string.sub, string.find, string.match, string.lower, string.gsub
 local tonumber, tostring, type, pairs, ipairs = tonumber, tostring, type, pairs, ipairs
 local concat, sort = table.concat, table.sort
 
@@ -60,8 +60,12 @@ local _M = { version = "1" }
 
 local purge = ngx.shared.cdnca_cache_purge
 local LOADED, PREWARM = "loaded", "prewarm_token"
-local config = { zones = 0, zone_suffix = "" }
+local config = { zones = 0, zone_suffix = "", chunk_bytes = 0, chunk_inactive = 3600 }
 local plans -- site digest -> plan
+-- chunked range cache (ADR 0021): object metadata, probe locks and chunk
+-- generations (edgecache.ChunkDictionary); nil when the node does not chunk
+local chunks
+local META_TTL, PROBE_TTL, PROBE_WAIT = 86400, 30, 10
 
 local MAX_RAW_QUERY_BYTES, MAX_QUERY_PAIRS = 8192, 256
 local MAX_HEADER_VALUE_BYTES, MAX_HEADER_TOTAL_BYTES = 4096, 16384
@@ -76,6 +80,16 @@ function _M.configure(opts)
     assert(suffix == "" or match(suffix, "^_%x%x%x%x%x%x%x%x$"), "cdnca_cache: zone_suffix")
     config.zone_suffix = suffix
     plans = assert(lrucache.new(tonumber(opts.lru_items) or 10000))
+    -- edgecache.Pool.ChunkBytes: 0 = off (whole objects and slices as before)
+    local chunk = tonumber(opts.chunk_bytes) or 0
+    assert(chunk == 0 or (chunk >= 262144 and chunk <= 67108864 and bit.band(chunk, chunk - 1) == 0), "cdnca_cache: chunk_bytes")
+    config.chunk_bytes = chunk
+    -- edgecache.Pool.Inactive: an unread cache file is gone after it
+    config.chunk_inactive = tonumber(opts.chunk_inactive) or 3600
+    chunks = nil
+    if chunk > 0 then
+        chunks = assert(ngx.shared.cdnca_cache_chunks, "cdnca_cache: lua_shared_dict cdnca_cache_chunks missing")
+    end
 end
 
 -- v7 simple policy TTLs (edgecache.simpleTTLs); schema v1 status rules are
@@ -703,6 +717,103 @@ local function no_cache_matches(conditions)
     return false
 end
 
+-- ---------------------------------------------------------------- chunks
+-- Chunked range cache (ADR 0021). Per object (md5 of its cache key, which
+-- carries the purge generation) the chunk dictionary holds:
+--   m:<hash>  "w\n<reason>" whole object, or "c\n<total>\n<etag>\n<lm>" chunks
+--   p:<hash>  the probe lock while the object's first request runs
+--   e:<hash>  the chunk generation (bumped when an object's chunks disagree)
+-- reasons a whole object stays whole: norange, encoded, novalidator,
+-- prewarm (STICKY: never turned into chunks); small, cached, status,
+-- uncacheable (turned into chunks when an origin 200 says it is large).
+local SINGLE_RANGE = "^bytes=%d+%-%d*$"
+local STICKY = { norange = true, encoded = true, novalidator = true, prewarm = true }
+
+local function chunk_meta(hash)
+    local value = chunks:get("m:" .. hash)
+    if not value then
+        return nil
+    end
+    local kind, a, b, c = match(value, "^(%a)\n([^\n]*)\n?([^\n]*)\n?(.*)$")
+    if kind == "c" then
+        return { kind = "c", total = tonumber(a), etag = b, lm = c }
+    end
+    return { kind = "w", reason = a }
+end
+
+local function set_meta(hash, value)
+    chunks:set("m:" .. hash, value, META_TTL)
+end
+
+-- chunk_epoch(hash): the chunk generation suffix of the object's chunk keys
+local function chunk_epoch(hash)
+    local epoch = chunks:get("e:" .. hash)
+    return epoch and epoch > 0 and ("|e=" .. epoch) or ""
+end
+
+-- bump(hash): the object's chunks are unreachable from now on (new chunk
+-- generation), its metadata is learned again. A generation is at least the
+-- current time in seconds: the dictionary does not survive a restart, and a
+-- generation counted from 0 again would reach chunks of an earlier one
+-- still on disk.
+local function bump(hash)
+    local epoch = math.max((chunks:get("e:" .. hash) or 0) + 1, math.floor(ngx.time()))
+    chunks:set("e:" .. hash, epoch)
+    chunks:delete("m:" .. hash)
+    ngx_var.cdnca_chunk_epoch = "|e=" .. epoch
+end
+
+-- whole_variant(variant): edgecache.WholeVariant (no slice size)
+local function whole_variant(variant)
+    return (gsub(variant, "_s%d+$", ""))
+end
+
+-- chunk_dispatch(variant, prewarm): the variant of a cacheable request on a
+-- chunking node: the object's whole variant or its chunk variant (ADR 0021
+-- section 4.2). The first request of an unknown object probes it (a single
+-- Range: chunks, else the whole object); concurrent ones wait for what it
+-- learns, at most PROBE_WAIT seconds (then a Range takes chunks, sharing
+-- the chunk fills, and anything else the whole object, as before).
+local function chunk_dispatch(variant, prewarm)
+    local whole = whole_variant(variant)
+    local hash = ngx.md5(ngx_var.cdnca_cache_key)
+    ngx_var.cdnca_chunk_hash = hash
+    local range = ngx_var.http_range
+    local ranged = range ~= nil and match(range, SINGLE_RANGE) ~= nil
+    local meta = chunk_meta(hash)
+    if not meta then
+        local deadline = ngx.now() + PROBE_WAIT
+        local pause = 0.01
+        while not meta do
+            if chunks:safe_add("p:" .. hash, 1, PROBE_TTL) then
+                -- the prober: chunks for a Range (only what it covers is
+                -- fetched), else the whole object (a small one is cached at
+                -- once, a cached one answers at once)
+                if ranged and not prewarm then
+                    ngx_var.cdnca_chunk = "cp"
+                    ngx_var.cdnca_chunk_epoch = chunk_epoch(hash)
+                    return whole .. "_c"
+                end
+                ngx_var.cdnca_chunk = "wp"
+                return whole
+            end
+            if ngx.now() >= deadline then
+                break
+            end
+            ngx.sleep(pause)
+            pause = math.min(pause * 2, 0.05)
+            meta = chunk_meta(hash)
+        end
+    end
+    if meta and meta.kind == "c" or not meta and ranged and not prewarm then
+        ngx_var.cdnca_chunk = "c"
+        ngx_var.cdnca_chunk_epoch = chunk_epoch(hash)
+        return whole .. "_c"
+    end
+    ngx_var.cdnca_chunk = "w"
+    return whole
+end
+
 -- access(): the cache decision of this request. Idempotent: a named
 -- variant re-runs the access phase.
 function _M.access()
@@ -810,6 +921,14 @@ function _M.access()
     -- cached: the origin is asked for the whole object (or one slice) and
     -- the client's Range is cut from the cache (ge-cache D, every site)
     ngx_var.cdnca_cache_range, ngx_var.cdnca_cache_if_range = "", ""
+    -- chunked range cache (ADR 0021): replaces slices; a following site's
+    -- requests stay whole (a chunk cannot be redirected)
+    if chunks and not following then
+        return ngx.exec(chunk_dispatch(variant, prewarm))
+    end
+    if following and chunks then
+        return ngx.exec(whole_variant(variant) .. "_f")
+    end
     if following and slice_bytes == 0 then
         return ngx.exec(variant .. "_f")
     end
@@ -863,6 +982,221 @@ local function type_filter(plan, signature)
     ngx_var.cdnca_cache_browsers = route.browsers
 end
 
+local function header_value(name)
+    local value = ngx.header[name]
+    if type(value) == "table" then
+        value = value[1]
+    end
+    return value or ""
+end
+
+local function encoded()
+    local value = header_value("Content-Encoding")
+    return value ~= "" and lower(value) ~= "identity"
+end
+
+-- learn_whole(hash, mode): a response of the object's whole variant (ADR
+-- 0021 section 4.3). An origin 200 of a large object the origin can range
+-- turns it into chunks (this response is not stored); else the object stays
+-- whole with its reason.
+local function learn_whole(hash, meta)
+    local status = ngx.status
+    if status == 304 or status == 412 then
+        -- a conditional answer (not_modified runs before this filter)
+        return
+    end
+    local fetched = ngx_var.upstream_cache_status
+    fetched = fetched == "MISS" or fetched == "EXPIRED"
+    if ngx_var.cdnca_cache_rule_bypass == "1" or ngx_var.cdnca_cache_response_cookie == "1" or ngx_var.cdnca_cache_response_control == "1" then
+        if not meta then
+            set_meta(hash, "w\nuncacheable")
+        end
+        return
+    end
+    if status ~= 200 then
+        if status < 500 and not meta then
+            set_meta(hash, "w\nstatus")
+        end
+        return
+    end
+    local reason
+    if ngx_var.cdnca_cache_prewarm == "1" then
+        reason = "prewarm"
+    elseif encoded() then
+        reason = "encoded"
+    elseif header_value("ETag") == "" and header_value("Last-Modified") == "" then
+        reason = "novalidator"
+    elseif lower(ngx_var.upstream_http_accept_ranges or "") ~= "bytes" and fetched then
+        reason = "norange"
+    elseif (tonumber(ngx.header["Content-Length"]) or 0) <= config.chunk_bytes then
+        reason = "small"
+    elseif fetched and not (meta and STICKY[meta.reason]) and ngx_var.cdnca_cache_size_bypass == "0" then
+        -- kept as chunks from now on: this whole object is not stored
+        set_meta(hash, "c\n" .. ngx.header["Content-Length"] .. "\n" .. header_value("ETag") .. "\n" .. header_value("Last-Modified"))
+        ngx_var.cdnca_cache_size_bypass = "3"
+        return
+    else
+        reason = "cached"
+    end
+    if meta and meta.kind == "w" and STICKY[meta.reason] and reason ~= "prewarm" then
+        reason = meta.reason
+    end
+    if not meta or meta.kind ~= "w" or meta.reason ~= reason or (chunks:ttl("m:" .. hash) or 0) < META_TTL / 2 then
+        set_meta(hash, "w\n" .. reason)
+    end
+end
+
+-- learn_chunk(hash, meta): the main request of a chunk variant. lua's
+-- header filter runs after nginx slice's and not_modified's: an origin 206
+-- is already the object's 200 here (Content-Length = the total length,
+-- $slice_range set), or a 304/412 answer to the client's condition (nothing
+-- to learn); anything else passed slice untouched ($slice_range empty).
+local function learn_chunk(hash, meta)
+    local status = ngx.status
+    if (ngx_var.slice_range or "") == "" then
+        -- not a chunk: 200 (the origin ignores Range: the whole object
+        -- passes, not stored), 416, errors (chunks are 206 only)
+        ngx_var.cdnca_cache_size_bypass = "3"
+        if status == 200 then
+            set_meta(hash, "w\nnorange")
+        elseif status ~= 416 and status ~= 304 and status ~= 412 and status < 500 and not (meta and meta.kind == "c") then
+            set_meta(hash, "w\nstatus")
+        end
+        return
+    end
+    if status ~= 200 then
+        return
+    end
+    local etag, lm = header_value("ETag"), header_value("Last-Modified")
+    local total = tonumber(ngx.header["Content-Length"])
+    ngx_var.cdnca_chunk_total, ngx_var.cdnca_chunk_etag, ngx_var.cdnca_chunk_lm = total or "", etag, lm
+    local reason
+    if not total then
+        reason = "norange"
+    elseif encoded() then
+        reason = "encoded"
+    elseif etag == "" and lm == "" then
+        reason = "novalidator"
+    end
+    -- an object no longer than a chunk is that one chunk (chunk 0): stored
+    -- and served as chunks from now on (no second origin fetch for a small
+    -- object whose first request had a Range)
+    if reason then
+        ngx_var.cdnca_cache_size_bypass = "3"
+        if not (meta and meta.kind == "w" and STICKY[meta.reason]) then
+            set_meta(hash, "w\n" .. reason)
+        end
+        return
+    end
+    local fetched = ngx_var.upstream_cache_status
+    fetched = fetched == "MISS" or fetched == "EXPIRED"
+    local changed = meta and meta.kind == "c" and (meta.total ~= total or meta.etag ~= etag or meta.lm ~= lm)
+    if changed and fetched then
+        -- the origin's object changed: the other chunks come from a new
+        -- chunk generation (this one is stored under the old one, unread)
+        bump(hash)
+    end
+    if changed or not meta or meta.kind ~= "c" or (chunks:ttl("m:" .. hash) or 0) < META_TTL / 2 then
+        set_meta(hash, "c\n" .. total .. "\n" .. etag .. "\n" .. lm)
+    end
+end
+
+-- chunk_filter(): the main request's chunk decision (header filter).
+local function chunk_filter()
+    local mode = ngx_var.cdnca_chunk
+    if not mode or mode == "" then
+        return
+    end
+    local hash = ngx_var.cdnca_chunk_hash
+    local meta = chunk_meta(hash)
+    if mode == "w" or mode == "wp" then
+        learn_whole(hash, meta)
+    else
+        learn_chunk(hash, meta)
+    end
+    if mode == "wp" or mode == "cp" then
+        -- released here; the log phase must not release a later prober's
+        chunks:delete("p:" .. hash)
+        ngx_var.cdnca_chunk = sub(mode, 1, 1)
+    end
+end
+
+-- chunk_subrequest_filter(): every other chunk of a chunk response (nginx
+-- slice subrequest; this filter runs before slice's). A chunk whose total
+-- length, ETag or Last-Modified differs from the first chunk's ends the
+-- response: what was sent is one version, the object's chunks are renewed
+-- (new chunk generation) so the client's retry gets one version again.
+-- nginx slice compares the ETag itself and ends the response before this
+-- filter runs: log() finds that in the captured error log.
+function _M.chunk_subrequest_filter()
+    local mode = ngx_var.cdnca_chunk
+    if mode ~= "c" and mode ~= "cp" or (ngx_var.slice_range or "") == "" then
+        return
+    end
+    -- nginx slice checked the range; this is the chunk as the object's 200
+    local total = header_value("Content-Length")
+    local etag, lm = header_value("ETag"), header_value("Last-Modified")
+    if total ~= ngx_var.cdnca_chunk_total or etag ~= (ngx_var.cdnca_chunk_etag or "") or lm ~= (ngx_var.cdnca_chunk_lm or "") then
+        ngx.log(ngx.WARN, "cdnca cache: chunk ", ngx_var.slice_range, " of ", ngx_var.uri, " differs from the first chunk (",
+            total, " ", etag, " ", lm, " vs ", ngx_var.cdnca_chunk_total or "", " ", ngx_var.cdnca_chunk_etag or "", " ",
+            ngx_var.cdnca_chunk_lm or "", "): chunks renewed")
+        bump(ngx_var.cdnca_chunk_hash)
+        return ngx.exit(ngx.ERROR)
+    end
+end
+
+-- slice_mismatches: connection number -> time of nginx slice's "etag
+-- mismatch in slice response" (lua_capture_error_log is one buffer per
+-- worker, read and emptied by get_logs: lines of other connections wait
+-- here for their own log phase)
+local slice_mismatches, SLICE_MISMATCH = {}, "etag mismatch in slice response"
+
+local function slice_mismatch(connection)
+    local errlog = require "ngx.errlog"
+    for _ = 1, 100 do
+        local logs = errlog.get_logs(50)
+        if not logs or #logs == 0 then
+            break
+        end
+        for index = 3, #logs, 3 do
+            local message = logs[index]
+            if find(message, SLICE_MISMATCH, 1, true) then
+                local number = match(message, " %*(%d+) ")
+                if number then
+                    slice_mismatches[number] = ngx.now()
+                end
+            end
+        end
+    end
+    local now = ngx.now()
+    for number, at in pairs(slice_mismatches) do
+        if now - at > 30 then
+            slice_mismatches[number] = nil
+        end
+    end
+    local found = slice_mismatches[connection] ~= nil
+    slice_mismatches[connection] = nil
+    return found
+end
+
+-- log(): a prober that never reached its header filter (client gone,
+-- origin failure) releases the probe lock; a chunk response nginx slice
+-- ended on an ETag mismatch renews the object's chunks (else the cached
+-- old chunk would end every retry the same way).
+function _M.log()
+    local mode = ngx_var.cdnca_chunk
+    if not chunks or not mode or mode == "" then
+        return
+    end
+    if mode == "wp" or mode == "cp" then
+        chunks:delete("p:" .. ngx_var.cdnca_chunk_hash)
+    end
+    if (mode == "c" or mode == "cp") and slice_mismatch(ngx_var.connection) then
+        ngx.log(ngx.WARN, "cdnca cache: chunks of ", ngx_var.uri, " differ (nginx slice ETag mismatch): chunks renewed")
+        bump(ngx_var.cdnca_chunk_hash)
+    end
+end
+
 -- header_filter(): the content_types decision, the object size bounds, then
 -- the prewarm identity echo (cache task verification).
 function _M.header_filter()
@@ -876,6 +1210,9 @@ function _M.header_filter()
         end
         if plan and plan.size_bounds and ngx_var.cdnca_cache_size_bypass == "0" then
             size_filter(plan)
+        end
+        if chunks then
+            chunk_filter()
         end
     end
     if ngx_var.cdnca_cache_prewarm == "1" then
@@ -928,6 +1265,41 @@ function _M.admin()
         ngx.say("{}")
         return
     end
+    if uri == "/cache/chunks/forget" and method == "POST" then
+        -- an exact purge (dyncache.purgeChunks): the objects' chunk state is
+        -- returned (the agent removes their chunk files by path) and
+        -- forgotten; the next request learns it again in a new chunk
+        -- generation, so a chunk file the agent did not find (state unknown,
+        -- past its probe) is never read again: it is gone once unread for
+        -- the pool's inactive time, the new generation lives that long.
+        ngx.req.read_body()
+        local body = cjson.decode(ngx.req.get_body_data() or "")
+        if type(body) ~= "table" or type(body.keys) ~= "table" or #body.keys > 4096 then
+            return ngx.exit(400)
+        end
+        local states = {}
+        for _, key in ipairs(body.keys) do
+            if type(key) ~= "string" or #key == 0 or #key > 16384 then
+                return ngx.exit(400)
+            end
+            local state = { epoch = 0, total = 0, kind = "" }
+            if chunks then
+                local hash = ngx.md5(key)
+                local meta = chunk_meta(hash)
+                state.epoch = chunks:get("e:" .. hash) or 0
+                if meta then
+                    state.kind = meta.kind
+                    state.total = meta.kind == "c" and meta.total or 0
+                end
+                chunks:delete("m:" .. hash)
+                chunks:delete("p:" .. hash)
+                chunks:set("e:" .. hash, math.max(state.epoch + 1, math.floor(ngx.time())), config.chunk_inactive + 600)
+            end
+            states[key] = state
+        end
+        ngx.say(cjson.encode({ chunk_bytes = config.chunk_bytes, states = states }))
+        return
+    end
     if uri == "/cache/generations" and method == "GET" then
         ngx.say(cjson.encode({ loaded = purge:get(LOADED) == 1 }))
         return
@@ -950,14 +1322,17 @@ function _M.admin()
                 local route = route_of(plan, indexes)
                 routes[signature] = { cache = route.cache, may_cache = route.may_cache, ttls = route.ttls,
                     browsers = route.browsers, variant = route.variant or cjson.null,
-                    ignore_query = route.ignore_query, no_cache = route.no_cache and #route.no_cache or 0 }
+                    ignore_query = route.ignore_query, no_cache = route.no_cache and #route.no_cache or 0,
+                    chunk_variant = config.chunk_bytes > 0 and (whole_variant(route.variant or plan.variant) .. "_c") or cjson.null }
             end
         else
             routes[""] = plan.simple
         end
         ngx.say(cjson.encode({ zone = plan.zone or cjson.null, projected = plan.projected, routes = routes,
             variant = plan.variant, slice_bytes = plan.slice_bytes, min_object_bytes = plan.min_object_bytes,
-            max_object_bytes = plan.max_object_bytes }))
+            max_object_bytes = plan.max_object_bytes,
+            chunk_variant = config.chunk_bytes > 0 and (whole_variant(plan.variant) .. "_c") or cjson.null,
+            chunk_bytes = config.chunk_bytes }))
         return
     end
     return ngx.exit(404)

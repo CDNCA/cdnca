@@ -95,14 +95,22 @@ func (zones Zones) dir(index int) string {
 
 // ZoneOf returns the directory of a site's zone (edgecache.ZoneIndex).
 func (zones Zones) ZoneOf(prefix string) (string, error) {
+	number, err := zones.zoneNumber(prefix)
+	if err != nil {
+		return "", err
+	}
+	return zones.dir(number), nil
+}
+
+func (zones Zones) zoneNumber(prefix string) (int, error) {
 	if zones.Count < 1 || zones.Count&(zones.Count-1) != 0 || len(prefix) < 8 {
-		return "", fmt.Errorf("%w: zone of %q", ErrInvalid, prefix)
+		return 0, fmt.Errorf("%w: zone of %q", ErrInvalid, prefix)
 	}
 	value, err := strconv.ParseUint(prefix[:8], 16, 32)
 	if err != nil {
-		return "", fmt.Errorf("%w: prefix %q", ErrInvalid, prefix)
+		return 0, fmt.Errorf("%w: prefix %q", ErrInvalid, prefix)
 	}
-	return zones.dir(int(value) & (zones.Count - 1)), nil
+	return int(value) & (zones.Count - 1), nil
 }
 
 // FilePath is nginx's file for a key (levels=1:2).

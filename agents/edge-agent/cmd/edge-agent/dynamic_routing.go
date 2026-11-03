@@ -46,6 +46,27 @@ type dynamicRoutingSettings struct {
 	// shared root's file system (dynamicRoutingCacheMaxBytes), 0 = no cache
 	// zones (N16: the installer writes none, so unset must cache).
 	CacheMaxBytes *int64 `json:"cache_max_bytes,omitempty"`
+	// ChunkedRange caches large objects in fixed chunks fetched from the
+	// origin aligned and only where missing (ADR 0021): unset = on (the
+	// installer writes none), an explicit false turns it off.
+	ChunkedRange *bool `json:"chunked_range,omitempty"`
+	// PurgeIndex keeps a purge index per cache zone so a directory, prefix
+	// or wildcard purge reads the index instead of every cached file of the
+	// zone: unset = on, an explicit false turns it off and removes the index
+	// files.
+	PurgeIndex *bool `json:"purge_index,omitempty"`
+}
+
+// dynamicRoutingChunkedRange: the chunked range cache is on unless the
+// configuration turns it off.
+func dynamicRoutingChunkedRange(settings dynamicRoutingSettings) bool {
+	return settings.ChunkedRange == nil || *settings.ChunkedRange
+}
+
+// dynamicRoutingPurgeIndex: the purge indexes run unless the configuration
+// turns them off.
+func dynamicRoutingPurgeIndex(settings dynamicRoutingSettings) bool {
+	return settings.PurgeIndex == nil || *settings.PurgeIndex
 }
 
 const (
@@ -206,7 +227,8 @@ func assembleDynamicRouting(config fileConfig, nodeID string, certificates *cert
 	runtime, err := dynroute.New(dynroute.Config{
 		StateRoot: state, SharedRoot: shared, ObjectsRoot: dynamicRoutingObjectsRoot(config), LuaRoot: dynamicRoutingLuaRoot, OpenResty: config.OpenResty.Binary,
 		Globals:   dynamicRoutingGlobals(config),
-		WorkerGID: gid, CacheMaxBytes: cacheMaxBytes, Telemetry: config.Telemetry.Enabled,
+		WorkerGID: gid, CacheMaxBytes: cacheMaxBytes, ChunkedRange: dynamicRoutingChunkedRange(config.DynamicRouting),
+		PurgeIndex: dynamicRoutingPurgeIndex(config.DynamicRouting), Telemetry: config.Telemetry.Enabled,
 		Node: edgeskeleton.Node{ID: strings.ToLower(nodeID),
 			IngressSourceIPv4: config.IngressSourceIPv4, IngressSourceIPv6: config.IngressSourceIPv6},
 		NodeID:       strings.ToLower(nodeID),

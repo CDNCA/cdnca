@@ -3323,7 +3323,7 @@ write_config() {
       certificate_runtime: {state_root: $certificateRuntime, listen_address: "127.0.0.1", listen_port: 18443},
       node_monitoring: {enabled: true, state_dir: $nodeMonitoring, default_port: 80},
       market_probe: {enabled: $externalProbe, join_market: false},
-      dynamic_routing: {enabled: true, worker_group: "cdnca-runtime"},
+      dynamic_routing: {enabled: true, worker_group: "cdnca-runtime", chunked_range: true, purge_index: true},
       security_runtime: {enabled: true, mode: "native",
         waf: {path: ($securityRoot + "/cdnca_waf.lua"), sha256: $securityAssets.waf},
         cc: {path: ($securityRoot + "/cc.lua"), sha256: $securityAssets.cc},

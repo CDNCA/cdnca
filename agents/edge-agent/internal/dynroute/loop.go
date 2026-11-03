@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/dyncache"
 )
 
 // Intervals of the background maintenance (Run).
@@ -34,6 +36,16 @@ func (runtime *Runtime) Run(ctx context.Context, intervals Intervals) error {
 	defer ocsp.Stop()
 	defer quota.Stop()
 	defer errorLog.Stop()
+	if runtime.indexes != nil {
+		// the purge indexes keep their own pace (a first build of a large
+		// zone takes minutes): never in this loop
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			runtime.indexes.Run(ctx, runtime.indexLayout)
+		}()
+		defer func() { <-done }()
+	}
 	runtime.refreshOCSP(ctx)
 	for {
 		select {
@@ -57,6 +69,23 @@ func (runtime *Runtime) Run(ctx context.Context, intervals Intervals) error {
 			}
 		}
 	}
+}
+
+// indexLayout is what the purge indexes follow: the zone pool and every
+// cached site's key prefix (read under the runtime lock, no I/O).
+func (runtime *Runtime) indexLayout() dyncache.IndexLayout {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	layout := dyncache.IndexLayout{Root: runtime.zones.Root, Zones: runtime.zones.Count, Prefixes: map[string]string{}}
+	if layout.Zones > 0 {
+		layout.ZoneBytes = runtime.cacheBudget() / int64(layout.Zones)
+	}
+	for _, site := range runtime.sites {
+		if site.Cache != nil {
+			layout.Prefixes[site.SiteID] = site.Cache.KeyPrefix
+		}
+	}
+	return layout
 }
 
 func (runtime *Runtime) refreshOCSP(ctx context.Context) {

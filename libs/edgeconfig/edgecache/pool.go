@@ -52,6 +52,10 @@ type PoolInput struct {
 	// MaxRuleTTL is the longest cache rule TTL of the node's sites: the
 	// zones' inactive time covers it (ge-cache G).
 	MaxRuleTTL time.Duration
+	// Chunked turns on the chunked range cache (ADR 0021, node switch
+	// dynamic_routing.chunked_range, on unless set to false):
+	// Pool.ChunkBytes = ChunkBytes.
+	Chunked bool
 }
 
 // Pool is the zone pool the skeleton renders; every zone is the same size.
@@ -61,6 +65,9 @@ type Pool struct {
 	MaxBytes      int64 // per zone, whole MiB
 	MinFreeBytes  int64 // per zone, whole MiB, 0 = none
 	Inactive      time.Duration
+	// ChunkBytes > 0: large objects are cached in chunks of this size
+	// (ADR 0021); 0 = whole objects and the policies' slices, as before.
+	ChunkBytes int64
 }
 
 // poolTiers maps a node's cache budget to a zone count: more zones spread the
@@ -102,7 +109,11 @@ func PlanPool(input PoolInput) (Pool, error) {
 	if inactive%time.Second != 0 {
 		inactive = inactive.Truncate(time.Second) + time.Second
 	}
-	return Pool{Zones: zones, KeysZoneBytes: keys, MaxBytes: maxBytes, MinFreeBytes: floorMiB(input.MinFreeBytes), Inactive: inactive}, nil
+	pool := Pool{Zones: zones, KeysZoneBytes: keys, MaxBytes: maxBytes, MinFreeBytes: floorMiB(input.MinFreeBytes), Inactive: inactive}
+	if input.Chunked {
+		pool.ChunkBytes = ChunkBytes
+	}
+	return pool, nil
 }
 
 func floorMiB(value int64) int64 { return value >> 20 << 20 }

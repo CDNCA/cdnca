@@ -101,12 +101,9 @@ post-rollback cache assertion.
 
 Before invoking OpenResty precheck, the deployment Manager creates
 `${state_root}/shared/cache` with owner-only permissions and rejects symlinks or
-an existing cache directory with broader permissions. The node-local
-`internal/cachetask` executor now provides durable exact URL, segment-bounded
-directory, and whole-site purge plus bounded URL-list prewarm through the active
-loopback listener. The real runtime smoke proves purge `MISS`/refill, prewarm
-`HIT`, query isolation, and site availability after task failure. See
-`docs/runbooks/cache-task-execution.md` for the schema and safety model.
+an existing cache directory with broader permissions. Node cache purge and
+prewarm tasks run in the dynamic routing runtime (`internal/dynroute/cachetasks.go`);
+the earlier `internal/cachetask` executor and its runtime smoke were deleted.
 
 This remains partial at platform scope. Ordered suffix/full-path policy rules,
 ignore-query options, Range/206 caching, Vary acceptance coverage, cache-lock

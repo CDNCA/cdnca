@@ -104,6 +104,18 @@ type Config struct {
 	// location (edgeskeleton.Input.AutoDefense): on when the node runs the
 	// local auto defense runtime (AD-05), which writes the gate.
 	AutoDefense bool
+	// ChunkedRange caches large objects in fixed chunks (ADR 0021,
+	// edgecache.PoolInput.Chunked; dynamic_routing.chunked_range, on unless
+	// set to false).
+	ChunkedRange bool
+	// PurgeIndex runs a purge index per cache zone (dyncache.Indexes,
+	// dynamic_routing.purge_index, on unless set to false): directory,
+	// prefix and wildcard purges read the index instead of every file of
+	// the zone, with their fallbacks to the zone scan. Index files and
+	// status.json are under <StateRoot>/cache-index.
+	PurgeIndex bool
+	// PurgeIndexSettings tune the indexes (zero: the defaults).
+	PurgeIndexSettings dyncache.IndexSettings
 	// Certificates is required when any site has a TLS listener.
 	Certificates CertificateStore
 	OCSP         dyntls.Fetcher
@@ -246,6 +258,9 @@ type Runtime struct {
 	generations *dyncache.Generations
 	prewarm     dyncache.Prewarmer
 	zones       dyncache.Zones
+	// indexes: the purge indexes (nil: PurgeIndex off); they keep their
+	// own locks.
+	indexes *dyncache.Indexes
 
 	logMu    sync.Mutex
 	errorLog dyntelemetry.ErrorLog
@@ -392,6 +407,11 @@ func New(config Config) (*Runtime, error) {
 	}
 	runtime.activator.LiveWorker = runtime.liveWorker
 	runtime.generations = &dyncache.Generations{Path: filepath.Join(config.StateRoot, "cache-generations.json"), Control: runtime.control}
+	if config.PurgeIndex {
+		runtime.indexes = dyncache.NewIndexes(runtime.indexDir(), config.PurgeIndexSettings)
+	} else {
+		dyncache.DisableIndexes(runtime.indexDir(), "configured_off")
+	}
 	if raw, err := os.ReadFile(runtime.statePath()); err == nil {
 		if err := json.Unmarshal(raw, &runtime.state); err != nil {
 			return nil, fmt.Errorf("%w: state.json: %v", ErrInvalid, err)
@@ -402,6 +422,12 @@ func New(config Config) (*Runtime, error) {
 		return nil, err
 	}
 	return runtime, nil
+}
+
+// indexDir holds the purge index files and status.json (agent state, never
+// in the cache directory: the cache manager owns every file there).
+func (runtime *Runtime) indexDir() string {
+	return filepath.Join(runtime.config.StateRoot, "cache-index")
 }
 
 func objectDir(config Config, access siteindex.Access) siteindex.ObjectDir {

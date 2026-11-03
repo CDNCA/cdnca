@@ -34,6 +34,10 @@ type Site struct {
 	// Sliced: objects are slices (keys end in |slice=<range>): an exact URL
 	// is every slice of it, found by a zone scan.
 	Sliced bool
+	// ChunkBytes > 0: the node caches large objects in chunks of this size
+	// (ADR 0021; it replaces the policy's slices): an exact URL is its whole
+	// object file and its chunk files, found by path (purgeChunks).
+	ChunkBytes int64
 	// QuotaBytes is the soft quota (policy.disk_quota_bytes).
 	QuotaBytes int64
 }
@@ -141,6 +145,12 @@ func (site Site) keyName(host string) string {
 	return site.Domain
 }
 
+// Matches is matches for callers outside the package (the real OpenResty
+// purge index soak, cdnca-cache-check purgeindex).
+func (target Target) Matches(site Site, key Key, prefix bool) bool {
+	return target.matches(site, key, prefix)
+}
+
 // matches reports whether an object of the site belongs to the target.
 // Every generation and freshness token of the site is matched: an object of
 // an earlier generation is not served any more but still holds disk.
@@ -173,64 +183,22 @@ type Result struct {
 // is md5 of the current-generation key, so no zone scan is needed (objects
 // of earlier generations are unreachable already).
 func (zones Zones) Purge(ctx context.Context, site Site, targets []Target, prefix bool, generations *Generations) (Result, error) {
-	var result Result
-	wildcard := false
-	for _, target := range targets {
-		wildcard = wildcard || target.WildcardSuffix != ""
+	if result, done, err := zones.exactFast(ctx, site, targets, prefix, generations); done || err != nil {
+		return result, err
 	}
-	if !site.Projected && !site.Sliced && !prefix && !wildcard && generations != nil {
-		if generation, ok := generations.Current(site.Prefix); ok {
-			fast := result
-			if err := zones.purgeExactFast(ctx, site, targets, generation, &fast); err == nil {
-				return fast, nil
-			} else if !errors.Is(err, errNeedScan) {
-				return result, err
-			}
-		}
-	}
-	err := zones.Walk(ctx, site.Prefix, func(entry Entry) error {
-		for _, target := range targets {
-			if target.matches(site, entry.Key, prefix) {
-				removed, err := remove(entry)
-				if err != nil {
-					return err
-				}
-				if removed {
-					result.Affected++
-					result.Bytes += entry.Size
-				}
-				return nil
-			}
-		}
-		return nil
-	})
-	return result, err
+	_, accept := purgeRanges(site, targets, prefix)
+	return zones.scanRemove(ctx, site.Prefix, accept, nil)
 }
 
-// errNeedScan: the fast path found a file it cannot vouch for.
-var errNeedScan = errors.New("scan needed")
-
-func (zones Zones) purgeExactFast(ctx context.Context, site Site, targets []Target, generation uint64, result *Result) error {
-	dir, err := zones.ZoneOf(site.Prefix)
-	if err != nil {
-		return err
-	}
-	for _, target := range targets {
-		if ctx.Err() != nil {
-			return ctx.Err()
+// scanRemove walks the site's zone and removes every object of the site
+// accept accepts; observe (nil: none) sees every one it removes or finds
+// gone.
+func (zones Zones) scanRemove(ctx context.Context, prefix string, accept func(Key) bool, observe func(Entry)) (Result, error) {
+	var result Result
+	err := zones.Walk(ctx, prefix, func(entry Entry) error {
+		if !accept(entry.Key) {
+			return nil
 		}
-		key := site.Prefix + "|" + site.Token + "|" + strconv.FormatUint(generation, 10) + "|" + site.keyName(target.Host) + "|" +
-			strconv.Itoa(target.Port) + "|" + target.URI
-		path := FilePath(dir, key)
-		raw, info, err := readKey(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil || raw != key {
-			return errNeedScan
-		}
-		parsed, _ := ParseKey(raw)
-		entry := entryOf(path, parsed, info)
 		removed, err := remove(entry)
 		if err != nil {
 			return err
@@ -238,6 +206,72 @@ func (zones Zones) purgeExactFast(ctx context.Context, site Site, targets []Targ
 		if removed {
 			result.Affected++
 			result.Bytes += entry.Size
+		}
+		if observe != nil {
+			observe(entry)
+		}
+		return nil
+	})
+	return result, err
+}
+
+// exactFast is Purge's exact fast path; done false: the targets need a
+// scan (prefix, wildcard, projected keys, a file it cannot vouch for).
+func (zones Zones) exactFast(ctx context.Context, site Site, targets []Target, prefix bool, generations *Generations) (Result, bool, error) {
+	var result Result
+	wildcard := false
+	for _, target := range targets {
+		wildcard = wildcard || target.WildcardSuffix != ""
+	}
+	// on a chunking node the policy's slices are not served (chunks are)
+	if !site.Projected && (!site.Sliced || site.ChunkBytes > 0) && !prefix && !wildcard && generations != nil {
+		if generation, ok := generations.Current(site.Prefix); ok {
+			if err := zones.purgeExactFast(ctx, site, targets, generation, &result, generations.Control); err == nil {
+				return result, true, nil
+			} else if !errors.Is(err, errNeedScan) {
+				return Result{}, false, err
+			}
+		}
+	}
+	return Result{}, false, nil
+}
+
+// errNeedScan: the fast path found a file it cannot vouch for.
+var errNeedScan = errors.New("scan needed")
+
+func (zones Zones) purgeExactFast(ctx context.Context, site Site, targets []Target, generation uint64, result *Result,
+	control Control) error {
+	dir, err := zones.ZoneOf(site.Prefix)
+	if err != nil {
+		return err
+	}
+	keys := make([]string, len(targets))
+	for index, target := range targets {
+		keys[index] = site.Prefix + "|" + site.Token + "|" + strconv.FormatUint(generation, 10) + "|" + site.keyName(target.Host) + "|" +
+			strconv.Itoa(target.Port) + "|" + target.URI
+	}
+	var states map[string]chunkState
+	if site.ChunkBytes > 0 {
+		if control == nil {
+			return errNeedScan
+		}
+		// the cache module forgets the objects' chunk state first: a
+		// request after this learns them again in a new chunk generation
+		if states, err = forgetChunks(ctx, control, keys); err != nil {
+			return errNeedScan
+		}
+	}
+	for _, key := range keys {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if _, err := removeKey(dir, key, result); err != nil {
+			return err
+		}
+		if site.ChunkBytes > 0 {
+			if _, err := purgeChunks(ctx, dir, key, site.ChunkBytes, states[key], result); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -251,22 +285,15 @@ func (zones Zones) PurgeSite(ctx context.Context, generations *Generations, site
 	if err != nil {
 		return 0, Result{}, err
 	}
-	var result Result
-	err = zones.Walk(ctx, site.Prefix, func(entry Entry) error {
-		if entry.Key.Generation >= generation {
-			return nil
-		}
-		removed, err := remove(entry)
-		if err != nil {
-			return err
-		}
-		if removed {
-			result.Affected++
-			result.Bytes += entry.Size
-		}
-		return nil
-	})
+	result, err := zones.RemoveOlder(ctx, site, generation)
 	return generation, result, err
+}
+
+// RemoveOlder removes the site's objects of generations before generation
+// (PurgeSite's scan after the bump).
+func (zones Zones) RemoveOlder(ctx context.Context, site Site, generation uint64) (Result, error) {
+	_, accept := siteRanges(site, generation)
+	return zones.scanRemove(ctx, site.Prefix, accept, nil)
 }
 
 // Generations is the per-site purge generation store: a file the agent owns

@@ -530,7 +530,7 @@ func (runtime *Runtime) cachePool(sites []edgesite.Site, system *edgeconfig.Site
 			maxTTL = max(maxTTL, plan.MaxTTL())
 		}
 	}
-	return edgecache.PlanPool(edgecache.PoolInput{MaxBytes: budget, MinFreeBytes: minFree, MaxRuleTTL: maxTTL})
+	return edgecache.PlanPool(edgecache.PoolInput{MaxBytes: budget, MinFreeBytes: minFree, MaxRuleTTL: maxTTL, Chunked: runtime.config.ChunkedRange})
 }
 
 func (runtime *Runtime) openresty(ctx context.Context, conf string, args ...string) error {

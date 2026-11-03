@@ -46,6 +46,18 @@ func (node *prewarmNode) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	node.mu.Unlock()
 }
 
+// snapshot: the paths fetched so far and the bytes written, read under the
+// lock the handler goroutines write them under.
+func (node *prewarmNode) snapshot() (map[string]int, int64) {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	seen := make(map[string]int, len(node.seen))
+	for path, count := range node.seen {
+		seen[path] = count
+	}
+	return seen, node.read
+}
+
 func (node *prewarmNode) fetches() int {
 	node.mu.Lock()
 	defer node.mu.Unlock()
@@ -123,10 +135,11 @@ func TestCacheTasksDeadlineStopsActiveRequest(t *testing.T) {
 	if elapsed := time.Since(started); elapsed > 3*time.Second {
 		t.Fatalf("the active request outlived the deadline: %v", elapsed)
 	}
+	seen, _ := node.snapshot()
 	if result.State != cachetask.StatePartialFailed || len(result.Items) != 3 || result.Items[0].Status != cachetask.ItemSuccess ||
 		result.Items[1].Code != cachetask.CodeTaskDeadlineExceeded || result.Items[2].Code != cachetask.CodeTaskDeadlineExceeded ||
-		node.seen["/c.css"] != 0 {
-		t.Fatalf("result %+v seen %v", result, node.seen)
+		seen["/c.css"] != 0 {
+		t.Fatalf("result %+v seen %v", result, seen)
 	}
 }
 
@@ -181,10 +194,11 @@ func TestCacheTasksPrewarmTaskBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	seen, read := node.snapshot()
 	if result.State != cachetask.StatePartialFailed || result.Items[0].Status != cachetask.ItemSuccess ||
 		result.Items[1].Status != cachetask.ItemSuccess || result.Items[2].Code != cachetask.CodePrewarmTaskBytesExceeded ||
-		node.seen["/3.bin"] != 0 || node.read != 1<<20 {
-		t.Fatalf("result %+v seen %v read %d", result, node.seen, node.read)
+		seen["/3.bin"] != 0 || read != 1<<20 {
+		t.Fatalf("result %+v seen %v read %d", result, seen, read)
 	}
 	// the receipt still reports the object size, not the bytes read
 	if result.Items[0].Bytes != 256<<10 {

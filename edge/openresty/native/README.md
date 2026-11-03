@@ -259,7 +259,7 @@ activation and failure rollback, and these real protocol regressions:
 Existing reusable entrypoints include `scripts/edge-http3-smoke.sh`,
 `scripts/edge-site-smoke.sh`, `scripts/edge-l4-smoke.sh`,
 `scripts/edge-range-smoke.sh`, `scripts/edge-cache-smoke.sh`,
-`scripts/edge-cache-task-smoke.sh`, `scripts/edge-runtime-linux-smoke.sh`, and
+`scripts/edge-runtime-linux-smoke.sh`, and
 `tests/edge-linux/inside-systemd-smoke.sh`. Their existing pinned images must
 not be silently confused with this new native candidate. The static
 `tests/edge-runtime-security-release-e2e/run.sh` is not runtime acceptance.

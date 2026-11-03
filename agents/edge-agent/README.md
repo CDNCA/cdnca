@@ -15,25 +15,15 @@
 
 The journal directory, artifact parts, client certificate, and private key must be in non-symlink, owner-only directories. Journal and artifact files are written with mode `0600`.
 
-## Cache task executor
+## Cache tasks
 
-`internal/cachetask` executes schema version 2 exact URL, directory-prefix, whole-site
-purge, and URL-list prewarm tasks against a resolver-supplied published site
-context. It journals task and item progress, binds task IDs and operation IDs,
-recovers unfinished work after restart, retains successful items during partial
-retry, serializes the same site, and allows bounded parallel work across sites.
-
-Purge scans only the hashed site cache directory and deletes a regular cache file
-after its bounded native key metadata, MD5 filename, Nginx `levels=1:2` path,
-domain, port, inode, and link count all match. Prewarm can dial only the configured
-loopback address and published site listener; it sends GET without caller headers,
-does not follow redirects, and bounds time, headers, body, response status, global
-rate, and site rate. Details and stable result codes are in
-`docs/runbooks/edge-cache-task.md`.
-
-This is a node-local executor. The current protobuf and daemon do not yet expose a
-cache-task command, and no control API, Gateway delivery, JetStream fan-out, UI,
-or distributed completion is claimed.
+`internal/dynroute/cachetasks.go` (`dynroute.CacheTasks`) executes the cache
+control commands the gateway client delivers: exact URL, directory-prefix and
+whole-site purge on the dynamic routing cache zones (`internal/dyncache`), and
+URL-list prewarm through the node's shared server. A task's only bound is its
+deadline; the node has no scan budget.
+`internal/cachetask` holds only the task/result types and node settings they
+share.
 
 ## Configuration artifact
 

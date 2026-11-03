@@ -48,3 +48,41 @@ func TestDefaultCacheBytesIsBoundedShareOfTheFileSystem(t *testing.T) {
 		}
 	}
 }
+
+// ADR 0021: the chunked range cache is on for every node whose
+// configuration does not turn it off (the installer writes no
+// chunked_range); an explicit false turns it off.
+func TestDynamicRoutingChunkedRangeDefaultsOn(t *testing.T) {
+	for raw, want := range map[string]bool{
+		`{"enabled":true,"worker_group":"cdnca-runtime"}`: true,
+		`{"enabled":true,"chunked_range":true}`:           true,
+		`{"enabled":true,"chunked_range":false}`:          false,
+	} {
+		var settings dynamicRoutingSettings
+		if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+			t.Fatalf("%s: %v", raw, err)
+		}
+		if got := dynamicRoutingChunkedRange(settings); got != want {
+			t.Fatalf("%s: chunked range %v, want %v", raw, got, want)
+		}
+	}
+}
+
+// The purge indexes are on for every node
+// whose configuration does not turn them off; an explicit false turns them
+// off.
+func TestDynamicRoutingPurgeIndexDefaultsOn(t *testing.T) {
+	for raw, want := range map[string]bool{
+		`{"enabled":true,"worker_group":"cdnca-runtime"}`: true,
+		`{"enabled":true,"purge_index":true}`:             true,
+		`{"enabled":true,"purge_index":false}`:            false,
+	} {
+		var settings dynamicRoutingSettings
+		if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+			t.Fatalf("%s: %v", raw, err)
+		}
+		if got := dynamicRoutingPurgeIndex(settings); got != want {
+			t.Fatalf("%s: purge index %v, want %v", raw, got, want)
+		}
+	}
+}

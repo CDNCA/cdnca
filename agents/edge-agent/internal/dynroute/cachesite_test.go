@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
+	"github.com/cdnca/cdnca/libs/edgeconfig/edgecache"
 	"github.com/cdnca/cdnca/libs/edgeconfig/edgesite"
 )
 
@@ -39,6 +40,22 @@ func TestCacheSiteOfProjectsSlices(t *testing.T) {
 	for _, test := range cases {
 		if got := cacheSiteOf(site(test.policy)).Sliced; got != test.sliced {
 			t.Errorf("%s: Sliced = %v, want %v", test.name, got, test.sliced)
+		}
+	}
+}
+
+// ADR 0021: on a chunking node a large object is stored as chunks (keys end
+// in |slice=<chunk>) whatever the policy says: an exact purge of every
+// caching site finds them by path (dyncache.Site.ChunkBytes), no zone scan.
+func TestCacheSiteChunkedNodeHasChunkBytes(t *testing.T) {
+	site := edgesite.Site{SiteID: "s", TenantID: "t", Hosts: edgesite.Hosts{Primary: "a.test"}, Listeners: []edgesite.Listener{{Port: 80}},
+		Cache: &edgesite.Cache{KeyPrefix: "p", Policy: edgeconfig.CachePolicyDocument{Mode: edgeconfig.CacheOverride, QueryMode: edgeconfig.CacheQueryPreserve}}}
+	for _, chunked := range []bool{false, true} {
+		runtime := &Runtime{config: Config{ChunkedRange: chunked}, sites: []edgesite.Site{site}}
+		runtime.zones.Count = 4
+		value, err := runtime.cacheSite("t", "s")
+		if err != nil || (value.ChunkBytes == edgecache.ChunkBytes) != chunked || value.Sliced {
+			t.Fatalf("chunked %v: ChunkBytes = %d Sliced = %v err %v", chunked, value.ChunkBytes, value.Sliced, err)
 		}
 	}
 }

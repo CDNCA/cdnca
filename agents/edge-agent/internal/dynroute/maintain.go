@@ -115,7 +115,13 @@ func (runtime *Runtime) cacheSite(tenantID, siteID string) (dyncache.Site, error
 		if site.SiteID != siteID || site.TenantID != tenantID || site.Cache == nil {
 			continue
 		}
-		return cacheSiteOf(site), nil
+		value := cacheSiteOf(site)
+		// chunked range cache (ADR 0021): a large object is chunk files
+		// (keys end in |slice=<chunk>), an exact purge finds them by path
+		if runtime.zones.Count > 0 && runtime.config.ChunkedRange {
+			value.ChunkBytes = edgecache.ChunkBytes
+		}
+		return value, nil
 	}
 	return dyncache.Site{}, ErrSiteNotServed
 }
@@ -149,22 +155,42 @@ func cacheSiteOf(site edgesite.Site) dyncache.Site {
 }
 
 // PurgeSite empties a site's cache: its purge generation is bumped (every
-// object unreachable at once) and its old files removed.
+// object unreachable at once) and its old files removed. Only the bump runs
+// under the runtime lock (it orders with Apply's generation sync); the zone
+// scan does not, so a long scan holds up no activation or telemetry (a
+// cold scan of a large zone takes minutes).
 func (runtime *Runtime) PurgeSite(ctx context.Context, tenantID, siteID string) (uint64, dyncache.Result, error) {
 	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
 	site, err := runtime.cacheSite(tenantID, siteID)
+	if err != nil {
+		runtime.mu.Unlock()
+		return 0, dyncache.Result{}, err
+	}
+	generation, err := runtime.generations.Bump(ctx, site.Prefix)
+	zones, indexes := runtime.zones, runtime.indexes
+	runtime.mu.Unlock()
 	if err != nil {
 		return 0, dyncache.Result{}, err
 	}
-	return runtime.zones.PurgeSite(ctx, runtime.generations, site)
+	if indexes != nil {
+		result, err := indexes.PurgeSite(ctx, zones, site, generation)
+		return generation, result, err
+	}
+	result, err := zones.RemoveOlder(ctx, site, generation)
+	return generation, result, err
 }
 
-// Purge removes exact URLs or prefixes of a site.
+// Purge removes exact URLs or prefixes of a site, through the zone's purge
+// index when it can be used (dyncache.Indexes). The site and zone pool
+// are read under the runtime lock, the zone scan runs without it (as
+// CleanQuota and Prewarm do). An activation meanwhile does not touch cache
+// files; if it changes the pool (zone count), this purge still scans the
+// zone of the pool it read, and only the site's own keys are removed.
 func (runtime *Runtime) Purge(ctx context.Context, tenantID, siteID string, urls []string, prefix bool) ([]dyncache.Result, error) {
 	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
 	site, err := runtime.cacheSite(tenantID, siteID)
+	zones, generations, indexes := runtime.zones, runtime.generations, runtime.indexes
+	runtime.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +200,12 @@ func (runtime *Runtime) Purge(ctx context.Context, tenantID, siteID string, urls
 		if err != nil {
 			return nil, err
 		}
-		if results[index], err = runtime.zones.Purge(ctx, site, []dyncache.Target{target}, prefix, runtime.generations); err != nil {
+		if indexes != nil {
+			results[index], err = indexes.Purge(ctx, zones, site, []dyncache.Target{target}, prefix, generations)
+		} else {
+			results[index], err = zones.Purge(ctx, site, []dyncache.Target{target}, prefix, generations)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}

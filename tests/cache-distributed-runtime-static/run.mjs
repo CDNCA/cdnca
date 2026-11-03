@@ -25,9 +25,6 @@ for (const relative of [
   'services/control-api/internal/cachecontrolruntime/nats.go',
   'services/control-api/internal/cachecontrolruntime/processor.go',
   'services/control-api/internal/cachecontrol/lifecycle.go',
-  'agents/edge-agent/internal/cachetask/carrier.go',
-  'agents/edge-agent/internal/cachetask/manager.go',
-  'agents/edge-agent/internal/cachetask/prewarm.go',
   'agents/edge-agent/internal/gatewayclient/cache_control_store.go',
 ]) {
   sources.set(relative, await readFile(join(root, relative), 'utf8'))
@@ -59,15 +56,6 @@ requireTokens('services/control-api/internal/cachecontrolruntime/processor.go', 
 ])
 requireTokens('services/control-api/internal/cachecontrol/lifecycle.go', [
   'jobstate.RetryTx(', 'jobstate.CancelTx(', 'jobstate.ReportTx(', 'leaseRetryBackoff(',
-])
-requireTokens('agents/edge-agent/internal/cachetask/carrier.go', [
-  'type CarrierReceipt struct', 'ActiveConfigUnchanged', 'ConfigRevision', 'validateCarrierResult',
-])
-requireTokens('agents/edge-agent/internal/cachetask/manager.go', [
-  'retryDelayWithServerHint(', 'siteLimiterIdentity(',
-])
-requireTokens('agents/edge-agent/internal/cachetask/prewarm.go', [
-  'Retry-After', 'response.Header.Values',
 ])
 requireTokens('agents/edge-agent/internal/gatewayclient/cache_control_store.go', [
   'CommandDigest', 'AckedThrough', 'cache control status sequence regressed',

@@ -13,6 +13,13 @@
 #   CDNCA_D8_IMAGE  node runtime image with patch 24 (default cdnca-native-runtime:edge-golden,
 #                   built from edge/openresty/native/Dockerfile --target runtime)
 #   ONLY=functional|extensions|rulematch|follow|statusheader|scale  SCALE (default 10000)  REQUESTS (default 100000)
+#   ONLY=rangebase|chunk|chunkbase|chunksizes|slicebg (ADR 0021, only when named)
+#   ONLY=purgeindex  ROUNDS (default 5)  FILL (default 20s)  the purge index soak:
+#                   real fills and evictions with purges through dyncache.Indexes, index == scan
+#                   (only when named; CDNCA_D8_DOCKER_OPTS=--memory=2g); PURGESCAN=1 the same with
+#                   scan purges (control: error.log noise of purges without an index)
+#   CDNCA_D8_DOCKER_OPTS  extra docker run options (e.g. --memory=2g)
+#   CDNCA_D8_CHUNKED=1    the nodes run the chunked range cache (ADR 0021, node default)
 set -eu
 here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "${here}/../.." && pwd)
@@ -33,5 +40,8 @@ grep -E '^COPY edge/openresty/[^ ]+ /usr/local/share/cdnca/' "${repo_root}/edge/
 		cp "${repo_root}/${source}" "${work}/lua${target#/usr/local/share/cdnca}"
 	done
 chmod -R a+rX "${work}"
-docker run --rm --init --network none -v "${work}:/d8:ro" --entrypoint /d8/check "${image}" \
-	-lua /d8/lua -workers "${WORKERS:-2}" -scale "${SCALE:-10000}" -requests "${REQUESTS:-100000}" -only "${ONLY:-}"
+# shellcheck disable=SC2086 # options are words
+docker run --rm --init --network none ${CDNCA_D8_DOCKER_OPTS:-} -v "${work}:/d8:ro" --entrypoint /d8/check "${image}" \
+	-lua /d8/lua -workers "${WORKERS:-2}" -scale "${SCALE:-10000}" -requests "${REQUESTS:-100000}" -only "${ONLY:-}" \
+	-rounds "${ROUNDS:-5}" -fill "${FILL:-20s}" -purgescan="$([ "${PURGESCAN:-}" = 1 ] && echo true || echo false)" \
+	-chunked="$([ "${CDNCA_D8_CHUNKED:-}" = 1 ] && echo true || echo false)"
