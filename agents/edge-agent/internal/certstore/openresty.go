@@ -117,10 +117,49 @@ func (runtime *OpenRestyRuntime) Precheck(ctx context.Context, candidatePath str
 		return ErrPrecheck
 	}
 	arguments := append(runtime.globalArguments(""), "-t", "-p", withSlash(candidatePath), "-c", "nginx.conf")
-	if err := runtime.run(ctx, runtime.binary, nil, arguments...); err != nil {
+	// nginx -t opens the pid file named in the candidate (the shared runtime
+	// one) and truncates it: with the worker user set it leaves an empty
+	// root file there, which every later PID read refuses as unsafe, so the
+	// activation and its rollback both failed. The file is put back as the
+	// precheck found it.
+	restore := preserveProcessFile(runtime.pidFile)
+	err := runtime.run(ctx, runtime.binary, nil, arguments...)
+	if restoreErr := restore(); restoreErr != nil && err == nil {
+		err = restoreErr
+	}
+	if err != nil {
 		return sanitized(ctx, ErrPrecheck)
 	}
 	return nil
+}
+
+// preserveProcessFile records a process file and returns how to put it back:
+// removed again when it did not exist, rewritten when its bytes changed.
+func preserveProcessFile(path string) func() error {
+	before, readErr := os.ReadFile(path)
+	existed := readErr == nil
+	return func() error {
+		after, err := os.ReadFile(path)
+		switch {
+		case !existed && errors.Is(err, os.ErrNotExist):
+			return nil
+		case !existed:
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			return syncDirectory(filepath.Dir(path))
+		case err == nil && bytes.Equal(before, after):
+			return nil
+		}
+		if err := os.WriteFile(path+".restore", before, 0o644); err != nil {
+			return err
+		}
+		if err := os.Rename(path+".restore", path); err != nil {
+			_ = os.Remove(path + ".restore")
+			return err
+		}
+		return syncDirectory(filepath.Dir(path))
+	}
 }
 
 func (runtime *OpenRestyRuntime) Activate(ctx context.Context, currentPath string) (result error) {

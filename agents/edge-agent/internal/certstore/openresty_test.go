@@ -1633,3 +1633,37 @@ func TestOpenRestyRuntimePassesConfiguredGlobals(t *testing.T) {
 		t.Fatalf("start globals = %q", got)
 	}
 }
+
+// nginx -t truncates the pid file the candidate names; the precheck puts it
+// back (absent stays absent, a live master's PID is kept).
+func TestOpenRestyRuntimePrecheckPreservesPIDFile(t *testing.T) {
+	for _, existing := range []string{"", "4321\n"} {
+		root := t.TempDir()
+		pidFile := filepath.Join(root, "nginx.pid")
+		if existing != "" {
+			if err := os.WriteFile(pidFile, []byte(existing), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		runtime, err := NewOpenRestyRuntime("/usr/bin/openresty", pidFile, "127.0.0.1:18443")
+		if err != nil {
+			t.Fatal(err)
+		}
+		runtime.run = func(context.Context, string, []string, ...string) error {
+			return os.WriteFile(pidFile, nil, 0o644)
+		}
+		if err := runtime.Precheck(context.Background(), filepath.Join(root, "candidate")); err != nil {
+			t.Fatal(err)
+		}
+		content, err := os.ReadFile(pidFile)
+		if existing == "" {
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("precheck left a pid file (%q, %v)", content, err)
+			}
+			continue
+		}
+		if err != nil || string(content) != existing {
+			t.Fatalf("pid file after precheck = (%q, %v), want %q", content, err, existing)
+		}
+	}
+}

@@ -125,11 +125,14 @@ func main() {
 	stateRoot := flag.String("state-root", "", "certificate runtime state root")
 	openrestyBinary := flag.String("openresty-bin", "/usr/local/openresty/bin/openresty", "OpenResty binary")
 	listenPort := flag.Uint("listen-port", 18443, "TLS listener port")
+	// The native node profile runs the workers as cdnca-runtime (the agent
+	// passes this as -g); without it the run does not cover the node path.
+	globals := flag.String("globals", "", "directives passed with -g, e.g. \"user cdnca-runtime cdnca-runtime;\"")
 	flag.Parse()
 	if *stateRoot == "" || !filepath.IsAbs(*stateRoot) || *listenPort == 0 || *listenPort > 65535 {
 		fail(errors.New("invalid smoke arguments"))
 	}
-	result, err := run(*stateRoot, *openrestyBinary, uint16(*listenPort))
+	result, err := run(*stateRoot, *openrestyBinary, uint16(*listenPort), *globals)
 	if err != nil {
 		fail(err)
 	}
@@ -140,7 +143,7 @@ func main() {
 	fmt.Println(string(encoded))
 }
 
-func run(stateRoot, binary string, port uint16) (evidence, error) {
+func run(stateRoot, binary string, port uint16, globals string) (evidence, error) {
 	now := time.Now().UTC()
 	ca, err := newHierarchy(now)
 	if err != nil {
@@ -171,6 +174,7 @@ func run(stateRoot, binary string, port uint16) (evidence, error) {
 	if err != nil {
 		return evidence{}, err
 	}
+	openresty.ConfigureGlobals(globals)
 	runtime := &smokeRuntime{inner: openresty}
 	manager, err := certstore.NewManager(config, runtime)
 	if err != nil {
