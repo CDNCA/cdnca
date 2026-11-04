@@ -20,6 +20,14 @@ export interface DNSProvider {
   version: number
   created_at: string
   updated_at: string
+  // 仅平台视图的列表返回：scope_id 所属用户（DNS API「用户」列）
+  owner?: { id: string; display_id: string; username: string }
+}
+
+// 平台视图的 DNS API 列表筛选：scope_id 按用户（仅平台），managed_by=tenant 排除平台 DNS 副本。
+export interface DNSProviderListFilter {
+  scope_id?: string
+  managed_by?: 'tenant' | 'platform'
 }
 
 // 平台 DNS 配置同步来的副本只供平台维护网站 CNAME，用户端不可见：
@@ -79,15 +87,17 @@ function invalidProviderListResponse(): ApiError {
   return new ApiError('DNS provider list response was invalid', 502, 'invalid_response')
 }
 
-async function listAllProviders(accessToken: string): Promise<DNSProviderList> {
+async function listAllProviders(accessToken: string, filter: DNSProviderListFilter = {}): Promise<DNSProviderList> {
   const items: DNSProvider[] = []
   const seenIDs = new Set<string>()
   const seenCursors = new Set<string>()
   let cursor: string | undefined
   for (let page = 0; page < maxProviderAuthorityPages; page += 1) {
-    const path = cursor
-      ? `/v1/dns/providers?${new URLSearchParams({ limit: String(providerAuthorityPageLimit), cursor }).toString()}`
-      : '/v1/dns/providers'
+    const query = new URLSearchParams(cursor ? { limit: String(providerAuthorityPageLimit), cursor } : {})
+    if (filter.scope_id) query.set('scope_id', filter.scope_id)
+    if (filter.managed_by) query.set('managed_by', filter.managed_by)
+    const search = query.toString()
+    const path = search ? `/v1/dns/providers?${search}` : '/v1/dns/providers'
     const result = await request<DNSProviderList>(accessToken, path)
     if (!Array.isArray(result.items)) throw invalidProviderListResponse()
     for (const item of result.items) {
@@ -256,8 +266,8 @@ export const dnsApi = {
     if (!id || id.length > 128) return Promise.reject(new ApiError('Invalid DNS operation', 400, 'validation_error'))
     return request(accessToken, `/v1/dns/settings/operations/${encodeURIComponent(id)}`)
   },
-  list(accessToken: string, input?: DNSProviderPageInput): Promise<DNSProviderList> {
-    if (!input) return listAllProviders(accessToken)
+  list(accessToken: string, input?: DNSProviderPageInput, filter?: DNSProviderListFilter): Promise<DNSProviderList> {
+    if (!input) return listAllProviders(accessToken, filter)
     if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100 ||
       (input.cursor !== undefined && (!input.cursor || input.cursor.length > 4096))) {
       return Promise.reject(new ApiError('Invalid DNS provider pagination', 400, 'validation_error'))

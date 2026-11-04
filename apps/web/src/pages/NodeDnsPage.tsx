@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Alert, Button, Form, Input, Modal, Select, Switch, Tabs } from 'antd'
 import { useFormSubmitError } from '@cdnca/ui'
 import type { TFunction } from 'i18next'
@@ -123,6 +123,16 @@ export function errorMessage(error: ApiError, t: TFunction<'dnsProviders'>): str
     : localizedUnknownApiError(error, t('errors.request_failed'))
 }
 
+// Form.Item 把 value/onChange 注入直接子元素；这里转交给调用方给的选择器。
+function TargetScopeField({ render, value, onChange, disabled }: {
+  render: NonNullable<Parameters<typeof ProviderEditor>[0]['targetScopeInput']>
+  value?: string
+  onChange?: (value: string) => void
+  disabled?: boolean
+}) {
+  return <>{render({ value, onChange, disabled })}</>
+}
+
 export function ProviderEditor({
   editor,
   isAdmin,
@@ -134,9 +144,14 @@ export function ProviderEditor({
   onRetry,
   onCloseAndRefresh,
   sectioned = false,
+  targetScopeInput,
+  defaultTargetScope = '',
 }: {
   // sectioned：用户端「新增DNS API」的 基础信息 / 验证信息 分区横排布局，含备注
   sectioned?: boolean
+  // 管理员新增时「用户」字段的选择器（值为用户的 scope_id），不给则是文本框；defaultTargetScope 预填
+  targetScopeInput?: (props: { value?: string; onChange?: (value: string) => void; disabled?: boolean }) => ReactNode
+  defaultTargetScope?: string
   editor: DNSProviderEditorState | null
   isAdmin: boolean
   pending: boolean
@@ -166,6 +181,7 @@ export function ProviderEditor({
     form.resetFields()
     form.setFieldsValue(editor.mode === 'create'
       ? {
+          ...(isAdmin ? { target_scope_id: defaultTargetScope || undefined } : {}),
           name: '', remark: '', provider_type: 'cloudflare', status: 'unverified',
           replace_credentials: true, credentials: {},
         }
@@ -177,6 +193,7 @@ export function ProviderEditor({
           replace_credentials: false,
           credentials: {},
         })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在打开弹窗时预填，不随筛选变化重置
   }, [editor, form])
 
   // A refusal naming a field (fix-fielderr-be2) is marked on the form instead of
@@ -227,7 +244,7 @@ export function ProviderEditor({
         {sectioned ? <h3 className="dns-provider-editor-section">{t('editor.sectionBasic')}</h3> : null}
         {isAdmin && editor?.mode === 'create' ? (
           <Form.Item name="target_scope_id" label={t('editor.targetScope')} rules={[{ required: true, whitespace: true, message: t('validation.targetScope') }]}>
-            <Input autoComplete="off" />
+            {targetScopeInput ? <TargetScopeField render={targetScopeInput} /> : <Input autoComplete="off" />}
           </Form.Item>
         ) : null}
         <Form.Item name="name" label={t('editor.name')} rules={[{ required: true, whitespace: true, max: 128, message: t('validation.name') }]}>

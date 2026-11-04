@@ -35,11 +35,24 @@ export interface ListingValues {
   plugins: string[]
   // The seller's own feature words (Tags.custom): ≤ 10, each ≤ 16 characters.
   custom: string[]
+  // Capabilities (spec.Allocation): HTTP(S) and L4 port counts and HTTP/3.
+  // WebSocket is not a choice: every node listing includes it (allocationOf).
+  httpPorts: number
+  streamPorts: number
+  http3: boolean
 }
 
 export const defaultValues: ListingValues = {
   name: '', billing_model: 'daily_bundle', price: 1, deposit: 10, minDays: 1, maxDays: 365, trialDays: 0, icp: false, prepaid: 'pause',
   cc: 'none', ddos: 0, tenancy: 'shared', complaint: false, mobile: false, regionBlock: false, plugins: [], custom: [],
+  httpPorts: 2, streamPorts: 0, http3: false,
+}
+
+// allocationOf is the offer body's capabilities; WebSocket is always on (the
+// market also turns a false into true, spec.Allocation.Normalized).
+// l2 (修改报价 only) is sent when on: off leaves the key out, as the market stores it.
+export function allocationOf(v: Pick<ListingValues, 'httpPorts' | 'streamPorts' | 'http3'> & { l2?: boolean }): MarketListingOffer['allocation'] {
+  return { http_ports: v.httpPorts ?? 0, stream_ports: v.streamPorts ?? 0, websocket: true, http3: !!v.http3, ...(v.l2 ? { l2: true } : {}) }
 }
 
 // moneyProblems: the yuan fields that cannot be sent exactly (more than 2
@@ -81,7 +94,7 @@ export function exampleCharge(model: BillingModel, price: number): { quantity: n
 export function offerOf(v: ListingValues, rows: LimitRow[], floor: LoadFloor | null): MarketListingOffer {
   const { limits } = toLimits(rows, floor)
   return {
-    name: v.name.trim(), billing_model: v.billing_model, allocation: { http_ports: 2 }, limits,
+    name: v.name.trim(), billing_model: v.billing_model, allocation: allocationOf(v), limits,
     tags: {
       cc_protection: v.cc, ddos_protection_gbps: v.ddos, complaint_resistant: v.complaint, tenancy: v.tenancy,
       mobile_reachable: v.mobile, region_block: v.regionBlock, ...(v.lineClass?.trim() ? { line_class: v.lineClass.trim() } : {}),

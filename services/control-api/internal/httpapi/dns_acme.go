@@ -126,7 +126,7 @@ func parseDNSProviderPageRequest(r *http.Request) (dnsacme.ProviderPageRequest, 
 		return dnsacme.ProviderPageRequest{}, err
 	}
 	for key, value := range values {
-		if (key != "limit" && key != "cursor") || len(value) != 1 {
+		if (key != "limit" && key != "cursor" && key != "scope_id" && key != "managed_by") || len(value) != 1 {
 			return dnsacme.ProviderPageRequest{}, dnsacme.ErrInvalidInput
 		}
 	}
@@ -143,6 +143,20 @@ func parseDNSProviderPageRequest(r *http.Request) (dnsacme.ProviderPageRequest, 
 			return dnsacme.ProviderPageRequest{}, dnsacme.ErrInvalidInput
 		}
 		result.Cursor = raw[0]
+	}
+	// 平台视图按用户（租户 scope）筛选、只看用户自己的账户（managed_by=tenant）。
+	if raw, found := values["scope_id"]; found {
+		scopeID, parseErr := uuid.Parse(raw[0])
+		if parseErr != nil || scopeID == uuid.Nil || scopeID.String() != raw[0] {
+			return dnsacme.ProviderPageRequest{}, dnsacme.ErrInvalidInput
+		}
+		result.ScopeID = scopeID
+	}
+	if raw, found := values["managed_by"]; found {
+		if raw[0] != "tenant" && raw[0] != "platform" {
+			return dnsacme.ProviderPageRequest{}, dnsacme.ErrInvalidInput
+		}
+		result.ManagedBy = raw[0]
 	}
 	return result, nil
 }

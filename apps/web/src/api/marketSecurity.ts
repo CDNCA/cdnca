@@ -21,10 +21,23 @@ export interface MarketSecurityLog {
   cursor: string
 }
 
+/** Relayed requests of each decision in the window (and site, when given). */
+export interface MarketSecurityCounts {
+  blocked: number
+  challenged: number
+  banned: number
+  /** Observe-only (action log); 0 from a supplier that does not relay it. */
+  logged: number
+}
+
 export interface MarketSecurityPage {
   data: MarketSecurityLog[]
-  meta: { next_cursor?: string }
+  /** counts is absent from a server built before it. */
+  meta: { next_cursor?: string; counts?: MarketSecurityCounts }
 }
+
+export const marketSecurityActions = ['block', 'challenge', 'temporary_ban', 'log'] as const
+export type MarketSecurityAction = typeof marketSecurityActions[number]
 
 export interface MarketSecurityFilters {
   from: string
@@ -33,6 +46,7 @@ export interface MarketSecurityFilters {
   siteId?: string
   clientIp?: string
   host?: string
+  action?: MarketSecurityAction
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -58,9 +72,18 @@ function isLog(value: unknown): value is MarketSecurityLog {
     text(value.cursor, 256) && value.cursor !== ''
 }
 
+function count(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function isCounts(value: unknown): value is MarketSecurityCounts {
+  return record(value) && count(value.blocked) && count(value.challenged) && count(value.banned) && count(value.logged)
+}
+
 export function parseMarketSecurityPage(value: unknown): MarketSecurityPage {
   if (!record(value) || !Array.isArray(value.data) || value.data.length > 100 || !value.data.every(isLog) ||
-    !record(value.meta) || (value.meta.next_cursor !== undefined && !text(value.meta.next_cursor, 256))) {
+    !record(value.meta) || (value.meta.next_cursor !== undefined && !text(value.meta.next_cursor, 256)) ||
+    (value.meta.counts !== undefined && !isCounts(value.meta.counts))) {
     throw invalidResponse()
   }
   return value as unknown as MarketSecurityPage
@@ -74,7 +97,8 @@ export async function listMarketSecurityLogs(
   cursor?: string,
 ): Promise<MarketSecurityPage> {
   if (!token || /\s/.test(token) || (audience === 'admin' && !uuidPattern.test(filters.tenantId ?? '')) ||
-    (filters.siteId !== undefined && !uuidPattern.test(filters.siteId))) {
+    (filters.siteId !== undefined && !uuidPattern.test(filters.siteId)) ||
+    (filters.action !== undefined && !marketSecurityActions.includes(filters.action))) {
     throw new ApiError('Invalid market security request', 400, 'analytics_logs_invalid_request')
   }
   const params = new URLSearchParams({ from: filters.from, to: filters.to, limit: String(limit) })
@@ -82,6 +106,7 @@ export async function listMarketSecurityLogs(
   if (filters.siteId) params.set('site_id', filters.siteId)
   if (filters.clientIp) params.set('client_ip', filters.clientIp)
   if (filters.host) params.set('host', filters.host)
+  if (filters.action) params.set('action', filters.action)
   if (cursor) params.set('cursor', cursor)
   const path = audience === 'admin' ? '/v1/admin/analytics/market-security' : '/v1/analytics/market-security'
   let response: Response

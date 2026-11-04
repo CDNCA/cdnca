@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -392,11 +393,34 @@ func (r *Runtime) answer(ctx context.Context, self marketclient.Identity, m mark
 	if err != nil {
 		return err
 	}
+	// The reply's message id follows the request's like its key: a request
+	// handled again (the relay redelivers unacked messages from cursor 0 on
+	// every boot) resends the same reply identity, which the relay answers
+	// with the stored one instead of 409 (a random id wedged this loop on the
+	// replayed message, so no later request reached the handler).
+	key := "reply-" + m.Header.MessageID.String()
 	_, err = r.market.Send(ctx, self, marketclient.Outbound{To: m.Header.SenderMemberID,
-		GrantID: m.Header.GrantID, Operation: siteconf.OpReply, Domains: m.Header.Domains,
-		IdempotencyKey: "reply-" + m.Header.MessageID.String(), Payload: body})
+		GrantID: m.Header.GrantID, MessageID: replyMessageID(key), Operation: siteconf.OpReply,
+		Domains: m.Header.Domains, IdempotencyKey: key, Payload: body})
+	if status, code, ok := marketclient.Rejected(err); ok && status == http.StatusConflict {
+		// A reply under this key already went out (with a random id, before
+		// replyMessageID): the requester has an answer; move on.
+		r.log.Info("market reply already sent", "op", m.Header.Operation, "key", key)
+		return nil
+	} else if ok && status >= 400 && status < 500 && status != http.StatusTooManyRequests {
+		// The market refuses this reply for good (a grant reissued or revoked
+		// since the request, a requester gone): retrying it would hold every
+		// later message behind it, so it is dropped and the requester's own
+		// timeout retries with its current grant.
+		r.log.Warn("market reply refused, dropped", "op", m.Header.Operation, "key", key, "status", status, "code", code)
+		return nil
+	}
 	return err
 }
+
+// replyMessageID derives a reply's message id from its idempotency key, as
+// Call derives a request's.
+func replyMessageID(key string) uuid.UUID { return uuid.NewSHA1(uuid.NameSpaceOID, []byte(key)) }
 
 // Call sends one request to a leaf through the relay and waits for its
 // reply. The leaf replies with idempotency key "reply-<message id>".

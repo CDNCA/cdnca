@@ -34,7 +34,17 @@ paths:
         - name: cursor
           in: query
           schema: {type: string, minLength: 1, maxLength: 4096}
-          description: Opaque cursor bound to the authenticated scope and page limit.
+          description: Opaque cursor bound to the authenticated scope, page limit and the scope_id / managed_by filter.
+        - name: scope_id
+          in: query
+          schema: {type: string, format: uuid}
+          description: Platform scope only; lists one tenant's accounts (filter by user). A tenant-scope request with it is 400 validation_error.
+          x-description-zh: 仅平台视图：只列这个用户（租户 scope）的账户；租户带此参数返回 400 validation_error。
+        - name: managed_by
+          in: query
+          schema: {type: string, enum: [tenant, platform]}
+          description: Only rows with this managed_by; the platform DNS API list sends tenant to leave out the platform copies.
+          x-description-zh: 只列该来源的账户；平台视图的 DNS API 列表传 tenant，不列平台 DNS 副本。
       responses:
         '200':
           description: Provider metadata without credentials or credential-derived fingerprints.
@@ -1131,6 +1141,15 @@ components:
         version: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        owner:
+          type: object
+          description: Platform-scope list only; the tenant owner of scope_id (DNS API 「用户」列). Absent in tenant views and on writes.
+          x-description-zh: 仅平台视图的列表返回：scope_id 所属用户；租户视图与写接口不返回。
+          required: [id, display_id, username]
+          properties:
+            id: {type: string, format: uuid}
+            display_id: {type: string}
+            username: {type: string}
     DNSSettings:
       type: object
       required: [scope_id, ttl, version]

@@ -38,7 +38,7 @@ const (
 	// fp-site3（迁移 513）：36 项第二批简单字段。
 	SiteDefaultSSLProtocols         = "ssl_protocols"          // TLSv1.2 TLSv1.3（空格分隔，连续区间）
 	SiteDefaultSSLCipherPreset      = "ssl_cipher_preset"      // modern / compatible / legacy / custom
-	SiteDefaultOriginProtocol       = "origin_protocol"        // http / https / follow
+	SiteDefaultOriginProtocol       = "origin_protocol"        // http / https / follow / follow_port
 	SiteDefaultBackendHTTPPort      = "backend_http_port"      // 回源 HTTP 端口
 	SiteDefaultOriginConnectTimeout = "origin_connect_timeout" // 回源连接超时，秒 1–30
 	SiteDefaultOriginReadTimeout    = "origin_read_timeout"    // 回源读取超时，秒 1–300
@@ -73,6 +73,10 @@ const (
 	// siteDefaultGzipMinLength: 默认设置开 Gzip 时的最小压缩长度，与站点编辑页新开压缩的初值一致。
 	siteDefaultGzipMinLength = 256
 
+	// SiteDefaultOriginFollowPort: origin_protocol 取值「跟随协议和端口」= 回源协议跟随 + FollowPort
+	// （按访客入口端口回源，回源端口默认不再适用）。
+	SiteDefaultOriginFollowPort = "follow_port"
+
 	SiteDefaultScopeGlobal = "global"
 	SiteDefaultScopeGroup  = "group"
 )
@@ -80,19 +84,21 @@ const (
 var ErrSiteDefaultConflict = errors.New("site default already exists for this setting and scope")
 
 type SiteUserDefault struct {
-	ID          uuid.UUID  `json:"id"`
-	DisplayID   string     `json:"display_id"`
-	ScopeID     uuid.UUID  `json:"scope_id"`
-	OwnerUserID uuid.UUID  `json:"owner_user_id"`
-	SettingName string     `json:"setting_name"`
-	Value       string     `json:"setting_value"`
-	ScopeName   string     `json:"scope_name"`
-	GroupID     *uuid.UUID `json:"group_id"`
-	GroupName   *string    `json:"group_name"`
-	Enabled     bool       `json:"enabled"`
-	Revision    int64      `json:"version"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID          uuid.UUID `json:"id"`
+	DisplayID   string    `json:"display_id"`
+	ScopeID     uuid.UUID `json:"scope_id"`
+	OwnerUserID uuid.UUID `json:"owner_user_id"`
+	// Owner: 管理员列表的「用户」列（租户看到的是自己）
+	Owner       *OwnerReference `json:"owner"`
+	SettingName string          `json:"setting_name"`
+	Value       string          `json:"setting_value"`
+	ScopeName   string          `json:"scope_name"`
+	GroupID     *uuid.UUID      `json:"group_id"`
+	GroupName   *string         `json:"group_name"`
+	Enabled     bool            `json:"enabled"`
+	Revision    int64           `json:"version"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 type SiteUserDefaultFields struct {
@@ -194,8 +200,9 @@ func normalizeSiteDefaultValue(name, raw string) (string, bool) {
 			return "", false
 		}
 		return strings.Join(suites, ":"), true
-	case SiteDefaultOriginProtocol:
-		return value, value == OriginSchemeHTTP || value == OriginSchemeHTTPS || value == OriginSchemeFollow
+	case SiteDefaultOriginProtocol: // follow_port：「跟随协议和端口」
+		return value, value == OriginSchemeHTTP || value == OriginSchemeHTTPS || value == OriginSchemeFollow ||
+			value == SiteDefaultOriginFollowPort
 	case SiteDefaultOriginConnectTimeout:
 		seconds, err := strconv.Atoi(value)
 		return strconv.Itoa(seconds), err == nil && seconds >= 1 && seconds <= 30
@@ -428,15 +435,27 @@ func (defaults siteCreationUserDefaults) applyPool(pool *OriginPool, overwrite b
 	// so a port default applies only where the scheme uses it.
 	if value, ok := defaults[SiteDefaultOriginProtocol]; ok && (overwrite || pool.Scheme == "") {
 		pool.Scheme = value
+		if value == SiteDefaultOriginFollowPort {
+			// 跟随协议和端口：边缘每个入口端口一个上游，与定源、「回源 Host 用源站地址」、
+			// 请求里写明的回源端口不能同用（normalizeOriginPool），那时只跟随协议。
+			pool.Scheme = OriginSchemeFollow
+			pool.FollowPort = pool.RequestHost.Mode != OriginRequestHostOrigin && pool.BalanceMethod != BalanceSticky &&
+				(pool.HTTPPort == 0 || pool.HTTPPort == 80) && (pool.HTTPSPort == 0 || pool.HTTPSPort == 443)
+		}
 	}
 	scheme := pool.Scheme
 	if scheme == "" {
 		scheme = OriginSchemeHTTP // defaultOriginPorts
 	}
-	if value, ok := defaults[SiteDefaultBackendHTTPSPort]; ok && (overwrite || pool.HTTPSPort == 0) && scheme != OriginSchemeHTTP {
+	if pool.FollowPort {
+		scheme = SiteDefaultOriginFollowPort // 不用回源端口默认（normalizeOriginPool 要求 80/443）
+	}
+	if value, ok := defaults[SiteDefaultBackendHTTPSPort]; ok && (overwrite || pool.HTTPSPort == 0) && scheme != OriginSchemeHTTP &&
+		scheme != SiteDefaultOriginFollowPort {
 		pool.HTTPSPort, _ = strconv.Atoi(value)
 	}
-	if value, ok := defaults[SiteDefaultBackendHTTPPort]; ok && (overwrite || pool.HTTPPort == 0) && scheme != OriginSchemeHTTPS {
+	if value, ok := defaults[SiteDefaultBackendHTTPPort]; ok && (overwrite || pool.HTTPPort == 0) && scheme != OriginSchemeHTTPS &&
+		scheme != SiteDefaultOriginFollowPort {
 		pool.HTTPPort, _ = strconv.Atoi(value)
 	}
 	if value, ok := defaults[SiteDefaultOriginConnectTimeout]; ok && (overwrite || pool.ConnectTimeoutMS == 0) {

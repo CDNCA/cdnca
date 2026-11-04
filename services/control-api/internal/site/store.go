@@ -2859,10 +2859,11 @@ func prepareCNAMEWriteIntent(ctx context.Context, tx pgx.Tx, actor Actor, ownerI
 	}
 	var subscriptionProductID uuid.UUID
 	var snapshotMode, domain, hostname string
+	// A market leaf's hidden product has no cname block (the "" case below).
 	err = tx.QueryRow(ctx, `SELECT subscription.product_id,
-		subscription.product_snapshot->'spec'->'cname'->>'mode',
-		subscription.product_snapshot->'spec'->'cname'->>'domain',
-		subscription.product_snapshot->'spec'->'cname'->>'hostname'
+		COALESCE(subscription.product_snapshot->'spec'->'cname'->>'mode',''),
+		COALESCE(subscription.product_snapshot->'spec'->'cname'->>'domain',''),
+		COALESCE(subscription.product_snapshot->'spec'->'cname'->>'hostname','')
 		FROM package_subscriptions subscription
 		WHERE subscription.tenant_scope_id=$1 AND subscription.id=$2 AND subscription.lifecycle_status='active'
 		  AND subscription.admin_enabled=true AND subscription.deleted_at IS NULL

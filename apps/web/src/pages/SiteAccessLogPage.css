@@ -640,13 +640,28 @@
   max-width: 100%;
 }
 
+.analytics-log-page .market-security-filter-bar .analytics-filter-field .ant-select {
+  width: 120px;
+}
+
+/* 拦截 / 挑战 / 封禁 / 仅记录 计数条。 */
+.analytics-log-page .market-security-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--cdnca-color-text-secondary);
+}
+
 @media (max-width: 767px) {
   /* 窄屏筛选栏纵向排列（styles.css），保持拉伸铺满，不随上面的 flex-end 靠右。 */
   .analytics-log-page .market-security-filter-bar {
     align-items: stretch;
   }
 
-  .analytics-log-page .market-security-filter-bar .analytics-filter-field .ant-input {
+  .analytics-log-page .market-security-filter-bar .analytics-filter-field .ant-input,
+  .analytics-log-page .market-security-filter-bar .analytics-filter-field .ant-select {
     width: 100%;
   }
 }

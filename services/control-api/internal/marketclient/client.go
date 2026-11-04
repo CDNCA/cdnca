@@ -348,6 +348,10 @@ type PoolNode struct {
 	// installation is licensed for and the node has installed; the market
 	// lets an offer include only those every node of its supply has.
 	Plugins []string `json:"plugins,omitempty"`
+	// L2: the node's supply group names a usable L2 configuration of the
+	// seller; the market lets an offer declare L2 only when every
+	// node of its supply has it.
+	L2 bool `json:"l2,omitempty"`
 }
 
 // ReportPoolNodes replaces the market's inventory of one node pool. online,

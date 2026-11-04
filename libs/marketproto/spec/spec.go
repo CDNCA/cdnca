@@ -15,9 +15,33 @@ type Allocation struct {
 	StreamPorts int64 `json:"stream_ports"`
 	WebSocket   bool  `json:"websocket"`
 	HTTP3       bool  `json:"http3"`
+	// L2: the supply goes to the origin through the seller's own L2 nodes
+	// for sites following the package. The seller names
+	// the L2 configuration on its supply group; the market accepts the
+	// declaration only when every node behind the offer reports it. Offer
+	// and purchase display only: grants leave it out (ForGrant), the leaf
+	// reads its own supply group.
+	L2 bool `json:"l2,omitempty"`
 }
 
 const MaxPorts = 65_535
+
+// Normalized is a with WebSocket on. WebSocket is part of every node supply:
+// an offer cannot be listed without it, so offers, component
+// limits, purchase snapshots and grants that recorded false before 1.0.35
+// (market 077) still allow it. The field stays on the wire so older leaves,
+// which refuse websocket=false grants, accept new grants.
+func (a Allocation) Normalized() Allocation {
+	a.WebSocket = true
+	return a
+}
+
+// ForGrant is a without the display-only L2 (controllers decode grants
+// strictly, and the leaf reads L2 from its own supply group).
+func (a Allocation) ForGrant() Allocation {
+	a.L2 = false
+	return a
+}
 
 func (a Allocation) Validate() error {
 	if a.HTTPPorts < 0 || a.StreamPorts < 0 || a.HTTPPorts > MaxPorts || a.StreamPorts > MaxPorts {
@@ -35,6 +59,7 @@ func (a Allocation) Min(b Allocation) Allocation {
 		StreamPorts: min(a.StreamPorts, b.StreamPorts),
 		WebSocket:   a.WebSocket && b.WebSocket,
 		HTTP3:       a.HTTP3 && b.HTTP3,
+		L2:          a.L2 && b.L2,
 	}
 }
 

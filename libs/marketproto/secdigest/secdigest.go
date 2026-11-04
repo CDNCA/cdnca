@@ -256,6 +256,83 @@ func WindowOfKey(key string) (int64, bool) {
 type Signed struct {
 	Payload   string `json:"payload"`
 	Signature string `json:"signature"`
+	// Extension and ExtensionSignature carry what v1 cannot (see Extension).
+	// Both are empty when there is nothing to add; a subscriber built before
+	// them decodes Signed leniently and never sees them.
+	Extension          string `json:"extension,omitempty"`
+	ExtensionSignature string `json:"extension_signature,omitempty"`
+}
+
+// Extension adds to a v1 digest without changing it: Payload is decoded
+// strictly (unknown fields rejected), so a new Summary field would make a
+// subscriber built before it drop the whole window. Summary keeps counting
+// enforced decisions only (attack alerts sum it); Logged counts the observe
+// only WAF / CC decisions (action "log") of the same window, in requests.
+// Their log lines ride in Digest.Logs with action "log".
+type Extension struct {
+	Logged int64 `json:"logged"`
+}
+
+const maxExtension = 256
+
+func (e Extension) zero() bool { return e == Extension{} }
+
+// extensionMessage binds the extension to the exact signed payload.
+func extensionMessage(payload, extension string) []byte {
+	sum := sha256.Sum256([]byte(payload))
+	return []byte(ExtensionDomain + hex.EncodeToString(sum[:]) + "\n" + extension)
+}
+
+// ExtensionDomain separates extension signatures from digest signatures.
+const ExtensionDomain = SchemaV1 + "+extension\n"
+
+// SignExtended is Sign plus a signed Extension; a zero extension gives
+// exactly what Sign gives.
+func SignExtended(d Digest, e Extension, key ed25519.PrivateKey) (Signed, error) {
+	s, err := Sign(d, key)
+	if err != nil || e.zero() {
+		return s, err
+	}
+	if e.Logged < 0 {
+		return Signed{}, ErrInvalid
+	}
+	raw, err := json.Marshal(e)
+	if err != nil {
+		return Signed{}, err
+	}
+	s.Extension = base64.StdEncoding.EncodeToString(raw)
+	s.ExtensionSignature = base64.StdEncoding.EncodeToString(ed25519.Sign(key, extensionMessage(s.Payload, s.Extension)))
+	return s, nil
+}
+
+// VerifyExtended is Verify plus the Extension (zero when the leaf sent
+// none, as a leaf built before it does). An extension that is present but
+// does not verify rejects the digest: it was signed by the same key.
+func VerifyExtended(public ed25519.PublicKey, s Signed) (Digest, Extension, error) {
+	d, _, err := Verify(public, s)
+	if err != nil {
+		return Digest{}, Extension{}, err
+	}
+	if s.Extension == "" && s.ExtensionSignature == "" {
+		return d, Extension{}, nil
+	}
+	if len(s.Extension) > maxExtension {
+		return Digest{}, Extension{}, ErrInvalid
+	}
+	raw, err := base64.StdEncoding.Strict().DecodeString(s.Extension)
+	if err != nil {
+		return Digest{}, Extension{}, ErrInvalid
+	}
+	signature, err := base64.StdEncoding.Strict().DecodeString(s.ExtensionSignature)
+	if err != nil || !ed25519.Verify(public, extensionMessage(s.Payload, s.Extension), signature) {
+		return Digest{}, Extension{}, ErrSignature
+	}
+	var e Extension
+	// Lenient: a later leaf may add fields this subscriber does not know.
+	if err := json.Unmarshal(raw, &e); err != nil || e.Logged < 0 {
+		return Digest{}, Extension{}, ErrInvalid
+	}
+	return d, e, nil
 }
 
 func Sign(d Digest, key ed25519.PrivateKey) (Signed, error) {

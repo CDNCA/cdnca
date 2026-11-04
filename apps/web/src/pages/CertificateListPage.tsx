@@ -9,7 +9,7 @@ import {
   Input,
   Modal,
   Pagination,
-  Popconfirm,
+  Radio,
   Result,
   Select,
   Space,
@@ -21,11 +21,10 @@ import {
   Grid,
   type TableColumnsType,
 } from 'antd'
-import { ArrowLeft, ChevronDown, CircleCheck, Download, Link2, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Download, Link2, MoreHorizontal, Plus, RefreshCw, Upload } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
-import AcmeCACredentialsCard from './system-settings/AcmeCACredentialsCard'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import '../i18n/systemSettings'
 
 import { ApiError, type Principal } from '../api/auth'
@@ -41,7 +40,6 @@ import {
   type CertificateOrder,
 	  type CertificateOrderStatus,
 	  type BindCertificateAssetInput,
-	  type CertificateDefaultType,
 	  type UpdateCertificateDefaultsInput,
   type CreateCertificateOrderInput,
   type ImportCertificateAssetInput,
@@ -60,13 +58,7 @@ import '../i18n/dnsProviders'
 import { CertificateFailureReason } from '../components/CertificateFailureReason'
 import { CertificateSyncStatus } from '../components/CertificateSyncStatus'
 import { formatDateTime } from '../i18n/formatters'
-import {
-  credentialFields,
-  isCreatableProviderType,
-  ProviderEditor,
-  type DNSProviderEditorState,
-  type ProviderForm,
-} from './NodeDnsPage'
+import SiteDnsApiPanel from './SiteDnsApiPanel'
 import './CertificateListPage.css'
 import { CertificatePEMDialog } from '../components/CertificatePEMDialog'
 import { AdvancedFilters, FeedbackWhen, MODAL_WIDTH, OutcomeUnknown, fieldReasonText, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply, type AdvancedFilterItem, type FormErrorMap } from '@cdnca/ui'
@@ -74,8 +66,9 @@ import { certificateSearch, userSearch } from './idNameSources'
 
 // Order fields named differently on the form: the domains
 // are one textarea, so domains / domains[n] mark it.
-// PATCH /v1/certificate-defaults fields the 默认设置 selects show refusals for.
-const defaultFieldNames = new Set(['certificate_type', 'issuer', 'dns_provider_id'])
+// PATCH /v1/certificate-defaults fields the 默认设置 controls show refusals for
+// (certificate_type is always acme from this page; a refusal of it shows as a dialog).
+const defaultFieldNames = new Set(['issuer', 'dns_provider_id'])
 
 const orderErrorMap: FormErrorMap = Object.fromEntries([
   ['domains', 'domains_text'],
@@ -112,13 +105,6 @@ interface CertificateDefaultsAttempt {
   input: UpdateCertificateDefaultsInput
   key: string
 }
-
-type ProviderWriteIntent =
-  | { kind: 'create'; input: import('../api/dns').CreateDNSProviderInput }
-  | { kind: 'update'; id: string; providerType: string; input: import('../api/dns').UpdateDNSProviderInput }
-  | { kind: 'verify'; id: string; providerType: string; version: number }
-  | { kind: 'delete'; id: string; version: number }
-type ProviderWriteAttempt = ProviderWriteIntent & { key: string }
 
 interface AssetUploadForm {
   name: string
@@ -360,17 +346,6 @@ function writeKey(): string {
   return `certificate-order-create-${suffix}`
 }
 
-function providerWriteKey(kind: ProviderWriteIntent['kind']): string {
-  const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
-  return `certificate-dns-provider-${kind}-${suffix}`
-}
-
-function clearProviderWriteCredentials(attempt: ProviderWriteAttempt | null): void {
-  const credentials = attempt?.kind === 'create' || attempt?.kind === 'update' ? attempt.input.credentials : undefined
-  if (!credentials) return
-  for (const key of Object.keys(credentials)) credentials[key] = ''
-}
-
 function requestID(): string {
   const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
   return `certificate-asset-${suffix}`
@@ -542,18 +517,18 @@ export default function CertificateListPage() {
         targetUser={{ id: principal.user_id, username: principal.username }}
         canManage={canManageCertificatePermission(principal, 'certificates.manage')}
         canReadDNS={canManageCertificatePermission(principal, 'dns.read')}
-        canManageDNS={canManageCertificatePermission(principal, 'dns.manage')}
       />
     </section>
   )
 }
 
-function CertificateOwnerPicker({ owner, value, onChange, disabled, label }: {
+function CertificateOwnerPicker({ owner, value, onChange, disabled, label, placeholder }: {
   owner: CertificateOwner
   value: ManagedUser | null
   onChange: (value: ManagedUser | null) => void
   disabled?: boolean
   label?: string
+  placeholder?: string
 }) {
   const { t } = useTranslation('certificateAssets')
   const [search, setSearch] = useState('')
@@ -588,7 +563,7 @@ function CertificateOwnerPicker({ owner, value, onChange, disabled, label }: {
           value: item.id, label: t('target.option', { username: item.username, displayID: item.display_id }),
         }))}
         loading={usersQuery.isPending || usersQuery.isFetching}
-        placeholder={t('target.placeholder')}
+        placeholder={placeholder ?? t('target.placeholder')}
         onSearch={setSearch}
         onChange={(id: string | undefined) => onChange(id ? users.find((item) => item.id === id) ?? selected.find((item) => item.id === id) ?? null : null)}
         notFoundContent={t(canListUsers && usersQuery.isPending ? 'target.loading' : 'target.empty')}
@@ -704,17 +679,16 @@ function PlatformCertificateListPage({ principal, sessionEpoch }: { principal: P
         contextUser={targetUser}
         canManage={canManageCertificatePermission(principal, 'certificates.manage')}
         canReadDNS={canManageCertificatePermission(principal, 'dns.read')}
-        canManageDNS={canManageCertificatePermission(principal, 'dns.manage')}
         initialSection={section}
         onSectionChange={setSection}
-        targetSelector={(disabled) => <CertificateOwnerPicker owner={owner} value={targetUser} onChange={setTargetUser} disabled={disabled} />}
+        targetSelector={(disabled, picker) => <CertificateOwnerPicker owner={owner} value={targetUser} onChange={setTargetUser} disabled={disabled} {...picker} />}
       />
     </section>
   )
 }
 
 function CertificateListPageContent({
-  owner, targetUser, contextUser, canManage, canReadDNS, canManageDNS, targetSelector, initialSection = 'list', onSectionChange,
+  owner, targetUser, contextUser, canManage, canReadDNS, targetSelector, initialSection = 'list', onSectionChange,
 }: {
   owner: CertificateOwner
   targetUser: CertificateTargetUser | null
@@ -722,18 +696,16 @@ function CertificateListPageContent({
   contextUser?: ManagedUser | null
   canManage: boolean
   canReadDNS: boolean
-  canManageDNS: boolean
-  targetSelector?: (disabled: boolean) => ReactNode
+  targetSelector?: (disabled: boolean, picker?: { label: string; placeholder: string }) => ReactNode
   initialSection?: 'list' | 'default' | 'dnsApi'
   onSectionChange?: (section: 'list' | 'default' | 'dnsApi') => void
 }) {
   const { t, i18n } = useTranslation('certificates')
   const { t: assetT } = useTranslation('certificateAssets')
   const { t: syncT } = useTranslation('certificatePublicationFailures')
-  const { t: systemT } = useTranslation('systemSettings')
   const sessionPrincipal = useSessionStore((state) => state.principal)
-  const { t: dnsT } = useTranslation('dnsProviders')
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { message, modal } = App.useApp()
   const queryOwner = useRef(owner).current
@@ -747,7 +719,6 @@ function CertificateListPageContent({
   const orderPrefix = useMemo(() => ['certificate-orders', ...queryOwner] as const, [queryOwner])
   const providerPrefix = useMemo(() => ['dns-providers', ...queryOwner, 'certificate-order-editor'] as const, [queryOwner])
   const defaultsPrefix = useMemo(() => ['certificate-defaults', ...queryOwner] as const, [queryOwner])
-  const providerMutationKey = useMemo(() => ['certificate-dns-provider-write', ...queryOwner] as const, [queryOwner])
   const defaultsMutationKey = useMemo(() => ['certificate-defaults-write', ...queryOwner] as const, [queryOwner])
   const detailPrefix = useMemo(() => ['certificate-asset', ...queryOwner] as const, [queryOwner])
   const bindingPrefix = useMemo(() => ['certificate-asset-bindings', ...queryOwner] as const, [queryOwner])
@@ -799,7 +770,6 @@ function CertificateListPageContent({
   const [batchRunning, setBatchRunning] = useState(false)
   const [selectedIssuer, setSelectedIssuer] = useState<CertificateIssuer>('lets_encrypt')
   const issuerTouchedRef = useRef(false)
-  const autoTypeRef = useRef(false)
   const addOpen = uploadOpen || editorOpen || batchOpen
   const [uploadOwner, setUploadOwner] = useState<ManagedUser | null>(null)
   const [orderOwner, setOrderOwner] = useState<ManagedUser | null>(null)
@@ -822,10 +792,6 @@ function CertificateListPageContent({
   // The order refusal marked on a form field: the editor shows no alert for it.
   const [orderFieldMarked, setOrderFieldMarked] = useState(false)
   const markOrderError = useFormSubmitError(form, orderErrorMap)
-  const [providerEditor, setProviderEditor] = useState<DNSProviderEditorState | null>(null)
-  const [providerAttempt, setProviderAttempt] = useState<ProviderWriteAttempt | null>(null)
-  const [providerWriteError, setProviderWriteError] = useState<ApiError | null>(null)
-  const [defaultType, setDefaultType] = useState<CertificateDefaultType>('acme')
   const [defaultProviderID, setDefaultProviderID] = useState<string | undefined>(undefined)
   const [defaultIssuer, setDefaultIssuer] = useState<CertificateIssuer | undefined>(undefined)
   const [defaultWriteError, setDefaultWriteError] = useState<ApiError | null>(null)
@@ -845,9 +811,6 @@ function CertificateListPageContent({
     domain: '', multiDomain: '', user: '', certificateID: '', name: '', remark: '',
   })
   const [selectedAssetIDs, setSelectedAssetIDs] = useState<string[]>([])
-  const [selectedProviderIDs, setSelectedProviderIDs] = useState<string[]>([])
-  const [providerPage, setProviderPage] = useState(1)
-  const [providerLimit, setProviderLimit] = useState(10)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
 	const assetSearch = search.trim()
@@ -876,7 +839,6 @@ function CertificateListPageContent({
   const uploadAttemptRef = useRef<AssetWriteAttempt | null>(null)
   const commandAttemptRef = useRef<AssetCommandAttempt | null>(null)
   const orderAttemptRef = useRef<WriteAttempt | null>(null)
-  const providerAttemptRef = useRef<ProviderWriteAttempt | null>(null)
   const defaultsAttemptRef = useRef<CertificateDefaultsAttempt | null>(null)
 
   useEffect(() => {
@@ -890,14 +852,12 @@ function CertificateListPageContent({
       queryClient.removeQueries({ queryKey: bindingPrefix })
       queryClient.removeQueries({ queryKey: ['certificate-issuers', ...queryOwner] })
       const mutationCache = queryClient.getMutationCache()
-      for (const key of [uploadMutationKey, orderMutationKey, commandMutationKey, providerMutationKey, defaultsMutationKey]) {
+      for (const key of [uploadMutationKey, orderMutationKey, commandMutationKey, defaultsMutationKey]) {
         for (const mutation of mutationCache.findAll({ mutationKey: key, exact: true })) mutationCache.remove(mutation)
       }
     }
     return () => {
       lineageActiveRef.current = false
-      clearProviderWriteCredentials(providerAttemptRef.current)
-      providerAttemptRef.current = null
       uploadForm.resetFields()
       if (!currentCertificateSessionMatches(queryOwner)) {
         cleanupOwnerCache()
@@ -907,7 +867,7 @@ function CertificateListPageContent({
         if (!lineageActiveRef.current) cleanupOwnerCache()
       })
     }
-  }, [assetPrefix, bindingPrefix, commandMutationKey, defaultsMutationKey, defaultsPrefix, detailPrefix, orderMutationKey, orderPrefix, providerMutationKey, providerPrefix, queryClient, queryOwner, uploadForm, uploadMutationKey])
+  }, [assetPrefix, bindingPrefix, commandMutationKey, defaultsMutationKey, defaultsPrefix, detailPrefix, orderMutationKey, orderPrefix, providerPrefix, queryClient, queryOwner, uploadForm, uploadMutationKey])
 
   const assetsQuery = useQuery({
 	queryKey: assetQueryKey,
@@ -987,7 +947,7 @@ function CertificateListPageContent({
         throw error
       }
     },
-    enabled: (editorOpen || batchOpen || advancedFilterOpen || sectionTab === 'default' || sectionTab === 'dnsApi') && canReadDNS &&
+    enabled: (editorOpen || batchOpen || advancedFilterOpen || sectionTab === 'default') && canReadDNS &&
       (queryOwner[0] === 'tenant' || Boolean(providerScopeID)),
   })
 
@@ -1003,10 +963,6 @@ function CertificateListPageContent({
       return certificatesApi.listIssuers(token)
     },
   })
-  const issuerOptions = (issuersQuery.data?.items ?? []).map((issuer) => ({
-    value: issuer,
-    label: t(`issuers.${issuer}`) + (issuer === issuersQuery.data?.default ? t('issuers.platformDefault') : ''),
-  }))
   const defaultsQuery = useQuery({
     queryKey: defaultsPrefix,
     retry: false,
@@ -1052,7 +1008,7 @@ function CertificateListPageContent({
 
   useEffect(() => {
     if (!defaultsQuery.data) return
-    setDefaultType(defaultsQuery.data.certificate_type)
+    // 旧的“上传证书”默认（已不可选）不带签发机构和 DNS API，与“系统默认设置”等价，按它显示。
     setDefaultProviderID(defaultsQuery.data.dns_provider_id)
     setDefaultIssuer(defaultsQuery.data.issuer)
     setDefaultWriteError(null)
@@ -1074,6 +1030,8 @@ function CertificateListPageContent({
 
   // CERT-03：打开申请弹窗后，用户还没选 DNS 账号时带入目标用户的默认 DNS 账号；默认账号已
   // 删除或停用就不带入（仍需用户选择）。每个目标只带入一次，用户改选后不再覆盖；换目标重新带入。
+  // 带入默认 DNS API 时，用户还没
+  // 手动改过验证方式就切到 DNS 验证；没有设置默认 DNS API 仍按 HTTP 验证。
   const defaultProviderAppliedRef = useRef<string | null>(null)
   useEffect(() => {
     const applied = isTenant ? 'self' : addTargetKey
@@ -1084,6 +1042,7 @@ function CertificateListPageContent({
     if (!providerID || form.getFieldValue('dns_provider_id')) return
     if (providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled' && item.managed_by !== 'platform')) {
       form.setFieldValue('dns_provider_id', providerID)
+      if (!form.isFieldTouched('challenge_type')) form.setFieldValue('challenge_type', 'dns-01')
     }
   }, [editorOpen, isTenant, addDefaults, addTarget?.scopeID, addTargetKey, providersQuery.data, form])
 
@@ -1098,6 +1057,8 @@ function CertificateListPageContent({
     const items = issuersQuery.data?.items ?? []
     return issuerCardOrder.filter((issuer) => items.includes(issuer))
   }, [issuersQuery.data?.items])
+  // 默认设置的证书类型（系统默认设置 / ZeroSSL(推荐) / Let's Encrypt）；Google Trust 只在平台已配置或已选时出现。
+  const defaultIssuerChoices = issuerCardOrder.filter((issuer) => issuer !== 'google_trust' || offeredIssuers.includes(issuer) || defaultIssuer === issuer)
   useEffect(() => {
     if (!addOpen || issuerTouchedRef.current || offeredIssuers.length === 0) return
     const preferred = [addDefaults?.issuer, issuersQuery.data?.default]
@@ -1435,62 +1396,6 @@ function CertificateListPageContent({
     return previous && JSON.stringify(previous.input) === JSON.stringify(input) ? previous : { input, key: writeKey() }
   }
 
-  const providerMutation = useMutation<void, unknown, void>({
-    mutationKey: providerMutationKey,
-    mutationFn: async () => {
-      const frozen = providerAttemptRef.current
-      const token = currentSessionAccess('dns.manage')
-      if (!frozen || !token) throw certificatePermissionDenied()
-      switch (frozen.kind) {
-        case 'create': {
-          const value = await dnsApi.create(token, frozen.input, frozen.key)
-          if (!currentSessionMatches()) throw invalidCertificateResponse()
-          assertProviderOwner(queryOwner, value)
-          break
-        }
-        case 'update': {
-          const value = await dnsApi.update(token, frozen.id, frozen.providerType, frozen.input, frozen.key)
-          if (!currentSessionMatches() || value.id !== frozen.id) throw invalidCertificateResponse()
-          assertProviderOwner(queryOwner, value)
-          break
-        }
-        case 'verify': {
-          const value = await dnsApi.verify(token, frozen.id, frozen.providerType, frozen.version, frozen.key)
-          if (!currentSessionMatches() || value.id !== frozen.id || value.status !== 'verified') throw invalidCertificateResponse()
-          assertProviderOwner(queryOwner, value)
-          break
-        }
-        case 'delete':
-          await dnsApi.remove(token, frozen.id, frozen.version, frozen.key)
-          if (!currentSessionMatches()) throw invalidCertificateResponse()
-          break
-      }
-    },
-    onSuccess: async () => {
-      if (!currentSessionMatches()) return
-      clearProviderWriteCredentials(providerAttemptRef.current)
-      providerAttemptRef.current = null
-      setProviderAttempt(null)
-      setProviderWriteError(null)
-      setProviderEditor(null)
-      await queryClient.invalidateQueries({ queryKey: providerPrefix })
-    },
-    onError: (error: unknown) => {
-      if (!currentSessionMatches()) return
-      const apiError = error instanceof ApiError ? error : new ApiError('request failed')
-      setProviderWriteError(apiError)
-      if (!outcomeUnknown(error)) {
-        clearProviderWriteCredentials(providerAttemptRef.current)
-        providerAttemptRef.current = null
-        setProviderAttempt(null)
-        if (apiError.code === 'version_conflict' || apiError.code === 'dns_resource_not_found') {
-          setProviderEditor(null)
-          void providersQuery.refetch()
-        }
-      }
-    },
-  })
-
   const defaultsMutation = useMutation<void, unknown, void>({
     mutationKey: defaultsMutationKey,
     mutationFn: async () => {
@@ -1499,7 +1404,8 @@ function CertificateListPageContent({
       if (!frozen || !token) throw certificatePermissionDenied()
       const value = await certificatesApi.updateDefaults(token, frozen.input, frozen.key)
       if (!currentSessionMatches() || value.scope_id !== queryOwner[1] || value.user_id !== frozen.input.target_user_id ||
-        value.certificate_type !== frozen.input.certificate_type || value.dns_provider_id !== frozen.input.dns_provider_id) {
+        value.certificate_type !== frozen.input.certificate_type || value.dns_provider_id !== frozen.input.dns_provider_id ||
+        value.issuer !== frozen.input.issuer) {
         throw invalidCertificateResponse()
       }
     },
@@ -1507,20 +1413,26 @@ function CertificateListPageContent({
       if (!currentSessionMatches()) return
       defaultsAttemptRef.current = null
       setDefaultWriteError(null)
+      message.success(t('defaultSettings.saved'))
       await queryClient.invalidateQueries({ queryKey: defaultsPrefix })
     },
     onError: (error: unknown) => {
       if (!currentSessionMatches()) return
-      setDefaultWriteError(error instanceof ApiError ? error : new ApiError('request failed'))
-      if (error instanceof ApiError && error.code === 'version_conflict') void defaultsQuery.refetch()
+      const apiError = error instanceof ApiError ? error : new ApiError('request failed')
+      setDefaultWriteError(apiError)
+      if (apiError.code === 'version_conflict') void defaultsQuery.refetch()
       if (!outcomeUnknown(error)) defaultsAttemptRef.current = null
+      // 改选即保存：明确失败且不是字段被拒时退回已保存的值；字段被拒保留所选并标在该项下，结果未知冻结待重试。
+      const fieldRefused = submitErrorFields(apiError).some((item) => defaultFieldNames.has(item.field))
+      if (!outcomeUnknown(error) && !fieldRefused && defaultsQuery.data) {
+        setDefaultIssuer(defaultsQuery.data.issuer)
+        setDefaultProviderID(defaultsQuery.data.dns_provider_id)
+      }
     },
   })
 
   const uncertain = Boolean(attempt && writeError && orderOutcomeUnknown(writeError))
   const writesLocked = mutation.isPending || uncertain
-  const providerUncertain = Boolean(providerAttempt && providerWriteError && outcomeUnknown(providerWriteError))
-  const providerWritesLocked = providerMutation.isPending || providerUncertain
 	  // CERT-08：结果未知时冻结输入，只能用原请求重试
 	  const defaultsUncertain = Boolean(defaultWriteError && outcomeUnknown(defaultWriteError) && defaultsAttemptRef.current)
 	  const defaultsLocked = defaultsMutation.isPending || defaultsUncertain
@@ -1533,7 +1445,7 @@ function CertificateListPageContent({
   const defaultFieldHelp = (field: string) => refusedDefault?.field === field
     ? <div className="certificate-default-error" role="alert">{fieldReasonText(refusedDefault.reason, reasonLocale)}</div>
     : null
-  const editDefault = () => { if (refusedDefault) setDefaultWriteError(null) }
+  const defaultsReadOnly = !canManage || !targetUser || defaultsQuery.isPending || defaultsQuery.isError || defaultsLocked
 	  const assetUncertain = Boolean(assetAttempt && assetWriteError && outcomeUnknown(assetWriteError))
 	  const assetWritesLocked = uploadMutation.isPending || assetUncertain
   const addLocked = batchRunning || writesLocked || assetWritesLocked
@@ -1560,20 +1472,6 @@ function CertificateListPageContent({
 		  if (commandAttempt.kind === 'bind') setBindTarget(commandAttempt.target)
     }
   }, [assetAttempt, assetWriteError, attempt, bindForm, canManage, commandAttempt, commandError, form, reapplyTarget, uploadForm, writeError])
-
-  useEffect(() => {
-    if (canManageDNS) return
-    clearProviderWriteCredentials(providerAttemptRef.current)
-    providerAttemptRef.current = null
-    setProviderAttempt(null)
-    setProviderWriteError(null)
-    setProviderEditor(null)
-  }, [canManageDNS])
-
-  useEffect(() => {
-    setSelectedProviderIDs([])
-    setProviderPage(1)
-  }, [queryOwner[1]])
 
 	  const startCommand = (next: AssetCommandAttempt) => {
 		if (!currentSessionAccess('certificates.manage')) return
@@ -1662,89 +1560,25 @@ function CertificateListPageContent({
 			startCommand({ kind: 'unbind', asset: detail.asset, binding, key: writeKey(), requestID: requestID() })
 		  }
 
-  const startProviderWrite = (next: ProviderWriteIntent) => {
-    if (!currentSessionAccess('dns.manage')) return
-    clearProviderWriteCredentials(providerAttemptRef.current)
-    const value: ProviderWriteAttempt = { ...next, key: providerWriteKey(next.kind) }
-    providerAttemptRef.current = value
-    setProviderAttempt(value)
-    setProviderWriteError(null)
-    providerMutation.mutate()
-  }
-
-  const submitProviderEditor = (values: ProviderForm) => {
-    if (!providerEditor || !currentSessionAccess('dns.manage') || (queryOwner[0] === 'platform' && !targetScopeID)) return
-    if (providerEditor.mode === 'create') {
-      if (!isCreatableProviderType(values.provider_type)) return
-      const credentials = Object.fromEntries(credentialFields[values.provider_type].map(
-        (field) => [field.name, values.credentials[field.name]],
-      ))
-      startProviderWrite({
-        kind: 'create',
-        input: {
-          ...(targetScopeID ? { target_scope_id: targetScopeID } : {}),
-          name: values.name.trim(), remark: (values.remark ?? '').trim(), provider_type: values.provider_type, credentials,
-        },
-      })
-      return
-    }
-    const item = providerEditor.item
-    startProviderWrite({
-      kind: 'update',
-      id: item.id,
-      providerType: item.provider_type,
-      input: {
-        expected_version: item.version,
-        name: values.name.trim(),
-        remark: (values.remark ?? '').trim(),
-        status: isCreatableProviderType(item.provider_type) ? values.status : 'disabled',
-        ...(isCreatableProviderType(item.provider_type) && values.replace_credentials ? {
-          credentials: Object.fromEntries(credentialFields[item.provider_type].map(
-            (field) => [field.name, values.credentials[field.name]],
-          )),
-        } : {}),
-      },
-    })
-  }
-
-  const closeProviderAndRefresh = () => {
-    clearProviderWriteCredentials(providerAttemptRef.current)
-    providerAttemptRef.current = null
-    setProviderAttempt(null)
-    setProviderWriteError(null)
-    setProviderEditor(null)
-    if (currentSessionAccess('dns.read')) void providersQuery.refetch()
-  }
-
-  const saveCertificateDefaults = () => {
+  // 证书类型或 DNS API 改选即保存；“系统默认设置”= 不带 issuer（平台默认签发机构）。
+  const saveCertificateDefaults = (change: { issuer?: CertificateIssuer; dnsProviderID?: string }) => {
     if (!currentSessionAccess('certificates.manage') || !targetUser || !defaultsQuery.data || defaultsLocked) return
+    const issuer = 'issuer' in change ? change.issuer : defaultIssuer
+    const providerID = 'dnsProviderID' in change ? change.dnsProviderID : defaultProviderID
+    setDefaultIssuer(issuer)
+    setDefaultProviderID(providerID)
     const input: UpdateCertificateDefaultsInput = {
       ...(targetScopeID ? { target_scope_id: targetScopeID } : {}),
       target_user_id: targetUser.id,
-      certificate_type: defaultType,
-      ...(defaultType === 'acme' && defaultProviderID ? { dns_provider_id: defaultProviderID } : {}),
-      ...(defaultType === 'acme' && defaultIssuer ? { issuer: defaultIssuer } : {}),
+      certificate_type: 'acme',
+      ...(providerID ? { dns_provider_id: providerID } : {}),
+      ...(issuer ? { issuer } : {}),
       expected_revision: defaultsQuery.data.revision,
     }
     const next = { input, key: `certificate-defaults-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}` }
     defaultsAttemptRef.current = next
     setDefaultWriteError(null)
     defaultsMutation.mutate()
-  }
-
-  const deleteSelectedProviders = async () => {
-    const token = currentSessionAccess('dns.manage')
-    if (!token) return
-    const selected = providerItems.filter((item) => selectedProviderIDs.includes(item.id))
-    try {
-      for (const item of selected) {
-        await dnsApi.remove(token, item.id, item.version, providerWriteKey('delete'))
-      }
-      setSelectedProviderIDs([])
-      await providersQuery.refetch()
-    } catch (error) {
-      if (currentSessionMatches()) setProviderWriteError(error instanceof ApiError ? error : new ApiError('request failed'))
-    }
   }
 
   const submit = (values: CertificateForm) => {
@@ -1810,22 +1644,17 @@ function CertificateListPageContent({
     setUploadOwner(contextOwner); setOrderOwner(contextOwner); setFromSite(false); setReapplyScopeID(undefined); setRequestOnly(false)
     batchRowsRef.current = []; setBatchRows([]); setBatchOpen(false)
     issuerTouchedRef.current = false
-    autoTypeRef.current = true
-    const uploadedDefault = isTenant && defaultsQuery.data?.certificate_type === 'uploaded'
-    if (uploadedDefault) autoTypeRef.current = false
-    setUploadOpen(uploadedDefault)
-    setEditorOpen(!uploadedDefault)
+    setUploadOpen(false)
+    setEditorOpen(true)
   }
   const openRequest = () => {
     if (!currentSessionAccess('certificates.manage')) return
     resetAddAttempts()
     setOrderOwner(contextOwner); setFromSite(false); setReapplyScopeID(undefined); setRequestOnly(true)
     issuerTouchedRef.current = false
-    autoTypeRef.current = false
     setUploadOpen(false); setBatchOpen(false); setEditorOpen(true)
   }
   const chooseUpload = () => {
-    autoTypeRef.current = false
     if (uploadOpen) return
     carryRef.current = { name: form.getFieldValue('name'), remark: form.getFieldValue('remark') }
     if (queryOwner[0] === 'platform') setUploadOwner(orderOwner)
@@ -1833,7 +1662,6 @@ function CertificateListPageContent({
     setEditorOpen(false); setUploadOpen(true)
   }
   const chooseIssuer = (issuer: CertificateIssuer) => {
-    autoTypeRef.current = false
     issuerTouchedRef.current = true
     setSelectedIssuer(issuer)
     if (!uploadOpen) return
@@ -1848,12 +1676,6 @@ function CertificateListPageContent({
     batchRowsRef.current = []; setBatchRows([])
     setUploadOpen(false); setEditorOpen(tab === 'single'); setBatchOpen(tab === 'batch')
   }
-  // 默认设置晚于弹窗到达时，用户还没点选类型就按默认类型切换一次
-  useEffect(() => {
-    if (!autoTypeRef.current || !addOpen || batchOpen || requestOnly || !addDefaults) return
-    autoTypeRef.current = false
-    if (addDefaults.certificate_type === 'uploaded' && editorOpen && !attempt) chooseUpload()
-  })
   // 可用 DNS 服务商只有一个时自动选中（两个及以上才让用户选）。
   // 平台托管的 DNS 副本只托管平台的解析域，谁申请都不列入证书验证选项
   // （服务端同样拒绝），否则唯一的平台副本会被自动选中、申请只能失败。
@@ -1958,9 +1780,9 @@ function CertificateListPageContent({
     setBatchRows(rows)
     void runBatch()
   }
-  // ZeroSSL EAB 在“默认设置”页由平台管理员填写（system_configuration.manage）。
+  // ZeroSSL EAB 由平台管理员在 全局配置 → 默认配置 → 证书 填写（system_configuration.manage）；证书默认设置页不放 EAB。
   const canManageEAB = queryOwner[0] === 'platform' && Boolean(sessionPrincipal && (sessionPrincipal.permissions.includes('system_configuration.manage') || sessionPrincipal.permissions.includes('platform.admin')))
-  const openEABSettings = () => { closeAdd(); setSectionTab('default'); onSectionChange?.('default') }
+  const openEABSettings = () => { closeAdd(); navigate('/config/default?tab=certificate') }
   const closeAdd = () => {
     if (batchRunning || writesLocked || assetWritesLocked) return
     resetAddAttempts()
@@ -2027,7 +1849,6 @@ function CertificateListPageContent({
     setReapplyScopeID(row.asset.tenant_scope_id)
     setOrderOwner(null)
     setFromSite(false)
-    autoTypeRef.current = false
     issuerTouchedRef.current = false
     setRequestOnly(true)
     setUploadOpen(false)
@@ -2344,84 +2165,10 @@ function CertificateListPageContent({
 		},
 	  ]
 
-  const providerLabels: Record<string, string> = {
-    aliyun: dnsT('providers.aliyun'),
-    cloudflare: dnsT('providers.cloudflare'),
-    huawei: dnsT('providers.huawei'),
-    dnspod_cn: dnsT('providers.dnspod_cn'),
-    dns_com: dnsT('providers.dns_com'),
-    dns_la: dnsT('providers.dns_la'),
-    namecom: dnsT('providers.namecom'),
-    dnsdun: dnsT('providers.dnsdun'),
-  }
   const providerItems = providersQuery.data?.items ?? []
-  const providerPageItems = useMemo(
-    () => providerItems.slice((providerPage - 1) * providerLimit, providerPage * providerLimit),
-    [providerItems, providerLimit, providerPage],
-  )
-  const certificateProviderColumns: TableColumnsType<DNSProvider> = [
-    // CERT-07b：DNS 服务商接口不返回归属用户，不再显示整列占位的"用户"列。
-    { title: 'ID', dataIndex: 'id', width: 190, ellipsis: true },
-    {
-      title: t('dnsApi.columns.name'), dataIndex: 'name', width: 220, ellipsis: true,
-      render: (value: string, item) => item.managed_by === 'platform' ? (
-        <Space size={6}>
-          <span>{value}</span>
-          <Tooltip title={dnsT('platformManaged.hint')}><Tag>{dnsT('platformManaged.tag')}</Tag></Tooltip>
-        </Space>
-      ) : value,
-    },
-    {
-      title: t('dnsApi.columns.type'), dataIndex: 'provider_type', width: 180,
-      render: (value: string) => providerLabels[value] ?? dnsT('providers.unknown', { type: value }),
-    },
-    {
-      title: t('dnsApi.columns.remark'), key: 'remark', width: 180, ellipsis: true,
-      render: (_, item) => {
-        const remark = item.remark?.trim()
-        if (item.status === 'disabled') return remark ? `${remark}（${dnsT('states.disabled')}）` : dnsT('states.disabled')
-        return remark || '—'
-      },
-    },
-    {
-      title: t('dnsApi.columns.actions'), key: 'actions', width: 150, fixed: 'right',
-      render: (_, item) => canManageDNS && item.managed_by !== 'platform' ? (
-        <Space size={2}>
-          {isCreatableProviderType(item.provider_type) ? (
-            <Tooltip title={dnsT('actions.verify')}>
-              <Button
-                type="text" size="small" aria-label={dnsT('actions.verifyNamed', { name: item.name })}
-                icon={<CircleCheck size={15} />} disabled={providerWritesLocked || item.status === 'disabled'}
-                onClick={() => startProviderWrite({ kind: 'verify', id: item.id, providerType: item.provider_type, version: item.version })}
-              />
-            </Tooltip>
-          ) : null}
-          <Tooltip title={dnsT('actions.edit')}>
-            <Button
-              type="text" size="small" aria-label={dnsT('actions.editNamed', { name: item.name })}
-              icon={<Pencil size={15} />} disabled={providerWritesLocked}
-              onClick={() => { setProviderWriteError(null); setProviderEditor({ mode: 'edit', item }) }}
-            />
-          </Tooltip>
-          <Popconfirm
-            title={dnsT('confirm.delete')} okText={dnsT('actions.delete')} cancelText={dnsT('actions.cancel')}
-            okButtonProps={{ danger: true }}
-            onConfirm={() => startProviderWrite({ kind: 'delete', id: item.id, version: item.version })}
-          >
-            <Tooltip title={dnsT('actions.delete')}>
-              <Button danger type="text" size="small" aria-label={dnsT('actions.deleteNamed', { name: item.name })} icon={<Trash2 size={15} />} disabled={providerWritesLocked} />
-            </Tooltip>
-          </Popconfirm>
-        </Space>
-      ) : null,
-    },
-  ]
-
-  const activeError = sectionTab === 'dnsApi'
-    ? providersQuery.error
-    : sectionTab === 'list'
-      ? (activeTab === 'assets' ? assetsQuery.error : query.error)
-      : null
+  const activeError = sectionTab === 'list'
+    ? (activeTab === 'assets' ? assetsQuery.error : query.error)
+    : null
   // 搜索框与高级条件边输入边生效（文本 400ms 防抖，下拉选完即查）。
   useLiveApply({ search: searchDraft, filters: filterDraft }, { search, filters: appliedFilters }, (next) => applyLiveRef.current(next.filters))
   const idSearchToken = currentSessionAccess('certificates.read') ?? ''
@@ -2651,47 +2398,31 @@ function CertificateListPageContent({
           {defaultsQuery.error ? <FeedbackWhen title={t('defaultSettings.loadFailed')} action={<Button size="small" onClick={() => void defaultsQuery.refetch()}>{t('defaultSettings.retry')}</Button>} /> : null}
           {defaultWriteError && !refusedDefault ? <FeedbackWhen title={errorMessage(defaultWriteError, t)} action={defaultWriteError.code === 'version_conflict' ? <Button size="small" onClick={() => void defaultsQuery.refetch()}>{t('defaultSettings.retry')}</Button>
             : defaultsUncertain ? <Button size="small" loading={defaultsMutation.isPending} onClick={() => { if (currentSessionAccess('certificates.manage')) defaultsMutation.mutate() }}>{assetT('actions.retrySameRequest')}</Button> : undefined} /> : null}
-          <div className="certificate-default-field">
-            <label htmlFor="certificate-default-user">{t('defaultSettings.user')}</label>
-            {targetSelector ? targetSelector(defaultsLocked) : targetUser ? (
-              <Input
-                id="certificate-default-user"
-                value={`${targetUser.username}（ID: ${targetUser.displayID ?? targetUser.id}）`}
-                disabled
-                aria-label={t('defaultSettings.user')}
-              />
-            ) : null}
-          </div>
-          <div className="certificate-default-field">
-            <label htmlFor="certificate-default-type">{t('defaultSettings.certificateType')}</label>
-            <Select
-              id="certificate-default-type"
-              disabled={!targetUser || defaultsLocked}
-              value={defaultType}
-              placeholder={targetUser ? t('defaultSettings.certificateTypePlaceholder') : t('defaultSettings.selectUserFirst')}
-              aria-label={t('defaultSettings.certificateType')}
-              options={[
-                { value: 'acme', label: t('defaultSettings.certificateTypeAutomatic') },
-                { value: 'uploaded', label: t('defaultSettings.certificateTypeUploaded') },
-              ]}
-              status={defaultFieldStatus('certificate_type')}
-              onChange={(value: CertificateDefaultType) => { editDefault(); setDefaultType(value); if (value === 'uploaded') { setDefaultProviderID(undefined); setDefaultIssuer(undefined) } }}
-            />
-            {defaultFieldHelp('certificate_type')}
-          </div>
-          {issuerOptions.length > 1 ? <div className="certificate-default-field">
-            <label htmlFor="certificate-default-issuer">{t('defaultSettings.issuer')}</label>
-            <Select
-              id="certificate-default-issuer" allowClear aria-label={t('defaultSettings.issuer')}
-              value={defaultIssuer} placeholder={t('defaultSettings.issuerPlatform')}
-              options={issuerOptions} onChange={(value: CertificateIssuer | undefined) => { editDefault(); setDefaultIssuer(value) }}
-              disabled={!targetUser || defaultType !== 'acme' || defaultsLocked} status={defaultFieldStatus('issuer')}
-            />
-            {defaultFieldHelp('issuer')}
+          {/* 管理员先选用户；租户没有用户行。证书类型/DNS API 改选即保存，没有保存按钮。 */}
+          {targetSelector ? <div className="certificate-default-field">
+            <label>{t('defaultSettings.user')}</label>
+            {targetSelector(defaultsLocked, { label: t('defaultSettings.user'), placeholder: t('defaultSettings.userPlaceholder') })}
           </div> : null}
           <div className="certificate-default-field">
+            <label id="certificate-default-type-label">{t('defaultSettings.certificateType')}</label>
+            {targetUser ? <div role="radiogroup" aria-labelledby="certificate-default-type-label"><Radio.Group
+              className="certificate-default-choices" optionType="button"
+              value={defaultIssuer ?? 'system'} disabled={defaultsReadOnly}
+              onChange={(event) => { const value = event.target.value as CertificateIssuer | 'system'; saveCertificateDefaults({ issuer: value === 'system' ? undefined : value }) }}
+            >
+              <Radio.Button value="system">{t('defaultSettings.certificateTypeSystem')}</Radio.Button>
+              {defaultIssuerChoices.map((issuer) => {
+                const unavailable = issuersQuery.isSuccess && !offeredIssuers.includes(issuer) && issuer !== defaultIssuer
+                const label = t(`issuers.${issuer}`) + (issuer === 'zerossl' ? t('defaultSettings.recommended') : '')
+                const choice = <Radio.Button key={issuer} value={issuer} disabled={unavailable}>{label}</Radio.Button>
+                return unavailable ? <Tooltip key={issuer} title={t('batch.zerosslUnconfigured')}>{choice}</Tooltip> : choice
+              })}
+            </Radio.Group></div> : <span className="certificate-default-hint">{t('defaultSettings.selectUserFirst')}</span>}
+            {defaultFieldHelp('issuer')}
+          </div>
+          <div className="certificate-default-field">
             <label htmlFor="certificate-default-dns">{t('defaultSettings.dnsApi')}</label>
-            {targetUser && canReadDNS ? (
+            {targetUser && canReadDNS ? <div className="certificate-default-control">
               <Select
                 id="certificate-default-dns"
                 allowClear
@@ -2700,105 +2431,21 @@ function CertificateListPageContent({
                 aria-label={t('defaultSettings.dnsApi')}
                 loading={providersQuery.isPending || providersQuery.isFetching}
                 options={providerItems.filter((item) => item.managed_by !== 'platform').map((item) => ({ value: item.id, label: item.name }))}
-                onChange={(value: string | undefined) => { editDefault(); setDefaultProviderID(value) }}
-                disabled={defaultType !== 'acme' || defaultsLocked} status={defaultFieldStatus('dns_provider_id')}
+                onChange={(value: string | undefined) => saveCertificateDefaults({ dnsProviderID: value })}
+                disabled={defaultsReadOnly} status={defaultFieldStatus('dns_provider_id')}
               />
-            ) : (
+              <span className="certificate-default-help">{t('defaultSettings.dnsApiHelp')}</span>
+            </div> : (
               <span className="certificate-default-hint">{t('defaultSettings.dnsApiSelectUser')}</span>
             )}
             {defaultFieldHelp('dns_provider_id')}
           </div>
-          {canManageEAB ? <section className="certificate-default-eab" aria-labelledby="certificate-default-eab-title">
-            <h3 id="certificate-default-eab-title">{t('eabSettings.title')}</h3>
-            <p>{t('eabSettings.description')}</p>
-            <AcmeCACredentialsCard t={systemT} editable />
-          </section> : null}
-          {canManage ? <div className="certificate-default-actions"><Button type="primary" loading={defaultsMutation.isPending} disabled={!targetUser || defaultsQuery.isPending || defaultsQuery.isError || defaultsLocked} onClick={saveCertificateDefaults}>{t('defaultSettings.save')}</Button>{defaultsQuery.data?.updated_at ? <span className="certificate-default-saved">{t('defaultSettings.updatedAt', { value: formatDateTime(defaultsQuery.data.updated_at, i18n.language) })}</span> : null}</div> : null}
         </div>
       ) : null}
-      {sectionTab === 'dnsApi' ? (
+      {sectionTab === 'dnsApi' && canReadDNS ? (
+        // 与网站列表 > DNS API 同一组件、同一份数据；管理员列全部用户的账号并带「用户」列。
         <div className="certificate-section-content certificate-dns-panel">
-          {/* 目标用户选择框与「新增 DNS API/删除选中」同一行，选择框约 320px。 */}
-          <div className="certificate-dns-toolbar">
-            {targetSelector ? <div className="certificate-default-field certificate-dns-target"><label>{assetT('target.label')}</label>{targetSelector(providerWritesLocked)}</div> : null}
-            <Space wrap>
-              {canManageDNS ? <Button type="primary" icon={<Plus size={15} />} disabled={providerWritesLocked || !targetUser} onClick={() => {
-                setProviderWriteError(null)
-                setProviderEditor({ mode: 'create' })
-              }}>{t('dnsApi.actions.create')}</Button> : null}
-              {canManageDNS ? (
-                <Popconfirm
-                  title={t('dnsApi.confirmDeleteSelected')}
-                  okText={t('dnsApi.actions.delete')}
-                  cancelText={t('dnsApi.actions.cancel')}
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => void deleteSelectedProviders()}
-                >
-                  <Button danger disabled={providerWritesLocked || selectedProviderIDs.length === 0}>{t('dnsApi.actions.deleteSelected')}</Button>
-                </Popconfirm>
-              ) : null}
-            </Space>
-            <span className="certificate-dns-total">{t('dnsApi.total', { count: providerItems.length })}</span>
-          </div>
-          {providerUncertain && !providerEditor ? (
-            <OutcomeUnknown title={dnsT('uncertainty.title')} detail={dnsT('uncertainty.description')} action={<Space size={4}>
-                <Button size="small" loading={providerMutation.isPending} onClick={() => providerMutation.mutate()}>{dnsT('actions.retrySameRequest')}</Button>
-                <Button size="small" onClick={closeProviderAndRefresh}>{dnsT('actions.closeAndRefresh')}</Button>
-              </Space>} className="identity-alert" />
-          ) : providerWriteError && !providerEditor ? (
-            <FeedbackWhen title={errorMessage(providerWriteError, dnsT)} onClose={() => setProviderWriteError(null)} />
-          ) : null}
-          {providersQuery.error ? (
-            <FeedbackWhen title={dnsT('errors.loadFailed')} detail={providersQuery.error instanceof ApiError ? errorMessage(providersQuery.error, dnsT) : dnsT('errors.request_failed')} action={<Button size="small" onClick={() => {
-                if (currentSessionAccess('dns.read')) void providersQuery.refetch()
-              }}>{dnsT('actions.retry')}</Button>} />
-          ) : null}
-          <div className="identity-table-scroll" aria-busy={providersQuery.isFetching}>
-            <Table
-              rowKey="id" size="small" columns={certificateProviderColumns} dataSource={providerPageItems}
-              loading={Boolean(targetUser) && (providersQuery.isPending || providersQuery.isFetching)} pagination={false}
-              locale={{ emptyText: !targetUser ? assetT('target.required') : providersQuery.isPending ? ' ' : t('dnsApi.empty') }}
-              rowSelection={canReadDNS ? {
-                selectedRowKeys: selectedProviderIDs,
-                onChange: (keys) => setSelectedProviderIDs(keys.map(String)),
-              } : undefined}
-              scroll={{ x: 1120 }}
-            />
-          </div>
-          <div className="identity-pagination certificate-dns-pagination">
-            <Pagination
-              current={providerPage}
-              pageSize={providerLimit}
-              total={providerItems.length}
-              showSizeChanger
-              pageSizeOptions={[10, 20, 50]}
-              showTotal={(total) => t('dnsApi.total', { count: total })}
-              onChange={(nextPage, nextLimit) => {
-                setProviderPage(nextLimit === providerLimit ? nextPage : 1)
-                setProviderLimit(nextLimit)
-              }}
-            />
-          </div>
-          <ProviderEditor
-            sectioned
-            editor={providerEditor}
-            isAdmin={false}
-            pending={providerMutation.isPending}
-            uncertain={providerUncertain}
-            error={providerEditor ? providerWriteError : null}
-            onCancel={() => {
-              if (!providerWritesLocked) {
-                clearProviderWriteCredentials(providerAttemptRef.current)
-                providerAttemptRef.current = null
-                setProviderAttempt(null)
-                setProviderWriteError(null)
-                setProviderEditor(null)
-              }
-            }}
-            onSubmit={submitProviderEditor}
-            onRetry={() => providerMutation.mutate()}
-            onCloseAndRefresh={closeProviderAndRefresh}
-          />
+          <SiteDnsApiPanel onChanged={() => void queryClient.invalidateQueries({ queryKey: providerPrefix })} />
         </div>
       ) : null}
 		<Modal

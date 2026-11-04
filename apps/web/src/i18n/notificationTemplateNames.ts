@@ -50,6 +50,8 @@ export const notificationTemplateNames: Record<string, string> = {
   'market.supply.cancel_available': '节点市场：供给可无责取消',
   'market.supply.receipt_unconfirmed': '节点市场：订阅配置未能确认',
   'market.supply.node_delivery_failed': '节点市场：订阅配置未在节点生效',
+  'market.node.probe_unreachable': '节点市场：订阅节点本主控探测不可达',
+  'market.node.probe_recovered': '节点市场：订阅节点本主控探测已恢复',
   'market.supply.outage': '节点市场：供给无在线可用节点',
   'market.supply.restored': '节点市场：供给已恢复',
   'market.terms.changed': '节点市场：供给条款变更',
@@ -135,6 +137,7 @@ export const notificationVariableNames: Record<string, string> = {
   trigger_5xx: '触发 5xx 阈值', trigger_qps: '触发 QPS 阈值', truncated: '裁剪条数', until: '有效期至', username: '用户名', window_end: '统计结束时间',
   window_minutes: '统计窗口（分钟）', window_start: '统计开始时间', xdp_event: 'XDP 事件', xdp_reason: 'XDP 原因代码',
   xdp_reason_text: 'XDP 原因说明',
+  market_health: '市场判定', seller: '卖家',
 }
 
 const localeSuffix = /\.(zh-cn|en-us)$/

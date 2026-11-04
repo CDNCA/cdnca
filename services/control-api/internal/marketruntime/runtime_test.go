@@ -174,3 +174,49 @@ func (f *failOnce) Send(ctx context.Context, id marketclient.Identity, out marke
 	}
 	return f.fakeMarket.Send(ctx, id, out)
 }
+
+// A reply the market refuses for good (403: the grant was reissued since the
+// request) is dropped: the messages behind it are still answered and acked
+// instead of the loop retrying the refused reply forever.
+func TestRelaySkipsReplyTheMarketRefuses(t *testing.T) {
+	sender := uuid.New()
+	msg := func(seq int64) marketclient.Inbound {
+		return marketclient.Inbound{Seq: seq, Header: envelope.Header{MessageID: uuid.New(), SenderMemberID: sender,
+			GrantID: uuid.New(), Operation: siteconf.OpStatus}}
+	}
+	inbox := []marketclient.Inbound{msg(1), msg(2), msg(3)}
+	market := &fakeMarket{inbox: inbox}
+	r := New(Config{StateDir: t.TempDir()}, nil, market, &fakeSupply{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r.market = &refuseKey{fakeMarket: market, key: "reply-" + inbox[0].Header.MessageID.String()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() { r.relayLoop(ctx); close(done) }()
+	for {
+		market.mu.Lock()
+		n, acked := len(market.sent), append([]int64(nil), market.acked...)
+		market.mu.Unlock()
+		if n == 2 && len(acked) > 0 && acked[len(acked)-1] == 3 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("replies sent = %d, acked %v", n, acked)
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+}
+
+type refuseKey struct {
+	*fakeMarket
+	key string
+}
+
+func (f *refuseKey) Send(ctx context.Context, id marketclient.Identity, out marketclient.Outbound) (int64, error) {
+	if out.IdempotencyKey == f.key {
+		return 0, &marketclient.RejectedError{Status: 403, Code: "forbidden"}
+	}
+	return f.fakeMarket.Send(ctx, id, out)
+}

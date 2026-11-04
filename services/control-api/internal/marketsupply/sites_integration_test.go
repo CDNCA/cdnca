@@ -120,7 +120,9 @@ func TestHandleSiteLifecycle(t *testing.T) {
 	unfiled.Domains = []string{"www.example.cn", "shop.example.cn"}
 	unfiled.WebSocket = true
 	r := call(siteconf.OpPrepare, unfiled.Domains, siteconf.CommitRequest{SiteID: siteID, Revision: 1, Config: unfiled})
-	if r.OK || codes(r.Blockers) != "icp_unfiled,websocket_not_allowed" {
+	// The grant says websocket=false (signed before market 077): WebSocket is
+	// still not refused, only the unfiled domain is.
+	if r.OK || codes(r.Blockers) != "icp_unfiled" {
 		t.Fatalf("blocked prepare = %+v", r)
 	}
 

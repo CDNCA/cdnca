@@ -129,6 +129,9 @@ type SupplyGroup struct {
 	Revision int64             `json:"revision"`
 	Name     string            `json:"name"`
 	Nodes    []SupplyGroupNode `json:"nodes"`
+	// L2ConfigID is the seller's L2 configuration of the supply
+	// (supply_l2.go); nil = sites go straight to the origin.
+	L2ConfigID *uuid.UUID `json:"l2_config_id"`
 }
 
 type SupplyGroupWrite struct {
@@ -136,8 +139,12 @@ type SupplyGroupWrite struct {
 	ExpectedRevision int64       `json:"expected_revision"`
 	Name             string      `json:"name"`
 	NodeIDs          []uuid.UUID `json:"node_ids"`
-	IdempotencyKey   string      `json:"-"`
-	RequestID        string      `json:"-"`
+	// L2ConfigID: omitted keeps the group's current L2 configuration, ""
+	// clears it, an id sets it (one of the platform's usable L2
+	// configurations, ErrSupplyL2Unusable otherwise).
+	L2ConfigID     *string `json:"l2_config_id,omitempty"`
+	IdempotencyKey string  `json:"-"`
+	RequestID      string  `json:"-"`
 }
 
 // Put creates (GroupID nil) or replaces a supply group from a node set.
@@ -165,17 +172,34 @@ func (s *SupplyGroups) Put(ctx context.Context, actor SupplyActor, w SupplyGroup
 	// its place (removing other nodes or refreshing must not be blocked),
 	// and its endpoint takes its current IP 归属 either way.
 	current := map[uuid.UUID]bool{}
+	var l2ConfigID *uuid.UUID
 	if w.GroupID != uuid.Nil {
 		if group, err := s.scheduler.GetMarketSupplyGroup(ctx, actor.scheduler(), w.GroupID); err == nil {
 			for _, endpoint := range group.Endpoints {
 				current[endpoint.NodeID] = true
 			}
+			l2ConfigID = group.L2ConfigID
 		} else if !errors.Is(err, nodescheduler.ErrNotFound) {
 			return SupplyGroup{}, mapSchedulerError(err)
 		}
 	}
 	if unmapped := unmappedNodes(nodes, func(id uuid.UUID) bool { return !current[id] }); len(unmapped) > 0 {
 		return SupplyGroup{}, &LocationUnmappedError{Nodes: unmapped}
+	}
+	// Only a configuration the seller names now is checked: a kept one that
+	// lost its nodes must not block editing the group's nodes.
+	if w.L2ConfigID != nil {
+		l2ConfigID = nil
+		if *w.L2ConfigID != "" {
+			id, err := uuid.Parse(*w.L2ConfigID)
+			if err != nil || id == uuid.Nil {
+				return SupplyGroup{}, ErrSupplyInvalid
+			}
+			if err := checkL2Config(ctx, s.pool, actor.ScopeID, id); err != nil {
+				return SupplyGroup{}, err
+			}
+			l2ConfigID = &id
+		}
 	}
 	if w.GroupID == uuid.Nil {
 		// A retried create (same actor and key) must send the same request:
@@ -189,7 +213,7 @@ func (s *SupplyGroups) Put(ctx context.Context, actor SupplyActor, w SupplyGroup
 	}
 	result, err := s.scheduler.PutMarketSupplyGroup(ctx, actor.scheduler(), nodescheduler.PutGroupRequest{
 		GroupID: w.GroupID, ExpectedRevision: w.ExpectedRevision, Name: supplyGroupLabel + name,
-		Note: "节点市场供给（自动生成，不在线路组列表显示）", Endpoints: endpoints,
+		Note: "节点市场供给（自动生成，不在线路组列表显示）", Endpoints: endpoints, L2ConfigID: l2ConfigID,
 		IdempotencyKey: w.IdempotencyKey, RequestID: w.RequestID,
 	})
 	if err != nil {
@@ -226,7 +250,7 @@ func (s *SupplyGroups) Get(ctx context.Context, actor SupplyActor, id uuid.UUID)
 
 func toSupplyGroup(group nodescheduler.LineGroupRevision, names []SupplyGroupNode) SupplyGroup {
 	out := SupplyGroup{ID: group.GroupID, Revision: group.Revision,
-		Name: strings.TrimPrefix(group.Name, supplyGroupLabel), Nodes: []SupplyGroupNode{}}
+		Name: strings.TrimPrefix(group.Name, supplyGroupLabel), Nodes: []SupplyGroupNode{}, L2ConfigID: group.L2ConfigID}
 	for _, e := range group.Endpoints {
 		node := SupplyGroupNode{NodeID: e.NodeID, Address: e.Address, Region: e.Region, Carrier: e.Carrier}
 		if i := slices.IndexFunc(names, func(n SupplyGroupNode) bool { return n.NodeID == e.NodeID }); i >= 0 {

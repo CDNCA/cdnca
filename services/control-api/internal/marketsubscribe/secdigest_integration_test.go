@@ -101,4 +101,37 @@ func TestReceiveDigestBindsToLocalSite(t *testing.T) {
 	if len(store.rows) != 1 {
 		t.Fatalf("foreign digests stored: %d", len(store.rows))
 	}
+	if store.rows[0].Extension != (secdigest.Extension{}) {
+		t.Fatalf("a leaf without the extension stored %+v", store.rows[0].Extension)
+	}
+
+	// a leaf that sends the observe-only count; its log lines ride
+	// in Logs with action log and the enforced summary is unchanged.
+	extended := good
+	extended.Logs = append(extended.Logs, secdigest.Log{AtMS: window*1000 + 9, ClientIP: "203.0.113.8",
+		Host: "www.subscriber.example", Path: "/search", Action: "log", Detector: "xss", RuleID: "941100"})
+	signed, err := secdigest.SignExtended(extended, secdigest.Extension{Logged: 30}, leafKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(signed)
+	h := envelope.Header{MessageID: uuid.New(), SenderMemberID: leaf, GrantID: grantID, Operation: secdigest.Operation,
+		IdempotencyKey: secdigest.IdempotencyKey(leafSite, window)}
+	if err := svc.ReceiveDigest(ctx, h, body); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.rows) != 2 || store.rows[1].Extension.Logged != 30 || store.rows[1].Digest.Summary.Events != 12 ||
+		len(store.rows[1].Digest.Logs) != 2 || store.rows[1].Digest.Logs[1].Action != "log" {
+		t.Fatalf("extended digest stored %+v", store.rows)
+	}
+	// The extension signed by another key: dropped, not stored without it.
+	forged, _ := secdigest.SignExtended(extended, secdigest.Extension{Logged: 30}, otherKey)
+	signed.ExtensionSignature = forged.ExtensionSignature
+	body, _ = json.Marshal(signed)
+	if err := svc.ReceiveDigest(ctx, h, body); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.rows) != 2 {
+		t.Fatalf("digest with a forged extension stored: %d", len(store.rows))
+	}
 }

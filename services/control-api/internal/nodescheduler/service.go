@@ -315,12 +315,13 @@ func validateEndpointNodeAddresses(ctx context.Context, tx pgx.Tx, scopeID uuid.
 
 // validateLineGroupReference: a line group's L2 configuration (L2配置) is an
 // L2 topology configuration of the scope (migration 504), never another line
-// group; its region is empty (any) or the group's.
+// group; its region is empty (any) or the group's. A market supply group has
+// no region and takes any (migration 629).
 func validateLineGroupReference(
 	ctx context.Context,
 	tx pgx.Tx,
 	scopeID uuid.UUID,
-	region string,
+	region, purpose string,
 	l2ConfigID *uuid.UUID,
 ) error {
 	if l2ConfigID == nil {
@@ -338,7 +339,7 @@ func validateLineGroupReference(
 	if err != nil {
 		return fmt.Errorf("load line group L2 configuration: %w", err)
 	}
-	if configRegion != "" && configRegion != region {
+	if purpose != PurposeMarketSupply && configRegion != "" && configRegion != region {
 		return ErrInvalidInput
 	}
 	return nil
@@ -451,7 +452,7 @@ func (s *Service) putGroup(
 			(!creating && currentRevision != normalized.expectedRevision) {
 			return ErrRevisionConflict
 		}
-		if err := validateLineGroupReference(ctx, tx, actor.ScopeID, normalized.region, normalized.l2ConfigID); err != nil {
+		if err := validateLineGroupReference(ctx, tx, actor.ScopeID, normalized.region, normalized.purpose, normalized.l2ConfigID); err != nil {
 			return err
 		}
 		if !creating {

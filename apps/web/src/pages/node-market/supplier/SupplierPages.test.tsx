@@ -383,21 +383,26 @@ describe('supplier holds, complaints, switches, resale, commission', () => {
     const inherited = await screen.findByTestId('inherited-terms')
     expect(within(inherited).getByText('继承自上游，不可放宽')).toBeInTheDocument()
     expect(within(inherited).getByText('域名数 ≤ 10 个 · 拒绝新增')).toBeInTheDocument()
-    expect(within(inherited).getByText('HTTP 4 个 · 四层 0 个')).toBeInTheDocument()
+    expect(within(inherited).getByText('HTTP(S) 4 个 · 四层 0 个')).toBeInTheDocument()
+    expect(within(inherited).getByText('WebSocket 已包含 · HTTP/3 无')).toBeInTheDocument()
     expect(screen.getByTestId('upstream-domains')).toHaveTextContent('上游 ≤ 10 个（拒绝新增），只能调低')
     expect(screen.getByTestId('upstream-qps')).toHaveTextContent('上游不限，可自设')
     // Inherited caps stay on; the cap field is bounded by the upstream; tags the upstream lacks are off.
     const table = screen.getByRole('table', { name: '限额' })
     expect(within(table).getByRole('checkbox', { name: '域名数' })).toBeDisabled()
     expect(within(table).getByRole('spinbutton', { name: '上限 域名数' })).toHaveAttribute('aria-valuemax', '10')
-    expect(screen.getByRole('spinbutton', { name: 'HTTP 端口数' })).toHaveAttribute('aria-valuemax', '4')
+    expect(screen.getByRole('spinbutton', { name: 'HTTP(S) 端口数' })).toHaveAttribute('aria-valuemax', '4')
+    // WebSocket is included, not a switch; HTTP/3 the upstream lacks cannot be turned on.
+    expect(screen.getByTestId('caps-websocket')).toHaveTextContent('已包含，不可关闭')
+    expect(screen.queryByRole('switch', { name: 'WebSocket' })).not.toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'HTTP/3' })).toBeDisabled()
     expect(screen.getByRole('switch', { name: '抗投诉' })).toBeDisabled()
     expect(screen.getByRole('switch', { name: '要求订阅方域名已备案' })).toBeDisabled()
     // Tightened: fewer ports and domains.
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: 'tight' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: '日价（元 / 天）' }), { target: { value: '0.09' } })
     fireEvent.change(within(table).getByRole('spinbutton', { name: '上限 域名数' }), { target: { value: '3' } })
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'HTTP 端口数' }), { target: { value: '1' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'HTTP(S) 端口数' }), { target: { value: '1' } })
     fireEvent.click(screen.getByRole('button', { name: '创建并上架转售报价' }))
     expect(await screen.findByText('转售报价已上架')).toBeInTheDocument()
     const body = JSON.parse(String(calls(fetchMock, 'POST', '/v1/admin/market/offers')[0][1]?.body))
@@ -454,7 +459,7 @@ describe('supplier holds, complaints, switches, resale, commission', () => {
     fireEvent.click(await screen.findByText('Bought locked'))
     const totals = await screen.findByTestId('combo-totals')
     expect(within(totals).getByText('各上游叶子按路径取最小值：每个上游仍受它自己的冻结条款约束，合计只作参考。')).toBeInTheDocument()
-    expect(within(totals).getByText('HTTP 6 个 · 四层 1 个')).toBeInTheDocument()
+    expect(within(totals).getByText('HTTP(S) 6 个 · 四层 1 个')).toBeInTheDocument()
     expect(within(totals).getByText('≤ 15 个')).toBeInTheDocument()
     // Traffic is capped on one component only: no total.
     expect(within(totals).queryByText(/月流量/)).not.toBeInTheDocument()
@@ -465,7 +470,8 @@ describe('supplier holds, complaints, switches, resale, commission', () => {
     const body = JSON.parse(String(calls(fetchMock, 'POST', '/v1/admin/market/offers')[0][1]?.body))
     expect(body.components).toEqual([{ kind: 'upstream', subscription_id: '12121212-1212-4121-8121-121212121212' },
       { kind: 'upstream', subscription_id: '88888888-8888-4888-8888-888888888888' }])
-    expect(body.allocation).toEqual({ http_ports: 6, stream_ports: 1, websocket: false, http3: false })
+    // WebSocket is in every offer, even when an upstream snapshot says false.
+    expect(body.allocation).toEqual({ http_ports: 6, stream_ports: 1, websocket: true, http3: false })
     expect(calls(fetchMock, 'POST', '/v1/admin/market/supply-groups')).toHaveLength(0)
     expect(await screen.findByText(/转售报价已创建为草稿/)).toBeInTheDocument()
   })

@@ -109,6 +109,61 @@ func (client *Client) ListAttackSummaries(ctx context.Context, from, to time.Tim
 	return result, nil
 }
 
+// LoggedSiteSummary is one site's observe-only WAF / CC decisions (action
+// "log") in a window, in requests (market attack digests carry
+// them next to the enforced ones; ListAttackSummaries keeps leaving them out).
+type LoggedSiteSummary struct {
+	TenantID string
+	SiteID   string
+	Logged   uint64
+}
+
+const loggedSummarySQL = `SELECT
+	toString(tenant_id) AS tenant_id,
+	toString(site_id) AS site_id,
+	toUInt64(sum(event_count)) AS logged
+FROM security_events FINAL
+WHERE metric_version = 1
+	AND event_type IN ('waf', 'cc') AND action = 'log'
+	AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
+	AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
+GROUP BY tenant_id, site_id
+ORDER BY logged DESC, tenant_id, site_id
+LIMIT {row_limit:UInt16}
+FORMAT JSONEachRow`
+
+type loggedSummaryRow struct {
+	TenantID string `json:"tenant_id"`
+	SiteID   string `json:"site_id"`
+	Logged   uint64 `json:"logged"`
+}
+
+// ListLoggedSummaries returns the sites with observe-only WAF / CC
+// decisions in [from, to), busiest first, across every tenant (callers
+// enforce tenant ownership when they act on a row).
+func (client *Client) ListLoggedSummaries(ctx context.Context, from, to time.Time, limit uint16) ([]LoggedSiteSummary, error) {
+	if client == nil || ctx == nil || !from.Before(to) || limit < 1 || limit > MaxAttackSummarySites {
+		return nil, ErrInvalidInput
+	}
+	parameters := url.Values{
+		"param_from_ms":   {strconv.FormatInt(from.UTC().UnixMilli(), 10)},
+		"param_to_ms":     {strconv.FormatInt(to.UTC().UnixMilli(), 10)},
+		"param_row_limit": {strconv.FormatUint(uint64(limit), 10)},
+	}
+	rows, err := queryRows[loggedSummaryRow](client, ctx, loggedSummarySQL, parameters, int(limit))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]LoggedSiteSummary, 0, len(rows))
+	for _, row := range rows {
+		if !validCanonicalUUID(row.TenantID) || !validCanonicalUUID(row.SiteID) || row.Logged < 1 {
+			return nil, ErrInvalidResponse
+		}
+		result = append(result, LoggedSiteSummary{TenantID: row.TenantID, SiteID: row.SiteID, Logged: row.Logged})
+	}
+	return result, nil
+}
+
 func unmappedIP(value string) string {
 	address, err := netip.ParseAddr(value)
 	if err != nil {

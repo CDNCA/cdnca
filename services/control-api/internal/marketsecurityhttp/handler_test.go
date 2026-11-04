@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +23,10 @@ type fakeReader struct {
 	limit  int
 	rows   []securityanalytics.MarketSecurityLog
 	err    error
+
+	countSite uuid.UUID
+	counts    securityanalytics.MarketSecurityCounts
+	countErr  error
 }
 
 func (f *fakeReader) ListMarketSecurityLogs(_ context.Context, tenant uuid.UUID, filter securityanalytics.MarketSecurityFilter,
@@ -29,6 +34,11 @@ func (f *fakeReader) ListMarketSecurityLogs(_ context.Context, tenant uuid.UUID,
 	f.calls++
 	f.tenant, f.filter, f.after, f.limit = tenant, filter, after, limit
 	return f.rows, f.err
+}
+
+func (f *fakeReader) MarketSecurityCounts(_ context.Context, _, site uuid.UUID, _, _ time.Time) (securityanalytics.MarketSecurityCounts, error) {
+	f.countSite = site
+	return f.counts, f.countErr
 }
 
 func TestHandler(t *testing.T) {
@@ -77,18 +87,27 @@ func TestHandler(t *testing.T) {
 		rows[i] = securityanalytics.MarketSecurityLog{SiteID: site, LeafRef: "0123abcd", Cursor: "c" + string(rune('0'+i))}
 	}
 	reader.rows = rows
+	reader.counts = securityanalytics.MarketSecurityCounts{Blocked: 4, Challenged: 3, Banned: 2, Logged: 15}
 	recorder, body := call("tenant", TenantRoute, with(map[string]string{"site_id": site.String(), "client_ip": "::ffff:198.51.100.7",
-		"host": "www.example.test", "limit": "2", "cursor": "prev"}))
-	if recorder.Code != 200 || len(body.Data) != 2 || body.Meta.NextCursor != "c1" {
+		"host": "www.example.test", "action": "log", "limit": "2", "cursor": "prev"}))
+	if recorder.Code != 200 || len(body.Data) != 2 || body.Meta.NextCursor != "c1" || body.Meta.Counts != reader.counts {
 		t.Fatalf("tenant page %d %s", recorder.Code, recorder.Body)
 	}
 	if reader.tenant != tenant || reader.limit != 3 || reader.after != "prev" || reader.filter.Site != site ||
-		reader.filter.ClientIP != "198.51.100.7" || reader.filter.Host != "www.example.test" {
+		reader.filter.ClientIP != "198.51.100.7" || reader.filter.Host != "www.example.test" || reader.filter.Action != "log" ||
+		reader.countSite != site {
 		t.Fatalf("reader got %+v", reader)
 	}
 	reader.rows = rows[:1]
-	if recorder, body := call("tenant", TenantRoute, window); recorder.Code != 200 || body.Meta.NextCursor != "" || reader.limit != defaultLimit+1 {
+	if recorder, body := call("tenant", TenantRoute, window); recorder.Code != 200 || body.Meta.NextCursor != "" || reader.limit != defaultLimit+1 ||
+		reader.filter.Action != "" || reader.countSite != uuid.Nil {
 		t.Fatalf("last page %d %s", recorder.Code, recorder.Body)
+	}
+	// An old client reads meta.next_cursor only; zero counts are still sent.
+	reader.counts = securityanalytics.MarketSecurityCounts{}
+	if recorder, _ := call("tenant", TenantRoute, window); recorder.Code != 200 ||
+		!strings.Contains(recorder.Body.String(), `"counts":{"blocked":0,"challenged":0,"banned":0,"logged":0}`) {
+		t.Fatalf("zero counts %d %s", recorder.Code, recorder.Body)
 	}
 	other := uuid.New()
 	if recorder, _ := call("admin", AdminRoute, with(map[string]string{"tenant_id": other.String()})); recorder.Code != 200 || reader.tenant != other {
@@ -111,6 +130,7 @@ func TestHandler(t *testing.T) {
 		"bad ip":            {"tenant", TenantRoute, with(map[string]string{"client_ip": "x"}), 400},
 		"bad host":          {"tenant", TenantRoute, with(map[string]string{"host": "A B"}), 400},
 		"bad limit":         {"tenant", TenantRoute, with(map[string]string{"limit": "101"}), 400},
+		"bad action":        {"tenant", TenantRoute, with(map[string]string{"action": "allow"}), 400},
 		"unknown parameter": {"tenant", TenantRoute, with(map[string]string{"x": "1"}), 400},
 	} {
 		if recorder, _ := call(c.token, c.path, c.q); recorder.Code != c.status {
@@ -120,6 +140,11 @@ func TestHandler(t *testing.T) {
 	if reader.calls != calls {
 		t.Fatal("rejected requests reached ClickHouse")
 	}
+	reader.countErr = securityanalytics.ErrClickHouse
+	if recorder, _ := call("tenant", TenantRoute, window); recorder.Code != 503 {
+		t.Fatalf("counts failure %d", recorder.Code)
+	}
+	reader.countErr = nil
 	reader.err = securityanalytics.ErrMarketCursor
 	if recorder, _ := call("tenant", TenantRoute, window); recorder.Code != 400 {
 		t.Fatalf("bad cursor %d", recorder.Code)

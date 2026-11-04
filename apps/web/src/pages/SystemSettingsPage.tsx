@@ -23,6 +23,7 @@ import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { ChevronDown, RefreshCw, RotateCcw, Save, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 
 import { ApiError, type Principal } from '../api/auth'
 import { securityPoliciesApi } from '../api/securityPolicies'
@@ -931,7 +932,9 @@ function DefaultsFields({ form, t, ccPolicyOptions, ccPolicyLoading, editable, o
   onOverridesChange: () => void
 }) {
   const [scope, setScope] = useState('global')
-  const [tab, setTab] = useState('website')
+  // 证书页“去配置”（ZeroSSL EAB）以 ?tab=certificate 直达证书页签。
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState(() => searchParams.get('tab') === 'certificate' ? 'certificate' : 'website')
   return <>
     <Tabs className="configuration-scope-tabs" activeKey={scope} onChange={setScope} items={[
       { key: 'global', label: t('parity.tabs.global') },

@@ -7,7 +7,18 @@ import { validSiteTLSCipherSuites } from '../api/sites'
 // 黑名单时间 1–86400 秒、白名单时间 60–604800 秒（与 CC 策略同一范围）；DNS API 与规则库为 ID；
 // 上传限制 1–1024 MB；源站请求头每行「名称: 值」，名称不重复（其余由后端按站点 HTTP 策略校验）；
 // 网站缓存为缓存策略 JSON、条件源站为 {"routes":[...]} 且每条 pool_id 为占位 @default，都至少一条规则（细则由后端校验）。
-const tlsVersions = ['TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3']
+export const tlsVersions = ['TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3']
+
+// 设置项下拉顺序（ssl_ciphers 本平台分预设与自定义套件，回源超时分连接与读取，回源长连接为本平台补充项，
+// 白名单IP / 黑名单IP 本平台是一个规则库默认）
+export const siteDefaultSettingOrder: readonly SiteDefaultSettingName[] = [
+  'cc_ban_seconds', 'cc_pass_seconds', 'proxy_cache', 'http_listen_port', 'https_listen_port', 'hsts', 'http2', 'http3',
+  'force_ssl_enable', 'ssl_protocols', 'ssl_cipher_preset', 'ssl_cipher_suites', 'ssl_prefer_server_ciphers', 'ocsp_stapling',
+  'origin_protocol', 'backend_http_port', 'backend_https_port', 'origin_connect_timeout', 'origin_read_timeout', 'req_header',
+  'balance_way', 'ups_keepalive', 'ups_keepalive_timeout', 'cc_policy', 'waf_policy', 'gzip_enable', 'websocket_enable',
+  'post_size_limit', 'block_proxy', 'send_real_time', 'recv_real_time', 'cond_origin', 'block_region', 'acl_policy',
+  'dns_provider', 'ipv6_enable',
+]
 
 export function siteDefaultValueError(name: SiteDefaultSettingName | undefined, raw: string): 'ports' | 'port' | 'timeout' | 'connectTimeout' | 'protocols' | 'banSeconds' | 'passSeconds' | 'dnsProvider' | 'policy' | 'postSize' | 'reqHeader' | 'document' | 'cipherSuites' | null {
   const value = raw.trim()

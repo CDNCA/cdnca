@@ -312,7 +312,7 @@ func buildMarketProbe(enabled string, edgeConnection natsRuntimeConnection, pool
 	}
 	cfg := marketprobe.Config{Identity: identity, Grants: grants}
 	if plugins != nil {
-		cfg.Plugins, cfg.Serving = plugins, plugins
+		cfg.Plugins, cfg.Serving, cfg.L2 = plugins, plugins, plugins
 	}
 	return marketprobe.New(pool, client, requester, cfg,
 		slog.Default().With("component", "market-probe")), "", nil

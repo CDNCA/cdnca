@@ -19,6 +19,24 @@ describe('marketSecurity API', () => {
     expect(page.meta.next_cursor).toBe('n')
   })
 
+  it('sends the decision filter and reads per-decision counts', async () => {
+    const counts = { blocked: 4, challenged: 3, banned: 2, logged: 15 }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: [{ ...row, action: 'log' }], meta: { counts },
+    })))
+    const page = await listMarketSecurityLogs('token', 'tenant', { from: 'a', to: 'b', action: 'log' }, 10)
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/v1/analytics/market-security?from=a&to=b&limit=10&action=log')
+    expect(page.meta.counts).toEqual(counts)
+    expect(page.data[0].action).toBe('log')
+    // A server built before counts omits them.
+    expect(parseMarketSecurityPage({ data: [], meta: {} }).meta.counts).toBeUndefined()
+    for (const bad of [{ ...counts, logged: -1 }, { ...counts, logged: 1.5 }, { ...counts, logged: '1' }, { blocked: 1 }]) {
+      expect(() => parseMarketSecurityPage({ data: [], meta: { counts: bad } })).toThrow()
+    }
+    await expect(listMarketSecurityLogs('token', 'tenant', { from: 'a', to: 'b', action: 'allow' as never }, 10))
+      .rejects.toMatchObject({ status: 400 })
+  })
+
   it('rejects malformed requests and responses', async () => {
     await expect(listMarketSecurityLogs('token', 'admin', { from: 'a', to: 'b' }, 5)).rejects.toMatchObject({ status: 400 })
     expect(() => parseMarketSecurityPage({ data: [{ ...row, site_id: 'x' }], meta: {} })).toThrow()

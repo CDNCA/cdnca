@@ -8,7 +8,7 @@ import { principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
 import SiteDefaultsPanel from './SiteDefaultsPanel'
 import { CacheRulesDefaultEditor, CondOriginDefaultEditor } from './SiteDefaultDocumentEditors'
-import { siteDefaultValueError } from './siteDefaultValue'
+import { siteDefaultSettingOrder, siteDefaultValueError } from './siteDefaultValue'
 
 // fp-site SITE-CURRENT-03/04/05/06/08（网站列表 > 默认设置）。
 
@@ -18,7 +18,7 @@ const userID = '019a03a3-735c-7b8c-9cc2-8543d041c822'
 function row(index: number, patch: Partial<SiteUserDefault> = {}): SiteUserDefault {
   return {
     id: `019a1b00-0000-7000-8000-00000000000${index}`, display_id: String(index), scope_id: scope, owner_user_id: userID,
-    setting_name: 'websocket_enable', setting_value: '1', scope_name: 'global', group_id: null, group_name: null,
+    owner: { id: userID, display_id: '7', display_name: 'jason' }, setting_name: 'websocket_enable', setting_value: '1', scope_name: 'global', group_id: null, group_name: null,
     enabled: true, version: 1, created_at: '2026-10-25T00:00:00Z', updated_at: '2026-10-25T00:00:00Z', ...patch,
   }
 }
@@ -31,6 +31,14 @@ function signIn(permissions = ['sites.read', 'sites.manage']) {
 }
 
 const dialogs = () => screen.queryAllByRole('dialog').filter((element) => !element.classList.contains('cdnca-feedback'))
+
+// 新增时设置项不预选，先选设置项再填设置值
+async function chooseSetting(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, label: string) {
+  const box = within(dialog).getByRole('combobox', { name: '设置项' })
+  await user.click(box)
+  await user.type(box, label) // 下拉是虚拟列表，先搜索
+  await user.click(await screen.findByText(label, { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+}
 
 describe('SiteDefaultsPanel', () => {
   beforeEach(async () => {
@@ -143,7 +151,7 @@ describe('SiteDefaultsPanel', () => {
       : json({ items: [row(1, { setting_name: 'dns_provider', setting_value: provider })], total: 1, page: 1, limit: 10 }))
     renderWithProviders(<SiteDefaultsPanel />)
     expect(await screen.findByText('阿里云主账号')).toBeInTheDocument()
-    expect(screen.getByText('DNS API（自动添加记录）')).toBeInTheDocument()
+    expect(screen.getByText('DNS API')).toBeInTheDocument()
   })
 
   it('shows choice defaults by their labels', async () => {
@@ -153,10 +161,11 @@ describe('SiteDefaultsPanel', () => {
       row(3, { setting_name: 'balance_way', setting_value: 'ip_hash' }),
     ], total: 3, page: 1, limit: 10 }))
     renderWithProviders(<SiteDefaultsPanel />)
-    expect(await screen.findByText('跟随访问协议')).toBeInTheDocument()
+    expect(await screen.findByText('跟随协议')).toBeInTheDocument()
     expect(screen.getByText('回源协议')).toBeInTheDocument()
     expect(screen.getByText('兼容')).toBeInTheDocument()
     expect(screen.getByText('定源（IP Hash）')).toBeInTheDocument()
+    expect(screen.getByText('ssl_ciphers')).toBeInTheDocument()
   })
 
   it('locks a batch while it runs and retries an unknown item with its original key; later items wait (SITE-CURRENT-03)', async () => {
@@ -222,6 +231,7 @@ describe('SiteDefaultsPanel', () => {
     renderWithProviders(<SiteDefaultsPanel />)
     await user.click(await screen.findByRole('button', { name: /新增设置/ }))
     const dialog = dialogs()[0]
+    await chooseSetting(user, dialog, 'HTTP监听端口')
     await user.type(within(dialog).getByRole('textbox', { name: '设置值' }), '8080')
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
     await waitFor(() => expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled())
@@ -244,7 +254,7 @@ describe('SiteDefaultsPanel', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [row(1, { setting_name: 'block_region', setting_value: 'abrord_no_inc' })],
       total: 1, page: 1, limit: 10 }))
     renderWithProviders(<SiteDefaultsPanel />)
-    expect(await screen.findByText('屏蔽境外（不含港澳台）')).toBeInTheDocument()
+    expect(await screen.findByText('屏蔽海外')).toBeInTheDocument()
     expect(screen.getByText('区域屏蔽')).toBeInTheDocument()
   })
 
@@ -257,7 +267,7 @@ describe('SiteDefaultsPanel', () => {
     ], total: 2, page: 1, limit: 10 }))
     renderWithProviders(<SiteDefaultsPanel />)
     expect(await screen.findByText('自定义')).toBeInTheDocument()
-    expect(screen.getByText('自定义套件')).toBeInTheDocument()
+    expect(screen.getByText('ssl_ciphers 自定义套件')).toBeInTheDocument()
     expect(screen.getByText('ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256')).toBeInTheDocument()
   })
 
@@ -307,12 +317,106 @@ describe('SiteDefaultsPanel', () => {
     expect(values).toHaveLength(1)
   })
 
+  // 设置项下拉 36 项全部在、按既定顺序；开关用 Switch、ssl_protocols 多选框、回源协议含跟随协议和端口
+  it('offers every setting in the competitor order with its control', async () => {
+    expect([...siteDefaultSettingOrder].sort()).toEqual([...siteDefaultSettingNames].sort())
+    expect(siteDefaultSettingOrder.slice(0, 4)).toEqual(['cc_ban_seconds', 'cc_pass_seconds', 'proxy_cache', 'http_listen_port'])
+    expect(siteDefaultSettingOrder.at(-1)).toBe('ipv6_enable')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => init?.method === 'POST'
+      ? json(row(9), 201) : json({ items: [], total: 0, page: 1, limit: 10 }))
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteDefaultsPanel />)
+    await user.click(await screen.findByRole('button', { name: /新增设置/ }))
+    const dialog = dialogs()[0]
+    for (const section of ['配置对象', '设置内容', '生效范围']) expect(within(dialog).getByText(section)).toBeInTheDocument()
+    expect(within(dialog).getByText('请选择设置项后编辑默认值。')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('combobox', { name: '用户' })).toBeNull()
+    await chooseSetting(user, dialog, 'ssl_protocols')
+    const protocols = within(dialog).getAllByRole('checkbox').map((item) => item.closest('label')?.textContent)
+    expect(protocols).toEqual(['TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3'])
+    // 初值 TLSv1.2 TLSv1.3；去掉 1.2、加上 1.1 不连续，被就地拒绝
+    expect(within(dialog).getByRole('checkbox', { name: 'TLSv1.2' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'TLSv1.3' })).toBeChecked()
+    await user.click(within(dialog).getByRole('checkbox', { name: 'TLSv1.2' }))
+    await user.click(within(dialog).getByRole('checkbox', { name: 'TLSv1.1' }))
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    expect(await within(dialog).findByText(/连续的版本/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('checkbox', { name: 'TLSv1.1' }))
+    await user.click(within(dialog).getByRole('checkbox', { name: 'TLSv1.2' }))
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true))
+    const body = JSON.parse(String(fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST')![1]?.body))
+    expect(body).toEqual({ setting_name: 'ssl_protocols', setting_value: 'TLSv1.2 TLSv1.3', scope_name: 'global' })
+  })
+
+  it('edits switches with a switch and offers follow protocol and port as an origin protocol', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [], total: 0, page: 1, limit: 10 }))
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteDefaultsPanel />)
+    await user.click(await screen.findByRole('button', { name: /新增设置/ }))
+    const dialog = dialogs()[0]
+    await chooseSetting(user, dialog, '开启HSTS')
+    expect(within(dialog).getByRole('switch', { name: '设置值' })).toBeChecked()
+    expect(within(dialog).getByText('开启后浏览器会优先使用 HTTPS 访问站点。')).toBeInTheDocument()
+    await chooseSetting(user, dialog, '回源协议')
+    expect(within(dialog).getByRole('radio', { name: /跟随协议和端口/ })).toBeInTheDocument()
+    expect(within(dialog).getByText('协议和端口都跟随访客请求')).toBeInTheDocument()
+    await chooseSetting(user, dialog, '回源超时（连接）')
+    expect(within(dialog).getByText('秒')).toBeInTheDocument()
+  })
+
+  it('marks a disabled default next to its setting instead of a state column', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [row(1, { enabled: false })], total: 1, page: 1, limit: 10 }))
+    renderWithProviders(<SiteDefaultsPanel />)
+    expect(await screen.findByText('已禁用')).toBeInTheDocument()
+    expect(screen.getAllByRole('columnheader').map((item) => item.textContent).filter(Boolean)).toEqual(['ID', '设置项', '设置值', '生效范围', '操作'])
+  })
+
+  // 平台管理员在同一页给用户维护默认设置，列表多「用户」列，新增先选用户（再按该用户取分组）
+  it('lets a platform admin pick the user first and lists the user column', async () => {
+    const platformScope = '019a03a3-735a-7f99-a2f8-7986a8618b44'
+    const tenantUser = { id: userID, display_id: '27', scope_id: scope, tenant_id: '019a03a3-735d-7c8c-9cc2-8543d041c811',
+      username: 'jason', display_name: 'jason', email: null, phone: null, status: 'active', role: 'tenant_owner', group_id: null, group_name: null,
+      revision: 1, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }
+    const groupID = '33333333-3333-4333-8333-333333333333'
+    useSessionStore.setState({ accessToken: 'access-token', sessionEpoch: 1, status: 'authenticated',
+      principal: principal({ scope_id: platformScope, scope_kind: 'platform', permissions: ['sites.read', 'sites.manage', 'identity.users.manage'] }) })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(String(input), 'http://x')
+      if (url.pathname === '/v1/admin/users') return json({ items: [tenantUser], total: 1, page: 1, limit: 20 })
+      if (url.pathname === '/v1/site-groups') return json({ items: url.searchParams.get('scope_id') === scope ? [{ id: groupID, scope_id: scope,
+        name: '默认分组', revision: 1, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' }] : [], total: 1, page: 1, limit: 20 })
+      if (init?.method === 'POST') return json(row(5), 201)
+      return json({ items: [row(1)], total: 1, page: 1, limit: 10 })
+    })
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteDefaultsPanel />)
+    expect(await screen.findByText('jason（7）')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '用户' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /新增设置/ }))
+    const dialog = dialogs()[0]
+    expect(within(dialog).getByText('请先选择用户，再选择需要写入的默认设置项。')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('combobox', { name: '用户' }))
+    await user.click(await screen.findByText(/jason（27）/, { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+    await chooseSetting(user, dialog, '回源协议')
+    await user.click(within(dialog).getByRole('radio', { name: /跟随协议和端口/ }))
+    await user.click(within(dialog).getByText('网站分组', { selector: '.ant-radio-button-wrapper span' }))
+    await user.click(within(dialog).getByRole('combobox', { name: '网站分组' }))
+    await user.click(await screen.findByText('默认分组', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true))
+    const body = JSON.parse(String(fetchSpy.mock.calls.find(([, init]) => init?.method === 'POST')![1]?.body))
+    expect(body).toEqual({ target_scope_id: scope, owner_id: userID, setting_name: 'origin_protocol', setting_value: 'follow_port',
+      scope_name: 'group', group_id: groupID })
+  })
+
   it('rejects an invalid port in the field before any write (SITE-CURRENT-08)', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ items: [], total: 0, page: 1, limit: 10 }))
     const user = userEvent.setup({ delay: null })
     renderWithProviders(<SiteDefaultsPanel />)
     await user.click(await screen.findByRole('button', { name: /新增设置/ }))
     const dialog = dialogs()[0]
+    await chooseSetting(user, dialog, 'HTTP监听端口')
     await user.type(within(dialog).getByRole('textbox', { name: '设置值' }), '65536')
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
     expect(await within(dialog).findByText(/端口须为 1–65535 的整数/)).toBeInTheDocument()

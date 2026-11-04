@@ -13,15 +13,23 @@ import (
 )
 
 const siteUserDefaultColumns = `d.id, d.display_id::text, d.scope_id, d.owner_user_id, d.setting_name, d.setting_value,
-	d.scope_name, d.group_id, g.name, d.enabled, d.revision, d.created_at, d.updated_at`
+	d.scope_name, d.group_id, g.name, d.enabled, d.revision, d.created_at, d.updated_at,
+	u.display_id::text, u.display_name`
 
+// 管理员列表的「用户」列：带出归属用户（users 行不在时为 null）。
 const siteUserDefaultFrom = ` FROM site_user_defaults d
-	LEFT JOIN site_groups g ON g.scope_id = d.scope_id AND g.id = d.group_id`
+	LEFT JOIN site_groups g ON g.scope_id = d.scope_id AND g.id = d.group_id
+	LEFT JOIN users u ON u.id = d.owner_user_id`
 
 func scanSiteUserDefault(row rowScanner) (SiteUserDefault, error) {
 	var item SiteUserDefault
+	var ownerDisplayID, ownerName *string
 	err := row.Scan(&item.ID, &item.DisplayID, &item.ScopeID, &item.OwnerUserID, &item.SettingName, &item.Value,
-		&item.ScopeName, &item.GroupID, &item.GroupName, &item.Enabled, &item.Revision, &item.CreatedAt, &item.UpdatedAt)
+		&item.ScopeName, &item.GroupID, &item.GroupName, &item.Enabled, &item.Revision, &item.CreatedAt, &item.UpdatedAt,
+		&ownerDisplayID, &ownerName)
+	if err == nil && ownerDisplayID != nil && ownerName != nil {
+		item.Owner = &OwnerReference{ID: item.OwnerUserID, DisplayID: *ownerDisplayID, DisplayName: *ownerName}
+	}
 	return item, err
 }
 

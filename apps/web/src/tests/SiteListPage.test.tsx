@@ -2119,16 +2119,21 @@ describe('SiteListPage', () => {
       String(url) === `/v1/sites/${site.id}/auto-dns/sync` && init?.method === 'POST')).toBe(true))
   })
 
-  it('opens the platform website defaults from the site subnavigation (ui-click F7)', async () => {
-    authenticate('admin', ['sites.read', 'system_configuration.read'])
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response())
+  // 平台管理员的「默认设置」也是本页标签，列出各用户的默认设置（带「用户」列），不再跳 系统设置 > 网站默认。
+  it('opens the site defaults in place for a platform admin with the user column', async () => {
+    authenticate('admin', ['sites.read'])
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => String(input).startsWith('/v1/site-defaults')
+      ? jsonResponse({ items: [], total: 0, page: 1, limit: 10 }) : response())
     const user = userEvent.setup({ delay: null })
     renderWithProviders(<><LocationProbe /><SiteListPage /></>, ['/site/list'])
     await screen.findByText(site.domain)
 
     await user.click(screen.getByRole('button', { name: '默认设置' }))
 
-    expect(screen.getByTestId('location')).toHaveTextContent('/config/default')
+    expect(screen.getByTestId('location')).toHaveTextContent('/site/list')
+    expect(await screen.findByRole('heading', { name: '站点默认设置' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '用户' })).toBeInTheDocument()
+    expect(fetchSpy.mock.calls.some(([url]) => String(url).startsWith('/v1/site-defaults?'))).toBe(true)
     expect(screen.queryByText(/暂不可用/)).not.toBeInTheDocument()
   })
 
@@ -2159,22 +2164,36 @@ describe('SiteListPage', () => {
     expect(await screen.findByRole('heading', { name: '站点默认设置' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /新增设置/ }))
     const dialog = getDialog('新增设置')
+    const setting = within(dialog).getByRole('combobox', { name: '设置项' })
+    await user.click(setting)
+    await user.type(setting, 'HTTP监听端口')
+    await user.click(await screen.findByText('HTTP监听端口', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
     await user.type(within(dialog).getByRole('textbox', { name: '设置值' }), '8080')
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
 
-    expect(await screen.findByText('HTTP 默认监听端口')).toBeInTheDocument()
+    expect(await screen.findByText('8080')).toBeInTheDocument()
     const write = fetchSpy.mock.calls.find(([url, init]) => String(url) === '/v1/site-defaults' && init?.method === 'POST')!
     expect(JSON.parse(String(write[1]?.body))).toEqual({ setting_name: 'http_listen_port', setting_value: '8080', scope_name: 'global' })
     expect(write[1]?.headers).toMatchObject({ 'Idempotency-Key': expect.stringMatching(/^site-default-create-/) })
     expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/v1/system-configuration'))).toBe(false)
   })
 
-  it('hides the website defaults entry from platform users without configuration read', async () => {
-    authenticate('admin', ['sites.read'])
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response())
+  // 没有用户管理权限的平台管理员看得到列表，但新增时不能选用户（给出原因，确定不发请求）
+  it('blocks adding a default for a user when the platform admin cannot view users', async () => {
+    authenticate('admin', ['sites.read', 'sites.manage'])
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => String(input).startsWith('/v1/site-defaults')
+      ? jsonResponse({ items: [], total: 0, page: 1, limit: 10 }) : response())
+    const user = userEvent.setup({ delay: null })
     renderWithProviders(<SiteListPage />, ['/site/list'])
     await screen.findByText(site.domain)
-    expect(screen.queryByRole('button', { name: '默认设置' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '默认设置' }))
+    await user.click(await screen.findByRole('button', { name: /新增设置/ }))
+    const dialog = getDialog('新增设置')
+    expect(within(dialog).getByText('当前账号无权查看用户，不能给用户新增默认设置')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    expect(await within(dialog).findByText('请选择用户')).toBeInTheDocument()
+    expect(fetchSpy.mock.calls.some(([url, init]) => String(url) === '/v1/site-defaults' && init?.method === 'POST')).toBe(false)
+    expect(fetchSpy.mock.calls.some(([url]) => String(url).startsWith('/v1/admin/users'))).toBe(false)
   })
 
   it('moves the tenant verified domains entry into more actions', async () => {
@@ -2272,6 +2291,26 @@ describe('SiteListPage', () => {
     expect(JSON.parse(String(write[1]?.body))).toMatchObject({ name: 'CF', remark: '备用', provider_type: 'cloudflare' })
   })
 
+  // 别人的 DNS 账号（scope 不是本租户）不进列表与缓存，整页显示加载失败。
+  it('refuses a foreign-scope DNS account in the tenant DNS API', async () => {
+    authenticate('user', ['sites.read', 'dns.read', 'dns.manage'])
+    const foreign = {
+      id: '019a03a3-735c-7b8c-9cc2-8543d041c9aa', scope_id: tenantBID, name: 'FOREIGN DNS', provider_type: 'aliyun',
+      credentials_configured: true, status: 'verified', managed_by: 'tenant', version: 1,
+      created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => String(input).includes('/v1/dns/providers')
+      ? jsonResponse({ items: [foreign] })
+      : response())
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteListPage />, ['/site/list'])
+    await screen.findByText(site.domain)
+    await user.click(screen.getByRole('button', { name: 'DNS API' }))
+
+    expect(await screen.findByText('DNS 配置加载失败')).toBeInTheDocument()
+    expect(screen.queryByText('FOREIGN DNS')).not.toBeInTheDocument()
+  })
+
   it('hides the DNS API entry from tenants without dns.read', async () => {
     authenticate('user', ['sites.read', 'sites.manage'])
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response())
@@ -2281,16 +2320,64 @@ describe('SiteListPage', () => {
     expect(screen.queryByRole('button', { name: 'DNS API' })).not.toBeInTheDocument()
   })
 
-  it('keeps the platform DNS configuration link for administrators with dns.read', async () => {
-    authenticate('admin', ['sites.read', 'dns.read'])
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response())
+  // 管理员点 DNS API 在本页打开全部用户的 DNS API（不跳 /node/dns），列 ID/用户/名称/类型/备注/操作，
+  // 只列用户自己的账户（managed_by=tenant），可按用户筛选；新增弹窗选用户并带 target_scope_id。
+  it('opens all users\' DNS APIs in place for administrators with a user column, user filter and user picker', async () => {
+    authenticate('admin', ['sites.read', 'dns.read', 'dns.manage', 'identity.users.manage'])
+    const owned = {
+      id: '019a03a3-735c-7b8c-9cc2-8543d041c901', scope_id: tenantAID, name: '租户阿里云', provider_type: 'aliyun',
+      credentials_configured: true, status: 'verified', managed_by: 'tenant', version: 2,
+      created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+      owner: { id: tenantAUserID, display_id: '27', username: 'tenant-a' },
+    }
+    const other = { ...owned, id: '019a03a3-735c-7b8c-9cc2-8543d041c902', scope_id: tenantBID, name: '另一用户CF',
+      provider_type: 'cloudflare', owner: undefined }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.startsWith('/v1/dns/providers') && init?.method === 'POST') return jsonResponse({ ...owned, id: 'new', name: 'CF 新增' }, 201)
+      if (url.startsWith('/v1/dns/providers')) {
+        return jsonResponse({ items: url.includes(`scope_id=${tenantAID}`) ? [owned] : [owned, other] })
+      }
+      if (url.startsWith('/v1/admin/users?')) return jsonResponse({ items: [resourceUser], total: 1, page: 1, limit: 20 })
+      return response()
+    })
     const user = userEvent.setup({ delay: null })
     renderWithProviders(<><LocationProbe /><SiteListPage /></>, ['/site/list'])
     await screen.findByText(site.domain)
 
     await user.click(screen.getByRole('button', { name: 'DNS API' }))
 
-    expect(screen.getByTestId('location')).toHaveTextContent('/node/dns')
+    expect(await screen.findByText('租户阿里云')).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/site/list')
+    expect(screen.getByRole('button', { name: 'DNS API' })).toHaveAttribute('aria-pressed', 'true')
+    const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent?.trim()).filter(Boolean)
+    expect(headers).toEqual(['ID', '用户', '名称', '类型', '备注', '操作'])
+    // 「用户」列（第 2 个数据列，前面是勾选列）：有 tenant_owner 显示 用户名（ID），没有显示横线。
+    const userCell = (name: string) => screen.getByText(name).closest('tr')!.querySelectorAll('td')[2]
+    expect(userCell('租户阿里云')).toHaveTextContent('tenant-a（27）')
+    expect(userCell('另一用户CF')).toHaveTextContent(/^—$/)
+    const urls = () => fetchSpy.mock.calls.map(([input]) => String(input))
+    expect(urls()).toContain('/v1/dns/providers?managed_by=tenant')
+    expect(urls().some((url) => url.includes('/v1/dns/platform-config'))).toBe(false)
+
+    // 按用户筛选：带 scope_id 重新读取，只剩该用户的账户。
+    await user.click(screen.getByRole('combobox', { name: '按用户筛选' }))
+    await user.click(await screen.findByText('tenant-a（27）', { selector: '.ant-select-item-option-content' }))
+    await waitFor(() => expect(screen.queryByText('另一用户CF')).not.toBeInTheDocument())
+    expect(urls()).toContain(`/v1/dns/providers?scope_id=${tenantAID}&managed_by=tenant`)
+
+    // 新增：弹窗第一项「用户」，默认带入当前筛选的用户，提交 target_scope_id。
+    await user.click(screen.getByRole('button', { name: /新增 DNS API/ }))
+    const dialog = getDialog('新增DNS API')
+    expect(within(dialog).getByRole('combobox', { name: '用户' })).toBeInTheDocument()
+    await user.type(within(dialog).getByRole('textbox', { name: '名称' }), 'CF 新增')
+    await user.click(within(dialog).getByRole('combobox', { name: 'DNS 服务商' }))
+    await user.click(await screen.findByText('Cloudflare', { selector: '.ant-select-item-option-content' }))
+    await user.type(within(dialog).getByLabelText('API Token'), 'cloudflare-token-value-0123456789')
+    await user.click(within(dialog).getByRole('button', { name: /保\s*存/ }))
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([url, init]) => String(url).startsWith('/v1/dns/providers') && init?.method === 'POST')).toBe(true))
+    const write = fetchSpy.mock.calls.find(([url, init]) => String(url).startsWith('/v1/dns/providers') && init?.method === 'POST')!
+    expect(JSON.parse(String(write[1]?.body))).toMatchObject({ target_scope_id: tenantAID, name: 'CF 新增', provider_type: 'cloudflare' })
   })
 
   it('keeps the table scroll container inside the panel and denies tenant create without sites.manage', async () => {

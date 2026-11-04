@@ -25,17 +25,19 @@ import (
 // data, one row per summary, mitigation or log line.
 const MarketSecurityTable = "market_security_events_v1"
 
-// SiteSecurityWindow returns up to limit of the newest enforced WAF / CC log
-// lines of one site in [from, to) and how many there were in total, and
-// every automatic defence verdict of the site in the window (newest first,
-// at most limit + 1, enough for secdigest.Truncate to count drops).
+// SiteSecurityWindow returns up to limit WAF / CC log lines of one site in
+// [from, to), enforced ones (block, challenge, temporary_ban) before
+// observe-only ones (log), newest first within each, and how many there
+// were in total, and every automatic defence verdict of the site in the
+// window (newest first, at most limit + 1, enough for secdigest.Truncate to
+// count drops).
 func (ch *ClickHouse) SiteSecurityWindow(ctx context.Context, tenant, site uuid.UUID, from, to time.Time, limit int,
 ) (logs []secdigest.Log, totalLogs int64, actions []secdigest.Action, err error) {
 	params := map[string]string{"tenant": tenant.String(), "site": site.String(),
 		"from": strconv.FormatInt(from.UnixMilli(), 10), "to": strconv.FormatInt(to.UnixMilli(), 10), "limit": strconv.Itoa(limit)}
 	window := ` AND occurred_at >= fromUnixTimestamp64Milli({from:Int64}, 'UTC') AND occurred_at < fromUnixTimestamp64Milli({to:Int64}, 'UTC')`
 	security := `FROM security_events FINAL WHERE metric_version = 1 AND tenant_id = {tenant:UUID} AND site_id = {site:UUID}
-		AND event_type IN ('waf', 'cc') AND action IN ('block', 'challenge', 'temporary_ban')` + window
+		AND event_type IN ('waf', 'cc') AND action IN ('block', 'challenge', 'temporary_ban', 'log')` + window
 	var total struct {
 		N int64 `json:"n"`
 	}
@@ -46,7 +48,7 @@ func (ch *ClickHouse) SiteSecurityWindow(ctx context.Context, tenant, site uuid.
 	}
 	err = ch.rows(ctx, `SELECT toInt64(toUnixTimestamp64Milli(occurred_at)) AS at_ms, IPv6NumToString(client_ip) AS client_ip,
 		host, path, toString(action) AS action, toString(detector) AS detector, rule_id `+security+`
-		ORDER BY occurred_at DESC, event_id DESC LIMIT {limit:UInt32}`, params, func(line []byte) error {
+		ORDER BY action = 'log', occurred_at DESC, event_id DESC LIMIT {limit:UInt32}`, params, func(line []byte) error {
 		var row secdigest.Log
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
@@ -101,6 +103,9 @@ type MarketSecurity struct {
 	LeafRef    string
 	ReceivedAt time.Time
 	Digest     secdigest.Digest
+	// Extension carries the window's observe-only count (zero from a leaf
+	// that does not send it).
+	Extension secdigest.Extension
 }
 
 type marketSecurityRow struct {
@@ -130,6 +135,7 @@ type marketSecurityRow struct {
 	Blocked      uint64 `json:"blocked"`
 	Challenged   uint64 `json:"challenged"`
 	Banned       uint64 `json:"banned"`
+	Logged       uint64 `json:"logged"`
 	Clients      uint64 `json:"clients"`
 	DroppedLogs  uint64 `json:"dropped_logs"`
 	ReceivedAt   string `json:"received_at"`
@@ -150,6 +156,7 @@ func (ch *ClickHouse) WriteMarketSecurity(ctx context.Context, m MarketSecurity)
 	}
 	summary.Events, summary.Blocked, summary.Challenged = uint64(d.Summary.Events), uint64(d.Summary.Blocked), uint64(d.Summary.Challenged)
 	summary.Banned, summary.Clients, summary.DroppedLogs = uint64(d.Summary.Banned), uint64(d.Summary.Clients), uint64(d.Dropped.Logs)
+	summary.Logged = uint64(m.Extension.Logged)
 	summary.Detector, summary.ClientIP = d.Summary.TopDetector, d.Summary.TopClientIP
 	rows := []any{summary}
 	for i, a := range d.Actions {
@@ -243,7 +250,12 @@ type MarketSecurityFilter struct {
 	Site     uuid.UUID
 	ClientIP string
 	Host     string
+	Action   string // one of MarketSecurityActions
 }
+
+// MarketSecurityActions are the WAF / CC decisions a relayed log line can
+// carry: enforced (block, challenge, temporary_ban) and observe-only (log).
+var MarketSecurityActions = []string{"block", "challenge", "temporary_ban", "log"}
 
 // ListMarketSecurityLogs returns up to limit relayed log lines of the
 // tenant in [from, to), newest first, after the keyset cursor (empty for
@@ -265,6 +277,10 @@ func (ch *ClickHouse) ListMarketSecurityLogs(ctx context.Context, tenant uuid.UU
 	if filter.Host != "" {
 		params["host"] = filter.Host
 		where += ` AND host = {host:String}`
+	}
+	if filter.Action != "" {
+		params["action"] = filter.Action
+		where += ` AND action = {action:String}`
 	}
 	if after != "" {
 		c, err := parseMarketCursor(after)
@@ -309,6 +325,48 @@ func (ch *ClickHouse) ListMarketSecurityLogs(ctx context.Context, tenant uuid.UU
 				Cursor: marketCursor{row.AtMS, row.SiteID, row.Leaf, row.WindowMS, row.RowIndex}.String()})
 			return nil
 		})
+	return out, err
+}
+
+// MarketSecurityCounts are the relayed requests of each decision, summed
+// from the summary rows of the leaf windows that start in [from, to).
+type MarketSecurityCounts struct {
+	Blocked    uint64 `json:"blocked"`
+	Challenged uint64 `json:"challenged"`
+	Banned     uint64 `json:"banned"`
+	Logged     uint64 `json:"logged"`
+}
+
+// MarketSecurityCounts sums the relayed summaries of the tenant (one site
+// when site is set) whose window starts in [from, to). A summary relayed
+// by a leaf that does not send the observe-only count has logged 0.
+func (ch *ClickHouse) MarketSecurityCounts(ctx context.Context, tenant, site uuid.UUID, from, to time.Time,
+) (MarketSecurityCounts, error) {
+	params := map[string]string{"tenant": tenant.String(), "from": strconv.FormatInt(from.UnixMilli(), 10),
+		"to": strconv.FormatInt(to.UnixMilli(), 10)}
+	where := `tenant_id = {tenant:UUID} AND row_kind = 'summary'
+		AND window_start >= fromUnixTimestamp64Milli({from:Int64}, 'UTC') AND window_start < fromUnixTimestamp64Milli({to:Int64}, 'UTC')`
+	if site != uuid.Nil {
+		params["site"] = site.String()
+		where += ` AND site_id = {site:UUID}`
+	}
+	var out MarketSecurityCounts
+	// Output names differ from the columns (see MarketAttackSummaries).
+	err := ch.rows(ctx, `SELECT toUInt64(sum(blocked)) AS sum_blocked, toUInt64(sum(challenged)) AS sum_challenged,
+		toUInt64(sum(banned)) AS sum_banned, toUInt64(sum(logged)) AS sum_logged
+		FROM `+MarketSecurityTable+` FINAL WHERE `+where, params, func(line []byte) error {
+		var row struct {
+			Blocked    uint64 `json:"sum_blocked"`
+			Challenged uint64 `json:"sum_challenged"`
+			Banned     uint64 `json:"sum_banned"`
+			Logged     uint64 `json:"sum_logged"`
+		}
+		if err := json.Unmarshal(line, &row); err != nil {
+			return err
+		}
+		out = MarketSecurityCounts(row)
+		return nil
+	})
 	return out, err
 }
 

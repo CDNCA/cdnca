@@ -101,7 +101,47 @@
   line-height: 20px;
 }
 .site-defaults-header p { margin: 0; color: var(--cdnca-color-text-secondary, #808695); font-size: 13px; }
+.site-defaults-header p + p { margin-top: 2px; }
+/* 新增设置弹窗：分「配置对象 / 设置内容 / 生效范围」三张卡片，标题带蓝色竖条，每段一句说明 */
+.site-defaults-form-section {
+  margin-bottom: 16px;
+  padding: 16px 16px 4px;
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 6px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+}
+.site-defaults-form-section:last-child { margin-bottom: 0; }
+.site-defaults-form-section h3 {
+  margin: 0 0 4px;
+  padding-left: 8px;
+  border-left: 3px solid var(--cdnca-color-primary, #2d8cf0);
+  color: var(--cdnca-color-title, #17233d);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.site-defaults-form-section > p { margin: 0 0 14px; color: var(--cdnca-color-text-secondary, #808695); font-size: 12px; }
+.site-defaults-empty-field { color: var(--cdnca-color-text-secondary, #808695); }
+/* 带说明的单选（回源协议、区域屏蔽）：两列卡片，名称下一行说明 */
+.site-defaults-choice-list.ant-radio-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; }
+.site-defaults-choice-list .ant-radio-wrapper {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--cdnca-color-border, #dcdee2);
+  border-radius: 6px;
+  background: var(--cdnca-color-bg-container, #fff);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+.site-defaults-choice-list .ant-radio-wrapper:hover { border-color: var(--cdnca-color-primary, #2d8cf0); }
+.site-defaults-choice-list .ant-radio-wrapper:active { transform: scale(0.99); }
+.site-defaults-choice-list .ant-radio-wrapper-checked { border-color: var(--cdnca-color-primary, #2d8cf0); box-shadow: 0 0 0 2px rgba(45, 140, 240, 0.12); }
+.site-defaults-choice-list .ant-radio-wrapper > span:last-child { display: flex; flex-direction: column; gap: 2px; font-weight: 500; }
+.site-defaults-choice-hint { color: var(--cdnca-color-text-secondary, #808695); font-size: 12px; font-weight: 400; }
+@media (max-width: 640px) { .site-defaults-choice-list.ant-radio-group { grid-template-columns: minmax(0, 1fr); } }
 .site-defaults-panel .site-groups-toolbar { gap: 8px; }
+/* 管理员 DNS API 的「按用户筛选」与按钮同一行，约 240px，窄屏随工具条换行。 */
+.site-dns-api-user-filter { width: 240px; max-width: 100%; }
+.site-dns-api-user-filter .ant-select { width: 100%; }
 .site-default-document-editor { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .site-default-document-editor .ant-table-wrapper { width: 100%; }
 .dns-provider-editor--sectioned { margin-top: 12px; }

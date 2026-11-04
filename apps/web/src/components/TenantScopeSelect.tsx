@@ -22,6 +22,8 @@ export interface TenantScopeSelectProps {
   queryKeyPrefix?: string
   // Called with the picked tenant user (null for a pasted scope UUID or a cleared value).
   onPickUser?: (user: ManagedUser | null) => void
+  allowClear?: boolean
+  disabled?: boolean
 }
 
 // Searchable tenant picker for platform sessions: searches tenant users by
@@ -30,7 +32,7 @@ export interface TenantScopeSelectProps {
 // only a search term and never becomes the target.
 export default function TenantScopeSelect({
   accessToken, ownerKey, canList, value, onChange, ariaLabel, placeholder, emptyText, status, className,
-  queryKeyPrefix = 'tenant-scope-select', onPickUser,
+  queryKeyPrefix = 'tenant-scope-select', onPickUser, allowClear, disabled,
 }: TenantScopeSelectProps) {
   const [search, setSearch] = useState('')
   const tenantsQuery = useQuery({
@@ -62,6 +64,8 @@ export default function TenantScopeSelect({
       className={className}
       aria-label={ariaLabel}
       showSearch
+      allowClear={allowClear}
+      disabled={disabled}
       filterOption={false}
       placeholder={placeholder}
       value={value || undefined}

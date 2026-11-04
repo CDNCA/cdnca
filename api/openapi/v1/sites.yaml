@@ -1139,12 +1139,17 @@ components:
     SiteUserDefault:
       type: object
       additionalProperties: false
-      required: [id, display_id, scope_id, owner_user_id, setting_name, setting_value, scope_name, group_id, group_name, enabled, version, created_at, updated_at]
+      required: [id, display_id, scope_id, owner_user_id, owner, setting_name, setting_value, scope_name, group_id, group_name, enabled, version, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         display_id: {type: string}
         scope_id: {type: string, format: uuid}
         owner_user_id: {type: string, format: uuid}
+        owner:
+          description: The owner user (the 用户 column of the platform list); null when the user row is gone.
+          oneOf:
+            - {$ref: '#/components/schemas/OwnerReference'}
+            - {type: 'null'}
         setting_name: {$ref: '#/components/schemas/SiteDefaultSettingName'}
         setting_value: {type: string}
         scope_name: {type: string, enum: [global, group]}
@@ -1197,7 +1202,11 @@ components:
         preset adds one WAF rule on the client's country (by the node's IP
         intelligence library) to the new site's WAF library as block_proxy
         does, none adds nothing; ssl_cipher_preset is modern, compatible,
-        legacy or custom; ssl_cipher_suites is the custom preset's
+        legacy or custom; origin_protocol is http, https, follow (the
+        visitor's protocol) or follow_port (the visitor's protocol and port;
+        the origin port defaults then do not apply, and it falls back to
+        follow when the create keeps the origin address as Host, uses sticky
+        balancing or names origin ports); ssl_cipher_suites is the custom preset's
         colon-separated suite list (the same whitelist and rules as the site's
         tls_cipher_suites), and a custom ssl_cipher_preset applies to a new
         site only together with it; the rest are 1 (on) or 0 (off).

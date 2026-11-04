@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Form, Input, Modal, Pagination, Popconfirm, Radio, Select, Space, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Form, Input, Modal, Pagination, Popconfirm, Radio, Select, Space, Switch, Table, Tag, type TableColumnsType } from 'antd'
 import { CircleCheck, CircleX, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -9,28 +9,37 @@ import { ApiError } from '../api/auth'
 import { dnsApi, ownDNSProviders } from '../api/dns'
 import { securityPoliciesApi } from '../api/securityPolicies'
 import { siteGroupsApi } from '../api/siteGroups'
+import { usersApi } from '../api/users'
 import { siteTLSCustomCipherSuites } from '../api/sites'
 import {
-  siteDefaultDocuments, siteDefaultPolicyKinds, siteDefaultSettingNames, siteDefaultsApi, siteDefaultSwitches,
+  siteDefaultDocuments, siteDefaultPolicyKinds, siteDefaultsApi, siteDefaultSwitches,
   type CreateSiteDefaultInput, type SiteDefaultSettingName, type SiteUserDefault,
 } from '../api/siteDefaults'
 import { useSessionStore } from '../auth/session'
-import { siteDefaultValueError } from './siteDefaultValue'
+import { siteDefaultSettingOrder, siteDefaultValueError, tlsVersions } from './siteDefaultValue'
 import { CacheRulesDefaultEditor, CondOriginDefaultEditor } from './SiteDefaultDocumentEditors'
 import '../i18n/siteListTabs'
 import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 
-// 网站列表 > 默认设置（用户端）：租户给自己新建网站设的默认值。
-// 只影响之后新建的网站；新建时手动填写的值优先（后端 /v1/site-defaults，迁移 490）。
+// 网站列表 > 默认设置（管理员与用户端同一页）：给用户新建网站设的默认值。管理员先选用户，
+// 列表多一列「用户」；租户只管自己的。只影响之后新建的网站；新建时手动填写的值优先（后端 /v1/site-defaults，迁移 490）。
+
+// 带说明的单选（回源协议、区域屏蔽每项都有一行说明）
+const describedChoices: ReadonlySet<SiteDefaultSettingName> = new Set(['origin_protocol', 'block_region'])
+// 数值输入后缀单位（「秒」「端口」「MB」）
+const valueUnits: Partial<Record<SiteDefaultSettingName, 'unitSeconds' | 'unitPort' | 'unitMegabytes'>> = {
+  cc_ban_seconds: 'unitSeconds', cc_pass_seconds: 'unitSeconds', origin_connect_timeout: 'unitSeconds', origin_read_timeout: 'unitSeconds',
+  ups_keepalive_timeout: 'unitSeconds', backend_http_port: 'unitPort', backend_https_port: 'unitPort', post_size_limit: 'unitMegabytes',
+}
 
 const balanceWays = ['round_robin', 'ip_hash', 'url_hash', 'least_conn', 'random'] as const
 // 单选类设置项的取值（与后端 normalizeSiteDefaultValue 一致）
 const choiceValues: Partial<Record<SiteDefaultSettingName, readonly string[]>> = {
   balance_way: balanceWays,
   ssl_cipher_preset: ['modern', 'compatible', 'legacy', 'custom'],
-  origin_protocol: ['http', 'https', 'follow'],
-  // 区域屏蔽预设：block_region 取值（拼写保持原样）
-  block_region: ['none', 'abrord_inc', 'abrord_no_inc', 'china_inc', 'china_not_inc'],
+  origin_protocol: ['http', 'https', 'follow', 'follow_port'],
+  // 区域屏蔽预设：block_region 取值（拼写与顺序保持原样）
+  block_region: ['none', 'abrord_no_inc', 'abrord_inc', 'china_inc', 'china_not_inc'],
 }
 // 规则文档默认（网站缓存 / 条件源站）在列表里显示规则条数
 function documentRuleCount(value: string): number {
@@ -42,7 +51,10 @@ function documentRuleCount(value: string): number {
 // 有说明文字的设置项（defaults.hints）
 const hintedSettings: ReadonlySet<SiteDefaultSettingName> = new Set(['cc_ban_seconds', 'cc_pass_seconds', 'gzip_enable', 'dns_provider', 'ipv6_enable',
   'cc_policy', 'waf_policy', 'acl_policy', 'block_proxy', 'req_header', 'post_size_limit',
-  'http2', 'http3', 'ssl_prefer_server_ciphers', 'proxy_cache', 'cond_origin', 'block_region', 'ssl_cipher_preset', 'ssl_cipher_suites'])
+  'http2', 'http3', 'ssl_prefer_server_ciphers', 'proxy_cache', 'cond_origin', 'block_region', 'ssl_cipher_preset', 'ssl_cipher_suites',
+  'http_listen_port', 'https_listen_port', 'hsts', 'force_ssl_enable', 'ssl_protocols', 'ocsp_stapling', 'origin_protocol',
+  'backend_http_port', 'backend_https_port', 'origin_connect_timeout', 'origin_read_timeout', 'balance_way', 'websocket_enable',
+  'send_real_time', 'recv_real_time'])
 const initialValues: Partial<Record<SiteDefaultSettingName, string>> = {
   // 规则文档默认从空规则开始，在可视化编辑器里逐条添加
   proxy_cache: JSON.stringify({ mode: 'override', rules: [], query_mode: 'preserve', query_names: [], vary_headers: [], disk_quota_bytes: 1_073_741_824 }),
@@ -50,6 +62,19 @@ const initialValues: Partial<Record<SiteDefaultSettingName, string>> = {
   // 自定义套件从现代预设的 6 个 AEAD 套件开始
   ssl_cipher_suites: siteTLSCustomCipherSuites.slice(0, 6).join(':'),
   balance_way: 'round_robin', ssl_cipher_preset: 'modern', block_region: 'abrord_inc', origin_protocol: 'http', ssl_protocols: 'TLSv1.2 TLSv1.3',
+}
+
+// 开关项：表单值 1 / 0
+function SwitchValue({ value, onChange, disabled, id, ...rest }: { value?: string; onChange?: (value: string) => void; disabled?: boolean; id?: string; 'aria-label'?: string }) {
+  return <Switch id={id} aria-label={rest['aria-label']} disabled={disabled} checked={value === '1'} onChange={(on) => onChange?.(on ? '1' : '0')} />
+}
+
+// ssl_protocols：多选框，表单值仍是空格分隔串（按版本顺序）
+function ProtocolsValue({ value, onChange, disabled }: { value?: string; onChange?: (value: string) => void; disabled?: boolean }) {
+  return (
+    <Checkbox.Group disabled={disabled} value={(value ?? '').split(/\s+/u).filter(Boolean)} options={tlsVersions.map((item) => ({ value: item, label: item }))}
+      onChange={(picked) => onChange?.(tlsVersions.filter((item) => picked.includes(item)).join(' '))} />
+  )
 }
 
 // #11 自定义套件：表单值是冒号分隔串，这里按白名单多选（保持所选顺序）
@@ -72,7 +97,8 @@ type BatchKind = 'enable' | 'disable' | 'delete'
 // 不发请求（SITE-CURRENT-03）。
 type BatchItem = { item: SiteUserDefault; key: string; state: 'pending' | 'done' | 'unknown' | 'failed'; error?: ApiError }
 type Batch = { kind: BatchKind; items: BatchItem[] }
-type FormValues = { setting_name: SiteDefaultSettingName; setting_value: string; scope_name: 'global' | 'group'; group_id?: string }
+type FormValues = { owner_id?: string; setting_name?: SiteDefaultSettingName; setting_value: string; scope_name: 'global' | 'group'; group_id?: string }
+type Owner = { id: string; scope_id: string; label: string }
 type Editor = { mode: 'create' } | { mode: 'edit'; item: SiteUserDefault }
 
 function writeKey(kind: string): string {
@@ -90,6 +116,9 @@ export default function SiteDefaultsPanel() {
   const principal = useSessionStore((state) => state.principal)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
   const canManage = Boolean(principal?.permissions.includes('sites.manage'))
+  // 平台管理员：先选用户（GET /v1/admin/users，需要用户管理权限），列表多「用户」列
+  const isPlatform = principal?.scope_kind === 'platform'
+  const canPickOwner = isPlatform && Boolean(principal?.permissions.some((item) => item === 'identity.users.manage' || item === 'platform.admin'))
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [selected, setSelected] = useState<string[]>([])
@@ -103,6 +132,8 @@ export default function SiteDefaultsPanel() {
   const [form] = Form.useForm<FormValues>()
   const settingName = Form.useWatch('setting_name', form)
   const scopeName = Form.useWatch('scope_name', form)
+  const [ownerSearch, setOwnerSearch] = useState('')
+  const [owner, setOwner] = useState<Owner | null>(null)
   const queryKey = ['site-defaults', principal?.scope_id, principal?.user_id, sessionEpoch, page, limit]
 
   const token = (permission: string) => {
@@ -119,14 +150,31 @@ export default function SiteDefaultsPanel() {
     },
   })
   // SITE-CURRENT-06：分组分页加载（与建站表单同一查询方式），失败给重试。
+  // 设置项归属：租户是自己；管理员新增时是所选用户，编辑时是该行的用户。分组、DNS API、规则库都按它取。
+  const target = !isPlatform ? (principal ? { scopeID: principal.scope_id, ownerID: principal.user_id } : null)
+    : editor?.mode === 'edit' ? { scopeID: editor.item.scope_id, ownerID: editor.item.owner_user_id }
+    : owner ? { scopeID: owner.scope_id, ownerID: owner.id } : null
+  const owners = useQuery({
+    queryKey: ['site-defaults-owners', principal?.scope_id, sessionEpoch, ownerSearch],
+    enabled: editor?.mode === 'create' && canPickOwner,
+    queryFn: async () => {
+      const accessToken = useSessionStore.getState().accessToken
+      if (!accessToken) throw new ApiError('permission denied', 403, 'permission_denied')
+      const term = ownerSearch.trim()
+      const result = await usersApi.list(accessToken, { page: 1, limit: 20, ...(/^\d+$/u.test(term) ? { display_id: term } : term ? { search: term } : {}) })
+      return result.items
+    },
+    staleTime: 30_000,
+    retry: false,
+  })
   const groups = useInfiniteQuery({
-    queryKey: ['site-defaults-groups', principal?.scope_id, sessionEpoch],
-    enabled: editor !== null && principal?.scope_kind === 'tenant',
+    queryKey: ['site-defaults-groups', principal?.scope_id, sessionEpoch, target?.scopeID],
+    enabled: editor !== null && Boolean(target),
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const accessToken = token('sites.read')
-      if (!accessToken || !principal) throw new ApiError('permission denied', 403, 'permission_denied')
-      return siteGroupsApi.list(accessToken, principal.scope_id, pageParam, 20)
+      if (!accessToken || !target) throw new ApiError('permission denied', 403, 'permission_denied')
+      return siteGroupsApi.list(accessToken, target.scopeID, pageParam, 20)
     },
     getNextPageParam: (last) => last.page * last.limit < last.total ? last.page + 1 : undefined,
     retry: false,
@@ -160,16 +208,35 @@ export default function SiteDefaultsPanel() {
     },
     retry: false,
   })
-  const policyNames = new Map((policies.data ?? []).map((item) => [item.id, item.name]))
-  const policyOptions = (policies.data ?? []).filter((item) => !item.protected && item.kind === editingKind)
-  const dnsOptions = ownDNSProviders(dnsProviders.data?.items ?? []).filter((item) => item.status === 'verified')
+  // 管理员编辑或新增时：只列所选用户本人的该类规则库（owner 按用户 ID 精确匹配）
+  const ownerPolicies = useQuery({
+    queryKey: ['site-defaults-owner-policies', principal?.scope_id, sessionEpoch, editingKind, target?.ownerID],
+    enabled: isPlatform && editor !== null && Boolean(editingKind && target) && Boolean(token('security_policies.read')),
+    queryFn: async () => {
+      const accessToken = token('security_policies.read')
+      if (!accessToken || !target || !editingKind) throw new ApiError('permission denied', 403, 'permission_denied')
+      return (await securityPoliciesApi.list(accessToken, { page: 1, limit: 100, kind: editingKind, owner: target.ownerID })).items
+    },
+    retry: false,
+  })
+  const policyNames = new Map([...(policies.data ?? []), ...(ownerPolicies.data ?? [])].map((item) => [item.id, item.name]))
+  const policyOptions = (isPlatform ? ownerPolicies.data ?? [] : policies.data ?? []).filter((item) => !item.protected && item.kind === editingKind &&
+    (!isPlatform || (item.scope_id === target?.scopeID && (!item.owner || item.owner.id === target.ownerID))))
+  const policyLoading = isPlatform ? ownerPolicies.isFetching : policies.isFetching
+  const policyFailed = isPlatform ? ownerPolicies.isError : policies.isError
+  // 管理员读到的是各租户的 DNS 账号：只列所选用户作用域里已验证的租户账号（平台副本除外）
+  const dnsOptions = ownDNSProviders(dnsProviders.data?.items ?? []).filter((item) => item.status === 'verified' &&
+    (!isPlatform || item.scope_id === target?.scopeID))
   const dnsNames = new Map((dnsProviders.data?.items ?? []).map((item) => [item.id, item.name]))
 
   useEffect(() => {
     if (!editor) return
     form.resetFields()
+    setOwner(null)
+    setOwnerSearch('')
+    // 新增时设置项不预选，选了设置项再编辑设置值
     form.setFieldsValue(editor.mode === 'create'
-      ? { setting_name: 'http_listen_port', setting_value: '', scope_name: 'global' }
+      ? { setting_name: undefined, setting_value: '', scope_name: 'global' }
       : { setting_name: editor.item.setting_name, setting_value: editor.item.setting_value, scope_name: editor.item.scope_name,
           group_id: editor.item.group_id ?? undefined })
   }, [editor, form])
@@ -256,13 +323,15 @@ export default function SiteDefaultsPanel() {
   const batchUnknown = batch?.items.some((value) => value.state === 'unknown') ?? false
 
   const submit = (values: FormValues) => {
-    if (!editor) return
+    if (!editor || !values.setting_name) return
     const value = values.setting_value.trim()
     if (editor.mode === 'edit') {
       start({ kind: 'update', item: editor.item, changes: { setting_value: value } })
       return
     }
+    if (isPlatform && !owner) return
     start({ kind: 'create', input: {
+      ...(isPlatform && owner ? { target_scope_id: owner.scope_id, owner_id: owner.id } : {}),
       setting_name: values.setting_name, setting_value: value, scope_name: values.scope_name,
       ...(values.scope_name === 'group' ? { group_id: values.group_id ?? null } : {}),
     } })
@@ -307,17 +376,21 @@ export default function SiteDefaultsPanel() {
     if (!uncertain) { leave(); return }
     confirmClose(() => { leave(); void queryClient.invalidateQueries({ queryKey: ['site-defaults'] }) })
   }
+  // 列：ID / 用户（管理员）/ 设置项 / 设置值 / 生效范围 / 操作；启停状态随设置项标「已禁用」
   const columns: TableColumnsType<SiteUserDefault> = [
     { title: t('defaults.columns.id'), dataIndex: 'display_id', width: 80 },
-    { title: t('defaults.columns.name'), dataIndex: 'setting_name', render: (value: SiteDefaultSettingName) => t(`defaults.names.${value}`) },
+    ...(isPlatform ? [{
+      title: t('defaults.columns.user'), key: 'user', width: 180,
+      render: (_: unknown, item: SiteUserDefault) => item.owner ? `${item.owner.display_name}（${item.owner.display_id}）` : t('defaults.form.userMissing'),
+    }] : []),
+    {
+      title: t('defaults.columns.name'), key: 'name',
+      render: (_, item) => <Space size={6}>{t(`defaults.names.${item.setting_name}`)}{item.enabled ? null : <Tag>{t('defaults.state.disabled')}</Tag>}</Space>,
+    },
     { title: t('defaults.columns.value'), key: 'value', render: (_, item) => displayValue(item) },
     {
       title: t('defaults.columns.scope'), key: 'scope',
       render: (_, item) => item.scope_name === 'group' ? t('defaults.scope.group', { name: item.group_name ?? item.group_id }) : t('defaults.scope.global'),
-    },
-    {
-      title: t('defaults.columns.state'), dataIndex: 'enabled', width: 90,
-      render: (value: boolean) => <Tag color={value ? 'success' : 'default'}>{value ? t('defaults.state.enabled') : t('defaults.state.disabled')}</Tag>,
     },
     {
       title: t('defaults.columns.actions'), key: 'actions', width: 120,
@@ -335,12 +408,17 @@ export default function SiteDefaultsPanel() {
     },
   ]
   const isSwitch = settingName ? siteDefaultSwitches.has(settingName) : false
+  const ownerMissing = isPlatform && editor?.mode === 'create' && !owner
+  const ownerOptions = (owners.data ?? []).map((user) => ({ value: user.id, scope_id: user.scope_id,
+    label: `${user.username}（${user.display_id}）${user.email ? ` · ${user.email}` : ''}` }))
+  const unit = settingName ? valueUnits[settingName] : undefined
 
   return (
     <section className="site-defaults-panel" aria-labelledby="site-defaults-title">
       <header className="site-defaults-header">
         <h2 id="site-defaults-title">{t('defaults.title')}</h2>
         <p>{t('defaults.description')}</p>
+        <p>{t('defaults.descriptionDetail')}</p>
       </header>
       {canManage ? (
         <div className="site-groups-toolbar">
@@ -384,7 +462,7 @@ export default function SiteDefaultsPanel() {
           showTotal={(count) => t('defaults.total', { count })}
           onChange={(next, size) => { setPage(size === limit ? next : 1); setLimit(size); setSelected([]) }} />
       </div>
-      <Modal className="identity-modal" open={editor !== null} width={settingName && siteDefaultDocuments.has(settingName) ? 760 : 560} destroyOnHidden
+      <Modal className="identity-modal" open={editor !== null} width={860} destroyOnHidden
         title={editor?.mode === 'edit' ? t('defaults.form.editTitle') : t('defaults.form.createTitle')}
         okText={uncertain ? t('defaults.actions.retry') : t('defaults.actions.save')} cancelText={t('defaults.actions.cancel')}
         confirmLoading={mutation.isPending} cancelButtonProps={{ disabled: mutation.isPending }}
@@ -393,79 +471,126 @@ export default function SiteDefaultsPanel() {
         onOk={() => uncertain ? mutation.mutate() : void form.validateFields().then(submit).catch(() => undefined)}>
         {writeError && editor ? <FeedbackWhen title={errorText(writeError)} /> : null}
         <Form form={form} layout="horizontal" labelCol={{ flex: '96px' }} requiredMark={false} disabled={mutation.isPending || uncertain}>
-          <Form.Item name="setting_name" label={t('defaults.form.name')} rules={[{ required: true }]}>
-            <Select disabled={editor?.mode === 'edit'} options={siteDefaultSettingNames.map((name) => ({ value: name, label: t(`defaults.names.${name}`) }))}
-              onChange={(name: SiteDefaultSettingName) => form.setFieldValue('setting_value', siteDefaultSwitches.has(name) ? '1' : initialValues[name] ?? '')} />
-          </Form.Item>
-          <Form.Item name="setting_value" label={t('defaults.form.value')}
-            extra={settingName && hintedSettings.has(settingName) ? t(`defaults.hints.${settingName}`) : undefined}
-            rules={[{ required: true, whitespace: true, max: settingName && siteDefaultDocuments.has(settingName) ? 65_536 : settingName === 'req_header' ? 8192 : settingName === 'ssl_cipher_suites' ? 1024 : 256, message: t('defaults.form.invalid') }, {
-              validator: (_, value?: string) => {
-                const problem = siteDefaultValueError(settingName, value ?? '')
-                return problem ? Promise.reject(new Error(t(`defaults.form.invalid_${problem}`))) : Promise.resolve()
-              },
-            }]}>
-            {isSwitch ? (
-              <Radio.Group options={[{ value: '1', label: t('defaults.form.on') }, { value: '0', label: t('defaults.form.off') }]} />
-            ) : settingName === 'dns_provider' ? (
-              <Select showSearch optionFilterProp="label" loading={dnsProviders.isFetching} placeholder={t('defaults.form.dnsProviderPlaceholder')}
-                options={[
-                  ...(editor?.mode === 'edit' && !dnsOptions.some((item) => item.id === editor.item.setting_value)
-                    ? [{ value: editor.item.setting_value, label: dnsNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
-                  ...dnsOptions.map((item) => ({ value: item.id, label: item.name })),
-                ]}
-                notFoundContent={dnsProviders.isError ? t('defaults.form.dnsProviderFailed') : t('defaults.form.dnsProviderEmpty')} />
-            ) : editingKind ? (
-              <Select showSearch optionFilterProp="label" loading={policies.isFetching} placeholder={t('defaults.form.policyPlaceholder')}
-                options={[
-                  ...(editor?.mode === 'edit' && !policyOptions.some((item) => item.id === editor.item.setting_value)
-                    ? [{ value: editor.item.setting_value, label: policyNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
-                  ...policyOptions.map((item) => ({ value: item.id, label: item.name })),
-                ]}
-                notFoundContent={policies.isError ? t('defaults.form.policyFailed') : t('defaults.form.policyEmpty')} />
-            ) : settingName === 'proxy_cache' ? (
-              <CacheRulesDefaultEditor disabled={mutation.isPending || uncertain} />
-            ) : settingName === 'cond_origin' ? (
-              <CondOriginDefaultEditor disabled={mutation.isPending || uncertain} />
-            ) : settingName === 'ssl_cipher_suites' ? (
-              <CipherSuitesInput label={t('defaults.names.ssl_cipher_suites')} disabled={mutation.isPending || uncertain} />
-            ) : settingName === 'req_header' ? (
-              <Input.TextArea autoComplete="off" rows={4} placeholder={t('defaults.form.reqHeaderPlaceholder')} />
-            ) : settingName && choiceValues[settingName] ? (
-              <Select options={choiceValues[settingName]!.map((value) => ({ value, label: t(`defaults.choices.${settingName}.${value}`) }))} />
-            ) : (
-              <Input autoComplete="off" placeholder={settingName?.endsWith('listen_port') ? t('defaults.form.portsPlaceholder')
-                : settingName === 'backend_https_port' || settingName === 'backend_http_port' ? t('defaults.form.portPlaceholder')
-                : settingName === 'ups_keepalive_timeout' ? t('defaults.form.timeoutPlaceholder')
-                : settingName === 'origin_connect_timeout' || settingName === 'origin_read_timeout' ||
-                  settingName === 'cc_ban_seconds' || settingName === 'cc_pass_seconds' ? t(`defaults.form.${settingName}Placeholder`)
-                : settingName === 'post_size_limit' ? t('defaults.form.postSizePlaceholder')
-                : settingName === 'ssl_protocols' ? t('defaults.form.protocolsPlaceholder') : undefined} />
-            )}
-          </Form.Item>
-          <Form.Item name="scope_name" label={t('defaults.form.scope')}>
-            <Radio.Group disabled={editor?.mode === 'edit'}
-              options={[{ value: 'global', label: t('defaults.form.scopeGlobal') }, { value: 'group', label: t('defaults.form.scopeGroup') }]} />
-          </Form.Item>
-          {scopeName === 'group' ? (
-            <Form.Item name="group_id" label={t('defaults.form.group')} rules={[{ required: true, message: t('defaults.form.groupRequired') }]}>
-              <Select disabled={editor?.mode === 'edit'} placeholder={t('defaults.form.groupPlaceholder')} loading={groups.isFetching}
-                showSearch optionFilterProp="label"
-                options={[
-                  ...(editor?.mode === 'edit' && editor.item.group_id && !groupOptions.some((group) => group.id === editor.item.group_id)
-                    ? [{ value: editor.item.group_id, label: editor.item.group_name ?? editor.item.group_id }] : []),
-                  ...groupOptions.map((group) => ({ value: group.id, label: group.name })),
-                ]}
-                notFoundContent={groups.isFetching ? t('defaults.form.groupLoading') : t('defaults.form.groupEmpty')}
-                popupRender={(menu) => <>{menu}{groups.hasNextPage ? <Button block loading={groups.isFetchingNextPage} onClick={() => void groups.fetchNextPage()}>{t('defaults.form.groupMore')}</Button> : null}</>} />
+          <div className="site-defaults-form-section">
+            <h3>{t('defaults.form.sectionTarget')}</h3>
+            <p>{t('defaults.form.sectionTargetDesc')}</p>
+            {isPlatform ? (
+              editor?.mode === 'edit' ? (
+                <Form.Item label={t('defaults.form.user')}>
+                  <span>{editor.item.owner ? `${editor.item.owner.display_name}（${editor.item.owner.display_id}）` : t('defaults.form.userMissing')}</span>
+                </Form.Item>
+              ) : (
+                <Form.Item name="owner_id" label={t('defaults.form.user')} rules={[{ required: true, message: t('defaults.form.userRequired') }]}
+                  extra={!canPickOwner ? t('defaults.form.userForbidden') : owners.isError ? t('defaults.form.userFailed') : undefined}>
+                  <Select showSearch allowClear filterOption={false} disabled={!canPickOwner} placeholder={t('defaults.form.userPlaceholder')}
+                    loading={owners.isFetching} onSearch={setOwnerSearch} options={ownerOptions}
+                    notFoundContent={owners.isFetching ? null : owners.isError ? t('defaults.form.userFailed') : t('defaults.form.userNotFound')}
+                    onChange={(next?: string) => {
+                      const picked = ownerOptions.find((item) => item.value === next)
+                      setOwner(picked ? { id: picked.value, scope_id: picked.scope_id, label: picked.label } : null)
+                      // 换用户后分组、DNS API、规则库都要重选
+                      form.setFieldsValue({ setting_name: undefined, setting_value: '', scope_name: 'global', group_id: undefined })
+                    }} />
+                </Form.Item>
+              )
+            ) : null}
+            <Form.Item name="setting_name" label={t('defaults.form.name')} rules={[{ required: true, message: t('defaults.form.namePlaceholder') }]}
+              hidden={ownerMissing}>
+              <Select disabled={editor?.mode === 'edit'} placeholder={t('defaults.form.namePlaceholder')} showSearch optionFilterProp="label"
+                options={siteDefaultSettingOrder.map((name) => ({ value: name, label: t(`defaults.names.${name}`) }))}
+                onChange={(name: SiteDefaultSettingName) => form.setFieldValue('setting_value', siteDefaultSwitches.has(name) ? '1' : initialValues[name] ?? '')} />
             </Form.Item>
-          ) : null}
-          {scopeName === 'group' && groups.isError ? (
-            <p role="alert" className="site-defaults-group-error">
-              {(groups.error as ApiError | null)?.status === 403 ? t('defaults.form.groupForbidden') : t('defaults.form.groupFailed')}
-              {' '}<Button size="small" onClick={() => void groups.refetch()}>{t('defaults.actions.retry')}</Button>
-            </p>
-          ) : null}
+            {ownerMissing ? <Form.Item label={t('defaults.form.name')}><span className="site-defaults-empty-field">{t('defaults.form.nameNeedsUser')}</span></Form.Item> : null}
+          </div>
+          <div className="site-defaults-form-section">
+            <h3>{t('defaults.form.sectionValue')}</h3>
+            <p>{t('defaults.form.sectionValueDesc')}</p>
+            {!settingName ? <Form.Item label={t('defaults.form.value')}><span className="site-defaults-empty-field">{t('defaults.form.valueNeedsName')}</span></Form.Item> : null}
+            <Form.Item name="setting_value" label={t('defaults.form.value')} hidden={!settingName}
+              extra={settingName && hintedSettings.has(settingName) ? t(`defaults.hints.${settingName}`) : undefined}
+              rules={settingName ? [{ required: true, whitespace: true, max: siteDefaultDocuments.has(settingName) ? 65_536 : settingName === 'req_header' ? 8192 : settingName === 'ssl_cipher_suites' ? 1024 : 256, message: t('defaults.form.invalid') }, {
+                validator: (_, value?: string) => {
+                  const problem = siteDefaultValueError(settingName, value ?? '')
+                  return problem ? Promise.reject(new Error(t(`defaults.form.invalid_${problem}`))) : Promise.resolve()
+                },
+              }] : []}>
+              {isSwitch ? (
+                <SwitchValue aria-label={t('defaults.form.value')} />
+              ) : settingName === 'ssl_protocols' ? (
+                <ProtocolsValue />
+              ) : settingName === 'dns_provider' ? (
+                <Select showSearch optionFilterProp="label" loading={dnsProviders.isFetching} placeholder={t('defaults.form.dnsProviderPlaceholder')}
+                  options={[
+                    ...(editor?.mode === 'edit' && !dnsOptions.some((item) => item.id === editor.item.setting_value)
+                      ? [{ value: editor.item.setting_value, label: dnsNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
+                    ...dnsOptions.map((item) => ({ value: item.id, label: item.name })),
+                  ]}
+                  notFoundContent={dnsProviders.isError ? t('defaults.form.dnsProviderFailed') : t('defaults.form.dnsProviderEmpty')} />
+              ) : editingKind ? (
+                <Select showSearch optionFilterProp="label" loading={policyLoading} placeholder={t('defaults.form.policyPlaceholder')}
+                  options={[
+                    ...(editor?.mode === 'edit' && !policyOptions.some((item) => item.id === editor.item.setting_value)
+                      ? [{ value: editor.item.setting_value, label: policyNames.get(editor.item.setting_value) ?? editor.item.setting_value }] : []),
+                    ...policyOptions.map((item) => ({ value: item.id, label: item.name })),
+                  ]}
+                  notFoundContent={policyFailed ? t('defaults.form.policyFailed') : t('defaults.form.policyEmpty')} />
+              ) : settingName === 'proxy_cache' ? (
+                <CacheRulesDefaultEditor disabled={mutation.isPending || uncertain} />
+              ) : settingName === 'cond_origin' ? (
+                <CondOriginDefaultEditor disabled={mutation.isPending || uncertain} />
+              ) : settingName === 'ssl_cipher_suites' ? (
+                <CipherSuitesInput label={t('defaults.names.ssl_cipher_suites')} disabled={mutation.isPending || uncertain} />
+              ) : settingName === 'req_header' ? (
+                <Input.TextArea autoComplete="off" rows={4} placeholder={t('defaults.form.reqHeaderPlaceholder')} />
+              ) : settingName && describedChoices.has(settingName) ? (
+                <Radio.Group className="site-defaults-choice-list">
+                  {choiceValues[settingName]!.map((value) => (
+                    <Radio key={value} value={value}>
+                      {t(`defaults.choices.${settingName}.${value}`)}
+                      <span className="site-defaults-choice-hint">{t(`defaults.choiceHints.${settingName}.${value}`)}</span>
+                    </Radio>
+                  ))}
+                </Radio.Group>
+              ) : settingName && choiceValues[settingName] ? (
+                <Radio.Group options={choiceValues[settingName]!.map((value) => ({ value, label: t(`defaults.choices.${settingName}.${value}`) }))} />
+              ) : (
+                <Input autoComplete="off" suffix={unit ? t(`defaults.form.${unit}`) : undefined}
+                  placeholder={settingName?.endsWith('listen_port') ? t('defaults.form.portsPlaceholder')
+                  : settingName === 'backend_https_port' || settingName === 'backend_http_port' ? t('defaults.form.portPlaceholder')
+                  : settingName === 'ups_keepalive_timeout' ? t('defaults.form.timeoutPlaceholder')
+                  : settingName === 'origin_connect_timeout' || settingName === 'origin_read_timeout' ||
+                    settingName === 'cc_ban_seconds' || settingName === 'cc_pass_seconds' ? t(`defaults.form.${settingName}Placeholder`)
+                  : settingName === 'post_size_limit' ? t('defaults.form.postSizePlaceholder') : undefined} />
+              )}
+            </Form.Item>
+          </div>
+          <div className="site-defaults-form-section">
+            <h3>{t('defaults.form.sectionScope')}</h3>
+            <p>{t('defaults.form.sectionScopeDesc')}</p>
+            <Form.Item name="scope_name" label={t('defaults.form.scope')}>
+              <Radio.Group disabled={editor?.mode === 'edit'} optionType="button"
+                options={[{ value: 'global', label: t('defaults.form.scopeGlobal') }, { value: 'group', label: t('defaults.form.scopeGroup') }]} />
+            </Form.Item>
+            {scopeName === 'group' ? (
+              <Form.Item name="group_id" label={t('defaults.form.group')} rules={[{ required: true, message: t('defaults.form.groupRequired') }]}>
+                <Select disabled={editor?.mode === 'edit' || !target} placeholder={t('defaults.form.groupPlaceholder')} loading={groups.isFetching}
+                  showSearch optionFilterProp="label"
+                  options={[
+                    ...(editor?.mode === 'edit' && editor.item.group_id && !groupOptions.some((group) => group.id === editor.item.group_id)
+                      ? [{ value: editor.item.group_id, label: editor.item.group_name ?? editor.item.group_id }] : []),
+                    ...groupOptions.map((group) => ({ value: group.id, label: group.name })),
+                  ]}
+                  notFoundContent={groups.isFetching ? t('defaults.form.groupLoading') : t('defaults.form.groupEmpty')}
+                  popupRender={(menu) => <>{menu}{groups.hasNextPage ? <Button block loading={groups.isFetchingNextPage} onClick={() => void groups.fetchNextPage()}>{t('defaults.form.groupMore')}</Button> : null}</>} />
+              </Form.Item>
+            ) : null}
+            {scopeName === 'group' && groups.isError ? (
+              <p role="alert" className="site-defaults-group-error">
+                {(groups.error as ApiError | null)?.status === 403 ? t('defaults.form.groupForbidden') : t('defaults.form.groupFailed')}
+                {' '}<Button size="small" onClick={() => void groups.refetch()}>{t('defaults.actions.retry')}</Button>
+              </p>
+            ) : null}
+          </div>
         </Form>
       </Modal>
     </section>

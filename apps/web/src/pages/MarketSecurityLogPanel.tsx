@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
-import { Alert, Button, Input, Table, type TableColumnsType } from 'antd'
+import { Alert, Button, Input, Select, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { listMarketSecurityLogs, type MarketSecurityFilters, type MarketSecurityLog } from '../api/marketSecurity'
+import {
+  listMarketSecurityLogs, marketSecurityActions, type MarketSecurityAction, type MarketSecurityCounts, type MarketSecurityFilters,
+  type MarketSecurityLog,
+} from '../api/marketSecurity'
 import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/marketSecurity'
@@ -17,7 +20,12 @@ const maximumWindowMilliseconds = 31 * 24 * 60 * 60 * 1000
 
 // 默认今天（当天 00:00 到次日 00:00）；最长 31 天，快捷项在点「查询」时按当前时钟重算。
 
-interface Draft { tenantId: string; siteId: string; clientIp: string; host: string }
+interface Draft { tenantId: string; siteId: string; clientIp: string; host: string; action: MarketSecurityAction | '' }
+
+// 拦截 / 挑战 / 封禁 / 仅记录 各自的回传请求数（meta.counts）。
+const countKeys: Array<[keyof MarketSecurityCounts, MarketSecurityAction, string]> = [
+  ['blocked', 'block', 'red'], ['challenged', 'challenge', 'orange'], ['banned', 'temporary_ban', 'volcano'], ['logged', 'log', 'blue'],
+]
 
 function draftWindow(value: TimeRangeValue) {
   return value.preset === 'custom' ? value.range : resolveTimeRangePreset(value.preset)
@@ -31,7 +39,7 @@ export default function MarketSecurityLogPanel() {
   const accessToken = useSessionStore((state) => state.accessToken)
   const principal = useSessionStore((state) => state.principal)
   const audience = principal?.scope_kind === 'platform' ? 'admin' : 'tenant'
-  const [draft, setDraft] = useState<Draft>({ tenantId: '', siteId: '', clientIp: '', host: '' })
+  const [draft, setDraft] = useState<Draft>({ tenantId: '', siteId: '', clientIp: '', host: '', action: '' })
   const [timeRange, setTimeRange] = useState<TimeRangeValue>(() => ({ preset: 'today', range: draftWindow({ preset: 'today', range: null }) }))
   // A tenant sees today's relayed lines at once; a platform admin picks a tenant first.
   const [applied, setApplied] = useState<MarketSecurityFilters | null>(() => {
@@ -59,6 +67,7 @@ export default function MarketSecurityLogPanel() {
       ...(draft.siteId.trim() ? { siteId: draft.siteId.trim() } : {}),
       ...(draft.clientIp.trim() ? { clientIp: draft.clientIp.trim() } : {}),
       ...(draft.host.trim() ? { host: draft.host.trim().toLowerCase() } : {}),
+      ...(draft.action ? { action: draft.action } : {}),
     })
     setCursors([undefined])
     setPageIndex(0)
@@ -79,7 +88,7 @@ export default function MarketSecurityLogPanel() {
     { title: t('table.host'), dataIndex: 'host', key: 'host', width: 190, render: (value: string) => <code>{value}</code> },
     { title: t('table.path'), dataIndex: 'path', key: 'path', width: 220, render: (value: string) => <code>{value}</code> },
     { title: t('table.clientIp'), dataIndex: 'client_ip', key: 'client_ip', width: 145, render: (value: string) => <code>{value}</code> },
-    { title: t('table.action'), dataIndex: 'action', key: 'action', width: 110, render: (value: string) => t(`values.action.${value}`, { defaultValue: value || t('values.unknown') }) },
+    { title: mt('action.label'), dataIndex: 'action', key: 'action', width: 110, render: (value: string) => mt(`action.${value}`, { defaultValue: value || t('values.unknown') }) },
     { title: mt('table.detector'), dataIndex: 'detector', key: 'detector', width: 110, render: (value: string) => value || '-' },
     { title: t('table.rule'), dataIndex: 'rule_id', key: 'rule_id', width: 150, render: (value: string) => value ? <code>{value}</code> : '-' },
   ]
@@ -98,11 +107,25 @@ export default function MarketSecurityLogPanel() {
         {field('siteId', t('filters.site'))}
         {field('host', t('filters.domain'))}
         {field('clientIp', t('filters.clientIp'))}
+        <label className="analytics-filter-field">
+          <span>{mt('action.label')}</span>
+          <Select aria-label={mt('action.label')} virtual={false} value={draft.action}
+            options={[{ value: '', label: mt('action.all') }, ...marketSecurityActions.map((value) => ({ value, label: mt(`action.${value}`) }))]}
+            onChange={(value: Draft['action']) => setDraft((current) => ({ ...current, action: value }))} />
+        </label>
         <div className="analytics-filter-field analytics-log-range-field"><span>{t('filters.timeRange')}</span>
           <TimeRangeFilter label={t('filters.timeRange')} allowClear={false} maxSpanMs={maximumWindowMilliseconds} value={timeRange} onChange={setTimeRange} /></div>
         <Button type="primary" onClick={apply}>{t('actions.query')}</Button>
       </div>
       {error ? <Alert className="analytics-page-error" type="error" showIcon message={error} /> : null}
+      {query.data?.meta.counts ? (
+        <div className="market-security-counts" data-testid="market-security-counts">
+          <Tooltip title={mt('counts.hint')}><span>{mt('counts.label')}</span></Tooltip>
+          {countKeys.map(([key, action, color]) => (
+            <Tag key={key} color={color}>{mt(`action.${action}`)} {query.data!.meta.counts![key].toLocaleString(locale)}</Tag>
+          ))}
+        </div>
+      ) : null}
       {query.error ? <FeedbackWhen title={t('states.requestFailed')} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
       <div className="analytics-log-table" data-testid="market-security-table">
         <Table<MarketSecurityLog>

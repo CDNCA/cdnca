@@ -45,6 +45,8 @@ export interface SiteUserDefault {
   display_id: string
   scope_id: string
   owner_user_id: string
+  // 归属用户（管理员列表的「用户」列）；用户行已不在时为 null
+  owner: { id: string; display_id: string; display_name: string } | null
   setting_name: SiteDefaultSettingName
   setting_value: string
   scope_name: 'global' | 'group'
@@ -64,6 +66,9 @@ export interface SiteUserDefaultList {
 }
 
 export interface CreateSiteDefaultInput {
+  // 平台管理员给指定用户新增（先选用户）；租户不传
+  target_scope_id?: string
+  owner_id?: string
   setting_name: SiteDefaultSettingName
   setting_value: string
   scope_name: 'global' | 'group'

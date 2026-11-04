@@ -67,8 +67,14 @@ func TestCheckAllocation(t *testing.T) {
 		t.Fatalf("unselected domains limit must be unlimited: %+v", got)
 	}
 	one := spec.LimitSet{{Metric: spec.MetricDomains, Cap: 1, Action: spec.ActionRejectNew}}
+	// A grant signed before market 077 may say websocket=false: WebSocket is
+	// still not refused (every node supply includes it).
 	got := c.CheckAllocation(spec.Allocation{HTTPPorts: 1}, one)
-	if len(got) != 3 || got[0].Code != "domain_limit" || got[1].Code != "port_limit" || got[2].Code != "websocket_not_allowed" {
+	if len(got) != 2 || got[0].Code != "domain_limit" || got[1].Code != "port_limit" {
 		t.Fatalf("blockers = %+v", got)
+	}
+	c.HTTP3 = true
+	if got := c.CheckAllocation(spec.Allocation{HTTPPorts: 2}, two); len(got) != 1 || got[0].Code != "http3_not_allowed" {
+		t.Fatalf("http3 blockers = %+v", got)
 	}
 }

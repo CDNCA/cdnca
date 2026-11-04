@@ -39,6 +39,9 @@ type providerCursorPayload struct {
 	Limit     int       `json:"limit"`
 	CreatedAt time.Time `json:"created_at"`
 	ID        uuid.UUID `json:"id"`
+	// The list filter the cursor was issued for (absent when unfiltered).
+	FilterScopeID uuid.UUID `json:"filter_scope_id,omitempty"`
+	ManagedBy     string    `json:"managed_by,omitempty"`
 }
 
 var (
@@ -229,7 +232,7 @@ func (s *Service) ListProviders(ctx context.Context, actor Actor) ([]Provider, e
 	seen := make(map[uuid.UUID]struct{})
 	var after *providerPageCursor
 	for page := 0; page < maxProviderListPages; page++ {
-		batch, err := s.store.ListProviders(ctx, actor, MaxProviderPageLimit+1, after)
+		batch, err := s.store.ListProviders(ctx, actor, MaxProviderPageLimit+1, after, ProviderListFilter{})
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +260,8 @@ func (s *Service) ListProviders(ctx context.Context, actor Actor) ([]Provider, e
 }
 
 func (s *Service) ListProviderPage(ctx context.Context, actor Actor, request ProviderPageRequest) (ProviderPage, error) {
-	if !validActor(actor) || validateProviderPageRequest(request) != nil || s.store == nil {
+	if !validActor(actor) || validateProviderPageRequest(request) != nil || s.store == nil ||
+		(actor.ScopeKind != "platform" && request.ScopeID != uuid.Nil) {
 		return ProviderPage{}, ErrInvalidInput
 	}
 	if request.Limit == 0 {
@@ -271,14 +275,14 @@ func (s *Service) ListProviderPage(ctx context.Context, actor Actor, request Pro
 			return ProviderPage{}, err
 		}
 	}
-	items, err := s.store.ListProviders(ctx, actor, request.Limit+1, after)
+	items, err := s.store.ListProviders(ctx, actor, request.Limit+1, after, request.ProviderListFilter)
 	if err != nil {
 		return ProviderPage{}, err
 	}
 	page := ProviderPage{Items: items}
 	if len(page.Items) > request.Limit {
 		page.Items = page.Items[:request.Limit]
-		page.NextCursor, err = s.encodeProviderCursor(actor, request.Limit, page.Items[len(page.Items)-1])
+		page.NextCursor, err = s.encodeProviderCursor(actor, request.Limit, page.Items[len(page.Items)-1], request.ProviderListFilter)
 		if err != nil {
 			return ProviderPage{}, err
 		}
@@ -288,13 +292,14 @@ func (s *Service) ListProviderPage(ctx context.Context, actor Actor, request Pro
 
 func validateProviderPageRequest(request ProviderPageRequest) error {
 	if request.Limit < 0 || request.Limit > MaxProviderPageLimit ||
-		len(request.Cursor) > MaxProviderCursorLength || strings.ContainsAny(request.Cursor, "\x00\r\n") {
+		len(request.Cursor) > MaxProviderCursorLength || strings.ContainsAny(request.Cursor, "\x00\r\n") ||
+		(request.ManagedBy != "" && request.ManagedBy != "tenant" && request.ManagedBy != "platform") {
 		return ErrInvalidInput
 	}
 	return nil
 }
 
-func (s *Service) encodeProviderCursor(actor Actor, limit int, last Provider) (string, error) {
+func (s *Service) encodeProviderCursor(actor Actor, limit int, last Provider, filter ProviderListFilter) (string, error) {
 	if s.cipher == nil || !validActor(actor) || limit < 1 || limit > MaxProviderPageLimit ||
 		last.ID == uuid.Nil || last.CreatedAt.IsZero() {
 		return "", ErrInvalidInput
@@ -302,6 +307,7 @@ func (s *Service) encodeProviderCursor(actor Actor, limit int, last Provider) (s
 	payload, err := json.Marshal(providerCursorPayload{
 		Version: providerCursorVersion, Kind: "dns-providers", ScopeKind: actor.ScopeKind,
 		ScopeID: actor.ScopeID, Limit: limit, CreatedAt: last.CreatedAt.UTC().Truncate(time.Microsecond), ID: last.ID,
+		FilterScopeID: filter.ScopeID, ManagedBy: filter.ManagedBy,
 	})
 	if err != nil {
 		return "", ErrInvalidInput
@@ -340,6 +346,7 @@ func (s *Service) decodeProviderCursor(actor Actor, request ProviderPageRequest)
 	if decoder.Decode(&decoded) != nil || decoder.Decode(&struct{}{}) != io.EOF ||
 		decoded.Version != providerCursorVersion || decoded.Kind != "dns-providers" ||
 		decoded.ScopeKind != actor.ScopeKind || decoded.ScopeID != actor.ScopeID || decoded.Limit != request.Limit ||
+		decoded.FilterScopeID != request.ScopeID || decoded.ManagedBy != request.ManagedBy ||
 		decoded.ID == uuid.Nil || decoded.CreatedAt.IsZero() || decoded.CreatedAt.Location() != time.UTC ||
 		!decoded.CreatedAt.Equal(decoded.CreatedAt.UTC().Truncate(time.Microsecond)) {
 		return nil, ErrInvalidInput

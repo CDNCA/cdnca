@@ -135,7 +135,7 @@ func (r *Runtime) sendDigests(ctx context.Context) error {
 }
 
 func (r *Runtime) sendDigest(ctx context.Context, self marketclient.Identity, t marketsupply.DigestTarget) error {
-	signed, err := secdigest.Sign(t.Digest, self.SigningKey)
+	signed, err := secdigest.SignExtended(t.Digest, t.Extension, self.SigningKey)
 	if err != nil {
 		return err
 	}

@@ -62,8 +62,8 @@ function market(extra: Handler = () => undefined, floor = { cpu_percent: 80, mem
     if (path === '/v1/admin/market/supply-limits-policy') return json({ version: 4, policy: { load_floor: floor } })
     if (path === '/v1/admin/market/supply-plugins') {
       const ids = JSON.parse(init!.body as string).node_ids as string[]
-      // ML-09 intersection: autodefense on every node, CRS only on A; the free JA4 cannot be sold as a tag,
-      // a bought rule pack can (rule_pack:<pack id>, ML-25), a malformed rule pack code cannot.
+      // Intersection: autodefense on every node, CRS only on A; the free JA4 can be declared too
+      // (spec freePlugins), a bought rule pack can (rule_pack:<pack id>, ML-25), a malformed rule pack code cannot.
       return json({ items: [
         { code: 'module.autodefense', name_zh: '智能自动防御（学习、观察、告警）', name_en: 'Automatic defense' },
         ...(ids.every((id) => id === nodeA) ? [{ code: 'pack.crs', name_zh: 'OWASP CRS 档位', name_en: 'OWASP CRS levels' }] : []),
@@ -237,7 +237,7 @@ describe('offer listing page', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'HK-1' }))
     expect(await screen.findByRole('checkbox', { name: 'OWASP CRS 档位' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: '智能自动防御（学习、观察、告警）' })).toBeInTheDocument()
-    expect(screen.queryByText('JA4 指纹')).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'JA4 指纹' })).toBeInTheDocument()
     expect(screen.queryByText('规则包 P1')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: '坏机器人规则包' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: 'HK-2' }))
@@ -263,7 +263,7 @@ describe('offer listing page', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/v1/admin/market/listing-batches', expect.objectContaining({ method: 'POST' })))
     const [, init] = fetchMock.mock.calls.find(([path]) => path === '/v1/admin/market/listing-batches')!
     expect(JSON.parse(init!.body as string)).toEqual({ mode: 'multi', node_ids: [nodeA, nodeB], publish: true, offer: {
-      name: 'HK pair', billing_model: 'daily_bundle', allocation: { http_ports: 2 },
+      name: 'HK pair', billing_model: 'daily_bundle', allocation: { http_ports: 2, stream_ports: 0, websocket: true, http3: false },
       limits: [{ metric: 'qps', cap: 2000, action: 'throttle' }, { metric: 'node_cpu_percent', cap: 75, action: 'remove_node' }],
       tags: { cc_protection: 'none', ddos_protection_gbps: 0, complaint_resistant: false, tenancy: 'shared', mobile_reachable: false,
         region_block: false, plugins: ['module.autodefense'] },
@@ -271,6 +271,24 @@ describe('offer listing page', () => {
       pricing: { currency: 'CNY', daily_minor: 100, min_days: 1, max_days: 365 }, trial_days: 0,
     } })
     expect(await screen.findByText('已创建')).toBeInTheDocument()
+  })
+
+  // 新建报价 sets the capabilities; WebSocket is shown as included, never a switch, and always sent on.
+  it('sends the chosen capabilities with WebSocket always included', async () => {
+    const fetchMock = market()
+    vi.stubGlobal('fetch', fetchMock)
+    await openSell()
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: 'caps' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'HK-1' }))
+    expect(screen.getByTestId('caps-websocket')).toHaveTextContent('已包含，不可关闭')
+    expect(screen.queryByRole('switch', { name: 'WebSocket' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'HTTP(S) 端口数' }), { target: { value: '6' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: '四层端口数' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'HTTP/3' }))
+    fireEvent.click(screen.getByRole('button', { name: '创建 1 条报价（每个节点一条）' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/v1/admin/market/listing-batches', expect.objectContaining({ method: 'POST' })))
+    const [, init] = fetchMock.mock.calls.find(([path]) => path === '/v1/admin/market/listing-batches')!
+    expect(JSON.parse(init!.body as string).offer.allocation).toEqual({ http_ports: 6, stream_ports: 2, websocket: true, http3: true })
   })
 
   // fix-offerform: no "create 0 offers" button; it waits for nodes and says where to pick them.

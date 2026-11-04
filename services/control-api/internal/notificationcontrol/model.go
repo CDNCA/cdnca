@@ -96,6 +96,8 @@ var supportedEventTypes = [...]string{
 	"market.supply.receipt_unconfirmed",
 	// 590 (internal/marketsubscribe node_check.go).
 	"market.supply.node_delivery_failed",
+	// 630: subscribed node probe failed / recovered.
+	"market.node.probe_unreachable", "market.node.probe_recovered",
 	// 443: seller changed an offer before the buyer's renewal (C7a).
 	"market.terms.changed",
 	// 444: direct top-ups (ADR 0015).

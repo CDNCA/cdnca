@@ -43,6 +43,10 @@ describe('marketReason (MC12 E3)', () => {
   // still blocks or degrades says why, in Chinese.
   it('explains the market site rollout codes', () => {
     expect(marketReason('http3_unavailable', 'zh-CN').reason).toContain('HTTP/2')
+    // following the package on a supply without the seller's L2 goes straight to the origin.
+    expect(marketReason('l2_unavailable', 'zh-CN')).toMatchObject({ known: true })
+    expect(marketReason('l2_unavailable', 'zh-CN').reason).toContain('直连回源站')
+    expect(marketReason('l2_unavailable', 'en').reason).toContain('straight to the origin')
     expect(marketReason('origin_route_geo_unmatched', 'zh-CN').reason).toBe('该供给没有对应地区的节点，此条件回源规则在该供给上不生效')
     for (const code of ['site_acl_rule', 'site_cc_rule', 'site_waf_policy', 'site_origin_routes', 'origin_routes_invalid',
       'site_l2_custom', 'site_basic_auth', 'site_http_policy', 'site_origin_auth', 'site_access_invalid', 'unsupported_site_access',

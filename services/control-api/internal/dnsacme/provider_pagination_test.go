@@ -23,7 +23,7 @@ func TestDNSProviderCursorIsTamperEvidentAndBoundToScopeAndLimit(t *testing.T) {
 		CreatedAt: time.Date(2026, 8, 8, 1, 2, 3, 456000000, time.UTC),
 	}
 
-	cursor, err := service.encodeProviderCursor(actor, 20, last)
+	cursor, err := service.encodeProviderCursor(actor, 20, last, ProviderListFilter{})
 	if err != nil || cursor == "" || strings.Contains(cursor, actor.ScopeID.String()) {
 		t.Fatalf("encodeProviderCursor() = %q, %v", cursor, err)
 	}
@@ -39,9 +39,10 @@ func TestDNSProviderCursorIsTamperEvidentAndBoundToScopeAndLimit(t *testing.T) {
 		actor Actor
 		input ProviderPageRequest
 	}{
-		"scope": {otherScope, ProviderPageRequest{Limit: 20, Cursor: cursor}},
-		"limit": {actor, ProviderPageRequest{Limit: 10, Cursor: cursor}},
-		"bytes": {actor, ProviderPageRequest{Limit: 20, Cursor: tampered}},
+		"scope":  {otherScope, ProviderPageRequest{Limit: 20, Cursor: cursor}},
+		"limit":  {actor, ProviderPageRequest{Limit: 10, Cursor: cursor}},
+		"bytes":  {actor, ProviderPageRequest{Limit: 20, Cursor: tampered}},
+		"filter": {actor, ProviderPageRequest{Limit: 20, Cursor: cursor, ProviderListFilter: ProviderListFilter{ManagedBy: "tenant"}}},
 	} {
 		if _, err := service.decodeProviderCursor(requestActor.actor, requestActor.input); err != ErrInvalidInput {
 			t.Fatalf("%s cursor error = %v, want %v", name, err, ErrInvalidInput)
@@ -99,5 +100,50 @@ func TestDNSProviderPageRequestEnforcesLimitBounds(t *testing.T) {
 		if err := validateProviderPageRequest(input); err != ErrInvalidInput {
 			t.Fatalf("validateProviderPageRequest(%+v) = %v, want %v", input, err, ErrInvalidInput)
 		}
+	}
+}
+
+// 游标绑定签发时的筛选（用户、managed_by），换筛选不能接着翻。
+func TestDNSProviderCursorIsBoundToListFilter(t *testing.T) {
+	cipher, err := NewAESGCMCredentialCipher("dns-provider-page-test", []byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(nil, cipher)
+	actor := Actor{UserID: uuid.New(), ScopeID: uuid.New(), ScopeKind: "platform"}
+	last := Provider{ID: uuid.New(), CreatedAt: time.Date(2026, 11, 5, 1, 2, 3, 0, time.UTC)}
+	filter := ProviderListFilter{ScopeID: uuid.New(), ManagedBy: "tenant"}
+	cursor, err := service.encodeProviderCursor(actor, 20, last, filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.decodeProviderCursor(actor, ProviderPageRequest{Limit: 20, Cursor: cursor, ProviderListFilter: filter}); err != nil {
+		t.Fatalf("same filter: %v", err)
+	}
+	for name, other := range map[string]ProviderListFilter{
+		"none":      {},
+		"scope":     {ScopeID: uuid.New(), ManagedBy: "tenant"},
+		"managedBy": {ScopeID: filter.ScopeID},
+	} {
+		if _, err := service.decodeProviderCursor(actor, ProviderPageRequest{Limit: 20, Cursor: cursor, ProviderListFilter: other}); err != ErrInvalidInput {
+			t.Fatalf("%s: err = %v, want %v", name, err, ErrInvalidInput)
+		}
+	}
+}
+
+// 租户不能按用户筛选；managed_by 只接受 tenant / platform。
+func TestDNSProviderListFilterValidation(t *testing.T) {
+	tenant := Actor{UserID: uuid.New(), ScopeID: uuid.New(), ScopeKind: "tenant"}
+	service := NewService(&Store{}, nil)
+	if _, err := service.ListProviderPage(t.Context(), tenant, ProviderPageRequest{Limit: 20, ProviderListFilter: ProviderListFilter{ScopeID: uuid.New()}}); err != ErrInvalidInput {
+		t.Fatalf("tenant scope filter err = %v, want %v", err, ErrInvalidInput)
+	}
+	for _, value := range []string{"", "tenant", "platform"} {
+		if err := validateProviderPageRequest(ProviderPageRequest{ProviderListFilter: ProviderListFilter{ManagedBy: value}}); err != nil {
+			t.Fatalf("managed_by %q: %v", value, err)
+		}
+	}
+	if err := validateProviderPageRequest(ProviderPageRequest{ProviderListFilter: ProviderListFilter{ManagedBy: "other"}}); err != ErrInvalidInput {
+		t.Fatalf("managed_by other err = %v", err)
 	}
 }

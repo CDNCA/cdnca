@@ -14,12 +14,14 @@ import (
 )
 
 // Attack digests for market sites (ADR 0012 §19.1, ML-20): every 5-minute
-// window, each market tenant site with enforced WAF / CC decisions gets one
-// signed secdigest.Digest the runtime seals to the grant's root subscriber.
+// window, each market tenant site with WAF / CC decisions, enforced or
+// observe-only (action log), gets one signed secdigest.Digest the
+// runtime seals to the grant's root subscriber.
 
 // AttackSummaries is analyticslog.Client (every tenant's sites of a window).
 type AttackSummaries interface {
 	ListAttackSummaries(ctx context.Context, from, to time.Time, minimum uint64, limit uint16) ([]analyticslog.AttackSiteSummary, error)
+	ListLoggedSummaries(ctx context.Context, from, to time.Time, limit uint16) ([]analyticslog.LoggedSiteSummary, error)
 }
 
 // SiteSecurity is autodefense.ClickHouse.SiteSecurityWindow.
@@ -34,6 +36,7 @@ type DigestTarget struct {
 	Subscriber uuid.UUID // root subscriber member (secdigest recipient)
 	Domains    []string  // the site's host, for the relay header
 	Digest     secdigest.Digest
+	Extension  secdigest.Extension // observe-only count, signed next to Digest
 }
 
 // WithSecurityReaders lets SecurityDigests read the leaf's ClickHouse.
@@ -78,7 +81,9 @@ func (s *Service) Subscribers() map[string]uuid.UUID {
 }
 
 // SecurityDigests builds the digests of [start, start+5m) for every market
-// tenant site with enforced decisions. Sites whose tenant has no current
+// tenant site with enforced or observe-only decisions. Summary counts the
+// enforced ones only (the subscriber's attack alerts sum it); the
+// observe-only count goes in Extension. Sites whose tenant has no current
 // grant or whose root subscriber is not known yet (no request seen since
 // this controller started) are skipped; leaf is this member.
 func (s *Service) SecurityDigests(ctx context.Context, leaf uuid.UUID, start time.Time) ([]DigestTarget, error) {
@@ -89,6 +94,22 @@ func (s *Service) SecurityDigests(ctx context.Context, leaf uuid.UUID, start tim
 	sites, err := s.summaries.ListAttackSummaries(ctx, start, end, 1, analyticslog.MaxAttackSummarySites)
 	if err != nil {
 		return nil, err
+	}
+	logged, err := s.summaries.ListLoggedSummaries(ctx, start, end, analyticslog.MaxAttackSummarySites)
+	if err != nil {
+		return nil, err
+	}
+	// A site with observe-only decisions alone gets an empty enforced summary.
+	enforced := make(map[string]bool, len(sites))
+	for _, summary := range sites {
+		enforced[summary.TenantID+"/"+summary.SiteID] = true
+	}
+	loggedBySite := make(map[string]int64, len(logged))
+	for _, l := range logged {
+		loggedBySite[l.TenantID+"/"+l.SiteID] = int64(l.Logged)
+		if !enforced[l.TenantID+"/"+l.SiteID] {
+			sites = append(sites, analyticslog.AttackSiteSummary{TenantID: l.TenantID, SiteID: l.SiteID})
+		}
 	}
 	if len(sites) == 0 {
 		return nil, nil
@@ -146,9 +167,11 @@ func (s *Service) SecurityDigests(ctx context.Context, leaf uuid.UUID, start tim
 			WindowStart: start.Unix(), WindowSeconds: secdigest.WindowSeconds,
 			Summary: secdigest.Summary{Events: int64(summary.Events), Blocked: int64(summary.Blocked),
 				Challenged: int64(summary.Challenged), Banned: int64(summary.Banned), Clients: int64(summary.Clients),
-				TopDetector: digestSlug(summary.TopDetector), TopClientIP: summary.TopClientIP,
-				FirstMS: summary.FirstEventAt.UnixMilli(), LastMS: summary.LastEventAt.UnixMilli()},
+				TopDetector: digestSlug(summary.TopDetector), TopClientIP: summary.TopClientIP},
 			Actions: keepValidActions(actions, start.Unix()), Logs: keepValidLogs(logs)}
+		if summary.Events > 0 { // a log-only site has no enforced first / last
+			d.Summary.FirstMS, d.Summary.LastMS = summary.FirstEventAt.UnixMilli(), summary.LastEventAt.UnixMilli()
+		}
 		if n := total - int64(len(logs)); n > 0 {
 			d.Dropped.Logs = n
 		}
@@ -159,7 +182,8 @@ func (s *Service) SecurityDigests(ctx context.Context, leaf uuid.UUID, start tim
 		if err := d.Validate(); err != nil {
 			continue // a row the contract cannot carry; the next window still goes
 		}
-		out = append(out, DigestTarget{Grant: g, Subscriber: subscriber, Domains: []string{domain}, Digest: d})
+		out = append(out, DigestTarget{Grant: g, Subscriber: subscriber, Domains: []string{domain}, Digest: d,
+			Extension: secdigest.Extension{Logged: loggedBySite[summary.TenantID+"/"+summary.SiteID]}})
 	}
 	return out, nil
 }

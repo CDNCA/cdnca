@@ -192,7 +192,8 @@ func (s *Service) applyOriginRoutes(ctx context.Context, actor serviceActor, lea
 	if sameJSON(current.Document, doc) {
 		return nil
 	}
-	key := "market-routes-" + req.SiteID.String() + "-" + strconv.FormatInt(req.Revision, 10)
+	key := "market-routes-" + req.SiteID.String() + "-" + strconv.FormatInt(req.Revision, 10) + "-v" +
+		strconv.FormatInt(current.Version, 10)
 	_, err = routes.UpdateConditionalOrigin(ctx, siteActor(actor), site.UpdateConditionalOriginRequest{ID: leafSiteID,
 		ExpectedRevision: current.Version, Document: doc, IdempotencyKey: key, RequestID: key})
 	return err

@@ -56,7 +56,7 @@ func (s *Service) ReceiveDigest(ctx context.Context, header envelope.Header, pay
 	if s.cards == nil || s.digests == nil {
 		return nil
 	}
-	d, err := s.verifyDigest(ctx, header, payload)
+	d, ext, err := s.verifyDigest(ctx, header, payload)
 	if err != nil {
 		slog.Warn("market security digest dropped", "sender", header.SenderMemberID, "grant_id", header.GrantID, "err", err)
 		return nil
@@ -76,32 +76,34 @@ func (s *Service) ReceiveDigest(ctx context.Context, header envelope.Header, pay
 		return err
 	}
 	m.LeafMemberID, m.LeafRef, m.ReceivedAt, m.Digest = header.SenderMemberID, LeafRef(header.SenderMemberID), s.now().UTC(), d
+	m.Extension = ext
 	return s.digests.WriteMarketSecurity(ctx, m)
 }
 
-func (s *Service) verifyDigest(ctx context.Context, header envelope.Header, payload []byte) (secdigest.Digest, error) {
+func (s *Service) verifyDigest(ctx context.Context, header envelope.Header, payload []byte,
+) (secdigest.Digest, secdigest.Extension, error) {
 	var signed secdigest.Signed
 	if err := json.Unmarshal(payload, &signed); err != nil {
-		return secdigest.Digest{}, secdigest.ErrInvalid
+		return secdigest.Digest{}, secdigest.Extension{}, secdigest.ErrInvalid
 	}
 	peer, err := s.cards.Card(ctx, header.SenderMemberID)
 	if err != nil {
-		return secdigest.Digest{}, err
+		return secdigest.Digest{}, secdigest.Extension{}, err
 	}
-	d, _, err := secdigest.Verify(ed25519.PublicKey(peer.SigningPublicKey), signed)
+	d, ext, err := secdigest.VerifyExtended(ed25519.PublicKey(peer.SigningPublicKey), signed)
 	if err != nil {
-		return secdigest.Digest{}, err
+		return secdigest.Digest{}, secdigest.Extension{}, err
 	}
 	window, ok := secdigest.WindowOfKey(header.IdempotencyKey)
 	if d.LeafMemberID != header.SenderMemberID || d.GrantID != header.GrantID || !ok || window != d.WindowStart ||
 		header.IdempotencyKey != secdigest.IdempotencyKey(d.LeafSiteID, d.WindowStart) {
-		return secdigest.Digest{}, ErrDigestForeign
+		return secdigest.Digest{}, secdigest.Extension{}, ErrDigestForeign
 	}
 	// A window far in the future is not something a leaf has seen yet.
 	if time.Unix(d.WindowStart, 0).After(s.now().Add(10 * time.Minute)) {
-		return secdigest.Digest{}, secdigest.ErrInvalid
+		return secdigest.Digest{}, secdigest.Extension{}, secdigest.ErrInvalid
 	}
-	return d, nil
+	return d, ext, nil
 }
 
 // LeafRef is the short display number of a leaf on the subscriber's pages

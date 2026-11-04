@@ -8,6 +8,8 @@ package marketsubscribe
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -284,8 +286,15 @@ func (s *Service) run(ctx context.Context, siteID uuid.UUID, revision int64, cfg
 			}
 		}
 	}
+	// A fresh relay message per run (as ReconcileReceipts and
+	// CheckNodeDelivery do): the relay dedups by key, so the same key on a
+	// retry is never redelivered and a reply lost to a timed-out waiter would
+	// never come again (every retry of one revision timed out). The
+	// leaf's commit is idempotent per site and revision (market-<site>-<rev>).
+	attempt := uuid.NewString()
 	key := func(op string, t target) string {
-		return fmt.Sprintf("%s-%s-%d-%s-%s", op, siteID, revision, t.leaf.LeafMemberID, t.leaf.NodePoolRef)
+		sum := sha256.Sum256([]byte(fmt.Sprintf("%s-%s-%d-%s-%s-%s", op, siteID, revision, t.leaf.LeafMemberID, t.leaf.NodePoolRef, attempt)))
+		return op + "-" + hex.EncodeToString(sum[:20])
 	}
 
 	// Step 2: prepare everywhere.

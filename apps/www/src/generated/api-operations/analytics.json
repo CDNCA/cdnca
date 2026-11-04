@@ -2260,6 +2260,12 @@
      "type": "string"
     },
     {
+     "name": "action",
+     "in": "query",
+     "type": "string: block / challenge / temporary_ban / log",
+     "description": "Only lines of this decision; log is observe only."
+    },
+    {
      "name": "cursor",
      "in": "query",
      "type": "string",

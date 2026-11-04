@@ -120,13 +120,26 @@ func (a *supplierAttacks) ListAttackSummaries(_ context.Context, from, _ time.Ti
 		LastEventAt: from.Add(3 * time.Second)}}, nil
 }
 
+// ListLoggedSummaries adds 7 observe-only requests to the same window.
+func (a *supplierAttacks) ListLoggedSummaries(_ context.Context, from, _ time.Time, _ uint16,
+) ([]analyticslog.LoggedSiteSummary, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.armed || from.Unix() != a.window {
+		return nil, nil
+	}
+	return []analyticslog.LoggedSiteSummary{{TenantID: a.tenant, SiteID: a.site, Logged: 7}}, nil
+}
+
 func (a *supplierAttacks) SiteSecurityWindow(_ context.Context, _, _ uuid.UUID, from, _ time.Time, _ int,
 ) ([]secdigest.Log, int64, []secdigest.Action, error) {
 	a.mu.Lock()
 	host := a.host
 	a.mu.Unlock()
 	logs := []secdigest.Log{{AtMS: from.Add(time.Second).UnixMilli(), ClientIP: "203.0.113.9", Host: host, Path: "/login",
-		Action: "block", Detector: "sqli", RuleID: "942100"}}
+		Action: "block", Detector: "sqli", RuleID: "942100"},
+		{AtMS: from.Add(2 * time.Second).UnixMilli(), ClientIP: "203.0.113.10", Host: host, Path: "/search",
+			Action: "log", Detector: "xss", RuleID: "941100"}}
 	actions := []secdigest.Action{{At: from.Unix() + 5, Source: "waf", Level: 2, Kind: "ip", Target: "203.0.113.9", Reason: "sqli"}}
 	return logs, int64(len(logs)), actions, nil
 }
@@ -359,6 +372,7 @@ func (flow *marketSupplierFlow) leafLocal(path []uuid.UUID) uuid.UUID {
 func seedRootSite(t *testing.T, pool *pgxpool.Pool, domain string) uuid.UUID {
 	t.Helper()
 	tenant, user, siteID := uuid.New(), uuid.New(), uuid.New()
+	pkg, product := uuid.New(), uuid.New()
 	err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
 		for _, statement := range []struct {
 			query string
@@ -368,8 +382,20 @@ func seedRootSite(t *testing.T, pool *pgxpool.Pool, domain string) uuid.UUID {
 			{`INSERT INTO access_scopes(id,kind,tenant_id) VALUES($1,'tenant',$1)`, []any{tenant}},
 			{`INSERT INTO users(id,username,display_name,password_hash) VALUES($1,'root-c-owner','C','unused')`, []any{user}},
 			{`INSERT INTO memberships(scope_id,user_id) VALUES($1,$2)`, []any{tenant, user}},
-			{`INSERT INTO sites(id,scope_id,owner_user_id,domain,origins,origin_hosts,created_by_user_id,updated_by_user_id,display_id)
-			  VALUES($1,$2,$3,$4,ARRAY['198.51.100.10:80'],ARRAY['198.51.100.10'],$3,$3,1)`, []any{siteID, tenant, user, domain}},
+			// a site without a valid package takes no push to the
+			// controller's market subscriptions (ErrSitePackageUnavailable).
+			{`SET LOCAL session_replication_role = replica`, nil},
+			{`INSERT INTO package_subscriptions(id,tenant_scope_id,product_id,product_revision,product_snapshot,site_limit,
+				domain_limit,node_limit,traffic_limit_bytes,starts_at,ends_at,timezone,cycle_kind,tcp_factor_numerator,
+				tcp_factor_denominator,created_by_user_id,updated_by_user_id,created_at,updated_at)
+			  VALUES($1,$2,$3,1,'{"revision":1,"name":"market","spec":{}}',100,100,100,0,now()-interval '1 hour',now()+interval '3650 days',
+				'UTC','monthly',1,1,$4,$4,now(),now())`, []any{pkg, tenant, product, user}},
+			{`INSERT INTO package_monitor_subscription_owners(subscription_id,state_revision,tenant_scope_id,owner_user_id,source_kind,created_at)
+			  VALUES($1,1,$2,$3,'subscription_state',now())`, []any{pkg, tenant, user}},
+			{`SET LOCAL session_replication_role = origin`, nil},
+			{`INSERT INTO sites(id,scope_id,owner_user_id,domain,origins,origin_hosts,created_by_user_id,updated_by_user_id,display_id,
+				package_subscription_id,package_id)
+			  VALUES($1,$2,$3,$4,ARRAY['198.51.100.10:80'],ARRAY['198.51.100.10'],$3,$3,1,$5,$6)`, []any{siteID, tenant, user, domain, pkg, product}},
 			{`INSERT INTO site_origin_pools(site_id) VALUES($1)`, []any{siteID}},
 			{`INSERT INTO site_origins(site_id,position,host,port) VALUES($1,1,'198.51.100.10',80)`, []any{siteID}},
 		} {
@@ -514,7 +540,8 @@ func (flow *marketSupplierFlow) run() {
 	flow.waitFor("C received A's attack digest", 3*time.Minute, func() bool { return len(flow.digests.all()) > 0 })
 	got := flow.digests.all()[0]
 	if got.SiteID != siteC || got.SupplyID != supplyID || got.LeafMemberID != a || got.Digest.LeafSiteID != leafSite ||
-		got.Digest.Summary.Blocked != 3 || len(got.Digest.Logs) != 1 || got.Digest.Logs[0].Path != "/login" || len(got.Digest.Actions) != 1 {
+		got.Digest.Summary.Blocked != 3 || got.Digest.Summary.Events != 3 || got.Extension.Logged != 7 || len(got.Digest.Logs) != 2 ||
+		got.Digest.Logs[0].Action != "log" || got.Digest.Logs[1].Path != "/login" || len(got.Digest.Actions) != 1 {
 		t.Fatalf("C's stored digest: %+v", got)
 	}
 	var attacked []supplierNotice

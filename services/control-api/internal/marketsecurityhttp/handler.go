@@ -3,10 +3,13 @@
 // ML-21; ClickHouse market_security_events_v1). The block event page lists
 // them with the source "market supply · leaf number".
 //
-//	GET /v1/analytics/market-security?from=&to=[&site_id=&client_ip=&host=&cursor=&limit=]                tenant session
+//	GET /v1/analytics/market-security?from=&to=[&site_id=&client_ip=&host=&action=&cursor=&limit=]        tenant session
 //	GET /v1/admin/analytics/market-security?tenant_id=&from=&to=[...]                                     platform admin
 //
-// from/to are RFC 3339, at most 31 days apart; limit 1–100 (default 10).
+// from/to are RFC 3339, at most 31 days apart; limit 1–100 (default 10);
+// action is block, challenge, temporary_ban or log (observe only).
+// meta.counts sums the relayed requests of each decision of the window
+// (and site_id when given; the other filters do not narrow it).
 package marketsecurityhttp
 
 import (
@@ -46,6 +49,7 @@ var (
 type Reader interface {
 	ListMarketSecurityLogs(ctx context.Context, tenant uuid.UUID, filter securityanalytics.MarketSecurityFilter,
 		from, to time.Time, after string, limit int) ([]securityanalytics.MarketSecurityLog, error)
+	MarketSecurityCounts(ctx context.Context, tenant, site uuid.UUID, from, to time.Time) (securityanalytics.MarketSecurityCounts, error)
 }
 
 type AuthenticateSessionFunc func(context.Context, string) (identity.AuthenticatedSession, error)
@@ -66,7 +70,8 @@ func NewHandler(reader Reader, authenticate AuthenticateSessionFunc) (*Handler, 
 type Response struct {
 	Data []securityanalytics.MarketSecurityLog `json:"data"`
 	Meta struct {
-		NextCursor string `json:"next_cursor,omitempty"`
+		NextCursor string                           `json:"next_cursor,omitempty"`
+		Counts     securityanalytics.MarketSecurityCounts `json:"counts"`
 	} `json:"meta"`
 }
 
@@ -120,7 +125,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	query := request.URL.Query()
-	allowed := []string{"from", "to", "site_id", "client_ip", "host", "cursor", "limit"}
+	allowed := []string{"from", "to", "site_id", "client_ip", "host", "action", "cursor", "limit"}
 	if admin {
 		allowed = append(allowed, "tenant_id")
 	}
@@ -171,6 +176,13 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		}
 		filter.Host = raw
 	}
+	if raw := query.Get("action"); raw != "" {
+		if !slices.Contains(securityanalytics.MarketSecurityActions, raw) {
+			fail(http.StatusBadRequest, "market_security_invalid_request")
+			return
+		}
+		filter.Action = raw
+	}
 	limit := defaultLimit
 	if raw := query.Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -192,7 +204,13 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		fail(http.StatusServiceUnavailable, "market_security_unavailable")
 		return
 	}
+	counts, err := handler.reader.MarketSecurityCounts(ctx, tenant, filter.Site, from.UTC(), to.UTC())
+	if err != nil {
+		fail(http.StatusServiceUnavailable, "market_security_unavailable")
+		return
+	}
 	var response Response
+	response.Meta.Counts = counts
 	if len(rows) > limit {
 		rows = rows[:limit]
 		response.Meta.NextCursor = rows[limit-1].Cursor

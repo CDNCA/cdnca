@@ -134,6 +134,8 @@ var MarketEventTypes = []string{
 	"market.supply.receipt_unconfirmed",
 	// 590: an applied leaf whose nodes did not take the revision.
 	"market.supply.node_delivery_failed",
+	// 630: this controller's probe of a subscribed node failed / recovered.
+	"market.node.probe_unreachable", "market.node.probe_recovered",
 	"market.terms.changed", // migration 443
 	// 444: direct top-ups (ADR 0015).
 	"market.direct_topup.paid", "market.direct_topup.received",

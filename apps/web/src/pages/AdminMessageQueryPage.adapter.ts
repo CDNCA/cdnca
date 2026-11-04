@@ -180,6 +180,8 @@ const typeTranslationKeys: Record<string, string> = {
   'market.supply.cancel_available': 'marketSupplyCancelAvailable',
   'market.supply.receipt_unconfirmed': 'marketSupplyReceiptUnconfirmed',
   'market.supply.node_delivery_failed': 'marketSupplyNodeDeliveryFailed',
+  'market.node.probe_unreachable': 'marketNodeProbeUnreachable',
+  'market.node.probe_recovered': 'marketNodeProbeRecovered',
   'market.direct_topup.paid': 'marketDirectTopupPaid',
   'market.direct_topup.received': 'marketDirectTopupReceived',
   'market.seller.deposit_mode': 'marketSellerDepositMode',

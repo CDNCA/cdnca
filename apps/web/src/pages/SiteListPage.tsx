@@ -1715,13 +1715,14 @@ function SiteListPageSession({
   // 之前点击只弹“暂不可用”；详细检测（/site/:id/dns-reconcile）仍只给租户，面板内按 scope 隐藏。
   const canOpenDnsCheck = canReadDNSReconcile ||
     (role === 'admin' && principal.scope_kind === 'platform' && principal.permissions.includes('dns.read'))
-  // DNS API：租户看自己的 DNS 服务商账号（本页内嵌，不跳管理员 /node/dns）；平台管理员仍去节点管理 > DNS配置。
+  // DNS API：本页内嵌，不跳转；租户看自己的账号，平台管理员看全部用户的账号（带「用户」列）。
   const canOpenDnsApi = principal.permissions.includes('dns.read') &&
     (principal.scope_kind === 'tenant' || (role === 'admin' && principal.scope_kind === 'platform'))
-  // 默认设置：租户在本页管理自己新建网站的默认值（/v1/site-defaults）；平台管理员仍去 系统设置 > 网站默认。
+  // 默认设置：租户与平台管理员都在本页管理用户新建网站的默认值（/v1/site-defaults），
+  // 管理员先选用户；平台级的网站默认仍在 系统设置 > 网站默认。
   const tenantScope = principal.scope_kind === 'tenant'
-  const canOpenWebsiteDefaults = tenantScope ? principal.permissions.includes('sites.read')
-    : role === 'admin' && principal.scope_kind === 'platform' && principal.permissions.includes('system_configuration.read')
+  const canOpenWebsiteDefaults = principal.permissions.includes('sites.read') &&
+    (tenantScope || (role === 'admin' && principal.scope_kind === 'platform'))
   const canSelectSites = canManageSites || canReadDNSReconcile || canRequestCertificate
   const language = i18n.resolvedLanguage ?? i18n.language
   const triStateOptions = [
@@ -3011,7 +3012,7 @@ function SiteListPageSession({
           ].map((item, index) => (index === 2 && !canOpenWebsiteDefaults) || (index === 3 && !canOpenDnsApi) ? null : (
             <button
               className={index === activeSubnavIndex ? 'is-active' : undefined}
-              aria-pressed={index < 2 || tenantScope ? index === activeSubnavIndex : undefined}
+              aria-pressed={index < 4 || tenantScope ? index === activeSubnavIndex : undefined}
               type="button"
               key={item}
               onClick={() => {
@@ -3021,20 +3022,11 @@ function SiteListPageSession({
                   return
                 }
                 if (index === 2) {
-                  if (tenantScope) {
-                    if (!forbidden) setActiveSubnav('defaults')
-                    return
-                  }
-                  // ui-click F7：平台管理员的网站默认是平台级配置（系统设置 > 网站默认）。
-                  navigate('/config/default')
+                  if (!forbidden) setActiveSubnav('defaults')
                   return
                 }
                 if (index === 3) {
-                  if (principal.scope_kind === 'tenant') {
-                    if (!forbidden) setActiveSubnav('dnsApi')
-                    return
-                  }
-                  navigate('/node/dns')
+                  if (!forbidden) setActiveSubnav('dnsApi')
                   return
                 }
                 if (index === 4) {
@@ -3062,9 +3054,9 @@ function SiteListPageSession({
       </nav>
 
       {activeSubnav === 'groups' && !forbidden ? <SiteGroupsPage />
-        : activeSubnav === 'dnsApi' && !forbidden && canOpenDnsApi && tenantScope ? <SiteDnsApiPanel />
-        : activeSubnav === 'defaults' && !forbidden && canOpenWebsiteDefaults && tenantScope ? <SiteDefaultsPanel />
-        : activeSubnav === 'dnsCheck' && !forbidden && canOpenDnsCheck ? <SiteDnsCheckPanel onConfigureDnsApi={() => tenantScope ? setActiveSubnav('dnsApi') : navigate('/node/dns')} restore={routeState?.dnsCheckBack} /> : <>
+        : activeSubnav === 'dnsApi' && !forbidden && canOpenDnsApi ? <SiteDnsApiPanel />
+        : activeSubnav === 'defaults' && !forbidden && canOpenWebsiteDefaults ? <SiteDefaultsPanel />
+        : activeSubnav === 'dnsCheck' && !forbidden && canOpenDnsCheck ? <SiteDnsCheckPanel onConfigureDnsApi={() => canOpenDnsApi ? setActiveSubnav('dnsApi') : navigate('/node/dns')} restore={routeState?.dnsCheckBack} /> : <>
       <div className="site-toolbar">
         <AdvancedFilters
           className="site-advanced-filters"

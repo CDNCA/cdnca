@@ -6,6 +6,7 @@ info:
     Attack log lines a market leaf supplier relayed for this controller's market-supplied sites (ADR 0012
     §19.1, ML-21). The leaf sends one signed digest per site and 5-minute window; lines carry client IP,
     host, path, action, detector and rule only. The block event page lists them as "market supply · leaf".
+    Enforced decisions (block, challenge, temporary_ban) and observe-only ones (log) are both relayed.
 paths:
   /v1/analytics/market-security:
     get:
@@ -20,6 +21,7 @@ paths:
         - {$ref: '#/components/parameters/SiteID'}
         - {$ref: '#/components/parameters/ClientIP'}
         - {$ref: '#/components/parameters/Host'}
+        - {$ref: '#/components/parameters/Action'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses:
@@ -43,6 +45,7 @@ paths:
         - {$ref: '#/components/parameters/SiteID'}
         - {$ref: '#/components/parameters/ClientIP'}
         - {$ref: '#/components/parameters/Host'}
+        - {$ref: '#/components/parameters/Action'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses:
@@ -61,6 +64,7 @@ components:
     SiteID: {name: site_id, in: query, required: false, schema: {type: string, format: uuid}}
     ClientIP: {name: client_ip, in: query, required: false, schema: {type: string}}
     Host: {name: host, in: query, required: false, schema: {type: string, maxLength: 253}}
+    Action: {name: action, in: query, required: false, description: Only lines of this decision; log is observe only., schema: {$ref: '#/components/schemas/Action'}}
     Cursor: {name: cursor, in: query, required: false, description: meta.next_cursor of the previous page., schema: {type: string}}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
   schemas:
@@ -75,10 +79,23 @@ components:
         client_ip: {type: string}
         host: {type: string}
         path: {type: string}
-        action: {type: string, enum: [block, challenge, temporary_ban]}
+        action: {$ref: '#/components/schemas/Action'}
         detector: {type: string}
         rule_id: {type: string}
         cursor: {type: string}
+    Action: {type: string, enum: [block, challenge, temporary_ban, log]}
+    Counts:
+      type: object
+      description: >-
+        Relayed requests of each decision, summed from the leaf window summaries that start in [from, to)
+        (and of site_id when given; host, client_ip and action do not narrow it). logged is 0 for windows
+        relayed by a leaf that does not send it.
+      required: [blocked, challenged, banned, logged]
+      properties:
+        blocked: {type: integer, minimum: 0}
+        challenged: {type: integer, minimum: 0}
+        banned: {type: integer, minimum: 0}
+        logged: {type: integer, minimum: 0}
     ErrorEnvelope:
       type: object
       required: [error]
@@ -103,6 +120,7 @@ components:
                 type: object
                 properties:
                   next_cursor: {type: string}
+                  counts: {$ref: '#/components/schemas/Counts'}
     Error:
       description: Error.
       content:

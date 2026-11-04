@@ -207,7 +207,9 @@ type Blocker struct {
 
 // CheckAllocation reports what the grant does not allow (allocation and the
 // domains limit; an unselected domains limit is unlimited). Leaves add their
-// own blockers for features they do not implement.
+// own blockers for features they do not implement. WebSocket is never refused
+// (spec.Allocation.Normalized): grants signed before market 077 may still say
+// websocket=false and cannot be edited, only reissued.
 func (c Config) CheckAllocation(a spec.Allocation, limits spec.LimitSet) []Blocker {
 	var out []Blocker
 	if domains, ok := limits.Cap(spec.MetricDomains); ok && int64(len(c.Domains)) > domains {
@@ -215,9 +217,6 @@ func (c Config) CheckAllocation(a spec.Allocation, limits spec.LimitSet) []Block
 	}
 	if int64(len(c.HTTPPorts)+len(c.HTTPSPorts)) > a.HTTPPorts {
 		out = append(out, Blocker{Code: "port_limit", Detail: strconv.FormatInt(a.HTTPPorts, 10)})
-	}
-	if c.WebSocket && !a.WebSocket {
-		out = append(out, Blocker{Code: "websocket_not_allowed"})
 	}
 	if c.HTTP3 && !a.HTTP3 {
 		out = append(out, Blocker{Code: "http3_not_allowed"})

@@ -9,6 +9,7 @@ import { formatCap } from './limitsModel'
 import { offerQualityText } from './offerView'
 import { formatDateTime } from '../../i18n/formatters'
 import { declaredTagKeys } from './subscriberModel'
+import { capabilityRows } from './OfferCapabilities'
 
 type Group = MarketOfferNodes['groups'][number]
 
@@ -100,6 +101,11 @@ export function OfferDetailDrawer({ offer, onClose }: { offer: MarketOfferListin
             </Card>
           </Col>
         </Row>
+        <Card size="small" title={t('caps.title')}>
+          <Descriptions size="small" column={{ xs: 1, sm: 2 }} data-testid="offer-capabilities"
+            items={capabilityRows(t, offer.allocation ?? {}, !!offer.l2_unavailable).map((r) => ({ key: r.key, label: r.label, children: r.value }))} />
+          <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>{t('caps.help')}</Typography.Paragraph>
+        </Card>
         <Card size="small" title={t('detail.thresholds')}>
           <Descriptions size="small" bordered column={{ xs: 1, sm: 3 }} items={[
             { key: 'floor', label: t('detail.floor'), children: data ? `CPU ${data.load_floor.cpu_percent}% · ${t('limitMetrics.node_memory_percent')} ${data.load_floor.memory_percent}%` : '—' },

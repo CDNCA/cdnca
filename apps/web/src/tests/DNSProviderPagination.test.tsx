@@ -56,4 +56,24 @@ describe('DNS provider server pagination', () => {
       await expect(dnsApi.list('token')).rejects.toMatchObject({ code: 'invalid_response' })
     }
   })
+
+  // 平台视图的筛选（scope_id / managed_by）每一页都带上，游标翻页不丢筛选。
+  it('keeps the platform list filter on every page', async () => {
+    const responses: DNSProviderList[] = [
+      { items: [provider('11111111-1111-4111-8111-111111111111', 'first')], next_cursor: 'cursor-two' },
+      { items: [provider('22222222-2222-4222-8222-222222222222', 'second')] },
+    ]
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(responses.shift()), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const scope = '33333333-3333-4333-8333-333333333333'
+    await expect(dnsApi.list('token', undefined, { scope_id: scope, managed_by: 'tenant' })).resolves.toEqual({ items: [
+      expect.objectContaining({ name: 'first' }),
+      expect.objectContaining({ name: 'second' }),
+    ] })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`/v1/dns/providers?scope_id=${scope}&managed_by=tenant`)
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(`/v1/dns/providers?limit=20&cursor=cursor-two&scope_id=${scope}&managed_by=tenant`)
+  })
 })

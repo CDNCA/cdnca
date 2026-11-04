@@ -501,4 +501,44 @@ describe('SiteBlockEventLogPage', () => {
     await user.click(within(source).getByRole('tab', { name: '本地节点' }))
     expect(screen.queryByTestId('market-security-panel')).not.toBeInTheDocument()
   })
+
+  it('counts and filters relayed decisions including log only', async () => {
+    const actor = principal({ scope_id: tenantId, tenant_id: tenantId, permissions: ['sites.read'] })
+    useSessionStore.getState().setSession(authResponse(actor), actor)
+    const requests: URL[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://cdnca.test')
+      requests.push(url)
+      if (url.pathname === '/v1/analytics/market-security') {
+        return Promise.resolve(json({ data: [{
+          site_id: siteId, supply_id: '018f0000-0000-7000-8000-000000000050', leaf_ref: '0a1b2c3d',
+          occurred_at: '2026-07-28T07:58:00Z', client_ip: '198.51.100.8', host: 'shop.example.test', path: '/search',
+          action: 'log', detector: 'xss', rule_id: 'crs-941100', cursor: 'c1',
+        }], meta: { counts: { blocked: 4, challenged: 3, banned: 2, logged: 1500 } } }))
+      }
+      return Promise.resolve(blockPage(input))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<SiteBlockEventLogPage />)
+    await user.click(within(screen.getByRole('group', { name: '来源' })).getByRole('tab', { name: '市场供给' }))
+
+    const counts = await screen.findByTestId('market-security-counts')
+    expect(counts).toHaveTextContent('拦截 4')
+    expect(counts).toHaveTextContent('挑战 3')
+    expect(counts).toHaveTextContent('封禁 2')
+    expect(counts).toHaveTextContent('仅记录 1,500')
+    const table = screen.getByTestId('market-security-table')
+    expect(within(table).getByText('仅记录')).toBeInTheDocument()
+    expect(requests.filter((url) => url.pathname === '/v1/analytics/market-security')[0].searchParams.has('action')).toBe(false)
+
+    await user.click(screen.getByRole('combobox', { name: '处置' }))
+    expect(within(await screen.findByRole('listbox')).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['全部', '拦截', '挑战', '封禁', '仅记录'])
+    await user.click(screen.getByTitle('仅记录', { exact: true }))
+    await user.click(screen.getByRole('button', { name: '查询' }))
+    await waitFor(() => {
+      const last = requests.filter((url) => url.pathname === '/v1/analytics/market-security').at(-1)!
+      expect(last.searchParams.get('action')).toBe('log')
+    })
+  })
 })

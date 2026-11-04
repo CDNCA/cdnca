@@ -1,12 +1,13 @@
 import type { MarketFrozenTerms, MarketLimit, MarketLimitMetric, MarketOfferInput, MarketTags } from '../../api/market'
 import { capOf, defaultRows, floorOf, ruleOf, toLimits, type LimitRow, type LimitUnit, type LoadFloor } from './limitsModel'
-import { customOf, pricingOf, trialDaysOf, type ListingValues } from './listingModel'
+import { allocationOf, customOf, pricingOf, trialDaysOf, type ListingValues } from './listingModel'
 
 // C16: a resale offer inherits the terms frozen in the upstream subscription's
 // purchase snapshot (market frozen_terms) and may only tighten them; the market
 // refuses anything looser (400 upstream_terms_exceeded, resale_terms.go).
 
-export interface ResaleAllocation { httpPorts: number; streamPorts: number; websocket: boolean; http3: boolean }
+// WebSocket is not part of it: every offer includes it.
+export interface ResaleAllocation { httpPorts: number; streamPorts: number; http3: boolean }
 
 const unitFactor: Record<LimitUnit, number> = {
   count: 1, perSecond: 1, percent: 1, Mbps: 1e6, Gbps: 1e9, GB: 1024 ** 3, TB: 1024 ** 4,
@@ -60,8 +61,7 @@ export function valuesFromUpstream(up: MarketFrozenTerms): Partial<ListingValues
     cc: t.cc_protection ?? 'none', ddos: t.ddos_protection_gbps ?? 0, tenancy: t.tenancy ?? 'shared', lineClass: t.line_class ?? '',
     complaint: !!t.complaint_resistant, mobile: !!t.mobile_reachable, regionBlock: !!t.region_block, plugins: [...(t.plugins ?? [])],
     icp: !!up.compliance.require_icp, prepaid: up.prepaid_exhausted_action ?? 'pause',
-    httpPorts: up.allocation.http_ports ?? 0, streamPorts: up.allocation.stream_ports ?? 0,
-    websocket: !!up.allocation.websocket, http3: !!up.allocation.http3,
+    httpPorts: up.allocation.http_ports ?? 0, streamPorts: up.allocation.stream_ports ?? 0, http3: !!up.allocation.http3,
   }
 }
 
@@ -76,7 +76,7 @@ export function resaleOfferOf(v: ListingValues & ResaleAllocation, rows: LimitRo
     name: v.name.trim(), billing_model: v.billing_model,
     allocation: {
       http_ports: Math.min(v.httpPorts ?? 0, a.http_ports ?? 0), stream_ports: Math.min(v.streamPorts ?? 0, a.stream_ports ?? 0),
-      websocket: !!a.websocket && !!v.websocket, http3: !!a.http3 && !!v.http3,
+      websocket: true, http3: !!a.http3 && !!v.http3,
     },
     limits: toLimits(rows, floor).limits,
     tags: {
@@ -134,7 +134,7 @@ export function comboOfferOf(v: ListingValues & ResaleAllocation, rows: LimitRow
   poolRef: string | null, subscriptions: string[], allowedPlugins: string[]): MarketOfferInput {
   return {
     name: v.name.trim(), billing_model: v.billing_model,
-    allocation: { http_ports: v.httpPorts ?? 0, stream_ports: v.streamPorts ?? 0, websocket: !!v.websocket, http3: !!v.http3 },
+    allocation: allocationOf(v),
     limits: toLimits(rows, floor).limits,
     tags: {
       cc_protection: v.cc, ddos_protection_gbps: v.ddos, complaint_resistant: v.complaint, tenancy: v.tenancy,

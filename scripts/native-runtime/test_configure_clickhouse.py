@@ -389,6 +389,8 @@ class TestNativeClickHouseConfiguration(unittest.TestCase):
             # Smart auto defense (AD-08): write only.
             self.assertIn("GRANT INSERT ON cdnca_analytics.autodefense_verdicts_v1 TO cdnca_analytics_ingest", sql)
             self.assertIn("GRANT INSERT ON cdnca_analytics.market_security_events_v1 TO cdnca_analytics_ingest", sql)
+            self.assertIn("GRANT INSERT ON cdnca_analytics.market_site_stats_v1 TO cdnca_analytics_ingest", sql)
+            self.assertNotIn("GRANT SELECT ON cdnca_analytics.market_site_stats_v1 TO cdnca_analytics_ingest", sql)
             self.assertIn("GRANT INSERT ON cdnca_analytics.node_security_events_v1 TO cdnca_analytics_ingest", sql)
             self.assertNotIn("GRANT SELECT ON cdnca_analytics.autodefense_verdicts_v1 TO cdnca_analytics_ingest", sql)
             self.assertNotIn("GRANT SELECT ON cdnca_analytics.* TO cdnca_analytics_ingest", sql)

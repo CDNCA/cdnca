@@ -29,11 +29,18 @@ var SupplyPatterns = []string{
 	"POST /v1/admin/market/plugin-names",
 	// 我的上架 → 可上报节点, which nodes reach the market and why not.
 	"GET /v1/admin/market/supply-groups/{id}/report",
+	// 供货管理 → L2 回源, the platform's L2 configurations a supply may name.
+	"GET /v1/admin/market/supply-l2-configs",
 }
 
 // PoolReporter is *marketprobe.Reporter.
 type PoolReporter interface {
 	Report(ctx context.Context, groupID uuid.UUID) (marketprobe.PoolReport, error)
+}
+
+// SupplyL2Options is the optional L2 choice list (*marketsupply.SupplyGroups).
+type SupplyL2Options interface {
+	L2Options(ctx context.Context, actor marketsupply.SupplyActor) ([]marketsupply.SupplyL2Option, error)
 }
 
 // SupplyGroups is *marketsupply.SupplyGroups.
@@ -141,6 +148,16 @@ func (h *Handler) WithSupplyGroups(groups SupplyGroups) *Handler {
 			writeJSON(w, http.StatusOK, report)
 		})
 	}
+	if options, ok := groups.(SupplyL2Options); ok {
+		h.handle(SupplyPatterns[7], accessSell, func(w http.ResponseWriter, r *http.Request, c Caller) {
+			items, err := options.L2Options(r.Context(), supplyActor(c))
+			if err != nil {
+				supplyFail(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"items": items})
+		})
+	}
 	return h
 }
 
@@ -222,6 +239,9 @@ func supplyFail(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "node_location_unmapped", "nodes": unmapped.Nodes})
 	case errors.Is(err, marketsupply.ErrSupplyNodeUnusable):
 		writeError(w, http.StatusUnprocessableEntity, "node_unusable")
+	case errors.Is(err, marketsupply.ErrSupplyL2Unusable):
+		// the L2 configuration is deleted, of another scope, or has no enabled member on an active node.
+		writeError(w, http.StatusUnprocessableEntity, "l2_config_unusable")
 	case errors.Is(err, marketsupply.ErrSupplyInvalid):
 		writeError(w, http.StatusBadRequest, "invalid")
 	case errors.Is(err, marketsupply.ErrSupplyNotFound):

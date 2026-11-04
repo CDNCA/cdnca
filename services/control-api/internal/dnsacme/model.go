@@ -93,11 +93,28 @@ type Provider struct {
 	Revision  int64     `json:"version"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Owner: the tenant owner of scope_id, filled only in the platform list
+	// (网站列表/证书管理 > DNS API 的「用户」列); absent elsewhere.
+	Owner *ProviderOwner `json:"owner,omitempty"`
+}
+
+type ProviderOwner struct {
+	ID        uuid.UUID `json:"id"`
+	DisplayID string    `json:"display_id"`
+	Username  string    `json:"username"`
 }
 
 type ProviderPageRequest struct {
 	Limit  int
 	Cursor string
+	ProviderListFilter
+}
+
+// ProviderListFilter narrows the provider list. ScopeID is platform only
+// (按用户筛选); ManagedBy is "", "tenant" or "platform".
+type ProviderListFilter struct {
+	ScopeID   uuid.UUID
+	ManagedBy string
 }
 
 type ProviderPage struct {

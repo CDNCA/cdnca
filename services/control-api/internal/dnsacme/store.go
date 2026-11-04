@@ -312,25 +312,43 @@ func (s *Store) prepareProviderCredentialCreate(
 	return CredentialBinding{TenantID: tenantID, ScopeID: scopeID, ProviderID: providerID}, nil
 }
 
-func (s *Store) ListProviders(ctx context.Context, actor Actor, limit int, after *providerPageCursor) ([]Provider, error) {
+func (s *Store) ListProviders(ctx context.Context, actor Actor, limit int, after *providerPageCursor, filter ProviderListFilter) ([]Provider, error) {
 	var afterCreatedAt *time.Time
 	afterID := uuid.Nil
 	if after != nil {
 		afterCreatedAt = &after.CreatedAt
 		afterID = after.ID
 	}
+	var scopeFilter *uuid.UUID
+	if filter.ScopeID != uuid.Nil {
+		scopeFilter = &filter.ScopeID
+	}
 	// A tenant does not see its platform DNS copy:
 	// the copy only serves the platform-allocated CNAME records, which read it
 	// by its deterministic id, not through this list. The platform view keeps it.
+	// The platform view also carries the tenant owner (「用户」列).
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, scope_id, name, remark, provider_type, credentials_configured, status, managed_by,
-		       revision, created_at, updated_at
-		FROM dns_providers
+		       revision, created_at, updated_at,
+		       CASE WHEN owner_id IS NULL THEN NULL ELSE jsonb_build_object('id', owner_id,
+		            'display_id', owner_display_id::text, 'username', owner_username) END
+		FROM dns_providers AS provider
+		LEFT JOIN LATERAL (
+			SELECT u.id AS owner_id, u.display_id AS owner_display_id, u.username AS owner_username
+			FROM role_assignments AS ra
+			JOIN roles AS r ON r.id = ra.role_id AND r.scope_id = ra.scope_id AND r.system_role AND r.name = 'tenant_owner'
+			JOIN users AS u ON u.id = ra.user_id
+			WHERE $1 = 'platform' AND ra.scope_id = provider.scope_id
+			ORDER BY ra.assigned_at, u.id
+			LIMIT 1
+		) AS owner ON true
 		WHERE ($1 = 'platform' OR (scope_id = $2 AND managed_by = 'tenant' AND id <> $6))
 		  AND ($3::timestamptz IS NULL OR created_at < $3 OR (created_at = $3 AND id < $4))
+		  AND ($7::uuid IS NULL OR scope_id = $7)
+		  AND ($8 = '' OR managed_by = $8)
 		ORDER BY created_at DESC, id DESC
 		LIMIT $5`, actor.ScopeKind, actor.ScopeID, afterCreatedAt, afterID, limit,
-		PlatformProviderCopyID(actor.ScopeID))
+		PlatformProviderCopyID(actor.ScopeID), scopeFilter, filter.ManagedBy)
 	if err != nil {
 		return nil, fmt.Errorf("list DNS providers: %w", err)
 	}
@@ -338,7 +356,9 @@ func (s *Store) ListProviders(ctx context.Context, actor Actor, limit int, after
 	items := make([]Provider, 0)
 	for rows.Next() {
 		var item Provider
-		if err := scanProvider(rows, &item); err != nil {
+		if err := rows.Scan(&item.ID, &item.ScopeID, &item.Name, &item.Remark, &item.ProviderType,
+			&item.CredentialsConfigured, &item.Status, &item.ManagedBy, &item.Revision,
+			&item.CreatedAt, &item.UpdatedAt, &item.Owner); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

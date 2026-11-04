@@ -31,6 +31,7 @@ type soldPackageLimits struct {
 
 func loadSoldPackageLimits(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (map[uuid.UUID]soldPackageLimits, error) {
 	rows, err := tx.Query(ctx, `SELECT site.id,subscription.id,subscription.product_snapshot#>'{spec,limits}',
+			COALESCE((subscription.product_snapshot->'spec') ? 'market',false),
 			market.node_requests,market.node_bandwidth_bps,market.node_connections,market.node_new_per_second,
 			market.node_qps,market.node_stopped
 		FROM sites site JOIN package_subscriptions subscription
@@ -47,7 +48,8 @@ func loadSoldPackageLimits(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (m
 		var raw []byte
 		var requests, bandwidth, connections, newPerSecond, qps *int64
 		var stopped *bool
-		if err := rows.Scan(&siteID, &subscriptionID, &raw, &requests, &bandwidth, &connections, &newPerSecond,
+		var marketSupply bool
+		if err := rows.Scan(&siteID, &subscriptionID, &raw, &marketSupply, &requests, &bandwidth, &connections, &newPerSecond,
 			&qps, &stopped); err != nil {
 			return nil, fmt.Errorf("%w: scan sold package limits", ErrPersistence)
 		}
@@ -56,6 +58,12 @@ func loadSoldPackageLimits(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (m
 			return nil, err
 		}
 		limits.subscriptionID = subscriptionID
+		if marketSupply {
+			// Every market supply includes WebSocket: the
+			// buyer's site decides. Hidden market products froze the grant's
+			// websocket switch, false on grants signed before market 077.
+			limits.WebSocket = nil
+		}
 		if requests != nil {
 			limits.market = &edgeconfig.PackageConnectionLimit{SubscriptionID: subscriptionID.String(),
 				Connections: *requests, BandwidthBPS: *bandwidth, MaxConnections: *connections,

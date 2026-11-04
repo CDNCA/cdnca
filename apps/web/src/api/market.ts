@@ -40,7 +40,8 @@ export interface MarketOfferListing {
   revision?: number
   category?: string
   pricing: MarketPricing
-  allocation: { http_ports?: number; stream_ports?: number; websocket?: boolean; http3?: boolean }
+  // l2: 支持 L2 回源, sites following the package go through the seller's own L2 nodes.
+  allocation: { http_ports?: number; stream_ports?: number; websocket?: boolean; http3?: boolean; l2?: boolean }
   compliance: { require_icp: boolean }
   // Own offers only (the market hides them from buyers): own_pool = a supply group of this controller.
   components?: Array<{ kind: string; node_pool_ref?: string; subscription_id?: string }> | null
@@ -50,6 +51,8 @@ export interface MarketOfferListing {
   tags?: MarketTags
   prepaid_exhausted_action?: MarketPrepaidAction
   plugins_unavailable?: string[] | null
+  // allocation.l2 is declared but a node behind the offer no longer has the seller's L2.
+  l2_unavailable?: boolean
   settlement_mode?: 'direct' | 'escrow'
   sla?: MarketSlaPolicy | null
   // market-service OfferFacets: absent before the first quality refresh.
@@ -182,7 +185,11 @@ export interface MarketSupplyGroup {
   nodes: Array<{ node_id: string; name: string; address: string; region: string; carrier: string }>
   node_pool_ref: string
   plugins: MarketSupplyPlugin[]
+  // the seller's L2 configuration of this supply (null = straight to the origin).
+  l2_config_id?: string | null
 }
+// one of this platform's L2 configurations a supply group may name (only usable ones are accepted).
+export interface MarketSupplyL2Option { id: string; name: string; region: string; mode: 'cache' | 'global'; usable: boolean }
 // This controller's nodes as the market admitted them (benchmark_grade s/a/b/c is the line grade).
 export interface MarketNodeAdmission { node_pool_ref: string; node_id: string; benchmark_grade?: string; status: string; region?: string; carrier?: string }
 export type MarketHoldReason = 'limit' | 'prepaid' | 'overdraft_cap' | 'operator'
@@ -888,9 +895,12 @@ export const marketApi = {
   supplyGroupReport: (token: string, groupID: string) =>
     call<MarketPoolReport>(token, `/v1/admin/market/supply-groups/${id(groupID)}/report`).then((v) => ({ ...v, nodes: v?.nodes ?? [] })),
   // Same node set again: endpoints take each node's current IP 归属.
-  updateSupplyGroup: (token: string, groupID: string, revision: number, name: string, nodeIDs: string[], key: string) =>
+  // l2ConfigID: undefined keeps the group's L2 configuration, '' clears it, an id sets it.
+  updateSupplyGroup: (token: string, groupID: string, revision: number, name: string, nodeIDs: string[], key: string, l2ConfigID?: string) =>
     call<MarketSupplyGroup>(token, `/v1/admin/market/supply-groups/${id(groupID)}`,
-      json('PUT', { name, node_ids: nodeIDs, expected_revision: revision }), key),
+      json('PUT', { name, node_ids: nodeIDs, expected_revision: revision, ...(l2ConfigID === undefined ? {} : { l2_config_id: l2ConfigID }) }), key),
+  supplyL2Configs: (token: string) =>
+    call<unknown>(token, '/v1/admin/market/supply-l2-configs').then((v) => list<MarketSupplyL2Option>(v)),
   // Every admission of this controller: walks all pages (200 each) by next_cursor.
   async nodeAdmissions(token: string): Promise<MarketNodeAdmission[]> {
     const out: MarketNodeAdmission[] = []
@@ -942,8 +952,11 @@ export const marketApi = {
   removeSupplyNodes: (token: string, groupIDs: string[], nodeIDs: string[]) =>
     call<unknown>(token, '/v1/admin/market/supply-node-removals', json('POST', { group_ids: groupIDs, node_ids: nodeIDs }))
       .then((v) => list<{ group_id: string; status: 'updated' | 'unchanged' | 'failed'; removed: string[]; error?: string }>(v)),
+  // allocation (ports, HTTP/3; omitted = kept, new subscriptions only) and plugins (omitted = kept,
+  // reaches sold subscriptions at once) ride on the same revision as the limits.
   updateOfferLimits: (token: string, offerID: string,
-    body: { limits: MarketLimit[]; prepaid_exhausted_action: MarketPrepaidAction; expected_revision?: number }, key: string) =>
+    body: { limits: MarketLimit[]; prepaid_exhausted_action: MarketPrepaidAction; expected_revision?: number;
+      allocation?: MarketOfferListing['allocation']; plugins?: string[] }, key: string) =>
     call<MarketOfferListing>(token, `/v1/admin/market/offers/${id(offerID)}/limits`, json('PUT', body), key),
   publishOffer: (token: string, id: string) =>
     call<{ status: string }>(token, `/v1/admin/market/offers/${encodeURIComponent(id)}/publish`, { method: 'POST' }),

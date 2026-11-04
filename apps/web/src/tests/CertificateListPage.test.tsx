@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App as AntApp, ConfigProvider } from 'antd'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, vi } from 'vitest'
 
 import { ApiError } from '../api/auth'
@@ -11,6 +11,7 @@ import {
   type CertificateAsset,
 	  type CertificateAssetBinding,
   type CertificateAssetDetail,
+  type CertificateDefaults,
   type CertificateOrder,
 } from '../api/certificates'
 import { dnsApi, type DNSProvider } from '../api/dns'
@@ -877,10 +878,16 @@ describe('CertificateListPage', () => {
     expect(screen.queryByRole('button', { name: '新增 DNS API' })).not.toBeInTheDocument()
 
 		await user.click(screen.getByRole('tab', { name: '默认设置' }))
-		// 证书列表的高级筛选面板（收起、hidden）也有「用户」字段，这里只看默认设置里可见的那个。
-		await waitFor(() => expect(screen.getAllByLabelText('用户').filter((node) => !node.closest('[hidden]'))).toHaveLength(1))
-		expect(screen.getAllByLabelText('证书类型').length).toBeGreaterThan(0)
-		expect(screen.getAllByLabelText('DNS API').length).toBeGreaterThan(0)
+		// 没有用户行；证书类型 = 系统默认设置 / ZeroSSL(推荐) / Let's Encrypt 按钮；
+		// DNS API 下拉下方一行说明；改选即保存，没有保存按钮。证书列表的高级筛选（收起、hidden）也有「用户」字段，不算。
+		const panel = document.querySelector('.certificate-default-panel') as HTMLElement
+		expect(within(panel).queryByText('用户')).not.toBeInTheDocument()
+		const types = within(panel).getByRole('radiogroup', { name: '证书类型' })
+		expect(within(types).getAllByRole('radio').map((radio) => radio.closest('label')?.textContent)).toEqual(['系统默认设置', 'ZeroSSL(推荐)', "Let's Encrypt"])
+		expect(within(panel).getByRole('combobox', { name: 'DNS API' })).toBeInTheDocument()
+		expect(within(panel).getByText('设置后，一键申请证书将优先使用此 DNS API。')).toBeInTheDocument()
+		expect(within(panel).queryByRole('button', { name: /保存/ })).not.toBeInTheDocument()
+		expect(screen.queryByRole('heading', { name: 'ACME 签发机构凭据' })).not.toBeInTheDocument()
 	})
 
   // Codex 复查卡 28：备注列显示服务商的备注，不再固定横线；停用的仍标“已禁用”。
@@ -902,16 +909,20 @@ describe('CertificateListPage', () => {
     expect(within(row('Disabled one')).getByText(/已禁用/)).toBeInTheDocument()
   })
 
-	it('loads and persists certificate defaults through the selected user without exposing tenant scope input', async () => {
+	// 改选即保存；“系统默认设置”= 不带 issuer，DNS API 照旧保留。
+	it('saves each certificate default as soon as it is picked and maps 系统默认设置 to no issuer', async () => {
 		authenticate()
-		const defaults = vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
+		vi.spyOn(certificatesApi, 'listIssuers').mockResolvedValue({ items: ['lets_encrypt', 'zerossl'], default: 'lets_encrypt' })
+		let stored: CertificateDefaults = {
 			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
-			certificate_type: 'acme', dns_provider_id: provider.id, revision: 2,
-			updated_at: '2026-09-30T02:00:00Z',
-		})
-		const updated = vi.spyOn(certificatesApi, 'updateDefaults').mockResolvedValue({
-			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
-			certificate_type: 'uploaded', revision: 3, updated_at: '2026-09-30T02:01:00Z',
+			certificate_type: 'acme', dns_provider_id: provider.id, revision: 2, updated_at: '2026-09-30T02:00:00Z',
+		}
+		const defaults = vi.spyOn(certificatesApi, 'getDefaults').mockImplementation(async () => stored)
+		const updated = vi.spyOn(certificatesApi, 'updateDefaults').mockImplementation(async (_token, input) => {
+			stored = { scope_id: stored.scope_id, user_id: stored.user_id, certificate_type: input.certificate_type,
+				...(input.dns_provider_id ? { dns_provider_id: input.dns_provider_id } : {}),
+				...(input.issuer ? { issuer: input.issuer } : {}), revision: stored.revision + 1 }
+			return stored
 		})
 		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
 		const user = userEvent.setup()
@@ -920,39 +931,77 @@ describe('CertificateListPage', () => {
 		await user.click(screen.getByRole('tab', { name: '默认设置' }))
 		await waitFor(() => expect(defaults).toHaveBeenCalledWith('memory-only-access-token', undefined, '11111111-1111-4111-8111-111111111111'))
 		expect(screen.queryByLabelText('租户作用域')).not.toBeInTheDocument()
-		await user.click(screen.getByRole('combobox', { name: '证书类型' }))
-		await user.click(await screen.findByText('上传证书'))
-		await user.click(screen.getByRole('button', { name: '保存默认设置' }))
+		const radio = (name: string | RegExp) => screen.getByRole('radio', { name })
+		await waitFor(() => expect(radio('系统默认设置')).toBeChecked())
+		await waitFor(() => expect(radio(/ZeroSSL/)).toBeEnabled())
+		await user.click(radio(/ZeroSSL/).closest('label')!)
 		await waitFor(() => expect(updated).toHaveBeenCalledTimes(1))
-		expect(updated.mock.calls[0][1]).toMatchObject({
-			target_user_id: '11111111-1111-4111-8111-111111111111',
-			certificate_type: 'uploaded', expected_revision: 2,
+		expect(updated.mock.calls[0][1]).toEqual({
+			target_user_id: '11111111-1111-4111-8111-111111111111', certificate_type: 'acme',
+			dns_provider_id: provider.id, issuer: 'zerossl', expected_revision: 2,
 		})
-		expect(updated.mock.calls[0][1]).not.toHaveProperty('dns_provider_id')
+		expect(await screen.findByText('已保存')).toBeInTheDocument()
+		await waitFor(() => expect(radio(/ZeroSSL/)).toBeChecked())
+		await waitFor(() => expect(radio('系统默认设置')).toBeEnabled())
+		// 清空 DNS API 也立即保存，签发机构保留
+		await user.click(document.querySelector('.certificate-default-panel .ant-select-clear') as HTMLElement)
+		await waitFor(() => expect(updated).toHaveBeenCalledTimes(2))
+		expect(updated.mock.calls[1][1]).toEqual({
+			target_user_id: '11111111-1111-4111-8111-111111111111', certificate_type: 'acme', issuer: 'zerossl', expected_revision: 3,
+		})
+		await waitFor(() => expect(radio('系统默认设置')).toBeEnabled())
+		await waitFor(() => expect(defaults.mock.results.length).toBeGreaterThanOrEqual(3))
+		await user.click(radio('系统默认设置').closest('label')!)
+		await waitFor(() => expect(updated).toHaveBeenCalledTimes(3))
+		expect(updated.mock.calls[2][1]).toEqual({
+			target_user_id: '11111111-1111-4111-8111-111111111111', certificate_type: 'acme', expected_revision: 4,
+		})
+		expect(new Set(updated.mock.calls.map((call) => call[2])).size).toBe(3)
 	})
 
-	// 默认设置被拒能定位字段时标在对应选择框下，不弹窗；改选后清除
+	// 旧的“上传证书”默认（已不可选）不带签发机构和 DNS API，按“系统默认设置”显示
+	it('shows a stored uploaded default as 系统默认设置', async () => {
+		authenticate()
+		vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
+			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
+			certificate_type: 'uploaded', revision: 4, updated_at: '2026-09-30T02:00:00Z',
+		})
+		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
+		const user = userEvent.setup()
+		renderWithProviders(<CertificateListPage />, ['/site/cert'])
+		await user.click(screen.getByRole('tab', { name: '默认设置' }))
+		await waitFor(() => expect(screen.getByRole('radio', { name: '系统默认设置' })).toBeEnabled())
+		expect(screen.getByRole('radio', { name: '系统默认设置' })).toBeChecked()
+		expect(screen.queryByText('上传证书')).not.toBeInTheDocument()
+	})
+
+	// 默认设置被拒能定位字段时标在对应选择框下，不弹窗、保留所选；再改选后清除
 	it('marks a refused certificate default under its field without a dialog', async () => {
 		authenticate()
 		vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
 			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
 			certificate_type: 'acme', dns_provider_id: provider.id, revision: 2, updated_at: '2026-09-30T02:00:00Z',
 		})
-		vi.spyOn(certificatesApi, 'updateDefaults').mockRejectedValueOnce(Object.assign(
-			new ApiError('API request failed', 400, 'validation_error', 'req-defaults'), { field: 'dns_provider_id', reason: 'invalid' }))
+		vi.spyOn(certificatesApi, 'updateDefaults')
+			.mockRejectedValueOnce(Object.assign(
+				new ApiError('API request failed', 400, 'validation_error', 'req-defaults'), { field: 'dns_provider_id', reason: 'invalid' }))
+			.mockResolvedValueOnce({
+				scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
+				certificate_type: 'acme', dns_provider_id: provider.id, revision: 3,
+			})
 		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
 		const user = userEvent.setup()
 		renderWithProviders(<CertificateListPage />, ['/site/cert'])
 		await user.click(screen.getByRole('tab', { name: '默认设置' }))
-		await screen.findByRole('combobox', { name: '证书类型' })
-		await user.click(screen.getByRole('button', { name: '保存默认设置' }))
+		await waitFor(() => expect(screen.getByRole('radio', { name: "Let's Encrypt" })).toBeEnabled())
+		await user.click(screen.getByRole('radio', { name: "Let's Encrypt" }).closest('label')!)
 		const help = await screen.findByText('填写的内容不符合要求')
 		expect(help.closest('.certificate-default-field')).toContainElement(screen.getByRole('combobox', { name: 'DNS API' }))
 		expect(screen.getByRole('combobox', { name: 'DNS API' }).closest('.ant-select')).toHaveClass('ant-select-status-error')
 		expect(document.querySelector('.cdnca-feedback')).toBeNull()
-		await user.click(screen.getByRole('combobox', { name: '证书类型' }))
-		await user.click(await screen.findByText('上传证书'))
-		expect(screen.queryByText('填写的内容不符合要求')).not.toBeInTheDocument()
+		expect(screen.getByRole('radio', { name: "Let's Encrypt" })).toBeChecked()
+		await user.click(screen.getByRole('radio', { name: '系统默认设置' }).closest('label')!)
+		await waitFor(() => expect(screen.queryByText('填写的内容不符合要求')).not.toBeInTheDocument())
 	})
 
 	// fp-site CERT-01：服务端规范化后的 PEM（LF、末尾换行、去块外文字）算同一证书，换了证书仍拒绝
@@ -1005,9 +1054,9 @@ describe('CertificateListPage', () => {
 		await user.click(screen.getByRole('button', { name: '申请证书' }))
 		const dialog = getDialog('申请证书')
 		await user.type(within(dialog).getByLabelText('域名'), 'www.example.com')
-		// 默认 HTTP-01；切到 DNS-01 后带入保存的默认 DNS 账号
-		await chooseDNS01(user, dialog)
+		// 设了默认 DNS API 就直接 DNS-01 并带入该账号
 		await waitFor(() => expect(within(dialog).getByText(provider.name)).toBeInTheDocument())
+		expect(within(dialog).getByText('DNS-01')).toBeInTheDocument()
 		await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
 		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
 		expect(create.mock.calls[0][1]).toMatchObject({ challenge_type: 'dns-01', dns_provider_id: provider.id })
@@ -1024,23 +1073,59 @@ describe('CertificateListPage', () => {
 			.mockRejectedValueOnce(new ApiError('down', 503, 'service_unavailable'))
 			.mockResolvedValueOnce({
 				scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
-				certificate_type: 'uploaded', revision: 3, updated_at: '2026-09-30T02:01:00Z',
+				certificate_type: 'acme', dns_provider_id: provider.id, issuer: 'lets_encrypt', revision: 3, updated_at: '2026-09-30T02:01:00Z',
 			})
 		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
 		const user = userEvent.setup()
 		renderWithProviders(<CertificateListPage />, ['/site/cert'])
 		await user.click(screen.getByRole('tab', { name: '默认设置' }))
-		await user.click(await screen.findByRole('combobox', { name: '证书类型' }))
-		await user.click(await screen.findByText('上传证书'))
-		await user.click(screen.getByRole('button', { name: '保存默认设置' }))
+		await waitFor(() => expect(screen.getByRole('radio', { name: "Let's Encrypt" })).toBeEnabled())
+		await user.click(screen.getByRole('radio', { name: "Let's Encrypt" }).closest('label')!)
 		await waitFor(() => expect(updated).toHaveBeenCalledTimes(1))
 		const retry = await screen.findByRole('button', { name: '使用同一请求重试' })
-		expect(screen.getByRole('combobox', { name: '证书类型' })).toBeDisabled()
-		expect(screen.getByRole('button', { name: '保存默认设置' })).toBeDisabled()
+		expect(screen.getByRole('radio', { name: '系统默认设置' })).toBeDisabled()
+		expect(screen.getByRole('radio', { name: "Let's Encrypt" })).toBeChecked()
+		expect(screen.getByRole('combobox', { name: 'DNS API' })).toBeDisabled()
 		await user.click(retry)
 		await waitFor(() => expect(updated).toHaveBeenCalledTimes(2))
 		expect(updated.mock.calls[1][2]).toBe(updated.mock.calls[0][2])
 		expect(updated.mock.calls[1][1]).toEqual(updated.mock.calls[0][1])
+	})
+
+	// 明确失败（非字段被拒）时退回已保存的值，并说明原因
+	it('reverts a refused certificate default to the saved value', async () => {
+		authenticate()
+		vi.spyOn(certificatesApi, 'listIssuers').mockResolvedValue({ items: ['lets_encrypt', 'zerossl'], default: 'lets_encrypt' })
+		vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
+			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
+			certificate_type: 'acme', issuer: 'lets_encrypt', revision: 2, updated_at: '2026-09-30T02:00:00Z',
+		})
+		vi.spyOn(certificatesApi, 'updateDefaults').mockRejectedValueOnce(new ApiError('unavailable', 409, 'certificate_issuer_unavailable'))
+		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
+		const user = userEvent.setup()
+		renderWithProviders(<CertificateListPage />, ['/site/cert'])
+		await user.click(screen.getByRole('tab', { name: '默认设置' }))
+		await waitFor(() => expect(screen.getByRole('radio', { name: /ZeroSSL/ })).toBeEnabled())
+		await user.click(screen.getByRole('radio', { name: /ZeroSSL/ }).closest('label')!)
+		await waitFor(() => expect(document.querySelector('.cdnca-feedback')).not.toBeNull())
+		expect(screen.getByRole('radio', { name: "Let's Encrypt" })).toBeChecked()
+		expect(screen.queryByRole('button', { name: '使用同一请求重试' })).not.toBeInTheDocument()
+	})
+
+	// 平台未配置 EAB 时 ZeroSSL 置灰（与添加证书一致）；Google Trust 未配置不出现
+	it('disables ZeroSSL in the defaults until the platform configures EAB', async () => {
+		authenticate()
+		vi.spyOn(certificatesApi, 'listIssuers').mockResolvedValue({ items: ['lets_encrypt'], default: 'lets_encrypt' })
+		vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
+			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111', certificate_type: 'acme', revision: 1,
+		})
+		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [] })
+		const user = userEvent.setup()
+		renderWithProviders(<CertificateListPage />, ['/site/cert'])
+		await user.click(screen.getByRole('tab', { name: '默认设置' }))
+		await waitFor(() => expect(screen.getByRole('radio', { name: "Let's Encrypt" })).toBeEnabled())
+		expect(screen.getByRole('radio', { name: /ZeroSSL/ })).toBeDisabled()
+		expect(screen.queryByRole('radio', { name: /Google Trust/ })).not.toBeInTheDocument()
 	})
 
 	it('keeps the certificate list toolbar, page statistics, and nine-column contract', async () => {
@@ -1309,7 +1394,8 @@ describe('CertificateListPage', () => {
 		expect(create.mock.calls[0][1]).toMatchObject({ name: 'shop', remark: 'main site', issuer: 'zerossl', challenge_type: 'http-01' })
 	})
 
-	// 添加证书固定显示 ZeroSSL 卡；未配置 EAB 时置灰说明，平台管理员可直达默认设置配置。
+	// 添加证书固定显示 ZeroSSL 卡；未配置 EAB 时置灰说明。
+	// 证书默认设置页不放 EAB，平台管理员“去配置”直达 全局配置 → 默认配置 → 证书。
 	it('shows ZeroSSL disabled with a reason until the platform configures EAB', async () => {
 		platformSession('platform-certificate-token', ['certificates.read', 'certificates.manage', 'dns.read', 'system_configuration.manage'])
 		vi.spyOn(usersApi, 'list').mockResolvedValue({ items: [] } as never)
@@ -1321,7 +1407,14 @@ describe('CertificateListPage', () => {
 		] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 		vi.stubGlobal('fetch', fetchMock)
 		const user = userEvent.setup()
-		renderWithProviders(<CertificateListPage />, ['/site/cert'])
+		function LocationProbe() {
+			const location = useLocation()
+			return <p data-testid="location">{location.pathname + location.search}</p>
+		}
+		renderWithProviders(<Routes>
+			<Route path="/site/cert" element={<CertificateListPage />} />
+			<Route path="/config/default" element={<LocationProbe />} />
+		</Routes>, ['/site/cert'])
 		await user.click(await screen.findByRole('button', { name: '添加证书' }))
 		const dialog = await findDialog('添加证书')
 		const zerossl = await within(dialog).findByRole('button', { name: /ZeroSSL/ })
@@ -1331,9 +1424,7 @@ describe('CertificateListPage', () => {
 		expect(zerossl).toHaveAccessibleDescription('平台尚未配置 EAB，暂不可用。')
 		expect(within(dialog).getByRole('button', { name: /Let's Encrypt/ })).toHaveAttribute('aria-pressed', 'true')
 		await user.click(within(dialog).getByRole('button', { name: '去配置' }))
-		// 跳到“默认设置”，平台管理员看到 EAB 凭据卡（含按邮箱获取）。
-		expect(await screen.findByRole('heading', { name: 'ACME 签发机构凭据' })).toBeInTheDocument()
-		expect(await screen.findByLabelText('ZeroSSL 账户邮箱')).toBeInTheDocument()
+		expect(await screen.findByTestId('location')).toHaveTextContent('/config/default?tab=certificate')
 		vi.unstubAllGlobals()
 	})
 
@@ -1397,7 +1488,8 @@ describe('CertificateListPage', () => {
 		expect(create.mock.calls[0][1]).toMatchObject({ name: 'shop', issuer: 'zerossl', domains: ['example.com', 'www.example.com'] })
 	})
 
-	it('preselects 自己上传 when the saved default certificate type is uploaded', async () => {
+	// 默认设置不再有“上传证书”；旧数据不再让添加证书预选自己上传
+	it('opens the add dialog on a CA even when a legacy uploaded default is stored', async () => {
 		authenticate(['certificates.read', 'certificates.manage', 'dns.read'])
 		vi.spyOn(certificatesApi, 'listIssuers').mockResolvedValue({ items: ['lets_encrypt'], default: 'lets_encrypt' })
 		vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
@@ -1409,8 +1501,9 @@ describe('CertificateListPage', () => {
 		renderWithProviders(<CertificateListPage />, ['/site/cert'])
 		await user.click(await screen.findByRole('button', { name: '添加证书' }))
 		const dialog = await findDialog('添加证书')
-		await waitFor(() => expect(within(dialog).getByRole('button', { name: /自己上传/ })).toHaveAttribute('aria-pressed', 'true'))
-		expect(within(dialog).getByLabelText('证书 PEM')).toBeInTheDocument()
+		await waitFor(() => expect(within(dialog).getByRole('button', { name: /Let's Encrypt/ })).toHaveAttribute('aria-pressed', 'true'))
+		expect(within(dialog).getByRole('button', { name: /自己上传/ })).toHaveAttribute('aria-pressed', 'false')
+		expect(within(dialog).queryByLabelText('证书 PEM')).not.toBeInTheDocument()
 	})
 
 	// 批量申请：每行一个独立订单、独立幂等键；明确失败换新键重试，结果未知用原键重试
@@ -1511,7 +1604,7 @@ describe('CertificateListPage', () => {
     expect(createInput).toEqual({
       name: 'Cloudflare created', remark: '', provider_type: 'cloudflare', credentials: { api_token: 'create-token' },
     })
-    expect(create.mock.calls[0]?.[2]).toMatch(/^certificate-dns-provider-create-/)
+    expect(create.mock.calls[0]?.[2]).toMatch(/^site-dns-api-create-/)
 
     await user.click(screen.getByRole('button', { name: '编辑Cloudflare primary' }))
     const editDialog = getDialog('编辑 DNS 服务商')
@@ -1531,7 +1624,7 @@ describe('CertificateListPage', () => {
     await user.click(screen.getByRole('button', { name: '验证Cloudflare primary' }))
     await waitFor(() => expect(verify).toHaveBeenCalledTimes(1))
     expect(verify.mock.calls[0]?.slice(1)).toEqual([
-      provider.id, 'cloudflare', provider.version, expect.stringMatching(/^certificate-dns-provider-verify-/),
+      provider.id, 'cloudflare', provider.version, expect.stringMatching(/^site-dns-api-verify-/),
     ])
 
     await user.click(screen.getByRole('button', { name: '删除Cloudflare primary' }))
@@ -1541,7 +1634,7 @@ describe('CertificateListPage', () => {
     await user.click(within(confirm as HTMLElement).getByRole('button', { name: '删除' }))
     await waitFor(() => expect(remove).toHaveBeenCalledTimes(1))
     expect(remove.mock.calls[0]?.slice(1)).toEqual([
-      provider.id, provider.version, expect.stringMatching(/^certificate-dns-provider-delete-/),
+      provider.id, provider.version, expect.stringMatching(/^site-dns-api-delete-/),
     ])
     expect(list).toHaveBeenCalled()
   })
@@ -2467,15 +2560,25 @@ describe('CertificateListPage', () => {
     expect(screen.queryByRole('combobox', { name: '目标用户' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('tab', { name: '默认设置' }))
     expect(defaults).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('combobox', { name: '目标用户' }))
+    // 管理员端：先选用户，证书类型/DNS API 显示“请先选择用户。/选择用户后加载可用 DNS API。”
+    expect(screen.getByText('请先选择用户。')).toBeInTheDocument()
+    expect(screen.getByText('选择用户后加载可用 DNS API。')).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: '用户' }))
     await user.click(await screen.findByText('target-admin（ID: 17）'))
     await waitFor(() => expect(defaults).toHaveBeenCalledWith('platform-certificate-token', managedTarget.scope_id, managedTarget.id))
     expect(screen.getByRole('tab', { name: '默认设置' })).toHaveAttribute('aria-selected', 'true')
 
-    // DNS API 页签目标用户选择框与「新增 DNS API/删除选中」在同一工具条里。
+    // DNS API 与网站列表同一组件，列全部用户的账户（managed_by=tenant）、
+    // 带「用户」列；「按用户筛选」与「新增 DNS API/删除选中」在同一工具条里。
+    const listProviders = vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [{
+      ...provider, scope_id: managedTarget.scope_id, owner: { id: managedTarget.id, display_id: '17', username: 'target-admin' },
+    }] })
     await user.click(screen.getByRole('tab', { name: 'DNS API' }))
-    const dnsTarget = await screen.findByRole('combobox', { name: '目标用户' })
-    const toolbar = dnsTarget.closest('.certificate-dns-toolbar')
+    expect(await screen.findByText('target-admin（17）')).toBeInTheDocument()
+    expect(listProviders).toHaveBeenCalledWith('platform-certificate-token', undefined, { managed_by: 'tenant' })
+    expect(screen.getByRole('columnheader', { name: '用户' })).toBeInTheDocument()
+    const filter = screen.getByRole('combobox', { name: '按用户筛选' })
+    const toolbar = filter.closest('.site-groups-toolbar')
     expect(toolbar).not.toBeNull()
     expect(toolbar).toContainElement(screen.getByRole('button', { name: /新增 DNS API/ }))
   })

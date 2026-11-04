@@ -12,6 +12,7 @@ import { resaleForbiddenBy } from '../../api/marketSupplier'
 import { nodesApi, type NodeInventoryItem, type NodeMetricsLatest } from '../../api/nodes'
 import { useSessionStore } from '../../auth/session'
 import { ListingBatchResults } from './ListingBatchResults'
+import { PluginChecks } from './PluginChecks'
 import {
   defaultRows, floorOf, formatCap, offerablePlugin, ruleOf, shareOf, toLimits, type LimitRow, type LimitUnit, type LoadFloor,
 } from './limitsModel'
@@ -27,6 +28,7 @@ import {
 import { useErrorText } from './supplier/hooks'
 import { useIdempotencyKey } from '../market/idempotency'
 import { UnmappedNodesAlert } from './OfferPoolReport'
+import { CapabilityFields } from './OfferCapabilities'
 import { useFeedback } from '@cdnca/ui'
 import { formatYuan } from '@cdnca/ui/offer-terms'
 
@@ -40,8 +42,8 @@ export type ListingSource = 'own' | 'resale' | 'combo'
 type PluginNames = Map<string, { name_zh: string; name_en: string }>
 
 const gradeRank: Record<string, number> = { s: 4, a: 3, b: 2, c: 1 }
-// A combo's ports start at the components' sum (2 HTTP ports for my nodes, as a listing).
-const defaultAllocation: ResaleAllocation = { httpPorts: 2, streamPorts: 0, websocket: false, http3: false }
+// A combo's ports start at the components' sum (2 HTTP(S) ports for my nodes, as a listing).
+const defaultAllocation: ResaleAllocation = { httpPorts: 2, streamPorts: 0, http3: false }
 
 const priceLabel = { daily_bundle: 'dailyMinor', traffic: 'perGBMinor', bandwidth_95: 'perMbpsMonthMinor', bandwidth_daily_peak: 'perMbpsDayMinor' } as const
 
@@ -74,7 +76,7 @@ function InheritedTerms({ up, plugin }: { up: MarketFrozenTerms; plugin: (code: 
       items={[
         { key: 'offer', label: t('unified.upstreamOffer'), children: `${up.name}（${t(`models.${up.billing_model}`, { defaultValue: up.billing_model })}）`, span: 2 },
         { key: 'ports', label: t('unified.ports'), children: t('unified.portsValue', { http: a.http_ports ?? 0, stream: a.stream_ports ?? 0 }) },
-        { key: 'switches', label: t('unified.switches'), children: `WebSocket ${yes(a.websocket)} · HTTP/3 ${yes(a.http3)}` },
+        { key: 'switches', label: t('unified.switches'), children: `WebSocket ${t('caps.included')} · HTTP/3 ${yes(a.http3)}` },
         { key: 'limits', label: t('listing.limits'), span: 2, children: up.limits.length ? up.limits.map((l) => {
           const c = formatCap(l.metric, l.cap)
           return <Tag key={l.metric}>{`${t(`limitMetrics.${l.metric}`)} ≤ ${c.value} ${t(`limitUnits.${c.unit}`)} · ${t(`limitActions.${l.action}`)}`}</Tag>
@@ -449,14 +451,7 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
         {up ? <>
           <InheritedTerms up={up} plugin={plugin} />
           <Typography.Title level={5} style={{ marginTop: 16 }}>{t('unified.allocation')}</Typography.Title>
-          <Space wrap align="start">
-            <Form.Item name="httpPorts" label={t('unified.httpPorts')}>
-              <InputNumber min={0} max={up.allocation.http_ports ?? 0} precision={0} aria-label={t('unified.httpPorts')} /></Form.Item>
-            <Form.Item name="streamPorts" label={t('unified.streamPorts')}>
-              <InputNumber min={0} max={up.allocation.stream_ports ?? 0} precision={0} aria-label={t('unified.streamPorts')} /></Form.Item>
-            <Form.Item name="websocket" label={t('unified.websocket')} valuePropName="checked"><Switch disabled={!up.allocation.websocket} /></Form.Item>
-            <Form.Item name="http3" label={t('unified.http3')} valuePropName="checked"><Switch disabled={!up.allocation.http3} /></Form.Item>
-          </Space>
+          <CapabilityFields maxHttp={up.allocation.http_ports ?? 0} maxStream={up.allocation.stream_ports ?? 0} http3Allowed={!!up.allocation.http3} />
         </> : null}
       </> : <>
       {combo ? <>
@@ -515,13 +510,13 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
               return { key: r.metric, label: t(`limitMetrics.${r.metric}`), children: c ? `≤ ${c.value} ${t(`limitUnits.${c.unit}`)}` : t('sell.unlimited') }
             }),
           ]} />
-        <Space wrap align="start" style={{ marginTop: 12 }}>
-          <Form.Item name="httpPorts" label={t('unified.httpPorts')}><InputNumber min={0} precision={0} aria-label={t('unified.httpPorts')} /></Form.Item>
-          <Form.Item name="streamPorts" label={t('unified.streamPorts')}><InputNumber min={0} precision={0} aria-label={t('unified.streamPorts')} /></Form.Item>
-          <Form.Item name="websocket" label={t('unified.websocket')} valuePropName="checked"><Switch /></Form.Item>
-          <Form.Item name="http3" label={t('unified.http3')} valuePropName="checked"><Switch /></Form.Item>
-        </Space>
+        <div style={{ marginTop: 12 }}><CapabilityFields /></div>
       </> : null}
+      {combo ? null : <>
+        <Typography.Title level={5} style={{ marginTop: 24 }}>{t('caps.title')}</Typography.Title>
+        <Typography.Paragraph type="secondary">{t('caps.help')}</Typography.Paragraph>
+        <CapabilityFields />
+      </>}
       </>}
 
       <Typography.Title level={5} style={{ marginTop: 24 }}>{t('listing.pricing')}</Typography.Title>
@@ -632,7 +627,7 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
         : selected.length === 0 ? t('listing.pluginsPickNodes')
           : pluginOptions.length === 0 && !plugins.isLoading ? t('listing.pluginsNone')
             : mode === 'single' ? `${t('listing.pluginsHelp')}${t('batch.pluginsHelp')}` : t('listing.pluginsHelp')}>
-        <Checkbox.Group options={pluginOptions.map((p) => ({ value: p.code, label: p.label }))} />
+        <PluginChecks options={pluginOptions.map((p) => ({ value: p.code, label: p.label }))} />
       </Form.Item>
       <Form.Item name="icp" label={t('listing.icp')} valuePropName="checked"
         extra={up?.compliance.require_icp ? t('unified.icpInherited') : undefined}><Switch disabled={!!up?.compliance.require_icp} /></Form.Item>

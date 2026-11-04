@@ -16,6 +16,9 @@ func TestAllocationMinAndStrictDecode(t *testing.T) {
 	if got, want := a.Min(b), (Allocation{HTTPPorts: 2, WebSocket: true}); got != want {
 		t.Fatalf("Min = %+v, want %+v", got, want)
 	}
+	if got := (Allocation{HTTPPorts: 2, HTTP3: true}).Normalized(); got != (Allocation{HTTPPorts: 2, WebSocket: true, HTTP3: true}) {
+		t.Fatalf("Normalized = %+v", got)
+	}
 	if (Allocation{HTTPPorts: MaxPorts + 1}).Validate() == nil || (Allocation{StreamPorts: -1}).Validate() == nil {
 		t.Fatal("out of range ports accepted")
 	}

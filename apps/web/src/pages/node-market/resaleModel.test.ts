@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { MarketFrozenTerms } from '../../api/market'
 import { defaultValues } from './listingModel'
-import { defaultRows } from './limitsModel'
+import { defaultRows, offerablePlugin } from './limitsModel'
 import {
   ccOptions, comboOfferOf, comboPlugins, comboTotals, maxIn, overUpstream, pluginLabel, resaleOfferOf, rowsFromUpstream, valuesFromUpstream,
 } from './resaleModel'
@@ -54,6 +54,13 @@ describe('resale model', () => {
     expect(body.limits.map((l) => [l.metric, l.cap])).toEqual([['domains', 10], ['bandwidth_peak_bps', 2e9], ['monthly_traffic_bytes', 1536 * 1024 ** 3]])
     expect(body.name).toBe('R')
   })
+
+  // an upstream bought before WebSocket became required may say false; the resale still includes it.
+  it('always sends WebSocket on, whatever the upstream snapshot says', () => {
+    const old: MarketFrozenTerms = { ...up, allocation: { ...up.allocation, websocket: false } }
+    const v = { ...defaultValues, ...valuesFromUpstream(old), name: 'R', price: 7 }
+    expect(resaleOfferOf(v, rowsFromUpstream(old), null, 'sub-1', old).allocation.websocket).toBe(true)
+  })
 })
 
 // u4g: combined offers and plugin names.
@@ -77,15 +84,18 @@ describe('combo model', () => {
   })
 
   it('builds own_pool plus sorted upstream components and drops plugins not allowed', () => {
-    const body = comboOfferOf({ ...defaultValues, name: ' c ', price: 10, httpPorts: 3, streamPorts: 0, websocket: true, http3: false,
+    const body = comboOfferOf({ ...defaultValues, name: ' c ', price: 10, httpPorts: 3, streamPorts: 0, http3: false,
       plugins: ['ja4', 'pack.crs'] }, defaultRows(), null, 'pool-1', ['b', 'a'], ['ja4'])
     expect(body.name).toBe('c')
     expect(body.components).toEqual([{ kind: 'own_pool', node_pool_ref: 'pool-1' }, { kind: 'upstream', subscription_id: 'a' },
       { kind: 'upstream', subscription_id: 'b' }])
     expect(body.allocation).toEqual({ http_ports: 3, stream_ports: 0, websocket: true, http3: false })
     expect(body.tags.plugins).toEqual(['ja4'])
-    expect(comboOfferOf({ ...defaultValues, name: 'x', price: 1, httpPorts: 0, streamPorts: 0, websocket: false, http3: false },
-      defaultRows(), null, null, ['a', 'b'], []).components.map((c) => c.kind)).toEqual(['upstream', 'upstream'])
+    const upstreamsOnly = comboOfferOf({ ...defaultValues, name: 'x', price: 1, httpPorts: 0, streamPorts: 0, http3: false },
+      defaultRows(), null, null, ['a', 'b'], [])
+    expect(upstreamsOnly.components.map((c) => c.kind)).toEqual(['upstream', 'upstream'])
+    // WebSocket is in every offer, not a choice.
+    expect(upstreamsOnly.allocation.websocket).toBe(true)
   })
 
   it('names a plugin from the catalogue or falls back to the code', () => {
@@ -93,5 +103,15 @@ describe('combo model', () => {
     expect(pluginLabel('ja4', names, false)).toBe('JA4 指纹')
     expect(pluginLabel('ja4', names, true)).toBe('JA4 fingerprints')
     expect(pluginLabel('rule_pack:system/x', names, false)).toBe('rule_pack:system/x')
+  })
+})
+
+// the free plugins the market accepts (spec freePlugins) can be offered like module.* and rule packs.
+describe('offerablePlugin', () => {
+  it('matches spec.ValidPlugin', () => {
+    for (const code of ['ipintel', 'ja4', 'module.autodefense', 'module.ipintel.dnspup', 'pack.crs', 'rule_pack:system/bot-core'])
+      expect(offerablePlugin(code)).toBe(true)
+    for (const code of ['IPINTEL', 'ja5', 'plugin.x', 'rule_pack:other/x', ''])
+      expect(offerablePlugin(code)).toBe(false)
   })
 })

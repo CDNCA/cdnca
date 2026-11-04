@@ -77,6 +77,10 @@ type Config struct {
 	// reported when only delisted offers use it: delisting stops new sales,
 	// not the supply already sold (ADR 0012 §18.4, U3). Nil: none serve.
 	Serving PoolServing
+	// L2 reports whether a pool's supply group names a usable L2
+	// configuration (marketsupply.SupplyGroups.PoolL2), sent as each node's
+	// l2. Nil reports none.
+	L2 PoolL2
 	// Grants resolves a market key to its current grant, for whole-node
 	// actions on market sites (ADR 0012 §19.4). Nil reports them without a site.
 	Grants GrantResolver
@@ -85,6 +89,11 @@ type Config struct {
 // PoolServing reports whether a node pool still serves subscribers.
 type PoolServing interface {
 	PoolServing(ctx context.Context, ref string) (bool, error)
+}
+
+// PoolL2 reports whether a pool has usable seller L2.
+type PoolL2 interface {
+	PoolL2(ctx context.Context, ref string) (bool, error)
 }
 
 // NodePlugins reads the market plugin codes each node has.
@@ -248,6 +257,10 @@ func (s *Service) SyncInventory(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("pool %s plugins: %w", ref, err))
 			continue
 		}
+		if err := s.withL2(ctx, ref, nodes); err != nil {
+			errs = append(errs, fmt.Errorf("pool %s L2: %w", ref, err))
+			continue
+		}
 		online, err := s.onlineAvailable(ctx, ref)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("pool %s online nodes: %w", ref, err))
@@ -294,6 +307,22 @@ func (s *Service) withPlugins(ctx context.Context, nodes []marketclient.PoolNode
 	}
 	for i := range nodes {
 		nodes[i].Plugins = codes[ids[i]]
+	}
+	return nil
+}
+
+// withL2 marks every node of a pool with usable seller L2. A pool whose L2
+// cannot be read is not reported this round, as for plugins.
+func (s *Service) withL2(ctx context.Context, ref string, nodes []marketclient.PoolNode) error {
+	if s.cfg.L2 == nil || len(nodes) == 0 {
+		return nil
+	}
+	l2, err := s.cfg.L2.PoolL2(ctx, ref)
+	if err != nil {
+		return err
+	}
+	for i := range nodes {
+		nodes[i].L2 = l2
 	}
 	return nil
 }

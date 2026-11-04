@@ -116,13 +116,15 @@ export function overriddenBy(limits: MarketLimit[] | undefined, floor: LoadFloor
   })
 }
 
-// Spec plugin codes (spec.ValidPlugin): module.* / pack.* feature codes and
-// rule_pack:<pack id> (a bought rule pack every node applied) may go into tags.plugins.
+// Spec plugin codes (spec.ValidPlugin): module.* / pack.* feature codes,
+// rule_pack:<pack id> (a bought rule pack every node applied) and the free
+// plugins ipintel / ja4 (spec freePlugins) may go into tags.plugins.
 const pluginCode = /^(module|pack)\.[a-z0-9]+([._-][a-z0-9]+)*$/
+const freePlugins = ['ipintel', 'ja4']
 const rulePackCode = /^rule_pack:(system\/[a-z0-9][a-z0-9-]{0,63}|dev\/[a-z0-9]+(?:[.-][a-z0-9]+)*\/[a-z0-9][a-z0-9-]{0,63}|user\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9][a-z0-9-]{0,63})$/
 export function offerablePlugin(code: string): boolean {
   if (rulePackCode.test(code)) return code.length <= 180
-  return code.length <= 96 && pluginCode.test(code)
+  return freePlugins.includes(code) || code.length <= 96 && pluginCode.test(code)
 }
 
 // formatCap renders a contract cap in the largest unit it reaches (rounded to 2 decimals).

@@ -130,7 +130,11 @@ func (s *Service) Handle(ctx context.Context, header envelope.Header, payload []
 		if err != nil {
 			return siteconf.Reply{}, err
 		}
-		reply.Blockers = append(append(advisory, http3Advisory...), originRouteAdvisory(req.Config, geos)...)
+		l2Advisory, err := s.l2Advisory(ctx, actor, g, req.Config)
+		if err != nil {
+			return siteconf.Reply{}, err
+		}
+		reply.Blockers = append(append(append(advisory, http3Advisory...), originRouteAdvisory(req.Config, geos)...), l2Advisory...)
 		if header.Operation == siteconf.OpPrepare {
 			reply.OK = true
 			return reply, nil
@@ -345,6 +349,12 @@ func (s *Service) commit(ctx context.Context, actor serviceActor, g grant.Grant,
 	if err != nil {
 		return uuid.Nil, err
 	}
+	// The key also names the leaf site's revision the update starts from: a
+	// commit of the same subscriber revision sent again after it applied (a
+	// lost reply, a fresh relay message per attempt) finds the site moved on
+	// and writes the same fields again instead of reusing the first update's
+	// key with another expected revision (site idempotency conflict).
+	key += "-r" + strconv.FormatInt(current.Revision, 10)
 	updated, err := s.sites.Update(ctx, siteActor(actor), site.UpdateRequest{ID: current.ID,
 		ExpectedRevision: current.Revision, Fields: fields, IdempotencyKey: key, RequestID: key})
 	if err != nil {

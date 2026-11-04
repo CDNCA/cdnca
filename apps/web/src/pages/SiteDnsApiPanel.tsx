@@ -3,25 +3,32 @@ import { Button, Pagination, Popconfirm, Space, Table, Tooltip, type TableColumn
 import { CircleCheck, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import { dnsApi, ownDNSProviders, type CreateDNSProviderInput, type DNSProvider, type UpdateDNSProviderInput } from '../api/dns'
 import { useSessionStore } from '../auth/session'
+import TenantScopeSelect from '../components/TenantScopeSelect'
+import '../i18n/dnsProviders'
+import './SiteGroupsPage.css'
 import {
   credentialFields, errorMessage, isCreatableProviderType, ProviderEditor, providerLabel,
   type DNSProviderEditorState, type ProviderForm,
 } from './NodeDnsPage'
 
-// 网站管理 > DNS API（用户端）：本租户自己的 DNS 服务商账号，
-// 走租户级 /v1/dns/providers（按 scope 隔离，dns.read / dns.manage），
-// 供 DNS-01 证书验证与租户 DNS 区域使用。管理员的平台 DNS 配置在 /node/dns，用户端不跳转过去。
+// DNS API（网站列表与证书管理两处共用，同一份数据）：
+// 列 ID / 用户（仅管理员）/ 名称 / 类型 / 备注 / 操作，工具条「新增 DNS API」「删除选中」。
+// 用户：本租户自己的 DNS 账号（/v1/dns/providers，服务端按 scope 隔离），不含平台 DNS 副本。
+// 平台管理员：全部用户的 DNS 账号（managed_by=tenant，不含平台 DNS 副本），带所属用户，
+// 可按用户筛选；新增时在弹窗里选用户（新增弹窗第一项「用户」）。
 type Write =
   | { kind: 'create'; input: CreateDNSProviderInput }
   | { kind: 'update'; id: string; providerType: string; input: UpdateDNSProviderInput }
   | { kind: 'verify'; id: string; providerType: string; version: number }
   | { kind: 'delete'; id: string; version: number }
 type Attempt = Write & { key: string }
+
+const siteDnsApiQueryPrefix = 'site-dns-api'
 
 function attemptKey(kind: Write['kind']): string {
   return `site-dns-api-${kind}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
@@ -37,14 +44,26 @@ function clearCredentials(attempt: Attempt | null): void {
   if (credentials) for (const key of Object.keys(credentials)) credentials[key] = ''
 }
 
-export default function SiteDnsApiPanel() {
+function hasPermission(permissions: string[] | undefined, code: string): boolean {
+  return Boolean(permissions?.includes(code) || permissions?.includes('platform.admin'))
+}
+
+export default function SiteDnsApiPanel({ onChanged }: {
+  // 写成功后通知宿主页刷新它自己的 DNS 账号缓存（证书页默认设置/申请弹窗的选择器）。
+  onChanged?: () => void
+} = {}) {
   const { t } = useTranslation('dnsProviders')
   const { t: certT } = useTranslation('certificates')
   const queryClient = useQueryClient()
   const principal = useSessionStore((state) => state.principal)
   const sessionEpoch = useSessionStore((state) => state.sessionEpoch)
-  const canManage = Boolean(principal?.permissions.includes('dns.manage'))
-  const queryKey = ['site-dns-api', principal?.scope_id, principal?.user_id, sessionEpoch]
+  const accessToken = useSessionStore((state) => state.accessToken)
+  const isPlatform = principal?.scope_kind === 'platform'
+  const canManage = hasPermission(principal?.permissions, 'dns.manage')
+  const canListUsers = hasPermission(principal?.permissions, 'identity.users.manage')
+  const ownerKey = `${principal?.scope_kind}:${principal?.scope_id}:${principal?.user_id}:${sessionEpoch}`
+  const [userFilter, setUserFilter] = useState('')
+  const queryKey = [siteDnsApiQueryPrefix, principal?.scope_kind, principal?.scope_id, principal?.user_id, sessionEpoch, userFilter]
   const [editor, setEditor] = useState<DNSProviderEditorState | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [page, setPage] = useState(1)
@@ -55,27 +74,42 @@ export default function SiteDnsApiPanel() {
 
   const token = (permission: string) => {
     const state = useSessionStore.getState()
-    return state.accessToken && state.principal?.permissions.includes(permission) ? state.accessToken : null
+    return state.accessToken && hasPermission(state.principal?.permissions, permission) ? state.accessToken : null
   }
 
   const query = useQuery({
     queryKey,
     queryFn: async () => {
-      const accessToken = token('dns.read')
-      if (!accessToken) throw new ApiError('permission denied', 403, 'permission_denied')
-      return dnsApi.list(accessToken)
+      const current = useSessionStore.getState().principal
+      const readToken = token('dns.read')
+      if (!readToken || !current) throw new ApiError('permission denied', 403, 'permission_denied')
+      const platform = current.scope_kind === 'platform'
+      const value = await dnsApi.list(readToken, undefined, platform
+        ? { managed_by: 'tenant', ...(userFilter ? { scope_id: userFilter } : {}) }
+        : undefined)
+      const items = ownDNSProviders(value.items)
+      // 别人的账号不进列表与缓存：租户只收本 scope，平台按用户筛选时只收该用户。
+      const expectedScope = platform ? userFilter : current.scope_id
+      if (expectedScope && items.some((item) => item.scope_id !== expectedScope)) {
+        throw new ApiError('DNS provider list response was invalid', 502, 'invalid_response')
+      }
+      return items
     },
   })
+  const refreshAll = async () => {
+    await queryClient.invalidateQueries({ queryKey: [siteDnsApiQueryPrefix] })
+    onChanged?.()
+  }
 
   const mutation = useMutation<void, unknown, void>({
     mutationFn: async () => {
       const frozen = attemptRef.current
-      const accessToken = token('dns.manage')
-      if (!frozen || !accessToken) throw new ApiError('permission denied', 403, 'permission_denied')
-      if (frozen.kind === 'create') await dnsApi.create(accessToken, frozen.input, frozen.key)
-      else if (frozen.kind === 'update') await dnsApi.update(accessToken, frozen.id, frozen.providerType, frozen.input, frozen.key)
-      else if (frozen.kind === 'verify') await dnsApi.verify(accessToken, frozen.id, frozen.providerType, frozen.version, frozen.key)
-      else await dnsApi.remove(accessToken, frozen.id, frozen.version, frozen.key)
+      const writeToken = token('dns.manage')
+      if (!frozen || !writeToken) throw new ApiError('permission denied', 403, 'permission_denied')
+      if (frozen.kind === 'create') await dnsApi.create(writeToken, frozen.input, frozen.key)
+      else if (frozen.kind === 'update') await dnsApi.update(writeToken, frozen.id, frozen.providerType, frozen.input, frozen.key)
+      else if (frozen.kind === 'verify') await dnsApi.verify(writeToken, frozen.id, frozen.providerType, frozen.version, frozen.key)
+      else await dnsApi.remove(writeToken, frozen.id, frozen.version, frozen.key)
     },
     onSuccess: async () => {
       clearCredentials(attemptRef.current)
@@ -83,14 +117,19 @@ export default function SiteDnsApiPanel() {
       setAttempt(null)
       setWriteError(null)
       setEditor(null)
-      await queryClient.invalidateQueries({ queryKey })
+      await refreshAll()
     },
     onError: (error) => {
-      setWriteError(error instanceof ApiError ? error : new ApiError('request failed'))
+      const apiError = error instanceof ApiError ? error : new ApiError('request failed')
+      setWriteError(apiError)
       if (!outcomeUnknown(error)) {
         clearCredentials(attemptRef.current)
         attemptRef.current = null
         setAttempt(null)
+        if (apiError.code === 'version_conflict' || apiError.code === 'dns_resource_not_found') {
+          setEditor(null)
+          void query.refetch()
+        }
       }
     },
   })
@@ -109,8 +148,13 @@ export default function SiteDnsApiPanel() {
     if (!editor) return
     if (editor.mode === 'create') {
       if (!isCreatableProviderType(values.provider_type)) return
+      const target = values.target_scope_id?.trim()
+      if (isPlatform && !target) return
       const credentials = Object.fromEntries(credentialFields[values.provider_type].map((field) => [field.name, values.credentials[field.name]]))
-      start({ kind: 'create', input: { name: values.name.trim(), remark: (values.remark ?? '').trim(), provider_type: values.provider_type, credentials } })
+      start({ kind: 'create', input: {
+        ...(isPlatform ? { target_scope_id: target } : {}),
+        name: values.name.trim(), remark: (values.remark ?? '').trim(), provider_type: values.provider_type, credentials,
+      } })
       return
     }
     const item = editor.item
@@ -136,31 +180,47 @@ export default function SiteDnsApiPanel() {
   }
 
   const deleteSelected = async () => {
-    const accessToken = token('dns.manage')
-    if (!accessToken) return
+    const writeToken = token('dns.manage')
+    if (!writeToken) return
     try {
       for (const item of items.filter((value) => selected.includes(value.id))) {
-        await dnsApi.remove(accessToken, item.id, item.version, attemptKey('delete'))
+        await dnsApi.remove(writeToken, item.id, item.version, attemptKey('delete'))
       }
       setSelected([])
     } catch (error) {
       setWriteError(error instanceof ApiError ? error : new ApiError('request failed'))
     }
-    await queryClient.invalidateQueries({ queryKey })
+    await refreshAll()
   }
-
-  const items = ownDNSProviders(query.data?.items ?? [])
+  const items = query.data ?? []
   const pageItems = items.slice((page - 1) * limit, page * limit)
   const locked = mutation.isPending || attempt !== null
   const uncertain = attempt !== null && writeError !== null && outcomeUnknown(writeError)
+  const userPicker = (props: { value?: string; onChange?: (value: string) => void; disabled?: boolean; allowClear?: boolean; label: string; placeholder: string }) => (
+    <TenantScopeSelect accessToken={accessToken} ownerKey={ownerKey} canList={canListUsers} queryKeyPrefix="site-dns-api-users"
+      value={props.value ?? ''} onChange={(next) => props.onChange?.(next)} disabled={props.disabled} allowClear={props.allowClear}
+      ariaLabel={props.label} placeholder={props.placeholder} emptyText={certT('dnsApi.userEmpty')} />
+  )
   const columns: TableColumnsType<DNSProvider> = [
     { title: 'ID', dataIndex: 'id', width: 300, ellipsis: true },
-    { title: t('columns.name'), dataIndex: 'name', ellipsis: true },
-    { title: t('columns.provider'), dataIndex: 'provider_type', width: 200, render: (value: string) => providerLabel(value, t) },
-    { title: t('columns.remark'), dataIndex: 'remark', ellipsis: true, render: (value?: string) => value || '-' },
-    { title: t('columns.status'), dataIndex: 'status', width: 120, render: (value: string) => t(`states.${value}`) },
+    ...(isPlatform ? [{
+      title: certT('dnsApi.columns.user'), key: 'owner', width: 180, ellipsis: true,
+      render: (_: unknown, item: DNSProvider) => item.owner ? `${item.owner.username}（${item.owner.display_id}）` : '—',
+    }] : []),
+    { title: certT('dnsApi.columns.name'), dataIndex: 'name', ellipsis: true },
+    { title: certT('dnsApi.columns.type'), dataIndex: 'provider_type', width: 200, render: (value: string) => providerLabel(value, t) },
     {
-      title: t('columns.actions'), key: 'actions', width: 140, fixed: 'right',
+      title: certT('dnsApi.columns.remark'), key: 'remark', ellipsis: true,
+      // 不设状态列：停用/待验证跟在备注后（证书页原有写法），建站选择器只列已验证的。
+      render: (_, item) => {
+        const remark = item.remark?.trim()
+        const state = item.status === 'verified' ? '' : t(`states.${item.status}`)
+        if (state) return remark ? `${remark}（${state}）` : state
+        return remark || '—'
+      },
+    },
+    {
+      title: certT('dnsApi.columns.actions'), key: 'actions', width: 140, fixed: 'right',
       render: (_, item) => canManage ? (
         <Space size={2}>
           {isCreatableProviderType(item.provider_type) ? (
@@ -196,9 +256,20 @@ export default function SiteDnsApiPanel() {
             <Button danger icon={<Trash2 size={13} />} disabled={locked || selected.length === 0}>{certT('dnsApi.actions.deleteSelected')}</Button>
           </Popconfirm>
         ) : null}
+        {isPlatform ? (
+          <div className="site-dns-api-user-filter">
+            {userPicker({ value: userFilter, allowClear: true, label: certT('dnsApi.userFilter'), placeholder: certT('dnsApi.userFilterPlaceholder'),
+              onChange: (next) => { setUserFilter(next); setSelected([]); setPage(1) } })}
+          </div>
+        ) : null}
         <span className="site-groups-count">{certT('dnsApi.total', { count: items.length })}</span>
       </div>
-      {writeError && !editor && !uncertain ? <FeedbackWhen title={errorMessage(writeError, t)} onClose={() => setWriteError(null)} /> : null}
+      {uncertain && !editor ? (
+        <OutcomeUnknown title={t('uncertainty.title')} detail={t('uncertainty.description')} action={<Space size={4}>
+          <Button size="small" loading={mutation.isPending} onClick={() => mutation.mutate()}>{t('actions.retrySameRequest')}</Button>
+          <Button size="small" onClick={closeAndRefresh}>{t('actions.closeAndRefresh')}</Button>
+        </Space>} className="identity-alert" />
+      ) : writeError && !editor ? <FeedbackWhen title={errorMessage(writeError, t)} onClose={() => setWriteError(null)} /> : null}
       {query.error ? (
         <FeedbackWhen title={t('errors.loadFailed')} detail={query.error instanceof ApiError ? errorMessage(query.error, t) : t('errors.request_failed')}
           action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} />
@@ -213,9 +284,11 @@ export default function SiteDnsApiPanel() {
           showTotal={(total) => certT('dnsApi.total', { count: total })}
           onChange={(next, size) => { setPage(size === limit ? next : 1); setLimit(size) }} />
       </div>
-      <ProviderEditor sectioned editor={editor} isAdmin={false} pending={mutation.isPending} uncertain={uncertain}
+      <ProviderEditor sectioned editor={editor} isAdmin={isPlatform} pending={mutation.isPending} uncertain={uncertain}
         error={editor ? writeError : null} onCancel={closeAndRefresh} onSubmit={submit}
-        onRetry={() => mutation.mutate()} onCloseAndRefresh={closeAndRefresh} />
+        onRetry={() => mutation.mutate()} onCloseAndRefresh={closeAndRefresh}
+        defaultTargetScope={userFilter}
+        targetScopeInput={(props) => userPicker({ ...props, label: t('editor.targetScope'), placeholder: t('editor.targetScopePlaceholder') })} />
     </section>
   )
 }
