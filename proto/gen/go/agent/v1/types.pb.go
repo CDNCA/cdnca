@@ -330,6 +330,13 @@ const (
 	// (applied / confirmed / reverted / failed), also unprompted when the
 	// timer reverted it. Control sends commands only to nodes that declare it.
 	CapabilityName_CAPABILITY_NAME_SSH_ACCESS CapabilityName = 78
+	// MARKET_ROLE v1: the node takes its node-market role from the controller
+	// (MarketProbeCommand.assigned_role, no targets) and answers the role in
+	// effect (MarketProbeResult.effective_role, role_source). Declared only
+	// with market_probe.enabled; a local market_probe.leave_market keeps it
+	// probe-only whatever is assigned. Control assigns roles only to nodes
+	// that declare it.
+	CapabilityName_CAPABILITY_NAME_MARKET_ROLE CapabilityName = 79
 )
 
 // Enum value maps for CapabilityName.
@@ -408,6 +415,7 @@ var (
 		76: "CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE",
 		77: "CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY",
 		78: "CAPABILITY_NAME_SSH_ACCESS",
+		79: "CAPABILITY_NAME_MARKET_ROLE",
 	}
 	CapabilityName_value = map[string]int32{
 		"CAPABILITY_NAME_UNSPECIFIED":                     0,
@@ -483,6 +491,7 @@ var (
 		"CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE":          76,
 		"CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY":            77,
 		"CAPABILITY_NAME_SSH_ACCESS":                      78,
+		"CAPABILITY_NAME_MARKET_ROLE":                     79,
 	}
 )
 
@@ -9929,7 +9938,14 @@ type MarketProbeCommand struct {
 	// benchmark, when set, turns every target into a benchmark download of the
 	// fixed benchmark object instead of a probe (MARKET_BENCHMARK v1 only).
 	// timeout_millis bounds the whole download of one target.
-	Benchmark     *MarketBenchmarkSpec `protobuf:"bytes,6,opt,name=benchmark,proto3" json:"benchmark,omitempty"`
+	Benchmark *MarketBenchmarkSpec `protobuf:"bytes,6,opt,name=benchmark,proto3" json:"benchmark,omitempty"`
+	// assigned_role (MARKET_ROLE v1), when set, makes this a role assignment
+	// instead of a probe: targets and benchmark are empty, and the role is
+	// JOIN_MARKET (the node's line group is in one of the seller's offers) or
+	// PROBE_ONLY (it no longer is). The node keeps the assignment across
+	// restarts and answers MarketProbeResult with no results and the role in
+	// effect.
+	AssignedRole  MarketProbeRole `protobuf:"varint,7,opt,name=assigned_role,json=assignedRole,proto3,enum=agent.v1.MarketProbeRole" json:"assigned_role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10004,6 +10020,13 @@ func (x *MarketProbeCommand) GetBenchmark() *MarketBenchmarkSpec {
 		return x.Benchmark
 	}
 	return nil
+}
+
+func (x *MarketProbeCommand) GetAssignedRole() MarketProbeRole {
+	if x != nil {
+		return x.AssignedRole
+	}
+	return MarketProbeRole_MARKET_PROBE_ROLE_UNSPECIFIED
 }
 
 // MarketBenchmarkSpec: download the benchmark object over `connections`
@@ -10259,8 +10282,15 @@ type MarketProbeResult struct {
 	NodeId         string                     `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	CommandEventId string                     `protobuf:"bytes,3,opt,name=command_event_id,json=commandEventId,proto3" json:"command_event_id,omitempty"`
 	Results        []*MarketProbeTargetResult `protobuf:"bytes,4,rep,name=results,proto3" json:"results,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// effective_role and role_source answer a role assignment (MARKET_ROLE
+	// v1; unset otherwise): the role the node runs after it, and why:
+	// "assigned" (follows the controller), "local_join" (market_probe.
+	// join_market keeps it joined) or "local_leave" (market_probe.
+	// leave_market keeps it probe-only).
+	EffectiveRole MarketProbeRole `protobuf:"varint,5,opt,name=effective_role,json=effectiveRole,proto3,enum=agent.v1.MarketProbeRole" json:"effective_role,omitempty"`
+	RoleSource    string          `protobuf:"bytes,6,opt,name=role_source,json=roleSource,proto3" json:"role_source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MarketProbeResult) Reset() {
@@ -10319,6 +10349,20 @@ func (x *MarketProbeResult) GetResults() []*MarketProbeTargetResult {
 		return x.Results
 	}
 	return nil
+}
+
+func (x *MarketProbeResult) GetEffectiveRole() MarketProbeRole {
+	if x != nil {
+		return x.EffectiveRole
+	}
+	return MarketProbeRole_MARKET_PROBE_ROLE_UNSPECIFIED
+}
+
+func (x *MarketProbeResult) GetRoleSource() string {
+	if x != nil {
+		return x.RoleSource
+	}
+	return ""
 }
 
 type MarketProbeTargetResult struct {
@@ -15289,7 +15333,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x12certificate_sha256\x18\t \x01(\tR\x11certificateSha256\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\n" +
-	" \x01(\tR\terrorCode\"\xb5\x02\n" +
+	" \x01(\tR\terrorCode\"\xf5\x02\n" +
 	"\x12MarketProbeCommand\x12.\n" +
 	"\x05event\x18\x01 \x01(\v2\x18.common.v1.EventMetadataR\x05event\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x125\n" +
@@ -15297,7 +15341,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x0etimeout_millis\x18\x04 \x01(\rR\rtimeoutMillis\x12;\n" +
 	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\x12;\n" +
-	"\tbenchmark\x18\x06 \x01(\v2\x1d.agent.v1.MarketBenchmarkSpecR\tbenchmark\"7\n" +
+	"\tbenchmark\x18\x06 \x01(\v2\x1d.agent.v1.MarketBenchmarkSpecR\tbenchmark\x12>\n" +
+	"\rassigned_role\x18\a \x01(\x0e2\x19.agent.v1.MarketProbeRoleR\fassignedRole\"7\n" +
 	"\x13MarketBenchmarkSpec\x12 \n" +
 	"\vconnections\x18\x01 \x01(\rR\vconnections\"\xdd\x02\n" +
 	"\x11MarketProbeTarget\x12\x17\n" +
@@ -15318,12 +15363,15 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\aheaders\x18\f \x03(\v2\x1b.agent.v1.MarketProbeHeaderR\aheaders\"=\n" +
 	"\x11MarketProbeHeader\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\xc3\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\xa6\x02\n" +
 	"\x11MarketProbeResult\x12.\n" +
 	"\x05event\x18\x01 \x01(\v2\x18.common.v1.EventMetadataR\x05event\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12(\n" +
 	"\x10command_event_id\x18\x03 \x01(\tR\x0ecommandEventId\x12;\n" +
-	"\aresults\x18\x04 \x03(\v2!.agent.v1.MarketProbeTargetResultR\aresults\"\xc2\x02\n" +
+	"\aresults\x18\x04 \x03(\v2!.agent.v1.MarketProbeTargetResultR\aresults\x12@\n" +
+	"\x0eeffective_role\x18\x05 \x01(\x0e2\x19.agent.v1.MarketProbeRoleR\reffectiveRole\x12\x1f\n" +
+	"\vrole_source\x18\x06 \x01(\tR\n" +
+	"roleSource\"\xc2\x02\n" +
 	"\x17MarketProbeTargetResult\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x126\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1c.agent.v1.MarketProbeOutcomeR\aoutcome\x12%\n" +
@@ -15682,7 +15730,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x10total_size_bytes\x18\x05 \x01(\x04R\x0etotalSizeBytes\x12\"\n" +
 	"\rend_of_object\x18\x06 \x01(\bR\vendOfObject\"K\n" +
 	"\x18FetchSiteObjectsResponse\x12/\n" +
-	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\x98\x15\n" +
+	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\xb9\x15\n" +
 	"\x0eCapabilityName\x12\x1f\n" +
 	"\x1bCAPABILITY_NAME_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CAPABILITY_NAME_HTTP_1_1\x10\x01\x12\x1a\n" +
@@ -15757,7 +15805,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"%CAPABILITY_NAME_AGGREGATED_EDGE_PROBE\x10K\x12*\n" +
 	"&CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE\x10L\x12(\n" +
 	"$CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY\x10M\x12\x1e\n" +
-	"\x1aCAPABILITY_NAME_SSH_ACCESS\x10N\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
+	"\x1aCAPABILITY_NAME_SSH_ACCESS\x10N\x12\x1f\n" +
+	"\x1bCAPABILITY_NAME_MARKET_ROLE\x10O\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
 	"\x1aActiveConfigIdentitySchema\x12-\n" +
 	")ACTIVE_CONFIG_IDENTITY_SCHEMA_UNSPECIFIED\x10\x00\x12$\n" +
 	" ACTIVE_CONFIG_IDENTITY_SCHEMA_V1\x10\x01*\x9a\x04\n" +
@@ -16331,118 +16380,120 @@ var file_agent_v1_types_proto_depIdxs = []int32{
 	116, // 174: agent.v1.MarketProbeCommand.targets:type_name -> agent.v1.MarketProbeTarget
 	157, // 175: agent.v1.MarketProbeCommand.expire_time:type_name -> google.protobuf.Timestamp
 	115, // 176: agent.v1.MarketProbeCommand.benchmark:type_name -> agent.v1.MarketBenchmarkSpec
-	117, // 177: agent.v1.MarketProbeTarget.headers:type_name -> agent.v1.MarketProbeHeader
-	163, // 178: agent.v1.MarketProbeResult.event:type_name -> common.v1.EventMetadata
-	119, // 179: agent.v1.MarketProbeResult.results:type_name -> agent.v1.MarketProbeTargetResult
-	33,  // 180: agent.v1.MarketProbeTargetResult.outcome:type_name -> agent.v1.MarketProbeOutcome
-	163, // 181: agent.v1.L4LiveConnectionsCommand.event:type_name -> common.v1.EventMetadata
-	157, // 182: agent.v1.L4LiveConnectionsCommand.expire_time:type_name -> google.protobuf.Timestamp
-	157, // 183: agent.v1.L4LiveConnection.started_at:type_name -> google.protobuf.Timestamp
-	163, // 184: agent.v1.L4LiveConnectionsResult.event:type_name -> common.v1.EventMetadata
-	121, // 185: agent.v1.L4LiveConnectionsResult.connections:type_name -> agent.v1.L4LiveConnection
-	122, // 186: agent.v1.L4LiveConnectionsResult.closed:type_name -> agent.v1.L4LiveConnectionClose
-	164, // 187: agent.v1.StreamError.error:type_name -> common.v1.ProtocolError
-	165, // 188: agent.v1.ConnectRequest.stream:type_name -> common.v1.StreamMetadata
-	54,  // 189: agent.v1.ConnectRequest.hello:type_name -> agent.v1.AgentHello
-	63,  // 190: agent.v1.ConnectRequest.heartbeat:type_name -> agent.v1.Heartbeat
-	72,  // 191: agent.v1.ConnectRequest.deployment_status:type_name -> agent.v1.DeploymentStatus
-	74,  // 192: agent.v1.ConnectRequest.acme_http01_overlay_status:type_name -> agent.v1.AcmeHTTP01OverlayStatus
-	78,  // 193: agent.v1.ConnectRequest.cache_control_status:type_name -> agent.v1.CacheControlStatus
-	83,  // 194: agent.v1.ConnectRequest.deployment_status_ack_receipt:type_name -> agent.v1.DeploymentStatusAckReceipt
-	85,  // 195: agent.v1.ConnectRequest.upgrade_status:type_name -> agent.v1.UpgradeStatus
-	87,  // 196: agent.v1.ConnectRequest.upgrade_status_ack_receipt:type_name -> agent.v1.UpgradeStatusAckReceipt
-	90,  // 197: agent.v1.ConnectRequest.firewall_status:type_name -> agent.v1.FirewallStatus
-	92,  // 198: agent.v1.ConnectRequest.drain_status:type_name -> agent.v1.DrainStatus
-	107, // 199: agent.v1.ConnectRequest.node_monitoring_report:type_name -> agent.v1.NodeMonitoringReport
-	109, // 200: agent.v1.ConnectRequest.node_monitoring_apply_status:type_name -> agent.v1.NodeMonitoringApplyStatus
-	113, // 201: agent.v1.ConnectRequest.gateway_port_transition_status:type_name -> agent.v1.GatewayPortTransitionStatus
-	118, // 202: agent.v1.ConnectRequest.market_probe_result:type_name -> agent.v1.MarketProbeResult
-	123, // 203: agent.v1.ConnectRequest.l4_live_connections_result:type_name -> agent.v1.L4LiveConnectionsResult
-	139, // 204: agent.v1.ConnectRequest.edge_signer_trust_receipt:type_name -> agent.v1.EdgeSignerTrustReceipt
-	150, // 205: agent.v1.ConnectRequest.auto_defense_receipt:type_name -> agent.v1.AutoDefenseReceipt
-	152, // 206: agent.v1.ConnectRequest.security_ban_status:type_name -> agent.v1.SecurityBanStatus
-	153, // 207: agent.v1.ConnectRequest.auto_defense_report:type_name -> agent.v1.AutoDefenseReport
-	148, // 208: agent.v1.ConnectRequest.installation_ban_receipt:type_name -> agent.v1.InstallationBanReceipt
-	147, // 209: agent.v1.ConnectRequest.site_drop_receipt:type_name -> agent.v1.SiteDropReceipt
-	81,  // 210: agent.v1.ConnectRequest.cache_control_cancel_receipt:type_name -> agent.v1.CacheControlCancelReceipt
-	142, // 211: agent.v1.ConnectRequest.gateway_address_change_receipt:type_name -> agent.v1.GatewayAddressChangeReceipt
-	144, // 212: agent.v1.ConnectRequest.ssh_access_receipt:type_name -> agent.v1.SSHAccessReceipt
-	165, // 213: agent.v1.ConnectResponse.stream:type_name -> common.v1.StreamMetadata
-	55,  // 214: agent.v1.ConnectResponse.hello:type_name -> agent.v1.GatewayHello
-	70,  // 215: agent.v1.ConnectResponse.deployment_command:type_name -> agent.v1.DeploymentCommand
-	64,  // 216: agent.v1.ConnectResponse.heartbeat_ack:type_name -> agent.v1.HeartbeatAck
-	124, // 217: agent.v1.ConnectResponse.error:type_name -> agent.v1.StreamError
-	73,  // 218: agent.v1.ConnectResponse.acme_http01_overlay_command:type_name -> agent.v1.AcmeHTTP01OverlayCommand
-	76,  // 219: agent.v1.ConnectResponse.cache_control_command:type_name -> agent.v1.CacheControlCommand
-	79,  // 220: agent.v1.ConnectResponse.cache_control_status_ack:type_name -> agent.v1.CacheControlStatusAck
-	82,  // 221: agent.v1.ConnectResponse.deployment_status_ack:type_name -> agent.v1.DeploymentStatusAck
-	84,  // 222: agent.v1.ConnectResponse.upgrade_command:type_name -> agent.v1.UpgradeCommand
-	86,  // 223: agent.v1.ConnectResponse.upgrade_status_ack:type_name -> agent.v1.UpgradeStatusAck
-	87,  // 224: agent.v1.ConnectResponse.upgrade_status_ack_receipt:type_name -> agent.v1.UpgradeStatusAckReceipt
-	89,  // 225: agent.v1.ConnectResponse.firewall_command:type_name -> agent.v1.FirewallCommand
-	91,  // 226: agent.v1.ConnectResponse.drain_command:type_name -> agent.v1.DrainCommand
-	93,  // 227: agent.v1.ConnectResponse.node_monitoring_artifact:type_name -> agent.v1.NodeMonitoringArtifact
-	108, // 228: agent.v1.ConnectResponse.node_monitoring_ack:type_name -> agent.v1.NodeMonitoringAck
-	111, // 229: agent.v1.ConnectResponse.gateway_port_transition_command:type_name -> agent.v1.GatewayPortTransitionCommand
-	114, // 230: agent.v1.ConnectResponse.market_probe_command:type_name -> agent.v1.MarketProbeCommand
-	120, // 231: agent.v1.ConnectResponse.l4_live_connections_command:type_name -> agent.v1.L4LiveConnectionsCommand
-	138, // 232: agent.v1.ConnectResponse.edge_signer_trust_bundle:type_name -> agent.v1.EdgeSignerTrustBundle
-	151, // 233: agent.v1.ConnectResponse.security_ban_command:type_name -> agent.v1.SecurityBanCommand
-	137, // 234: agent.v1.ConnectResponse.sched302_table:type_name -> agent.v1.Sched302Table
-	149, // 235: agent.v1.ConnectResponse.auto_defense_command:type_name -> agent.v1.AutoDefenseCommand
-	140, // 236: agent.v1.ConnectResponse.installation_ban_command:type_name -> agent.v1.InstallationBanCommand
-	57,  // 237: agent.v1.ConnectResponse.gateway_endpoint_migration:type_name -> agent.v1.GatewayEndpointMigration
-	145, // 238: agent.v1.ConnectResponse.site_drop_command:type_name -> agent.v1.SiteDropCommand
-	80,  // 239: agent.v1.ConnectResponse.cache_control_cancel:type_name -> agent.v1.CacheControlCancel
-	141, // 240: agent.v1.ConnectResponse.gateway_address_change_command:type_name -> agent.v1.GatewayAddressChangeCommand
-	143, // 241: agent.v1.ConnectResponse.ssh_access_command:type_name -> agent.v1.SSHAccessCommand
-	160, // 242: agent.v1.TelemetryClientHello.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
-	161, // 243: agent.v1.TelemetryGatewayHello.selected_protocol_version:type_name -> common.v1.ProtocolVersion
-	157, // 244: agent.v1.TelemetryGatewayHello.server_time:type_name -> google.protobuf.Timestamp
-	34,  // 245: agent.v1.TelemetryRecord.kind:type_name -> agent.v1.TelemetryKind
-	129, // 246: agent.v1.TelemetryBatch.records:type_name -> agent.v1.TelemetryRecord
-	166, // 247: agent.v1.ConnectionsTelemetryRecordV1.envelope:type_name -> agent.v1.ConnectionsMetricEnvelopeV1
-	131, // 248: agent.v1.ConnectionsTelemetryBatchV1.records:type_name -> agent.v1.ConnectionsTelemetryRecordV1
-	157, // 249: agent.v1.TelemetryAck.accepted_time:type_name -> google.protobuf.Timestamp
-	162, // 250: agent.v1.TelemetryAck.retry_after_duration:type_name -> google.protobuf.Duration
-	164, // 251: agent.v1.TelemetryError.error:type_name -> common.v1.ProtocolError
-	165, // 252: agent.v1.StreamTelemetryRequest.stream:type_name -> common.v1.StreamMetadata
-	127, // 253: agent.v1.StreamTelemetryRequest.hello:type_name -> agent.v1.TelemetryClientHello
-	130, // 254: agent.v1.StreamTelemetryRequest.batch:type_name -> agent.v1.TelemetryBatch
-	132, // 255: agent.v1.StreamTelemetryRequest.connections_batch:type_name -> agent.v1.ConnectionsTelemetryBatchV1
-	165, // 256: agent.v1.StreamTelemetryResponse.stream:type_name -> common.v1.StreamMetadata
-	128, // 257: agent.v1.StreamTelemetryResponse.hello:type_name -> agent.v1.TelemetryGatewayHello
-	133, // 258: agent.v1.StreamTelemetryResponse.ack:type_name -> agent.v1.TelemetryAck
-	134, // 259: agent.v1.StreamTelemetryResponse.error:type_name -> agent.v1.TelemetryError
-	163, // 260: agent.v1.Sched302Table.event:type_name -> common.v1.EventMetadata
-	36,  // 261: agent.v1.Sched302Table.schema:type_name -> agent.v1.Sched302Schema
-	10,  // 262: agent.v1.Sched302Table.signature_algorithm:type_name -> agent.v1.ArtifactSignatureAlgorithm
-	163, // 263: agent.v1.EdgeSignerTrustBundle.event:type_name -> common.v1.EventMetadata
-	35,  // 264: agent.v1.EdgeSignerTrustBundle.schema:type_name -> agent.v1.EdgeSignerTrustSchema
-	163, // 265: agent.v1.EdgeSignerTrustReceipt.event:type_name -> common.v1.EventMetadata
-	35,  // 266: agent.v1.EdgeSignerTrustReceipt.schema:type_name -> agent.v1.EdgeSignerTrustSchema
-	163, // 267: agent.v1.InstallationBanCommand.event:type_name -> common.v1.EventMetadata
-	163, // 268: agent.v1.GatewayAddressChangeCommand.event:type_name -> common.v1.EventMetadata
-	163, // 269: agent.v1.GatewayAddressChangeReceipt.event:type_name -> common.v1.EventMetadata
-	163, // 270: agent.v1.SSHAccessCommand.event:type_name -> common.v1.EventMetadata
-	163, // 271: agent.v1.SSHAccessReceipt.event:type_name -> common.v1.EventMetadata
-	163, // 272: agent.v1.SiteDropCommand.event:type_name -> common.v1.EventMetadata
-	163, // 273: agent.v1.SiteDropReceipt.event:type_name -> common.v1.EventMetadata
-	146, // 274: agent.v1.SiteDropReceipt.rejected:type_name -> agent.v1.SiteDropRejection
-	163, // 275: agent.v1.InstallationBanReceipt.event:type_name -> common.v1.EventMetadata
-	157, // 276: agent.v1.InstallationBanReceipt.ticket_issued_time:type_name -> google.protobuf.Timestamp
-	157, // 277: agent.v1.InstallationBanReceipt.ticket_not_after_time:type_name -> google.protobuf.Timestamp
-	163, // 278: agent.v1.AutoDefenseCommand.event:type_name -> common.v1.EventMetadata
-	163, // 279: agent.v1.AutoDefenseReceipt.event:type_name -> common.v1.EventMetadata
-	163, // 280: agent.v1.SecurityBanCommand.event:type_name -> common.v1.EventMetadata
-	163, // 281: agent.v1.SecurityBanStatus.event:type_name -> common.v1.EventMetadata
-	159, // 282: agent.v1.FetchSiteObjectsRequest.request:type_name -> common.v1.RequestMetadata
-	155, // 283: agent.v1.FetchSiteObjectsResponse.chunk:type_name -> agent.v1.SiteObjectChunk
-	284, // [284:284] is the sub-list for method output_type
-	284, // [284:284] is the sub-list for method input_type
-	284, // [284:284] is the sub-list for extension type_name
-	284, // [284:284] is the sub-list for extension extendee
-	0,   // [0:284] is the sub-list for field type_name
+	7,   // 177: agent.v1.MarketProbeCommand.assigned_role:type_name -> agent.v1.MarketProbeRole
+	117, // 178: agent.v1.MarketProbeTarget.headers:type_name -> agent.v1.MarketProbeHeader
+	163, // 179: agent.v1.MarketProbeResult.event:type_name -> common.v1.EventMetadata
+	119, // 180: agent.v1.MarketProbeResult.results:type_name -> agent.v1.MarketProbeTargetResult
+	7,   // 181: agent.v1.MarketProbeResult.effective_role:type_name -> agent.v1.MarketProbeRole
+	33,  // 182: agent.v1.MarketProbeTargetResult.outcome:type_name -> agent.v1.MarketProbeOutcome
+	163, // 183: agent.v1.L4LiveConnectionsCommand.event:type_name -> common.v1.EventMetadata
+	157, // 184: agent.v1.L4LiveConnectionsCommand.expire_time:type_name -> google.protobuf.Timestamp
+	157, // 185: agent.v1.L4LiveConnection.started_at:type_name -> google.protobuf.Timestamp
+	163, // 186: agent.v1.L4LiveConnectionsResult.event:type_name -> common.v1.EventMetadata
+	121, // 187: agent.v1.L4LiveConnectionsResult.connections:type_name -> agent.v1.L4LiveConnection
+	122, // 188: agent.v1.L4LiveConnectionsResult.closed:type_name -> agent.v1.L4LiveConnectionClose
+	164, // 189: agent.v1.StreamError.error:type_name -> common.v1.ProtocolError
+	165, // 190: agent.v1.ConnectRequest.stream:type_name -> common.v1.StreamMetadata
+	54,  // 191: agent.v1.ConnectRequest.hello:type_name -> agent.v1.AgentHello
+	63,  // 192: agent.v1.ConnectRequest.heartbeat:type_name -> agent.v1.Heartbeat
+	72,  // 193: agent.v1.ConnectRequest.deployment_status:type_name -> agent.v1.DeploymentStatus
+	74,  // 194: agent.v1.ConnectRequest.acme_http01_overlay_status:type_name -> agent.v1.AcmeHTTP01OverlayStatus
+	78,  // 195: agent.v1.ConnectRequest.cache_control_status:type_name -> agent.v1.CacheControlStatus
+	83,  // 196: agent.v1.ConnectRequest.deployment_status_ack_receipt:type_name -> agent.v1.DeploymentStatusAckReceipt
+	85,  // 197: agent.v1.ConnectRequest.upgrade_status:type_name -> agent.v1.UpgradeStatus
+	87,  // 198: agent.v1.ConnectRequest.upgrade_status_ack_receipt:type_name -> agent.v1.UpgradeStatusAckReceipt
+	90,  // 199: agent.v1.ConnectRequest.firewall_status:type_name -> agent.v1.FirewallStatus
+	92,  // 200: agent.v1.ConnectRequest.drain_status:type_name -> agent.v1.DrainStatus
+	107, // 201: agent.v1.ConnectRequest.node_monitoring_report:type_name -> agent.v1.NodeMonitoringReport
+	109, // 202: agent.v1.ConnectRequest.node_monitoring_apply_status:type_name -> agent.v1.NodeMonitoringApplyStatus
+	113, // 203: agent.v1.ConnectRequest.gateway_port_transition_status:type_name -> agent.v1.GatewayPortTransitionStatus
+	118, // 204: agent.v1.ConnectRequest.market_probe_result:type_name -> agent.v1.MarketProbeResult
+	123, // 205: agent.v1.ConnectRequest.l4_live_connections_result:type_name -> agent.v1.L4LiveConnectionsResult
+	139, // 206: agent.v1.ConnectRequest.edge_signer_trust_receipt:type_name -> agent.v1.EdgeSignerTrustReceipt
+	150, // 207: agent.v1.ConnectRequest.auto_defense_receipt:type_name -> agent.v1.AutoDefenseReceipt
+	152, // 208: agent.v1.ConnectRequest.security_ban_status:type_name -> agent.v1.SecurityBanStatus
+	153, // 209: agent.v1.ConnectRequest.auto_defense_report:type_name -> agent.v1.AutoDefenseReport
+	148, // 210: agent.v1.ConnectRequest.installation_ban_receipt:type_name -> agent.v1.InstallationBanReceipt
+	147, // 211: agent.v1.ConnectRequest.site_drop_receipt:type_name -> agent.v1.SiteDropReceipt
+	81,  // 212: agent.v1.ConnectRequest.cache_control_cancel_receipt:type_name -> agent.v1.CacheControlCancelReceipt
+	142, // 213: agent.v1.ConnectRequest.gateway_address_change_receipt:type_name -> agent.v1.GatewayAddressChangeReceipt
+	144, // 214: agent.v1.ConnectRequest.ssh_access_receipt:type_name -> agent.v1.SSHAccessReceipt
+	165, // 215: agent.v1.ConnectResponse.stream:type_name -> common.v1.StreamMetadata
+	55,  // 216: agent.v1.ConnectResponse.hello:type_name -> agent.v1.GatewayHello
+	70,  // 217: agent.v1.ConnectResponse.deployment_command:type_name -> agent.v1.DeploymentCommand
+	64,  // 218: agent.v1.ConnectResponse.heartbeat_ack:type_name -> agent.v1.HeartbeatAck
+	124, // 219: agent.v1.ConnectResponse.error:type_name -> agent.v1.StreamError
+	73,  // 220: agent.v1.ConnectResponse.acme_http01_overlay_command:type_name -> agent.v1.AcmeHTTP01OverlayCommand
+	76,  // 221: agent.v1.ConnectResponse.cache_control_command:type_name -> agent.v1.CacheControlCommand
+	79,  // 222: agent.v1.ConnectResponse.cache_control_status_ack:type_name -> agent.v1.CacheControlStatusAck
+	82,  // 223: agent.v1.ConnectResponse.deployment_status_ack:type_name -> agent.v1.DeploymentStatusAck
+	84,  // 224: agent.v1.ConnectResponse.upgrade_command:type_name -> agent.v1.UpgradeCommand
+	86,  // 225: agent.v1.ConnectResponse.upgrade_status_ack:type_name -> agent.v1.UpgradeStatusAck
+	87,  // 226: agent.v1.ConnectResponse.upgrade_status_ack_receipt:type_name -> agent.v1.UpgradeStatusAckReceipt
+	89,  // 227: agent.v1.ConnectResponse.firewall_command:type_name -> agent.v1.FirewallCommand
+	91,  // 228: agent.v1.ConnectResponse.drain_command:type_name -> agent.v1.DrainCommand
+	93,  // 229: agent.v1.ConnectResponse.node_monitoring_artifact:type_name -> agent.v1.NodeMonitoringArtifact
+	108, // 230: agent.v1.ConnectResponse.node_monitoring_ack:type_name -> agent.v1.NodeMonitoringAck
+	111, // 231: agent.v1.ConnectResponse.gateway_port_transition_command:type_name -> agent.v1.GatewayPortTransitionCommand
+	114, // 232: agent.v1.ConnectResponse.market_probe_command:type_name -> agent.v1.MarketProbeCommand
+	120, // 233: agent.v1.ConnectResponse.l4_live_connections_command:type_name -> agent.v1.L4LiveConnectionsCommand
+	138, // 234: agent.v1.ConnectResponse.edge_signer_trust_bundle:type_name -> agent.v1.EdgeSignerTrustBundle
+	151, // 235: agent.v1.ConnectResponse.security_ban_command:type_name -> agent.v1.SecurityBanCommand
+	137, // 236: agent.v1.ConnectResponse.sched302_table:type_name -> agent.v1.Sched302Table
+	149, // 237: agent.v1.ConnectResponse.auto_defense_command:type_name -> agent.v1.AutoDefenseCommand
+	140, // 238: agent.v1.ConnectResponse.installation_ban_command:type_name -> agent.v1.InstallationBanCommand
+	57,  // 239: agent.v1.ConnectResponse.gateway_endpoint_migration:type_name -> agent.v1.GatewayEndpointMigration
+	145, // 240: agent.v1.ConnectResponse.site_drop_command:type_name -> agent.v1.SiteDropCommand
+	80,  // 241: agent.v1.ConnectResponse.cache_control_cancel:type_name -> agent.v1.CacheControlCancel
+	141, // 242: agent.v1.ConnectResponse.gateway_address_change_command:type_name -> agent.v1.GatewayAddressChangeCommand
+	143, // 243: agent.v1.ConnectResponse.ssh_access_command:type_name -> agent.v1.SSHAccessCommand
+	160, // 244: agent.v1.TelemetryClientHello.supported_protocol_versions:type_name -> common.v1.ProtocolVersionRange
+	161, // 245: agent.v1.TelemetryGatewayHello.selected_protocol_version:type_name -> common.v1.ProtocolVersion
+	157, // 246: agent.v1.TelemetryGatewayHello.server_time:type_name -> google.protobuf.Timestamp
+	34,  // 247: agent.v1.TelemetryRecord.kind:type_name -> agent.v1.TelemetryKind
+	129, // 248: agent.v1.TelemetryBatch.records:type_name -> agent.v1.TelemetryRecord
+	166, // 249: agent.v1.ConnectionsTelemetryRecordV1.envelope:type_name -> agent.v1.ConnectionsMetricEnvelopeV1
+	131, // 250: agent.v1.ConnectionsTelemetryBatchV1.records:type_name -> agent.v1.ConnectionsTelemetryRecordV1
+	157, // 251: agent.v1.TelemetryAck.accepted_time:type_name -> google.protobuf.Timestamp
+	162, // 252: agent.v1.TelemetryAck.retry_after_duration:type_name -> google.protobuf.Duration
+	164, // 253: agent.v1.TelemetryError.error:type_name -> common.v1.ProtocolError
+	165, // 254: agent.v1.StreamTelemetryRequest.stream:type_name -> common.v1.StreamMetadata
+	127, // 255: agent.v1.StreamTelemetryRequest.hello:type_name -> agent.v1.TelemetryClientHello
+	130, // 256: agent.v1.StreamTelemetryRequest.batch:type_name -> agent.v1.TelemetryBatch
+	132, // 257: agent.v1.StreamTelemetryRequest.connections_batch:type_name -> agent.v1.ConnectionsTelemetryBatchV1
+	165, // 258: agent.v1.StreamTelemetryResponse.stream:type_name -> common.v1.StreamMetadata
+	128, // 259: agent.v1.StreamTelemetryResponse.hello:type_name -> agent.v1.TelemetryGatewayHello
+	133, // 260: agent.v1.StreamTelemetryResponse.ack:type_name -> agent.v1.TelemetryAck
+	134, // 261: agent.v1.StreamTelemetryResponse.error:type_name -> agent.v1.TelemetryError
+	163, // 262: agent.v1.Sched302Table.event:type_name -> common.v1.EventMetadata
+	36,  // 263: agent.v1.Sched302Table.schema:type_name -> agent.v1.Sched302Schema
+	10,  // 264: agent.v1.Sched302Table.signature_algorithm:type_name -> agent.v1.ArtifactSignatureAlgorithm
+	163, // 265: agent.v1.EdgeSignerTrustBundle.event:type_name -> common.v1.EventMetadata
+	35,  // 266: agent.v1.EdgeSignerTrustBundle.schema:type_name -> agent.v1.EdgeSignerTrustSchema
+	163, // 267: agent.v1.EdgeSignerTrustReceipt.event:type_name -> common.v1.EventMetadata
+	35,  // 268: agent.v1.EdgeSignerTrustReceipt.schema:type_name -> agent.v1.EdgeSignerTrustSchema
+	163, // 269: agent.v1.InstallationBanCommand.event:type_name -> common.v1.EventMetadata
+	163, // 270: agent.v1.GatewayAddressChangeCommand.event:type_name -> common.v1.EventMetadata
+	163, // 271: agent.v1.GatewayAddressChangeReceipt.event:type_name -> common.v1.EventMetadata
+	163, // 272: agent.v1.SSHAccessCommand.event:type_name -> common.v1.EventMetadata
+	163, // 273: agent.v1.SSHAccessReceipt.event:type_name -> common.v1.EventMetadata
+	163, // 274: agent.v1.SiteDropCommand.event:type_name -> common.v1.EventMetadata
+	163, // 275: agent.v1.SiteDropReceipt.event:type_name -> common.v1.EventMetadata
+	146, // 276: agent.v1.SiteDropReceipt.rejected:type_name -> agent.v1.SiteDropRejection
+	163, // 277: agent.v1.InstallationBanReceipt.event:type_name -> common.v1.EventMetadata
+	157, // 278: agent.v1.InstallationBanReceipt.ticket_issued_time:type_name -> google.protobuf.Timestamp
+	157, // 279: agent.v1.InstallationBanReceipt.ticket_not_after_time:type_name -> google.protobuf.Timestamp
+	163, // 280: agent.v1.AutoDefenseCommand.event:type_name -> common.v1.EventMetadata
+	163, // 281: agent.v1.AutoDefenseReceipt.event:type_name -> common.v1.EventMetadata
+	163, // 282: agent.v1.SecurityBanCommand.event:type_name -> common.v1.EventMetadata
+	163, // 283: agent.v1.SecurityBanStatus.event:type_name -> common.v1.EventMetadata
+	159, // 284: agent.v1.FetchSiteObjectsRequest.request:type_name -> common.v1.RequestMetadata
+	155, // 285: agent.v1.FetchSiteObjectsResponse.chunk:type_name -> agent.v1.SiteObjectChunk
+	286, // [286:286] is the sub-list for method output_type
+	286, // [286:286] is the sub-list for method input_type
+	286, // [286:286] is the sub-list for extension type_name
+	286, // [286:286] is the sub-list for extension extendee
+	0,   // [0:286] is the sub-list for field type_name
 }
 
 func init() { file_agent_v1_types_proto_init() }

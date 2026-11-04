@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/marketprobe"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketsupply"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketsupplyguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
@@ -50,6 +51,61 @@ func (f *fakeSupply) SupplyPlugins(_ context.Context, _ uuid.UUID, nodes []uuid.
 func (f *fakeSupply) PluginNames(_ context.Context, codes []string) ([]marketsupply.SupplyPlugin, error) {
 	f.codes = codes
 	return []marketsupply.SupplyPlugin{{Code: "ja4", NameZH: "JA4 指纹", NameEN: "JA4 fingerprints"}}, f.err
+}
+
+type fakePoolReports struct{ asked uuid.UUID }
+
+func (f *fakePoolReports) Report(_ context.Context, id uuid.UUID) (marketprobe.PoolReport, error) {
+	f.asked = id
+	return marketprobe.PoolReport{Probe: "running", Total: 1, Nodes: []marketprobe.PoolReportNode{
+		{NodeID: id, Reason: marketprobe.ReasonCarrierUnmapped}}}, nil
+}
+
+// The seller reads why its pool's nodes are (not) reported;
+// another scope's or a missing group answers as Get does, browse-only 403.
+func TestSupplyGroupReportRoute(t *testing.T) {
+	caller := Caller{UserID: uuid.New(), ScopeID: uuid.New(), ScopeKind: "platform", Permissions: []string{PermissionSell}}
+	reports := &fakePoolReports{}
+	supply := &fakeSupply{}
+	h := New(nil, func(*http.Request) (Caller, error) { return caller, nil }).WithPoolReports(reports).WithSupplyGroups(supply)
+	id := uuid.New()
+	path := "/v1/admin/market/supply-groups/" + id.String() + "/report"
+	if w := do(h, "GET", path, ""); w.Code != 200 || reports.asked != id || !strings.Contains(w.Body.String(), `"reason":"carrier_unmapped"`) {
+		t.Fatalf("report: %d %s", w.Code, w.Body)
+	}
+	supply.err = marketsupply.ErrSupplyNotFound
+	if w := do(h, "GET", path, ""); w.Code != 404 {
+		t.Fatalf("not the caller's group: %d", w.Code)
+	}
+	supply.err = nil
+	caller.Permissions = []string{PermissionBrowse}
+	if w := do(h, "GET", path, ""); w.Code != 403 {
+		t.Fatalf("browse-only: %d", w.Code)
+	}
+}
+
+// A location refusal names the nodes and fields to fix.
+func TestSupplyGroupLocationRefusal(t *testing.T) {
+	node := uuid.New()
+	supply := &fakeSupply{err: &marketsupply.LocationUnmappedError{Nodes: []marketsupply.UnmappedNode{
+		{NodeID: node, Name: "118", Region: "CN", Fields: []string{"carrier"}}}}}
+	caller := Caller{UserID: uuid.New(), ScopeID: uuid.New(), ScopeKind: "platform", Permissions: []string{PermissionSell}}
+	h := New(nil, func(*http.Request) (Caller, error) { return caller, nil }).WithSupplyGroups(supply)
+	r := httptest.NewRequest("POST", "/v1/admin/market/supply-groups", strings.NewReader(`{"name":"x","node_ids":["`+node.String()+`"]}`))
+	r.Header.Set("Idempotency-Key", "k1")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	var body struct {
+		Error string                      `json:"error"`
+		Nodes []marketsupply.UnmappedNode `json:"nodes"`
+	}
+	if w.Code != 422 || json.Unmarshal(w.Body.Bytes(), &body) != nil || body.Error != "node_location_unmapped" ||
+		len(body.Nodes) != 1 || body.Nodes[0].NodeID != node || body.Nodes[0].Fields[0] != "carrier" {
+		t.Fatalf("refusal: %d %s", w.Code, w.Body)
+	}
+	if supplyCode(supply.err) != "node_location_unmapped" || !strings.Contains(string(supplyDetail(supply.err)), node.String()) {
+		t.Fatal("batch listing code/detail")
+	}
 }
 
 func TestSupplyGroupRoutes(t *testing.T) {

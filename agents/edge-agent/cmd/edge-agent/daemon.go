@@ -247,6 +247,12 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if err != nil {
 		return nil, err
 	}
+	// The node-market role follows the controller within the local settings;
+	// restored before dynamic routing renders.
+	marketRoleState, err := newMarketRole(config.MarketProbe, config.JournalDir)
+	if err != nil {
+		return nil, err
+	}
 	maximumReceiveBytes := config.Limits.MaxCommandBytes
 	chunkMessageBytes := int(config.Limits.MaxArtifactChunkBytes) + (64 << 10)
 	if chunkMessageBytes > maximumReceiveBytes {
@@ -462,6 +468,17 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		return nil, err
 	}
 	manager = dynamicManager
+	if dynamicRouting != nil {
+		dynamicRouting.SetMarketBenchmark(marketRoleState.Joined())
+		marketRoleState.apply = func(ctx context.Context, joined bool) error {
+			dynamicRouting.SetMarketBenchmark(joined)
+			if err := dynamicManager.Reapply(ctx); err != nil {
+				dynamicRouting.SetMarketBenchmark(!joined)
+				return err
+			}
+			return nil
+		}
+	}
 	urlAuthRuntime, err := urlauth.NewArtifactRuntime(filepath.Join(config.DeploymentRoot, "urlauth"))
 	if err != nil {
 		return nil, fmt.Errorf("configure URL auth artifact runtime: %w", err)
@@ -586,7 +603,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	clientConfig.InitialBackoff = timeouts.InitialBackoff
 	clientConfig.MaximumBackoff = timeouts.MaximumBackoff
 	runtimeStatusProbe := gatewayclient.RuntimeStatusProbe{OpenResty: deploymentRuntime.Healthy,
-		MarketProbeRole: config.MarketProbe.role()}
+		MarketProbeRoleNow: marketRoleState.Role}
 	if nativeRuntimeNode(config) {
 		statusPath := nativeRuntimeStatusPath(config)
 		runtimeStatusProbe.NativeRuntime = func() *agentv1.NativeRuntimeStatus { return nativeRuntimeReport(statusPath) }
@@ -750,7 +767,8 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	}
 	clientOptions = append(clientOptions, gatewayclient.WithArtifactSetRuntime(artifactSets))
 	if marketProbe != nil {
-		clientOptions = append(clientOptions, gatewayclient.WithMarketProbeExecutor(marketProbe))
+		clientOptions = append(clientOptions, gatewayclient.WithMarketProbeExecutor(marketProbe),
+			gatewayclient.WithMarketRoleAssigner(marketRoleState))
 	}
 	var ddosStatus ddosStatusSource
 	if dynamicRouting != nil {

@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/marketprobe"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -40,7 +41,53 @@ var (
 	// ErrSupplyConflict: stale revision, idempotency key reuse, or (delete)
 	// a market product still uses the group.
 	ErrSupplyConflict = errors.New("market supply group: conflict")
+	// ErrSupplyLocationUnmapped: a newly selected node's IP 归属 has no
+	// region or carrier the market understands (*LocationUnmappedError).
+	ErrSupplyLocationUnmapped = errors.New("market supply group: node location unmapped")
 )
+
+// UnmappedNode is a selected node whose region or carrier cannot be mapped;
+// Fields lists "region" and/or "carrier".
+type UnmappedNode struct {
+	NodeID  uuid.UUID `json:"node_id"`
+	Name    string    `json:"name"`
+	Region  string    `json:"region"`
+	Carrier string    `json:"carrier"`
+	Fields  []string  `json:"fields"`
+}
+
+// LocationUnmappedError: the supply group copies each
+// node's IP 归属 into its endpoints, and the market reports only nodes whose
+// region and carrier map (marketprobe.Region/Carrier). A node without them
+// would never be reported, so it is refused here instead of being sold as
+// an empty pool; the seller corrects it under 节点管理 → 编辑节点 → IP 归属.
+type LocationUnmappedError struct{ Nodes []UnmappedNode }
+
+func (e *LocationUnmappedError) Error() string { return ErrSupplyLocationUnmapped.Error() }
+func (e *LocationUnmappedError) Unwrap() error { return ErrSupplyLocationUnmapped }
+
+// unmappedNodes are the nodes of fresh (not already in the group) whose
+// region or carrier does not map.
+func unmappedNodes(nodes []SupplyGroupNode, fresh func(uuid.UUID) bool) []UnmappedNode {
+	var out []UnmappedNode
+	for _, node := range nodes {
+		if !fresh(node.NodeID) {
+			continue
+		}
+		var fields []string
+		region, ok := marketprobe.Region(node.Region)
+		if !ok {
+			fields = append(fields, "region")
+		} else if _, ok := marketprobe.MarketCarrier(region, node.Carrier); !ok {
+			// Only mainland nodes need a carrier (it picks the DNS line).
+			fields = append(fields, "carrier")
+		}
+		if len(fields) > 0 {
+			out = append(out, UnmappedNode{NodeID: node.NodeID, Name: node.Name, Region: node.Region, Carrier: node.Carrier, Fields: fields})
+		}
+	}
+	return out
+}
 
 // FeatureReader is the valid lease's feature codes
 // (entitlementguard.Guard.ReadValidFeatures).
@@ -112,6 +159,22 @@ func (s *SupplyGroups) Put(ctx context.Context, actor SupplyActor, w SupplyGroup
 	nodes, err := s.loadNodes(ctx, actor.ScopeID, ids)
 	if err != nil {
 		return SupplyGroup{}, err
+	}
+	// Only nodes the seller adds are checked: one already in the group keeps
+	// its place (removing other nodes or refreshing must not be blocked),
+	// and its endpoint takes its current IP 归属 either way.
+	current := map[uuid.UUID]bool{}
+	if w.GroupID != uuid.Nil {
+		if group, err := s.scheduler.GetMarketSupplyGroup(ctx, actor.scheduler(), w.GroupID); err == nil {
+			for _, endpoint := range group.Endpoints {
+				current[endpoint.NodeID] = true
+			}
+		} else if !errors.Is(err, nodescheduler.ErrNotFound) {
+			return SupplyGroup{}, mapSchedulerError(err)
+		}
+	}
+	if unmapped := unmappedNodes(nodes, func(id uuid.UUID) bool { return !current[id] }); len(unmapped) > 0 {
+		return SupplyGroup{}, &LocationUnmappedError{Nodes: unmapped}
 	}
 	if w.GroupID == uuid.Nil {
 		// A retried create (same actor and key) must send the same request:

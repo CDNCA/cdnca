@@ -353,7 +353,10 @@ describe('canonical line resolution', () => {
     expect(screen.getByText('100')).toBeInTheDocument()
     expect(screen.getByText('节点1').closest('td')).toHaveClass('node-line-resolution-name')
     expect(screen.getByText('192.0.2.10').closest('td')).toHaveClass('node-line-resolution-address')
-    expect(detailCSS).toMatch(/\.node-line-resolution-detail-page \.node-line-resolution-table-scroll td\.node-line-resolution-name,\s*\.node-line-resolution-detail-page \.node-line-resolution-table-scroll td\.node-line-resolution-address\s*\{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/)
+    // The shared rule is split: the address wraps, the
+    // name stays on one line with an ellipsis (full name in the Tooltip).
+    expect(detailCSS).toMatch(/\.node-line-resolution-detail-page \.node-line-resolution-table-scroll td\.node-line-resolution-address\s*\{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/)
+    expect(detailCSS).toMatch(/\.node-line-resolution-detail-page \.node-line-resolution-table-scroll td\.node-line-resolution-name\s*\{[^}]*white-space: nowrap;/)
   })
 
   it('keeps observed return/tool spacing and enabled delete/presence colors page-scoped', () => {

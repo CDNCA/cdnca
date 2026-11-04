@@ -261,15 +261,15 @@ export default function BasicSiteTab({
             <span>{t('edit.basic.fields.updatedAt')}</span>
             <strong>{dateText(detail.updated_at, language, t('values.placeholder'))}</strong>
           </div>
-          <label className="site-basic-fact">
-            <span>{t('edit.basic.fields.group')}</span>
+          <div className="site-basic-fact">
+            <span>{t('edit.basic.fields.group')}<Tooltip title={t('edit.basic.help.group')}><span className="site-form-row-tip" role="img" tabIndex={0} aria-label={t('edit.basic.help.group')}><CircleHelp size={14} aria-hidden="true" /></span></Tooltip></span>
             {selectScopeID ? (
-              <SiteGroupSelect accessToken={accessToken} scopeID={selectScopeID}
-                value={value} readOnly={readOnly} onChange={onChange} />
+              <SiteGroupSelect accessToken={accessToken} platform={role === 'admin'} scopeID={selectScopeID} ownerID={detail.owner?.id ?? ''}
+                ownerName={detail.owner?.display_name} value={value} readOnly={readOnly} onChange={onChange} />
             ) : (
               <Select aria-label={t('edit.basic.fields.group')} value={value.group_id} allowClear disabled={readOnly} placeholder={t('edit.basic.selectPlaceholder')} options={value.group_id ? [{ value: value.group_id, label: value.group_name || value.group_id }] : []} onChange={(groupId) => onChange({ ...value, group_id: groupId ?? null })} />
             )}
-          </label>
+          </div>
           <div className="site-basic-fact">
             <span>{t('edit.basic.fields.cname')}</span>
             <div className="site-basic-cname">

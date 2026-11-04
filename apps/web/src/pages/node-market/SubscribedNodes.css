@@ -1,0 +1,295 @@
+/* 节点管理 → 订阅节点 and the seller's 防御能力 drawer.
+   Theme variables only (unify-1035); the summary strip reuses .site-tab-summary. */
+.subn-page .subn-head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.subn-page .subn-head h4 {
+  margin: 0;
+}
+
+.subn-page .subn-summary {
+  margin-bottom: 16px;
+}
+
+.subn-page .subn-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 12px;
+}
+
+.subn-source {
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+}
+
+.subn-source-name {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+.subn-small {
+  font-size: 12px;
+}
+
+.subn-gap {
+  margin-top: 12px;
+}
+
+.subn-dotted {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.subn-col-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.subn-help {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--cdnca-color-text-secondary);
+  background: none;
+  border: 0;
+  border-radius: var(--cdnca-border-radius-sm, 4px);
+  cursor: pointer;
+}
+
+.subn-help:hover {
+  color: var(--cdnca-color-primary);
+}
+
+.subn-help:focus-visible {
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: 1px;
+}
+
+.subn-pop {
+  max-width: 360px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.subn-defense-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.subn-defense.ant-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.subn-defense-source {
+  padding-inline-start: 4px;
+  font-size: 11px;
+  opacity: 0.8;
+  border-inline-start: 1px solid currentColor;
+}
+
+.subn-defense.is-unavailable > span:first-of-type {
+  text-decoration: line-through;
+}
+
+.subn-note {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+.subn-more {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.subn-info {
+  color: var(--cdnca-color-text-secondary);
+  vertical-align: -2px;
+}
+
+.subn-detail {
+  display: grid;
+  gap: 20px;
+  padding: 8px 4px;
+}
+
+.subn-detail h4 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.subn-reasons {
+  display: grid;
+  gap: 4px;
+}
+
+.subn-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.subn-groups li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--cdnca-border-radius);
+}
+
+.subn-groups li > span {
+  flex: 1;
+}
+
+.subn-groups li strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.subn-ips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.subn-limits {
+  margin-top: 16px;
+}
+
+.subn-limits dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.subn-limits dt {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+.subn-limits dd {
+  margin: 2px 0 0;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.subn-empty {
+  padding: 48px 16px;
+}
+
+.subn-empty strong {
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+}
+
+.subn-empty p {
+  margin: 4px 0 0;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.subn-seller-link {
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+.subn-seller-link:hover,
+.subn-seller-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+.subn-seller-card {
+  display: grid;
+  gap: 8px;
+  width: 280px;
+}
+
+.subn-seller-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.subn-seller-card header strong {
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+}
+
+.subn-seller-card dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.subn-seller-card dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.subn-seller-card dt {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.subn-seller-card dd {
+  margin: 0;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.subn-drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.subn-coverage {
+  display: grid;
+  gap: 16px;
+}
+
+.subn-missing {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subn-missing li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .subn-page .subn-toolbar > * {
+    flex: 1 1 100%;
+    max-width: none !important;
+    width: 100% !important;
+  }
+}

@@ -341,7 +341,7 @@ describe('NodeMarketPage', () => {
     expect(await screen.findByText('已下架')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重新提交上架' }))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText(/已有订阅一直照常服务/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/已收到“到期不再续费”通知的订阅仍按通知到期关闭/)).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: '重新提交上架' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/v1/admin/market/offers/${delisted.id}/publish`, expect.objectContaining({ method: 'POST' })))
     expect(await screen.findByText('已提交审核，审核通过后上架')).toBeInTheDocument()

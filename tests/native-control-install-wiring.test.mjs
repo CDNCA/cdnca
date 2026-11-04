@@ -169,6 +169,12 @@ test('fixed NATS profile is checked and never updated in place', () => {
   const config = native_install_test_block('write_nats_config')
   assert.match(config, /max_payload:4194304/)
   assert.match(config, /http:"127\.0\.0\.1:8222"/)
+  // 固定 max_file_store 必须装得下 profile 全部流的 max_bytes（未设上限的流 NATS 按 1 字节预留），否则建流 10047。
+  const cap = Number(config.match(/max_file_store:(\d+)/)[1])
+  const profile = JSON.parse(readFileSync(new URL('../scripts/native-runtime/native-nats-profile.json', import.meta.url), 'utf8'))
+  const reserved = profile.streams.map((stream) => ({ ...profile.stream_defaults, ...stream }).max_bytes)
+    .reduce((sum, bytes) => sum + (bytes > 0 ? bytes : 1), 0)
+  assert.ok(reserved < cap * 0.9, `profile reserves ${reserved} bytes, max_file_store ${cap}`)
 })
 
 test('units use current binaries and verified runtime/native env; public nginx cannot reach private plan source', () => {

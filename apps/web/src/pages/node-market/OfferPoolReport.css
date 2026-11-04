@@ -1,0 +1,6 @@
+/* The node table keeps a fixed width and scrolls by itself on narrow
+   screens; grid children may shrink below it (the help text wraps instead of being cut). */
+.pool-report > *,
+.pool-report .subn-detail > * {
+  min-width: 0;
+}

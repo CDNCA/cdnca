@@ -108,6 +108,8 @@ type Handler struct {
 	svc          Service
 	authenticate Authenticate
 	mux          *http.ServeMux
+	// poolReports answers the supply group report route (WithPoolReports).
+	poolReports PoolReporter
 }
 
 // New serves the supply/site routes when svc is set; with a nil svc (node

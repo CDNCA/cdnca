@@ -41,3 +41,8 @@
   font-size: 12px;
   font-weight: 500;
 }
+
+/* 网站分组下拉与"该用户还没有网站分组 / 去新建分组"提示同列上下排 */
+.site-group-select { display: grid; min-width: 0; gap: 4px; }
+.site-group-empty { color: var(--cdnca-color-text-secondary); font-size: 12px; line-height: 18px; }
+.site-basic-fact > span .site-form-row-tip { width: 20px; height: 20px; vertical-align: -5px; }

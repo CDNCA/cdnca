@@ -314,6 +314,13 @@ enum CapabilityName {
   // (applied / confirmed / reverted / failed), also unprompted when the
   // timer reverted it. Control sends commands only to nodes that declare it.
   CAPABILITY_NAME_SSH_ACCESS = 78;
+  // MARKET_ROLE v1: the node takes its node-market role from the controller
+  // (MarketProbeCommand.assigned_role, no targets) and answers the role in
+  // effect (MarketProbeResult.effective_role, role_source). Declared only
+  // with market_probe.enabled; a local market_probe.leave_market keeps it
+  // probe-only whatever is assigned. Control assigns roles only to nodes
+  // that declare it.
+  CAPABILITY_NAME_MARKET_ROLE = 79;
 }
 
 // Capability advertises the highest implementation version for one feature.
@@ -1693,6 +1700,13 @@ message MarketProbeCommand {
   // fixed benchmark object instead of a probe (MARKET_BENCHMARK v1 only).
   // timeout_millis bounds the whole download of one target.
   MarketBenchmarkSpec benchmark = 6;
+  // assigned_role (MARKET_ROLE v1), when set, makes this a role assignment
+  // instead of a probe: targets and benchmark are empty, and the role is
+  // JOIN_MARKET (the node's line group is in one of the seller's offers) or
+  // PROBE_ONLY (it no longer is). The node keeps the assignment across
+  // restarts and answers MarketProbeResult with no results and the role in
+  // effect.
+  MarketProbeRole assigned_role = 7;
 }
 
 // MarketBenchmarkSpec: download the benchmark object over `connections`
@@ -1754,6 +1768,13 @@ message MarketProbeResult {
   string node_id = 2;
   string command_event_id = 3;
   repeated MarketProbeTargetResult results = 4;
+  // effective_role and role_source answer a role assignment (MARKET_ROLE
+  // v1; unset otherwise): the role the node runs after it, and why:
+  // "assigned" (follows the controller), "local_join" (market_probe.
+  // join_market keeps it joined) or "local_leave" (market_probe.
+  // leave_market keeps it probe-only).
+  MarketProbeRole effective_role = 5;
+  string role_source = 6;
 }
 
 message MarketProbeTargetResult {

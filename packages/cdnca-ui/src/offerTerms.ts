@@ -27,8 +27,9 @@ const zhCN = {
   revisionNotice: '保存会生成新的报价修订：新订单按新条款；已售订阅保持购买时的快照，日包到期时按各自的续费价格条件决定跟随新条款还是关闭（涨价或收紧限额视为涨价）；按量计费的订阅终身保持原价。订阅方会收到条款变更通知。',
   changed: '报价已在别处（主控或卖家站）修改，请刷新后重新打开再保存',
   nodesOnController: '节点的增减在主控 → 节点市场 → 卖节点 中设置；报价包含的节点和节点插件由主控按本机节点证明，卖家站只能查看。',
-  delistNotice: '下架只停止新购买，已售订阅照常服务与续费。',
-  republishNotice: '沿用同一报价，平台会按当前规则重新检查上架资格（入驻、佣金预付、欠费等）；需要审核时先进入待审核。',
+  // (market 076) the seller's delisting ends renewal.
+  delistNotice: '确定后立即停止新购买（含试用）；在期订阅照常服务到各自已付到期，不再续费，到期后自动关闭，买方会收到通知。没有在期买方时立即下架完成。',
+  republishNotice: '沿用同一报价，平台会按当前规则重新检查上架资格（入驻、佣金预付、欠费等）；需要审核时先进入待审核。已收到“到期不再续费”通知的订阅仍按通知到期关闭。',
 }
 
 const enUS: typeof zhCN = {
@@ -45,8 +46,8 @@ const enUS: typeof zhCN = {
   revisionNotice: 'Saving creates a new offer revision: new orders get the new terms; sold subscriptions keep their purchase snapshot, and day bundles follow the new terms at renewal only as their renewal price condition allows (a higher price or a stricter limit counts as an increase); metered subscriptions keep their price for life. Subscribers are notified.',
   changed: 'The offer was changed elsewhere (controller or seller site). Refresh and reopen before saving',
   nodesOnController: 'Nodes are added and removed on the controller under Node market → Sell. The nodes and node plugins behind an offer are proven by the controller from its own nodes; the seller site only shows them.',
-  delistNotice: 'Delisting only stops new purchases; sold subscriptions keep serving and renewing.',
-  republishNotice: 'The same offer is listed again after the current listing checks (onboarding, commission prepayment, arrears); with review on it goes to review first.',
+  delistNotice: 'New purchases (trials included) stop at once; subscriptions in period are served to their paid end and then close instead of renewing, and their buyers are notified. With no buyer in period it is delisted at once.',
+  republishNotice: 'The same offer is listed again after the current listing checks (onboarding, commission prepayment, arrears); with review on it goes to review first. Subscriptions already told they will not renew still close as announced.',
 }
 
 export type OfferCopy = typeof zhCN

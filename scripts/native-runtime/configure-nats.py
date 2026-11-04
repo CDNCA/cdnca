@@ -96,6 +96,19 @@ def project_native_nats_config(config, kind):
     return value
 
 
+class NATSAPIError(RuntimeError):
+    """A JetStream API refusal; only its numeric err_code is ever printed."""
+
+    def __init__(self, code):
+        super().__init__("NATS API rejected request")
+        self.code = code if type(code) is int else None
+
+
+# err_code 10047 = JSStorageResourcesExceededErr: the server's max_file_store cannot hold the profile's max_bytes.
+NATS_ERROR_HINTS = {10047: "NATS storage reservation is too small for the fixed stream limits; "
+                           "check max_file_store in nats.json and free disk space under the NATS store directory"}
+
+
 class NativeNATS:
     def __init__(self, server, cli=CLI):
         self.port = native_nats_url(server)
@@ -143,7 +156,7 @@ class NativeNATS:
             error = response["error"]
             if isinstance(error, dict) and missing is not None and error.get("err_code") == missing:
                 return None
-            raise RuntimeError("NATS API rejected request")
+            raise NATSAPIError(error.get("err_code") if isinstance(error, dict) else None)
         return response
 
 
@@ -233,9 +246,15 @@ def native_nats_main(argv=None):
         print(json.dumps({"status": "contract_verified", "streams": 17, "durables": 10,
                           "profile_sha256": receipt["profile_sha256"]}))
         return 0
-    except (OSError, ValueError, RuntimeError, KeyError, TypeError):
-        # No response bodies, CLI stderr, host context, or credentials enter receipts/logs.
-        print("native NATS contract check failed; existing resources were not updated or deleted", file=sys.stderr)
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
+        # No response bodies, CLI stderr, host context, or credentials enter receipts/logs: only the
+        # exception class, a fixed message from this file (OSError text may hold paths: dropped) and
+        # a numeric NATS err_code.
+        code = getattr(error, "code", None)
+        detail = type(error).__name__ + (f", err_code {code}" if code is not None else "")
+        reason = NATS_ERROR_HINTS.get(code) or ("" if isinstance(error, OSError) else str(error))
+        print(f"native NATS contract check failed ({detail}{': ' + reason if reason else ''}); "
+              "existing resources were not updated or deleted", file=sys.stderr)
         return 1
 
 

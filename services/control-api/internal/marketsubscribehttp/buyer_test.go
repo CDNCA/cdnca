@@ -428,7 +428,15 @@ func TestBatchOfferWriteRelays(t *testing.T) {
 	if w := request(h, "PUT", "/v1/admin/market/offers/"+id+"/limits", `{"limits":[]}`, nil); w.Code != 400 {
 		t.Fatalf("limits without key: %d", w.Code)
 	}
-	want := []string{`POST /v1/offers/` + id + `/delist key=batch-1 {}`, `PUT /v1/offers/` + id + `/limits key=batch-1 {"limits":[]}`}
+	// Delete relays keyed with no body.
+	if w := request(h, "DELETE", "/v1/admin/market/offers/"+id, ``, key); w.Code != 200 {
+		t.Fatalf("delete: %d %s", w.Code, w.Body)
+	}
+	if w := request(h, "DELETE", "/v1/admin/market/offers/"+id, ``, nil); w.Code != 400 {
+		t.Fatalf("delete without key: %d", w.Code)
+	}
+	want := []string{`POST /v1/offers/` + id + `/delist key=batch-1 {}`, `PUT /v1/offers/` + id + `/limits key=batch-1 {"limits":[]}`,
+		`DELETE /v1/offers/` + id + ` key=batch-1 `}
 	if got := strings.Join(f.calls, "\n"); got != strings.Join(want, "\n") {
 		t.Fatalf("forwarded:\n%s\nwant\n%s", got, strings.Join(want, "\n"))
 	}

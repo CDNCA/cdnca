@@ -35,7 +35,7 @@ const tcpRows = (ports) => '  sl  local_address rem_address   st\n' + ports.map(
 
 function host({ os = 'ubuntu2404', memMiB = 8192, swapMiB = 0, cores = 4, sse42 = true, kernel = '6.8.0-45-generic',
   machine = 'x86_64', systemd = '255', systemdRunning = true, cgroup2 = true, uid = 0, listen = [], availMiB = 200000,
-  curl = 'ok', remoteDate = 'Wed, 15 Oct 2026 08:00:00 GMT', localEpoch = 1792051200, firewall = '' } = {}) {
+  curl = 'ok', remoteDate = 'Wed, 15 Oct 2026 08:00:00 GMT', localEpoch = 1792051200, firewall = '', disks = [] } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), 'preflight-'))
   const bin = path.join(root, 'bin')
   for (const dir of ['etc', 'proc/net', 'sys/fs/cgroup', 'run/systemd/system', 'bin']) mkdirSync(path.join(root, dir), { recursive: true })
@@ -52,6 +52,15 @@ function host({ os = 'ubuntu2404', memMiB = 8192, swapMiB = 0, cores = 4, sse42 
   fake('systemctl', `[ "$1" = --version ] && echo "systemd ${systemd} (${systemd})"`)
   fake('df', `printf 'Filesystem 1048576-blocks Used Available Capacity Mounted on\\n/dev/vda1 300000 1000 ${availMiB} 1%% /\\n'`)
   fake('id', `case "$1" in -u) echo ${uid} ;; -un) echo tester ;; esac`)
+  // lsblk: -dbnpo lists whole disks (name type size ro rm); -nro FSTYPE,... / -nro NAME <disk> describe one disk.
+  // Always faked (empty by default) so a Linux test host never contributes its own disks.
+  const disk = (d) => ({ type: 'disk', ro: 0, rm: 0, used: '', parts: [], ...d })
+  fake('lsblk', [
+    'case "$1" in -dbnpo) cat <<\'EOF\'', ...disks.map(disk).map((d) => `${d.name} ${d.type} ${d.size} ${d.ro} ${d.rm}`), 'EOF', 'exit 0 ;; esac',
+    'case "$2:${!#}" in',
+    ...disks.map(disk).flatMap((d) => [`  FSTYPE,PTTYPE,MOUNTPOINT:${d.name}) echo '${d.used}' ;;`,
+      `  NAME:${d.name}) printf '%s\\n' ${[d.name, ...d.parts].join(' ')} ;;`]),
+    'esac'].join('\n'))
   fake('date', `case "$*" in '-u +%s') echo ${localEpoch} ;; *) exec /bin/date "$@" ;; esac`)
   const curlBody = { ok: `printf 'HTTP/2 200\\r\\ndate: ${remoteDate}\\r\\n\\r\\n'`, untrusted: 'exit 60', down: 'exit 7' }[curl]
   fake('curl', curlBody)
@@ -152,6 +161,34 @@ test('memory, CPU and disk thresholds', () => {
   // All paths share one mounted filesystem; it is reported once.
   const once = run(host({ availMiB: 50000 }), report('preflight_check_disk node'))
   assert.equal(once.stderr.split('\n').filter((line) => line.includes('磁盘空间')).length, 1, once.stderr)
+})
+
+test('control data on a small partition points to an unused disk, never formats it', () => {
+  const GiB = 1073741824
+  const empty = { name: '/dev/vdb', size: 100 * GiB }
+  const hint = (result) => result.stderr.split('\n').filter((line) => line.includes('mkfs.ext4'))
+  // 8G system disk + empty 100G disk: disk space fails, the data disk is a warning with the mount commands.
+  const small = run(host({ availMiB: 5000, disks: [{ name: '/dev/vda', size: 8 * GiB, used: 'ext4/', parts: ['/dev/vda1'] }, empty] }),
+    report('preflight_check_disk control'))
+  assert.equal(statusOf(small, '磁盘空间'), '不通过', small.stderr)
+  assert.equal(statusOf(small, '数据盘'), '警告', small.stderr)
+  assert.match(small.stderr, /\/dev\/vdb（100 GiB，无分区、未挂载）/)
+  assert.equal(hint(small).length, 1, small.stderr)
+  assert.match(hint(small)[0], /mkfs\.ext4 \/dev\/vdb && .*cp -a \/var\/lib\/\. \/mnt\/cdnca-var\/ && .* \/var\/lib ext4 defaults,nofail 0 2/)
+  // The largest empty disk is offered.
+  assert.match(run(host({ availMiB: 5000, disks: [{ name: '/dev/vdc', size: 50 * GiB }, empty] }), report('preflight_check_disk control')).stderr,
+    /mkfs\.ext4 \/dev\/vdb/)
+  // Disks in use, too small, read-only, removable or virtual are never offered.
+  for (const disk of [{ ...empty, used: 'ext4' }, { ...empty, used: 'gpt' }, { ...empty, parts: ['/dev/vdb1'] }, { ...empty, size: 10 * GiB },
+    { ...empty, ro: 1 }, { ...empty, rm: 1 }, { ...empty, name: '/dev/loop0' }, { ...empty, type: 'rom' }]) {
+    const result = run(host({ availMiB: 5000, disks: [disk] }), report('preflight_check_disk control'))
+    assert.equal(statusOf(result, '数据盘'), undefined, `${JSON.stringify(disk)}: ${result.stderr}`)
+  }
+  // Enough space, or a node install: nothing to suggest.
+  assert.equal(statusOf(run(host({ availMiB: 200000, disks: [empty] }), report('preflight_check_disk control')), '数据盘'), undefined)
+  assert.equal(statusOf(run(host({ availMiB: 1000, disks: [empty] }), report('preflight_check_disk node')), '数据盘'), undefined)
+  // Low but not failing (warning band) still points to the disk.
+  assert.equal(statusOf(run(host({ availMiB: 20000, disks: [empty] }), report('preflight_check_disk control')), '数据盘'), '警告')
 })
 
 test('systemd presence/version, root and coexistence', () => {

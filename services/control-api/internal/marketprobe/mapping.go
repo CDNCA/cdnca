@@ -139,3 +139,16 @@ func Region(raw string) (string, bool) {
 	}
 	return "", false
 }
+
+// MarketCarrier is the carrier the market gets for a node of this region:
+// on the mainland the mapped carrier (required: it picks the DNS line);
+// outside the mainland (HK/MO/TW and abroad) carriers are not distinguished
+// (the market answers every such node on its overseas line), so every such
+// node is reported as bgp, the multi-line code, whatever its carrier
+// ("中华电信" in Taiwan is not mainland China Telecom).
+func MarketCarrier(region, raw string) (string, bool) {
+	if region != "cn" {
+		return "bgp", true
+	}
+	return Carrier(raw)
+}

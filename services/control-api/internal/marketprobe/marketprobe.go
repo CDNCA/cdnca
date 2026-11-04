@@ -37,6 +37,13 @@ import (
 // ErrOffline means the node has no live gateway session.
 var ErrOffline = errors.New("market probe: node is offline")
 
+// Why leaf-side probing is off (control-api MARKET_PROBE_ENABLED): turned
+// off, or no edge NATS to reach the nodes.
+const (
+	OffDisabled   = "disabled"
+	OffNoEdgeNATS = "no_edge_nats"
+)
+
 // Market is the subset of marketclient.Client this package drives.
 type Market interface {
 	OwnOffers(ctx context.Context) ([]marketclient.OwnOffer, error)
@@ -93,10 +100,11 @@ type Service struct {
 	log    *slog.Logger
 
 	mu        sync.Mutex
-	known     map[string]bool      // probe-ready node IDs last reported
-	benchable map[string]bool      // of those, the ones that run benchmarks (capability 34)
-	pools     map[string][]string  // pool → node IDs last reported (node load, ADR 0012 §6.1)
-	logged    map[string]time.Time // rate limit for skip reasons
+	known     map[string]bool       // probe-ready node IDs last reported
+	benchable map[string]bool       // of those, the ones that run benchmarks (capability 34)
+	pools     map[string][]string   // pool → node IDs last reported (node load, ADR 0012 §6.1)
+	logged    map[string]time.Time  // rate limit for skip reasons
+	roles     map[string]roleAnswer // node → last role assignment answer
 	// legacyMarket: the market predates benchmarks (rejected the
 	// benchmark inventory field or has no benchmark routes); benchmark
 	// reporting and relay stay off for this process.
@@ -117,7 +125,7 @@ func New(pool *pgxpool.Pool, market Market, nodes Requester, cfg Config, log *sl
 		cfg.Now = time.Now
 	}
 	return &Service{pool: pool, market: market, nodes: nodes, cfg: cfg, log: log,
-		known: map[string]bool{}, benchable: map[string]bool{}, logged: map[string]time.Time{}}
+		known: map[string]bool{}, benchable: map[string]bool{}, logged: map[string]time.Time{}, roles: map[string]roleAnswer{}}
 }
 
 // Run reports inventory and relays probe tasks until ctx ends.
@@ -221,6 +229,13 @@ func (s *Service) SyncInventory(ctx context.Context) error {
 			active[ref] = true
 		}
 	}
+	// The active pools' nodes join the market, nodes the
+	// controller joined earlier and no active pool holds leave it; the
+	// answers stand for the heartbeat role this round.
+	answers, err := s.AssignRoles(ctx, sortedKeys(active))
+	if err != nil {
+		errs = append(errs, fmt.Errorf("market roles: %w", err))
+	}
 	known, benchable, pools := map[string]bool{}, map[string]bool{}, map[string][]string{}
 	for _, ref := range sortedKeys(active) {
 		candidates, err := s.loadCandidates(ctx, ref)
@@ -228,7 +243,7 @@ func (s *Service) SyncInventory(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("pool %s: %w", ref, err))
 			continue
 		}
-		nodes := s.filter(ref, candidates)
+		nodes := s.filter(ref, withAnswers(candidates, answers))
 		if err := s.withPlugins(ctx, nodes); err != nil {
 			errs = append(errs, fmt.Errorf("pool %s plugins: %w", ref, err))
 			continue
@@ -344,7 +359,12 @@ func (s *Service) loadCandidates(ctx context.Context, ref string) ([]candidate, 
 		s.skip(ref, "pool_not_local_group")
 		return nil, nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT serving.node_id, host(serving.address), endpoint.region, endpoint.carrier,
+	return loadGroupCandidates(ctx, s.pool, groupID)
+}
+
+// loadGroupCandidates is loadCandidates for a local group (also the pool report's).
+func loadGroupCandidates(ctx context.Context, pool *pgxpool.Pool, groupID uuid.UUID) ([]candidate, error) {
+	rows, err := pool.Query(ctx, `SELECT serving.node_id, host(serving.address), endpoint.region, endpoint.carrier,
 			(SELECT facts.capabilities_snapshot FROM node_session_capabilities facts WHERE facts.node_id=serving.node_id
 			 ORDER BY facts.session_epoch DESC LIMIT 1),
 			(SELECT presence.market_probe_role FROM node_presence presence WHERE presence.node_id=serving.node_id)
@@ -377,11 +397,46 @@ func (s *Service) loadCandidates(ctx context.Context, ref string) ([]candidate, 
 // MARKET_PROBE_ROLE_JOIN_MARKET as stored).
 const roleJoinMarket = "join_market"
 
-// filter keeps one public address per probe-capable, join_market node whose region and
-// carrier map, preferring IPv4; everything left out is logged with a reason.
-func (s *Service) filter(ref string, candidates []candidate) []marketclient.PoolNode {
+// Reasons a pool's node is not reported (logged, and shown to the seller by
+// the pool report).
+const (
+	ReasonAgentLacksProbe  = "agent_lacks_market_probe"
+	ReasonNotJoinMarket    = "node_not_join_market"
+	ReasonAddressNotPublic = "address_not_public"
+	ReasonRegionUnmapped   = reasonRegion
+	ReasonCarrierUnmapped  = reasonCarrier
+)
+
+// Excluded is a pool node left out of the report and why; Value is the
+// address, region or carrier that failed (empty for the others).
+type Excluded struct {
+	NodeID uuid.UUID
+	Reason string
+	Value  string
+}
+
+// withAnswers takes each node's answer to this round's role assignment as
+// its role: the node said so on its authenticated session, the heartbeat
+// follows within a minute.
+func withAnswers(candidates []candidate, answers map[string]roleAnswer) []candidate {
+	out := slices.Clone(candidates)
+	for i := range out {
+		if answer, ok := answers[out[i].NodeID.String()]; ok {
+			role := roleName(answer.Role)
+			out[i].Role = &role
+		}
+	}
+	return out
+}
+
+// classify keeps one public address per probe-capable, join_market node
+// whose region and carrier map, preferring IPv4, and says why every other
+// node is left out (each node once).
+func classify(candidates []candidate) ([]marketclient.PoolNode, []Excluded) {
 	var out []marketclient.PoolNode
+	var excluded []Excluded
 	seen := map[uuid.UUID]bool{}
+	private := map[uuid.UUID]string{} // nodes with only non-public addresses so far
 	for _, c := range candidates {
 		if seen[c.NodeID] {
 			continue
@@ -389,33 +444,60 @@ func (s *Service) filter(ref string, candidates []candidate) []marketclient.Pool
 		key := c.NodeID.String()
 		if !probeCapable(c.Capabilities) {
 			seen[c.NodeID] = true
-			s.skip(key, "agent_lacks_market_probe", "pool", ref)
+			excluded = append(excluded, Excluded{NodeID: c.NodeID, Reason: ReasonAgentLacksProbe})
 			continue
 		}
 		// A probe-only (installer default), disabled or older Agent does
 		// not join the node market even when its line group is in an offer.
 		if c.Role == nil || *c.Role != roleJoinMarket {
 			seen[c.NodeID] = true
-			s.skip(key, "node_not_join_market", "pool", ref)
+			excluded = append(excluded, Excluded{NodeID: c.NodeID, Reason: ReasonNotJoinMarket})
 			continue
 		}
 		if !contract.Public(c.Address) {
-			s.skip(key, "address_not_public", "pool", ref, "address", c.Address.String())
+			if _, ok := private[c.NodeID]; !ok {
+				private[c.NodeID] = c.Address.String()
+			}
 			continue // a later endpoint of the same node may be public
 		}
 		seen[c.NodeID] = true
+		delete(private, c.NodeID)
 		region, okRegion := Region(c.Region)
-		carrier, okCarrier := Carrier(c.Carrier)
+		carrier, okCarrier := MarketCarrier(region, c.Carrier)
 		if !okRegion {
-			s.skip(key, reasonRegion, "pool", ref, "region", c.Region)
+			excluded = append(excluded, Excluded{NodeID: c.NodeID, Reason: ReasonRegionUnmapped, Value: c.Region})
 			continue
 		}
 		if !okCarrier {
-			s.skip(key, reasonCarrier, "pool", ref, "carrier", c.Carrier)
+			excluded = append(excluded, Excluded{NodeID: c.NodeID, Reason: ReasonCarrierUnmapped, Value: c.Carrier})
 			continue
 		}
 		out = append(out, marketclient.PoolNode{NodeID: key, IP: c.Address.Unmap().String(), Region: region, Carrier: carrier,
 			Benchmark: hasCapability(c.Capabilities, agentv1.CapabilityName_CAPABILITY_NAME_MARKET_BENCHMARK)})
+	}
+	for _, c := range candidates {
+		if address, ok := private[c.NodeID]; ok && !seen[c.NodeID] {
+			seen[c.NodeID] = true
+			excluded = append(excluded, Excluded{NodeID: c.NodeID, Reason: ReasonAddressNotPublic, Value: address})
+		}
+	}
+	return out, excluded
+}
+
+// filter is classify with every left-out node logged with its reason.
+func (s *Service) filter(ref string, candidates []candidate) []marketclient.PoolNode {
+	out, excluded := classify(candidates)
+	for _, e := range excluded {
+		switch e.Reason {
+		case ReasonAddressNotPublic:
+			s.skip(e.NodeID.String(), e.Reason, "pool", ref, "address", e.Value)
+		case ReasonRegionUnmapped:
+			s.skip(e.NodeID.String(), e.Reason, "pool", ref, "region", e.Value)
+		case ReasonCarrierUnmapped:
+			s.skip(e.NodeID.String(), e.Reason, "pool", ref, "carrier", e.Value)
+		default:
+			s.skip(e.NodeID.String(), e.Reason, "pool", ref)
+		}
 	}
 	return out
 }

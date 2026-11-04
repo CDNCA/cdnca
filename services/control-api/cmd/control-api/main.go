@@ -2828,7 +2828,7 @@ func runServer() error {
 		EdgePublishHandlerFactory:                  edgePublishHandlerFactory,
 		DNSReconcileHandlerFactory:                 dnsReconcileHandlerFactory,
 		MarketRuntime:                              marketSubscribe != nil && marketClient != nil,
-		MarketSubscribeHandlerFactory:              marketSubscribeHandlerFactory(marketSubscribe, marketClientForwarder(marketClient), identityService, pool, marketAdvisories, entitlementguard.NewGuard(pool, time.Now, trust)),
+		MarketSubscribeHandlerFactory:              marketSubscribeHandlerFactory(marketSubscribe, marketClientForwarder(marketClient), identityService, pool, marketAdvisories, entitlementguard.NewGuard(pool, time.Now, trust), marketPoolReporter(marketRuntime, pool)),
 		NodeSchedulerHandlerFactory:                nodeSchedulerHandlerFactory,
 		NodeIsolationHandlerFactory:                nodeIsolationHandlerFactory,
 		AnalyticsService:                           analyticsService,

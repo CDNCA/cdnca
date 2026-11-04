@@ -1714,8 +1714,9 @@ function NodeListContent({
   const [limit, setLimit] = useState(10)
   const [cursorHistory, setCursorHistory] = useState<Array<string | undefined>>([undefined])
   const [pageIndex, setPageIndex] = useState(0)
-  const [searchDraft, setSearchDraft] = useState('')
-  const [search, setSearch] = useState('')
+  // ?q= (节点市场 → 可上报节点 "去编辑 IP 归属") opens the list filtered to one node.
+  const [searchDraft, setSearchDraft] = useState(() => searchParams.get('q') ?? '')
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '')
   const [installOpen, setInstallOpen] = useState(false)
   const [editing, setEditing] = useState<NodeInventoryItem | null>(null)
   const [batchMonitorNodes, setBatchMonitorNodes] = useState<{ id: string; name: string }[] | null>(null)

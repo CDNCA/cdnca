@@ -4,6 +4,7 @@ import { Alert, Button, Form, Input, Modal, Result, Select, Spin, Table, type Ta
 import { useFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { Pencil, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { ApiError, type Principal } from '../api/auth'
 import { siteGroupsApi, type AdminSiteGroup, type SiteGroup } from '../api/siteGroups'
@@ -44,8 +45,20 @@ export default function SiteGroupsPage() {
   return <SiteGroupsScope key={`${ownerKey}:${permissionKey}`} ownerKey={ownerKey} principal={principal} />
 }
 
+// The site editor's 「去新建分组」 link opens the create dialog for the site owner.
+type CreateFor = { userID: string; scopeID: string; name: string }
+function createForState(state: unknown): CreateFor | null {
+  const value = (state as { siteGroupCreateFor?: Partial<CreateFor> } | null)?.siteGroupCreateFor
+  return value && typeof value.userID === 'string' && uuidPattern.test(value.userID) && typeof value.scopeID === 'string' &&
+    uuidPattern.test(value.scopeID) ? { userID: value.userID, scopeID: value.scopeID, name: typeof value.name === 'string' ? value.name : '' } : null
+}
+
 function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal: Principal }) {
   const { t } = useTranslation('siteGroups')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [createFor] = useState(() => createForState(location.state))
+  const prefill = useRef(createFor?.userID ?? null)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
@@ -113,6 +126,20 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
     retry: false,
   })
   const userOptions = users.data?.pages.flatMap((result) => result.items).filter((item) => item.status === 'active' && item.role === 'tenant_owner') ?? []
+  useEffect(() => {
+    if (!createFor) return
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: { ...(location.state as object), siteGroupCreateFor: undefined } })
+    if (!canManage || blocked || journalRef.current || !platform && createFor.scopeID !== principal.scope_id) { prefill.current = null; return }
+    form.resetFields()
+    if (platform) setSearch(createFor.name)
+    setEditor({})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the state the page was opened with
+  }, [])
+  useEffect(() => {
+    const match = prefill.current && users.data?.pages.flatMap((result) => result.items)
+      .find((item) => item.id === prefill.current && item.scope_id === createFor?.scopeID && item.status === 'active' && item.role === 'tenant_owner')
+    if (match) { prefill.current = null; setSelectedUser(match) }
+  }, [users.data, createFor])
   const queryKey = ['site-groups', ownerKey, page, limit] as const
   const readGroups = async () => {
     const token = sessionAccess('sites.read')
@@ -230,7 +257,9 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
   const items = !query.isError ? query.data?.items ?? [] : []
   const nextAttempt = journal?.items.find((item) => item.phase !== 'done')
   const readOnlyRetry = !nextAttempt || nextAttempt.phase === 'accepted'
-  const retryPanel = blocked ? <Alert type="error" showIcon message={t('errors.storage')} /> : journal ?
+  // Only once the request has stopped. OutcomeUnknown opens its own dialog, and a
+  // closed antd Modal stops updating its content, so one rendered in flight stayed after a success.
+  const retryPanel = blocked ? <Alert type="error" showIcon message={t('errors.storage')} /> : journal && !pending ?
     <OutcomeUnknown title={t(notice ?? (readOnlyRetry ? 'errors.readback' : nextAttempt?.phase === 'unknown' ? 'errors.unknown' : 'errors.continueBatch'))} action={<Button size="small" loading={pending} disabled={!readOnlyRetry && !canManage} onClick={() => void runJournal(!readOnlyRetry)}>{t(readOnlyRetry ? 'actions.retryRead' : nextAttempt?.phase === 'unknown' ? 'actions.retryWrite' : 'actions.continueBatch')}</Button>} /> : null
   const columns: TableColumnsType<SiteGroup> = [
     { title: t('columns.id'), dataIndex: 'display_id', width: 90, render: (value?: string) => value ?? t('unknownValue') },
@@ -251,6 +280,7 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
 
   return <section className="site-groups-page site-groups-embedded" aria-label={t('title')}>
     {messageContext}
+    <p className="site-groups-usage">{t('usage')}</p>
     <div className="site-groups-toolbar">
       <Button type="primary" icon={<Plus size={14} />} disabled={!canManage || writeLocked} onClick={() => { draftGeneration.current += 1; setSelectedUser(null); setSearch(''); form.resetFields(); setEditor({}) }}>{t('actions.create')}</Button>
       <Button icon={<RotateCw size={13} />} disabled={pending} loading={query.isFetching} onClick={() => void query.refetch()}>{t('actions.refresh')}</Button>
@@ -279,11 +309,11 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
       }}>
       {retryPanel}
       <Form form={form} layout="horizontal" labelCol={{ flex: '90px' }} wrapperCol={{ flex: 1 }} initialValues={{ remark: '' }}>
-        {platform && !editor?.item ? <Form.Item label={t('scope.user')}>
+        {platform && !editor?.item ? <Form.Item label={t('scope.user')} required extra={t('scope.userHelp')}>
           <Select aria-label={t('scope.user')} showSearch allowClear filterOption={false} value={selectedUser?.id}
             placeholder={t('scope.placeholder')} loading={users.isFetching} disabled={writeLocked}
-            onChange={(id) => { draftGeneration.current += 1; setSelectedUser(userOptions.find((item) => item.id === id) ?? null) }}
-            onSearch={(value) => { if (!writeLocked) { draftGeneration.current += 1; setSelectedUser(null); setSearch(value) } }}
+            onChange={(id) => { draftGeneration.current += 1; prefill.current = null; setSelectedUser(userOptions.find((item) => item.id === id) ?? null) }}
+            onSearch={(value) => { if (!writeLocked) { draftGeneration.current += 1; prefill.current = null; setSelectedUser(null); setSearch(value) } }}
             options={userOptions.map((item) => ({ value: item.id, label: `${item.username}（${item.display_id}）` }))}
             notFoundContent={users.isFetching ? <Spin size="small" /> : t('scope.empty')}
             popupRender={(menu) => <>{menu}{users.hasNextPage ? <Button block loading={users.isFetchingNextPage} onClick={() => void users.fetchNextPage()}>{t('scope.more')}</Button> : null}</>} />

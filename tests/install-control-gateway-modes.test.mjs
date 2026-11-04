@@ -27,7 +27,7 @@ test('all mode keeps loopback NATS, Redis and the ControlInternal certificate un
     assert.equal(result.status, 0, result.stderr)
     assert.equal(result.stdout, 'DNS:localhost,IP:127.0.0.1||redis://127.0.0.1:6379/0')
     assert.deepEqual(JSON.parse(readFileSync(join(dir, 'nats.json'), 'utf8')),
-      { host: '127.0.0.1', port: 4222, http: '127.0.0.1:8222', max_payload: 4194304, jetstream: { store_dir: '/data' } })
+      { host: '127.0.0.1', port: 4222, http: '127.0.0.1:8222', max_payload: 4194304, jetstream: { store_dir: '/data', max_file_store: 34359738368 } })
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 

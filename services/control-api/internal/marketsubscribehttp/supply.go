@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/marketprobe"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketsupply"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketsupplyguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
@@ -26,6 +27,13 @@ var SupplyPatterns = []string{
 	"POST /v1/admin/market/supply-plugins",
 	// u4g: display names of plugin codes (a resale's upstream snapshot keeps codes only).
 	"POST /v1/admin/market/plugin-names",
+	// 我的上架 → 可上报节点, which nodes reach the market and why not.
+	"GET /v1/admin/market/supply-groups/{id}/report",
+}
+
+// PoolReporter is *marketprobe.Reporter.
+type PoolReporter interface {
+	Report(ctx context.Context, groupID uuid.UUID) (marketprobe.PoolReport, error)
 }
 
 // SupplyGroups is *marketsupply.SupplyGroups.
@@ -43,6 +51,13 @@ type supplyGroupView struct {
 	// NodePoolRef is what the offer component carries (own_pool).
 	NodePoolRef string                      `json:"node_pool_ref"`
 	Plugins     []marketsupply.SupplyPlugin `json:"plugins"`
+}
+
+// WithPoolReports serves the supply group report route (mounted by
+// WithSupplyGroups, so call this first).
+func (h *Handler) WithPoolReports(reports PoolReporter) *Handler {
+	h.poolReports = reports
+	return h
 }
 
 // WithSupplyGroups serves SupplyPatterns behind the seller permission.
@@ -106,6 +121,26 @@ func (h *Handler) WithSupplyGroups(groups SupplyGroups) *Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": names})
 	})
+	if h.poolReports != nil {
+		reports := h.poolReports
+		h.handle(SupplyPatterns[6], accessSell, func(w http.ResponseWriter, r *http.Request, c Caller) {
+			id, ok := supplyID(w, r)
+			if !ok {
+				return
+			}
+			// The group must be the caller's supply group (platform scope, purpose market_supply).
+			if _, err := groups.Get(r.Context(), supplyActor(c), id); err != nil {
+				supplyFail(w, err)
+				return
+			}
+			report, err := reports.Report(r.Context(), id)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal")
+				return
+			}
+			writeJSON(w, http.StatusOK, report)
+		})
+	}
 	return h
 }
 
@@ -180,7 +215,11 @@ func idempotencyKey(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func supplyFail(w http.ResponseWriter, err error) {
+	var unmapped *marketsupply.LocationUnmappedError
 	switch {
+	case errors.As(err, &unmapped):
+		// Which nodes, and which of region/carrier, to fix.
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "node_location_unmapped", "nodes": unmapped.Nodes})
 	case errors.Is(err, marketsupply.ErrSupplyNodeUnusable):
 		writeError(w, http.StatusUnprocessableEntity, "node_unusable")
 	case errors.Is(err, marketsupply.ErrSupplyInvalid):

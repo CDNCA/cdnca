@@ -153,10 +153,12 @@ var memberRoutes = map[string]memberRoute{
 	// Node subscriptions, usage statements, SLA and disputes (buyer.yaml, M4).
 	// ML-11b batch delist (stops new sales; sold subscriptions keep their
 	// snapshot) and limits: not mounted by the market yet, so they answer
-	// 501 market_feature_unavailable until it does.
+	// 501 market_feature_unavailable until it does. DELETE: soft delete of a
+	// draft or delisted offer without active subscriptions (market 076).
 	"PUT /v1/admin/market/offers/{id}/terms":                 {upstream: "/v1/offers/{id}/terms", access: accessSell, keyed: true},
 	"POST /v1/admin/market/offers/{id}/delist":               {upstream: "/v1/offers/{id}/delist", access: accessSell, keyed: true},
 	"PUT /v1/admin/market/offers/{id}/limits":                {upstream: "/v1/offers/{id}/limits", access: accessSell, keyed: true},
+	"DELETE /v1/admin/market/offers/{id}":                    {upstream: "/v1/offers/{id}", access: accessSell, keyed: true},
 	"GET /v1/admin/market/subscriptions/{id}":                {upstream: "/v1/subscriptions/{id}", access: accessBrowse},
 	"PUT /v1/admin/market/subscriptions/{id}/selection":      {upstream: "/v1/subscriptions/{id}/selection", access: accessPurchase, keyed: true},
 	"PUT /v1/admin/market/subscriptions/{id}/renewal-policy": {upstream: "/v1/subscriptions/{id}/renewal-policy", access: accessPurchase, keyed: true},

@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/marketprobe"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -34,14 +35,19 @@ func TestParseMarketKeys(t *testing.T) {
 }
 
 func TestBuildMarketProbeSwitch(t *testing.T) {
-	if probe, err := buildMarketProbe("false", nil, nil, nil, nil, nil, nil); probe != nil || err != nil {
-		t.Fatalf("disabled probe = %v, %v", probe, err)
+	if probe, off, err := buildMarketProbe("false", nil, nil, nil, nil, nil, nil); probe != nil || err != nil || off != marketprobe.OffDisabled {
+		t.Fatalf("disabled probe = %v, %q, %v", probe, off, err)
 	}
-	if _, err := buildMarketProbe("yes", nil, nil, nil, nil, nil, nil); err == nil {
+	if _, _, err := buildMarketProbe("yes", nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("invalid switch accepted")
 	}
-	if _, err := buildMarketProbe("true", nil, nil, nil, nil, nil, nil); err == nil {
-		t.Fatal("enabled without edge NATS must fail startup")
+	if _, _, err := buildMarketProbe("true", nil, nil, nil, nil, nil, nil); err == nil {
+		t.Fatal("explicitly enabled without edge NATS must fail startup")
+	}
+	// Unset is on by default; without edge NATS it stays off
+	// with a reason instead of stopping the controller.
+	if probe, off, err := buildMarketProbe("", nil, nil, nil, nil, nil, nil); probe != nil || err != nil || off != marketprobe.OffNoEdgeNATS {
+		t.Fatalf("default probe without edge NATS = %v, %q, %v", probe, off, err)
 	}
 }
 

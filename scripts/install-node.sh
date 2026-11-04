@@ -862,8 +862,33 @@ preflight_existing_parent() {
   printf '%s\n' "$path"
 }
 
+# 未使用的整块盘：无分区、无文件系统签名、未挂载、不是只读/可移动/虚拟设备、至少 20 GiB。
+# 输出 "名称 大小GiB"，按大小降序。只读：不格式化、不挂载，由用户确认后自己执行建议命令。
+preflight_spare_disks() {
+  command -v lsblk >/dev/null 2>&1 || return 0
+  lsblk -dbnpo NAME,TYPE,SIZE,RO,RM 2>/dev/null | while read -r name type size ro rm; do
+    [ "$type" = disk ] && [ "$ro" = 0 ] && [ "$rm" = 0 ] || continue
+    case "$name" in /dev/loop*|/dev/zram*|/dev/ram*|/dev/sr*|/dev/fd*) continue ;; esac
+    [ "${size:-0}" -ge 21474836480 ] || continue
+    # 整盘及其子设备都没有文件系统/分区表/挂载点才算空盘（-n 不含表头，任何非空字段都说明在用）。
+    [ -z "$(lsblk -nro FSTYPE,PTTYPE,MOUNTPOINT "$name" 2>/dev/null | tr -d ' \n')" ] || continue
+    [ "$(lsblk -nro NAME "$name" 2>/dev/null | wc -l)" -eq 1 ] || continue
+    printf '%s %s\n' "$name" "$((size / 1073741824))"
+  done | sort -k2,2nr
+}
+
+# 主控数据（PostgreSQL、ClickHouse、NATS、对象存储、Redis）都在 /var/lib；/var/lib 所在分区空间不足、
+# 又有空盘时，给出把空盘挂到 /var/lib 的命令（先拷原有内容再挂载，mkfs 会清空该盘）。
+preflight_check_spare_disk() {
+  local mount=$1 disk size
+  read -r disk size <<<"$(preflight_spare_disks | head -1)" || true
+  [ -n "${disk:-}" ] || return 0
+  preflight_record warn 数据盘 "$(msg "发现未使用的磁盘 $disk（$size GiB，无分区、未挂载）；安装器不会自动格式化或挂载" "found an unused disk $disk ($size GiB, no partitions, not mounted); the installer never formats or mounts disks itself")" \
+    "$(msg "确认 $disk 是空盘后（lsblk -f；mkfs 会清空它），把它挂到主控数据目录 /var/lib（当前在 $mount 分区）再重新安装：" "after confirming $disk is empty (lsblk -f; mkfs erases it), mount it on the control data directory /var/lib (now on $mount) and rerun the install: ")mkfs.ext4 $disk && mkdir -p /mnt/cdnca-var && mount $disk /mnt/cdnca-var && cp -a /var/lib/. /mnt/cdnca-var/ && umount /mnt/cdnca-var && echo \"UUID=\$(blkid -s UUID -o value $disk) /var/lib ext4 defaults,nofail 0 2\" >> /etc/fstab && reboot"
+}
+
 preflight_check_disk() {
-  local role=$1 path existing line mount avail_mib fail_mib warn_mib seen=' '
+  local role=$1 path existing line mount avail_mib fail_mib warn_mib seen=' ' short=' '
   local -a paths
   if [ "$role" = control ]; then
     paths=(/ /var/lib /data /usr/local)
@@ -879,6 +904,7 @@ preflight_check_disk() {
     mount=${line% *}; avail_mib=${line##* }
     case "$seen" in *" $mount "*) continue ;; esac
     seen="$seen$mount "
+    [ "$avail_mib" -ge "$warn_mib" ] || short="$short$mount "
     if [ "$avail_mib" -lt "$fail_mib" ]; then
       preflight_record fail 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free, below $((fail_mib / 1024)) GiB")" "$(msg "请清理或扩容 $mount 分区" "free up or grow the $mount partition")"
     elif [ "$avail_mib" -lt "$warn_mib" ]; then
@@ -888,6 +914,9 @@ preflight_check_disk() {
       preflight_record pass 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free")"
     fi
   done
+  [ "$role" = control ] || return 0
+  mount=$(df -Pm "$(preflight_existing_parent /var/lib)" 2>/dev/null | awk 'NR == 2 { print $6 }') || mount=''
+  case "$short" in *" $mount "*) [ -z "$mount" ] || preflight_check_spare_disk "$mount" ;; esac
 }
 
 preflight_systemd_minimum() {
@@ -1107,7 +1136,7 @@ preflight_label() {
     '管理端网页（本机回环）') printf 'management web (loopback)' ;;
     *）) printf '%s' "$1" | sed 's/）$//' ;;
     操作系统) printf 'Operating system' ;; CPU架构) printf 'CPU architecture' ;; CPU核数) printf 'CPU cores' ;;
-    内核) printf 'Kernel' ;; 内存) printf 'Memory' ;; 磁盘空间) printf 'Disk space' ;; root权限) printf 'Root' ;;
+    内核) printf 'Kernel' ;; 内存) printf 'Memory' ;; 磁盘空间) printf 'Disk space' ;; 数据盘) printf 'Data disk' ;; root权限) printf 'Root' ;;
     端口占用) printf 'Ports' ;; 必需命令) printf 'Required commands' ;; 时间偏差) printf 'Clock skew' ;;
     防火墙) printf 'Firewall' ;; 主控共存) printf 'Control plane on this host' ;; 节点共存) printf 'Node on this host' ;;
     主控) printf 'control plane' ;; 授权端) printf 'licensing server' ;; 端口规划) printf 'Port plan' ;; 端口调整) printf 'Port changes' ;;
@@ -3285,6 +3314,11 @@ write_config() {
     [ -n "$(find "$trust_file" -maxdepth 0 -type f -perm 0400 2>/dev/null)" ] ||
       fail "node upgrade cannot be enabled: ${trust_file} is missing or not an owner read-only file"
   done
+  # market_probe: probe-only at install. join_market false means "follow the
+  # controller" (MARKET_ROLE): the node joins the node market
+  # when the seller puts its line group in an offer and leaves when no offer
+  # uses it. Add "leave_market": true to keep the node out whatever the
+  # controller assigns; "join_market": true keeps it in.
   # OWASP CRS engine extension (waf_engine): the node package does not contain
   # it. It arrives as an item of the node artifact set (license catalog ->
   # control plane -> node); the Agent verifies it with the platform release

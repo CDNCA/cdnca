@@ -151,6 +151,29 @@ class NativeNATSContractTests(unittest.TestCase):
                 self.assertEqual(NATS.native_nats_main(["install", "--server", "nats://127.0.0.1:4222"]), 1)
                 write.assert_not_called()
 
+    def test_main_names_the_nats_err_code_without_the_response_body(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cli, profile = root / "nats", root / "profile.json"
+            cli.write_text("fixture")
+            cli.chmod(0o700)
+            profile.write_text("{}")
+            refused = Mock(returncode=0, stdout=json.dumps({"error": {"err_code": 10047, "code": 500,
+                                                                      "description": "secret-host-detail"}}))
+            stderr = io.StringIO()
+            with patch.object(NATS, "CLI", cli), patch.object(NATS, "PROFILE", profile), \
+                    patch.object(NATS.os, "geteuid", return_value=0), \
+                    patch.object(NATS.Path, "lstat") as lstat, \
+                    patch.object(NATS.subprocess, "run", return_value=refused), \
+                    patch.object(NATS.NativeNATS, "preflight"), \
+                    patch.object(NATS, "load_native_nats_profile", return_value={"streams": [{"name": "S"}], "consumers": []}), \
+                    redirect_stderr(stderr), redirect_stdout(io.StringIO()):
+                lstat.return_value = Mock(st_mode=0o100600, st_uid=0)
+                self.assertEqual(NATS.native_nats_main(["check", "--server", "nats://127.0.0.1:4222"]), 1)
+            self.assertIn("NATSAPIError, err_code 10047", stderr.getvalue())
+            self.assertIn("max_file_store", stderr.getvalue())
+            self.assertNotIn("secret-host-detail", stderr.getvalue())
+
     def test_main_refuses_invalid_receipt_and_partial_failure_publishes_none(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

@@ -296,7 +296,7 @@ describe('batch operations on own offers', () => {
     fireEvent.click(await screen.findByRole('tab', { name: '我的上架' }))
     fireEvent.click(await screen.findByRole('checkbox', { name: 'HK-1 包天' }))
     fireEvent.click(screen.getByRole('button', { name: '批量下架' }))
-    expect(await screen.findByText(/下架只停止新购买/)).toBeInTheDocument()
+    expect(await screen.findByText(/在期订阅照常服务到各自已付到期，不再续费/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '执行' }))
     expect(await screen.findByText('市场尚未开放该操作')).toBeInTheDocument()
   })

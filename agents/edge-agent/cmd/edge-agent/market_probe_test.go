@@ -55,9 +55,17 @@ func TestMarketProbeSettingsRole(t *testing.T) {
 		{marketProbeSettings{Enabled: true}, agentv1.MarketProbeRole_MARKET_PROBE_ROLE_PROBE_ONLY},
 		{marketProbeSettings{Enabled: true, JoinMarket: true}, agentv1.MarketProbeRole_MARKET_PROBE_ROLE_JOIN_MARKET},
 		{marketProbeSettings{Enabled: true, JoinMarket: true, Benchmark: true}, agentv1.MarketProbeRole_MARKET_PROBE_ROLE_JOIN_MARKET},
+		{marketProbeSettings{Enabled: true, LeaveMarket: true}, agentv1.MarketProbeRole_MARKET_PROBE_ROLE_PROBE_ONLY},
 	} {
-		if got := test.settings.role(); got != test.want {
+		role, err := newMarketRole(test.settings, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := role.Role(); got != test.want {
 			t.Errorf("%+v role = %v, want %v", test.settings, got, test.want)
 		}
+	}
+	if (marketProbeSettings{Enabled: true, JoinMarket: true, LeaveMarket: true}).validate() == nil {
+		t.Fatal("join_market with leave_market accepted")
 	}
 }

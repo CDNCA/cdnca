@@ -21,6 +21,9 @@ const (
 	// maxPendingMarketProbes bounds commands awaiting the Agent's result per
 	// session; control-api sends at most one per node per round.
 	maxPendingMarketProbes = 2
+	// marketRoleAPIVersion: MARKET_ROLE v1 role assignments
+	// (MarketProbeCommand.assigned_role).
+	marketRoleAPIVersion = 1
 )
 
 // Market probe commands are ephemeral request/reply exchanges (see
@@ -68,10 +71,24 @@ func marketProbeCapabilityFromFeatures(features []*agentv1.Capability) (uint32, 
 	return version, nil
 }
 
+// marketRoleCapable reports whether the Agent declared MARKET_ROLE v1. It is
+// declared only, not negotiated: role assignments are refused (empty reply)
+// for a session without it, so an older Agent never sees one.
+func marketRoleCapable(features []*agentv1.Capability) bool {
+	for _, capability := range features {
+		if capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_MARKET_ROLE && capability.GetApiVersion() >= marketRoleAPIVersion {
+			return true
+		}
+	}
+	return false
+}
+
 // sessionMarketProbes is the market probe state of one Connect session.
 type sessionMarketProbes struct {
 	subscription MarketProbeSubscription
 	pending      map[string]pendingMarketProbe
+	// roles: the Agent declared MARKET_ROLE (role assignments admitted).
+	roles bool
 }
 
 type pendingMarketProbe struct {
@@ -79,12 +96,12 @@ type pendingMarketProbe struct {
 	command *agentv1.MarketProbeCommand
 }
 
-func (g *Gateway) startSessionMarketProbes(ctx context.Context, nodeID string) (*sessionMarketProbes, error) {
+func (g *Gateway) startSessionMarketProbes(ctx context.Context, nodeID string, roles bool) (*sessionMarketProbes, error) {
 	subscription, err := g.marketProbes.SubscribeMarketProbes(ctx, nodeID)
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "could not subscribe to market probe commands")
 	}
-	return &sessionMarketProbes{subscription: subscription, pending: map[string]pendingMarketProbe{}}, nil
+	return &sessionMarketProbes{subscription: subscription, pending: map[string]pendingMarketProbe{}, roles: roles}, nil
 }
 
 func (session *sessionMarketProbes) requests() <-chan MarketProbeRequest {
@@ -103,7 +120,7 @@ func (session *sessionMarketProbes) stop() {
 
 // applyMarketProbeAuthorization follows a session authorization refresh like L4 live connections do.
 func (g *Gateway) applyMarketProbeAuthorization(ctx context.Context, nodeID string, session *sessionMarketProbes,
-	isAllowed bool,
+	isAllowed, roles bool,
 ) (*sessionMarketProbes, error) {
 	if g.marketProbes == nil || (session != nil) == isAllowed {
 		return session, nil
@@ -112,10 +129,25 @@ func (g *Gateway) applyMarketProbeAuthorization(ctx context.Context, nodeID stri
 		session.stop()
 		return nil, nil
 	}
-	return g.startSessionMarketProbes(ctx, nodeID)
+	return g.startSessionMarketProbes(ctx, nodeID, roles)
+}
+
+// assignableRole: a role assignment names JOIN_MARKET or PROBE_ONLY.
+func assignableRole(role agentv1.MarketProbeRole) bool {
+	return role == agentv1.MarketProbeRole_MARKET_PROBE_ROLE_JOIN_MARKET || role == agentv1.MarketProbeRole_MARKET_PROBE_ROLE_PROBE_ONLY
 }
 
 func validateMarketProbeCommand(command *agentv1.MarketProbeCommand, nodeID string, now time.Time) error {
+	if command.GetAssignedRole() != agentv1.MarketProbeRole_MARKET_PROBE_ROLE_UNSPECIFIED {
+		// A role assignment carries no target and no benchmark.
+		if !assignableRole(command.AssignedRole) || len(command.Targets) != 0 || command.Benchmark != nil ||
+			proto.Size(command) > marketprobe.MaxCarrierBytes || cacheControlMessageHasUnknown(command.ProtoReflect()) ||
+			command.NodeId != nodeID || command.Event == nil || !canonicalUUID(command.Event.EventId) ||
+			command.ExpireTime == nil || command.ExpireTime.CheckValid() != nil || !now.Before(command.ExpireTime.AsTime()) {
+			return fmt.Errorf("market role assignment is invalid")
+		}
+		return nil
+	}
 	if command == nil || proto.Size(command) > marketprobe.MaxCarrierBytes || cacheControlMessageHasUnknown(command.ProtoReflect()) ||
 		command.NodeId != nodeID || command.Event == nil || !canonicalUUID(command.Event.EventId) ||
 		len(command.Targets) == 0 || len(command.Targets) > marketprobe.MaxTargets ||
@@ -133,6 +165,13 @@ func validateMarketProbeResult(result *agentv1.MarketProbeResult, command *agent
 		len(result.Results) != len(command.Targets) {
 		return fmt.Errorf("market probe result is invalid")
 	}
+	// The role in effect answers a role assignment, and only one.
+	if assigned := command.GetAssignedRole() != agentv1.MarketProbeRole_MARKET_PROBE_ROLE_UNSPECIFIED; assigned !=
+		(result.EffectiveRole != agentv1.MarketProbeRole_MARKET_PROBE_ROLE_UNSPECIFIED) ||
+		assigned && (!assignableRole(result.EffectiveRole) || !marketRoleSources[result.RoleSource]) ||
+		!assigned && result.RoleSource != "" {
+		return fmt.Errorf("market probe result is invalid")
+	}
 	for i, item := range result.Results {
 		if item == nil || item.TaskId != command.Targets[i].GetTaskId() ||
 			item.Outcome == agentv1.MarketProbeOutcome_MARKET_PROBE_OUTCOME_UNSPECIFIED ||
@@ -143,10 +182,15 @@ func validateMarketProbeResult(result *agentv1.MarketProbeResult, command *agent
 	return nil
 }
 
+// marketRoleSources are MarketProbeResult.role_source's values.
+var marketRoleSources = map[string]bool{"assigned": true, "local_join": true, "local_leave": true}
+
 // admit validates a relayed command and records it pending, or refuses it.
+// A role assignment to a session without MARKET_ROLE is refused.
 func (session *sessionMarketProbes) admit(request MarketProbeRequest, nodeID string, now time.Time) (*agentv1.MarketProbeCommand, bool) {
 	command := request.Command()
-	if validateMarketProbeCommand(command, nodeID, now) != nil || len(session.pending) >= maxPendingMarketProbes {
+	if validateMarketProbeCommand(command, nodeID, now) != nil || len(session.pending) >= maxPendingMarketProbes ||
+		command.AssignedRole != agentv1.MarketProbeRole_MARKET_PROBE_ROLE_UNSPECIFIED && !session.roles {
 		_ = request.Reply(nil)
 		return nil, false
 	}

@@ -1,5 +1,6 @@
 .site-groups-page { padding: 0 24px 24px; }
 .site-groups-page.site-groups-embedded { padding: 0; }
+.site-groups-usage { margin: 14px 0 0; color: var(--cdnca-color-text-secondary); font-size: 13px; line-height: 20px; }
 .site-groups-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 14px 0 12px; }
 .site-groups-count { margin-left: auto; border: 1px solid var(--cdnca-color-border-secondary); border-radius: 3px; padding: 5px 10px; color: var(--cdnca-color-text-secondary); font-size: 12px; }
 .site-groups-count::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--cdnca-color-success); }

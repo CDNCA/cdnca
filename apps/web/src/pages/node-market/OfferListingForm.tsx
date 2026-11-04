@@ -26,6 +26,7 @@ import {
 } from './resaleModel'
 import { useErrorText } from './supplier/hooks'
 import { useIdempotencyKey } from '../market/idempotency'
+import { UnmappedNodesAlert } from './OfferPoolReport'
 import { useFeedback } from '@cdnca/ui'
 import { formatYuan } from '@cdnca/ui/offer-terms'
 
@@ -106,6 +107,8 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
   const subscription = Form.useWatch('subscription', form)
   const picked: string[] = Form.useWatch('subscriptions', form) ?? []
   const [refusal, setRefusal] = useState('')
+  // A node_location_unmapped refusal also lists the nodes and fields.
+  const [refusalError, setRefusalError] = useState<unknown>(null)
   const member = useQuery({ queryKey: ['nodeMarket', 'member'], queryFn: () => marketApi.member(token), enabled: !!token, retry: false })
   const canResell = (member.data?.features ?? []).includes('market.resell')
   // MC09 (ML-26/26f): the offer quota is checked before the form is filled.
@@ -268,6 +271,7 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
     void client.invalidateQueries({ queryKey: ['nodeMarket', 'myOffers'] })
   }
   const refused = (error: unknown) => {
+    setRefusalError(error)
     const ref = resaleForbiddenBy(error)
     const upstreamField = error instanceof ApiError && error.code === 'upstream_terms_exceeded'
       ? (error as ApiError & { refusal?: { field?: unknown } }).refusal?.field : undefined
@@ -633,6 +637,7 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
       <Form.Item name="icp" label={t('listing.icp')} valuePropName="checked"
         extra={up?.compliance.require_icp ? t('unified.icpInherited') : undefined}><Switch disabled={!!up?.compliance.require_icp} /></Form.Item>
       {refusal ? <Alert type="error" showIcon style={{ marginBottom: 16 }} message={refusal} /> : null}
+      {refusal ? <div style={{ marginBottom: 16 }}><UnmappedNodesAlert error={refusalError} /></div> : null}
 
       {problems.length ? <Alert type="error" showIcon style={{ marginBottom: 16 }} message={<ul style={{ margin: 0, paddingLeft: 16 }}>
         {problems.map((p) => <li key={p}>{p}</li>)}</ul>} /> : null}

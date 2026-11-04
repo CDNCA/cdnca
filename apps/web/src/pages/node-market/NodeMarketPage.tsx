@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Collapse, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd'
+import { Alert, App, Button, Collapse, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { CheckboxProps } from 'antd'
 import { useTranslation } from 'react-i18next'
 
@@ -31,6 +31,9 @@ import { OfferListingForm } from './OfferListingForm'
 import { OfferSlaModal } from './OfferSlaModal'
 import { SellerSiteGuide } from './SellerSiteGuide'
 import { OfferSubscribersDrawer } from './OfferSubscribersDrawer'
+import { LifecycleTag, OfferLifecycleActions } from './OfferLifecycle'
+import { OfferTermsModal } from './OfferTermsModal'
+import { OfferPoolReportDrawer, PoolReportCell } from './OfferPoolReport'
 import { PurchaseConfirm } from './PurchaseConfirm'
 import { SubscriptionUsagePanel } from './SubscriptionUsagePanel'
 import { BoundSupplies, ClampedReason, SitePicker, SiteRollout, type PickedSite } from './SiteRolloutPanel'
@@ -372,7 +375,8 @@ function SellTab() {
     },
     onError: (error) => {
       const code = errorCode(error)
-      void feedback.error(code === 'no_active_leaf' ? t('errors.noActiveLeaf') : t('errors.failed', { code }))
+      void feedback.error(code === 'no_active_leaf' ? t('errors.noActiveLeaf')
+        : code === 'offer_operator_delisted' ? t('life.errors.offer_operator_delisted') : t('errors.failed', { code }))
     },
   })
   const republish = (o: MarketOfferListing) => modal.confirm({
@@ -382,6 +386,10 @@ function SellTab() {
   const mine = useQuery({ queryKey: ['nodeMarket', 'myOffers'], queryFn: () => marketApi.myOffers(token), enabled: !!token })
   const [slaOffer, setSlaOffer] = useState<MarketOfferListing | null>(null)
   const [subscribersOf, setSubscribersOf] = useState<MarketOfferListing | null>(null)
+  // 修改报价 of one row (price / limits; buyers in period keep their snapshot).
+  const [termsOf, setTermsOf] = useState<MarketOfferListing | null>(null)
+  // Which own nodes reach the market and why the others do not.
+  const [reportOf, setReportOf] = useState<MarketOfferListing | null>(null)
   const [checked, setChecked] = useState<string[]>([])
   const policy = useQuery({ queryKey: ['nodeMarket', 'listing', 'floor'], queryFn: () => marketApi.supplyLimitsPolicy(token), enabled: !!token, retry: false })
   const floor = policy.data?.policy.load_floor ?? null
@@ -391,6 +399,8 @@ function SellTab() {
       <SellerSiteGuide scope="node" />
       <OfferSlaModal offer={slaOffer} onClose={() => setSlaOffer(null)} />
       <OfferSubscribersDrawer offer={subscribersOf} onClose={() => setSubscribersOf(null)} />
+      <OfferTermsModal offer={termsOf} floor={floor} onClose={() => setTermsOf(null)} />
+      <OfferPoolReportDrawer offer={reportOf} onClose={() => setReportOf(null)} />
       <Typography.Title level={5}>{t('sell.mine')}</Typography.Title>
       <OfferBulkActions offers={checkedOffers} floor={floor} onDone={() => setChecked([])} />
       <Table<MarketOfferListing> rowKey="id" size="small" loading={mine.isLoading} dataSource={mine.data ?? []} pagination={{ pageSize: 20 }}
@@ -400,7 +410,8 @@ function SellTab() {
           getCheckboxProps: (o) => ({ 'aria-label': o.name }) as CheckboxProps }}
         columns={[
           { title: t('offers.name'), dataIndex: 'name' },
-          { title: t('sell.status'), dataIndex: 'status', render: (v: string) => <State value={v} /> },
+          { title: t('sell.status'), dataIndex: 'status', render: (v: string, o) => <LifecycleTag offer={o} fallback={<State value={v} />} /> },
+          { title: t('poolReport:column'), key: 'pool', render: (_: unknown, o) => <PoolReportCell offer={o} onOpen={() => setReportOf(o)} /> },
           { title: t('offers.price'), key: 'price', render: (_: unknown, o) => offerPriceText(t, o) },
           { title: t('sell.limits'), key: 'limits', render: (_: unknown, o) => <LimitsSummary offer={o} floor={floor} /> },
           { title: t('sell.prepaid'), key: 'prepaid', render: (_: unknown, o) => t(`limitActions.${o.prepaid_exhausted_action ?? 'pause'}`) },
@@ -410,9 +421,13 @@ function SellTab() {
           {
             key: 'publish', render: (_: unknown, o) => <Space size={4}>
               {o.status === 'draft' ? <Button size="small" onClick={() => publish.mutate(o.id)} loading={publish.isPending && publish.variables === o.id}>{t('sell.publish')}</Button> : null}
-              {o.status === 'delisted' ? <Button size="small" onClick={() => republish(o)} loading={publish.isPending && publish.variables === o.id}>{t('sell.republish')}</Button> : null}
+              {o.status === 'delisted' ? (o.lifecycle?.operator_delisted
+                // The platform took it down; only the platform lists it again.
+                ? <Tooltip title={t('life.operatorDelisted')}><span><Button size="small" disabled>{t('sell.republish')}</Button></span></Tooltip>
+                : <Button size="small" onClick={() => republish(o)} loading={publish.isPending && publish.variables === o.id}>{t('sell.republish')}</Button>) : null}
               {o.status !== 'retired' ? <Button size="small" onClick={() => setSlaOffer(o)}>{t('sla.edit')}</Button> : null}
               {o.status !== 'draft' ? <Button size="small" onClick={() => setSubscribersOf(o)}>{t('sell.subscribers')}</Button> : null}
+              <OfferLifecycleActions offer={o} onEdit={() => setTermsOf(o)} />
             </Space>,
           },
         ]} />

@@ -102,6 +102,8 @@ type Runtime struct {
 	holdEvery    time.Duration
 
 	probe interface{ Run(context.Context) error }
+	// probeOff is why probing is off (marketprobe.Off*), "" when it runs.
+	probeOff string
 	// notices turns market notices into notification center events (notices.go).
 	notices NoticeEnqueuer
 	// direct top-ups (directpay.go, ADR 0015).
@@ -138,8 +140,32 @@ func (r *Runtime) WithSubscriptions(subs Subscriptions) *Runtime {
 // WithProbe also runs leaf-side market probing (marketprobe.Service) once the
 // member is registered.
 func (r *Runtime) WithProbe(probe interface{ Run(context.Context) error }) *Runtime {
-	r.probe = probe
+	r.probe, r.probeOff = probe, ""
 	return r
+}
+
+// WithProbeOff records why leaf-side probing does not run:
+// the seller pages say so instead of showing an empty pool.
+func (r *Runtime) WithProbeOff(reason string) *Runtime {
+	r.probe, r.probeOff = nil, reason
+	return r
+}
+
+// Probe is the leaf-side probe service (nil when off).
+func (r *Runtime) Probe() interface{ Run(context.Context) error } {
+	if r == nil {
+		return nil
+	}
+	return r.probe
+}
+
+// ProbeOff is why leaf-side probing does not run; "" when it runs. A nil
+// runtime (market off) answers "market_off".
+func (r *Runtime) ProbeOff() string {
+	if r == nil {
+		return "market_off"
+	}
+	return r.probeOff
 }
 
 // Supply returns the leaf the runtime drives.

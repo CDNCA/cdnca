@@ -108,6 +108,9 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// SSH_ACCESS gates the "only the controller may SSH" command
 	//, a node command feature.
 	agentv1.CapabilityName_CAPABILITY_NAME_SSH_ACCESS: true,
+	// MARKET_ROLE gates the node-market role assignment, a
+	// probe command feature.
+	agentv1.CapabilityName_CAPABILITY_NAME_MARKET_ROLE: true,
 }
 
 // Name maps a document capability name to its Agent capability.

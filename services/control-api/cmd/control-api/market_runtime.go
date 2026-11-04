@@ -70,7 +70,7 @@ func buildMarketRuntime(pool *pgxpool.Pool, identityService *identity.Service,
 // With neither, the routes stay unmounted.
 func marketSubscribeHandlerFactory(subscribe *marketsubscribe.Service, forwarder marketsubscribehttp.Forwarder,
 	identityService *identity.Service, pool *pgxpool.Pool, advisories *marketsubscribehttp.AdvisorySync,
-	features marketsupply.FeatureReader,
+	features marketsupply.FeatureReader, reports ...marketsubscribehttp.PoolReporter,
 ) func() (http.Handler, error) {
 	market := subscribe != nil && forwarder != nil
 	if pool == nil || !market && advisories == nil {
@@ -86,6 +86,9 @@ func marketSubscribeHandlerFactory(subscribe *marketsubscribe.Service, forwarder
 		})
 		if market {
 			groups := marketsupply.NewSupplyGroups(pool, nodescheduler.NewService(pool, time.Now), features)
+			if len(reports) == 1 && reports[0] != nil {
+				h = h.WithPoolReports(reports[0])
+			}
 			h = h.WithMember(forwarder, controlVersion).WithSupplyGroups(groups).
 				WithListing(groups, marketsubscribehttp.NewPostgresListingStore(pool), forwarder).
 				WithSiteRollout(subscribe)
@@ -255,44 +258,64 @@ func buildMarketRuntimeWithSubscribe(pool *pgxpool.Pool, identityService *identi
 	// plugin choices (marketsupply.SupplyPlugins).
 	plugins := marketsupply.NewSupplyGroups(pool, nodescheduler.NewService(pool, time.Now),
 		entitlementguard.NewGuard(pool, time.Now, trust))
-	probe, err := buildMarketProbe(env("MARKET_PROBE_ENABLED", "false"), edgeConnection, pool, client, runtime.Identity, plugins, supply)
+	probe, probeOff, err := buildMarketProbe(env("MARKET_PROBE_ENABLED", ""), edgeConnection, pool, client, runtime.Identity, plugins, supply)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if probe != nil {
 		runtime.WithProbe(probe)
+	} else {
+		runtime.WithProbeOff(probeOff)
 	}
 	return runtime, subscribe, client, nil
 }
 
-// buildMarketProbe returns the leaf probe service when MARKET_PROBE_ENABLED is
-// true (default false). Probing needs agent-gateway to relay commands to nodes
-// over edge NATS.
+// marketPoolReporter answers 我的上架 → 可上报节点 with the running probe
+// service's rules and role answers; nil without the market.
+func marketPoolReporter(runtime *marketruntime.Runtime, pool *pgxpool.Pool) marketsubscribehttp.PoolReporter {
+	if runtime == nil || pool == nil {
+		return nil
+	}
+	probe, _ := runtime.Probe().(*marketprobe.Service)
+	return marketprobe.NewReporter(pool, probe, runtime.ProbeOff())
+}
+
+// buildMarketProbe returns the leaf probe service (node pool reports, probe
+// and role relay). MARKET_PROBE_ENABLED unset runs it whenever the market
+// runtime is on and edge NATS is connected; without edge NATS it stays off
+// with a reason (the controller still starts). "true" requires edge NATS
+// (startup fails without it), "false" turns it off. When off, the second
+// result is why (marketprobe.Off*), shown on the seller pages.
 func buildMarketProbe(enabled string, edgeConnection natsRuntimeConnection, pool *pgxpool.Pool,
 	client *marketclient.Client, identity func() marketclient.Identity, plugins *marketsupply.SupplyGroups,
 	grants marketprobe.GrantResolver,
-) (*marketprobe.Service, error) {
+) (*marketprobe.Service, string, error) {
 	switch enabled {
 	case "false":
-		return nil, nil
-	case "true":
+		return nil, marketprobe.OffDisabled, nil
+	case "true", "":
 	default:
-		return nil, errors.New("MARKET_PROBE_ENABLED must be true or false")
+		return nil, "", errors.New("MARKET_PROBE_ENABLED must be true or false (unset: on when edge NATS is connected)")
 	}
 	edgeNATS, ok := edgeConnection.(*nats.Conn)
-	if !ok || edgeNATS == nil {
-		return nil, errors.New("MARKET_PROBE_ENABLED requires the edge NATS connection")
+	if !ok || edgeNATS == nil || edgeNATS.IsClosed() {
+		if enabled == "true" {
+			return nil, "", errors.New("MARKET_PROBE_ENABLED requires the edge NATS connection")
+		}
+		slog.Default().Warn("market node reports off: edge NATS is not connected (edge deployment runtime off)",
+			"component", "market-probe", "reason", marketprobe.OffNoEdgeNATS)
+		return nil, marketprobe.OffNoEdgeNATS, nil
 	}
 	requester, err := marketprobe.NewNATSRequester(edgeNATS)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	cfg := marketprobe.Config{Identity: identity, Grants: grants}
 	if plugins != nil {
 		cfg.Plugins, cfg.Serving = plugins, plugins
 	}
 	return marketprobe.New(pool, client, requester, cfg,
-		slog.Default().With("component", "market-probe")), nil
+		slog.Default().With("component", "market-probe")), "", nil
 }
 
 func parseMarketKeys(raw string) (map[string]ed25519.PublicKey, error) {

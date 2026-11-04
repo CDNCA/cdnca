@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/marketprobe"
-	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 )
 
 // marketProbeSettings are two separate switches:
@@ -19,10 +18,17 @@ import (
 //     serves the benchmark object and, with Benchmark, runs benchmark
 //     downloads against other sellers' nodes (CAPABILITY_NAME_MARKET_BENCHMARK).
 //
+// With Enabled and neither JoinMarket nor LeaveMarket, the node follows the
+// controller's role assignment (MARKET_ROLE): it joins when
+// the seller puts its line group in an offer and leaves when no offer uses it.
+// LeaveMarket is the explicit opt-out: the node stays probe-only whatever the
+// controller assigns.
+//
 // Zero limits take the executor's defaults (8 concurrent, 120 per minute).
 type marketProbeSettings struct {
 	Enabled     bool `json:"enabled"`
 	JoinMarket  bool `json:"join_market"`
+	LeaveMarket bool `json:"leave_market"`
 	Concurrency int  `json:"concurrency"`
 	PerMinute   int  `json:"per_minute"`
 	Benchmark   bool `json:"benchmark"`
@@ -35,23 +41,13 @@ func (s marketProbeSettings) validate() error {
 	if s.JoinMarket && !s.Enabled {
 		return errors.New("market_probe.join_market requires market_probe.enabled")
 	}
+	if s.JoinMarket && s.LeaveMarket {
+		return errors.New("market_probe.join_market and market_probe.leave_market exclude each other")
+	}
 	if s.Benchmark && !s.JoinMarket {
 		return errors.New("market_probe.benchmark requires market_probe.join_market")
 	}
 	return nil
-}
-
-// role is the market probe role the heartbeat reports
-// (EdgeRuntimeStatus.market_probe); validate keeps JoinMarket within Enabled.
-func (s marketProbeSettings) role() agentv1.MarketProbeRole {
-	switch {
-	case !s.Enabled:
-		return agentv1.MarketProbeRole_MARKET_PROBE_ROLE_DISABLED
-	case s.JoinMarket:
-		return agentv1.MarketProbeRole_MARKET_PROBE_ROLE_JOIN_MARKET
-	default:
-		return agentv1.MarketProbeRole_MARKET_PROBE_ROLE_PROBE_ONLY
-	}
 }
 
 func assembleMarketProbe(settings marketProbeSettings, nodeID string) (*marketprobe.Executor, error) {

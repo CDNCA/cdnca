@@ -113,7 +113,9 @@ type Client struct {
 	// node artifact set holds a library).
 	declaredIPIntel atomic.Bool
 	marketProbe     MarketProbeExecutor
-	l4Live          L4LiveExecutor
+	// marketRole applies controller role assignments (MARKET_ROLE).
+	marketRole MarketRoleAssigner
+	l4Live     L4LiveExecutor
 	// gatewayKnowsL4Live: a Gateway listed L4_LIVE_CONNECTIONS in
 	// known_capabilities, so advertising it cannot cost the session facts
 	// on a Gateway that does not know it.
@@ -166,8 +168,11 @@ type RuntimeStatusProbe struct {
 	// ErrorLog, when set, is the dynamic routing node's error.log summary
 	// (EdgeRuntimeStatus.error_log).
 	ErrorLog func() *agentv1.ErrorLogSummary
-	// MarketProbeRole is reported as EdgeRuntimeStatus.market_probe.
-	MarketProbeRole agentv1.MarketProbeRole
+	// MarketProbeRole is reported as EdgeRuntimeStatus.market_probe;
+	// MarketProbeRoleNow, when set, replaces it (the role follows controller
+	// assignments).
+	MarketProbeRole    agentv1.MarketProbeRole
+	MarketProbeRoleNow func() agentv1.MarketProbeRole
 	// NativeRuntime, when set (native nodes), is the outcome of the last
 	// native runtime switch (EdgeRuntimeStatus.native_runtime); nil: absent.
 	NativeRuntime func() *agentv1.NativeRuntimeStatus
@@ -1652,6 +1657,8 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 	}
 	marketProbeDone := make(chan *agentv1.MarketProbeResult, 1)
 	marketProbeBusy := false
+	marketRoleDone := make(chan *agentv1.MarketProbeResult, 1)
+	marketRoleBusy := false
 	l4LiveEnabled, err := negotiateL4LiveConnections(gatewayHello, c.l4Live,
 		hasCapability(hello.Capabilities, agentv1.CapabilityName_CAPABILITY_NAME_L4_LIVE_CONNECTIONS))
 	if err != nil {
@@ -2053,6 +2060,12 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			if err := sendMarketProbeResult(stream, sendSequence, result, c.now()); err != nil {
 				return true, err
 			}
+		case result := <-marketRoleDone:
+			marketRoleBusy = false
+			sendSequence++
+			if err := sendMarketProbeResult(stream, sendSequence, result, c.now()); err != nil {
+				return true, err
+			}
 		case result := <-upgradeWorkResults:
 			if !result.item.recover {
 				delete(upgradeInFlight, result.item.digest)
@@ -2104,12 +2117,16 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				if !marketProbeEnabled || cacheControlMessageHasUnknown(incoming.response.ProtoReflect()) {
 					return true, fmt.Errorf("%w: market probe command was not negotiated or contains unknown fields", ErrInvalidMessage)
 				}
-				started, immediate := c.startMarketProbe(ctx, payload.MarketProbeCommand, marketProbeBusy, marketProbeDone)
-				marketProbeBusy = marketProbeBusy || started
-				if immediate != nil {
-					sendSequence++
-					if err := sendMarketProbeResult(stream, sendSequence, immediate, c.now()); err != nil {
-						return true, err
+				if c.marketRoleAssignment(payload.MarketProbeCommand) {
+					marketRoleBusy = c.startMarketRole(ctx, payload.MarketProbeCommand, marketRoleBusy, marketRoleDone) || marketRoleBusy
+				} else {
+					started, immediate := c.startMarketProbe(ctx, payload.MarketProbeCommand, marketProbeBusy, marketProbeDone)
+					marketProbeBusy = marketProbeBusy || started
+					if immediate != nil {
+						sendSequence++
+						if err := sendMarketProbeResult(stream, sendSequence, immediate, c.now()); err != nil {
+							return true, err
+						}
 					}
 				}
 			case *agentv1.ConnectResponse_SecurityBanCommand:
@@ -2849,6 +2866,13 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_L4_LIVE_CONNECTIONS, ApiVersion: c.l4Live.APIVersion(),
 		})
 	}
+	// Declared only (the gateway refuses role assignments to
+	// a session without it, control reads the session capability snapshot).
+	if c.marketProbe != nil && c.marketRole != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_MARKET_ROLE) {
+		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_MARKET_ROLE, ApiVersion: marketRoleAPIVersion,
+		})
+	}
 	if c.benchmarkConfigured() && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_MARKET_BENCHMARK) {
 		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_MARKET_BENCHMARK, ApiVersion: marketBenchmarkAPIVersion,
@@ -3035,6 +3059,9 @@ func (c *Client) runtimeStatus(ctx context.Context, loadedConfigVersionID *strin
 		OpenrestyState:        openRestyState,
 		FirewallState:         firewallState,
 		MarketProbe:           c.runtimeProbe.MarketProbeRole,
+	}
+	if c.runtimeProbe.MarketProbeRoleNow != nil {
+		status.MarketProbe = c.runtimeProbe.MarketProbeRoleNow()
 	}
 	if c.runtimeProbe.ErrorLog != nil {
 		status.ErrorLog = c.runtimeProbe.ErrorLog()

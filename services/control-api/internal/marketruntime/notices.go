@@ -24,10 +24,13 @@ const noticeTemplateVersion = 1
 
 // noticeTemplateVersions overrides noticeTemplateVersion per kind: migration
 // 558 added v2 renewal stop/resume templates explaining the
-// upstream_paused reason.
+// upstream_paused reason; 622 v2 terms changed templates naming what
+// changed (category, the SLA included); 625 v3 adds at and the seller's
+// delisting (category offer_delisted: no renewal after at).
 var noticeTemplateVersions = map[string]uint64{
 	notice.KindRenewalStopped: 2,
 	notice.KindRenewalResumed: 2,
+	notice.KindTermsChanged:   3,
 }
 
 func noticeTemplateVersionOf(kind string) uint64 {
@@ -90,8 +93,8 @@ var noticeVariables = map[string][]string{
 	notice.KindSupplyOutage:          {notice.ValueOffer, notice.ValueSubscription},
 	notice.KindSupplyRestored:        {notice.ValueOffer, notice.ValueSubscription},
 	notice.KindSupplyCancelAvailable: {notice.ValueOffer, notice.ValueSubscription},
-	// migration 443 (C7a).
-	notice.KindTermsChanged: {notice.ValueOffer, notice.ValueSubscription, notice.ValueAction},
+	// migration 443 (C7a); 622 adds category (what changed); 625 at (offer_delisted: the paid end).
+	notice.KindTermsChanged: {notice.ValueOffer, notice.ValueSubscription, notice.ValueAction, notice.ValueCategory, notice.ValueAt},
 	// 444: direct top-ups.
 	notice.KindDirectTopupPaid:     {notice.ValuePeer, notice.ValueTopup, notice.ValueCurrency, notice.ValueObserved},
 	notice.KindDirectTopupReceived: {notice.ValuePeer, notice.ValueTopup, notice.ValueCurrency, notice.ValueObserved},

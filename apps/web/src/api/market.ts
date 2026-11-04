@@ -59,6 +59,20 @@ export interface MarketOfferListing {
   seller_credit?: MarketSellerCredit
   // Free trial days, once per buyer customer (daily_bundle only; 0 = no trial). market offers.go TrialDays.
   trial_days?: number
+  // Own offers (market 076; absent from older markets): listed → delisting → delisted → deleted.
+  lifecycle?: MarketOfferLifecycle
+}
+// market offers.go OfferLifecycle. delisting: delisted with active subscriptions still served until
+// completes_at (then they close, no renewal); on a listed offer completes_at is when a delisting now would
+// finish. renewing_subscriptions: active ones still renewing (sold before the change, or delisted by the
+// operator); delisting again stops them too.
+export interface MarketOfferLifecycle {
+  state: 'draft' | 'pending_review' | 'listed' | 'delisting' | 'delisted' | string
+  active_subscriptions: number
+  renewing_subscriptions: number
+  completes_at?: string
+  operator_delisted: boolean
+  deletable: boolean
 }
 export interface MarketOfferQuality {
   /** 0–3; 0 is a real score. */
@@ -137,6 +151,30 @@ export interface MarketSupplyLimitsPolicy {
 }
 // Hidden market-supply line group on this controller (ML-09 marketsubscribehttp/supply.go).
 export interface MarketSupplyPlugin { code: string; name_zh: string; name_en: string }
+// Which nodes of a supply group reach the market and why the others do not
+// (control-api marketprobe.PoolReport). reason '' = reported.
+export type MarketPoolReason = '' | 'node_inactive' | 'not_serving' | 'agent_lacks_market_probe' | 'node_not_join_market'
+  | 'address_not_public' | 'region_unmapped' | 'carrier_unmapped'
+export interface MarketPoolReportNode {
+  node_id: string
+  name: string
+  address: string
+  region: string
+  carrier: string
+  reason: MarketPoolReason
+  value?: string
+  role: string
+  role_source?: string
+  role_capable: boolean
+}
+export interface MarketPoolReport {
+  probe: string // running | disabled | no_edge_nats | market_off
+  total: number
+  reportable: number
+  nodes: MarketPoolReportNode[]
+}
+// Refusal of a supply group write: nodes whose IP 归属 has no market region/carrier.
+export interface MarketUnmappedNode { node_id: string; name: string; region: string; carrier: string; fields: Array<'region' | 'carrier'> }
 export interface MarketSupplyGroup {
   id: string
   revision: number
@@ -846,6 +884,13 @@ export const marketApi = {
     call<unknown>(token, '/v1/admin/market/plugin-names', json('POST', { codes })).then((v) => list<MarketSupplyPlugin>(v)),
   createSupplyGroup: (token: string, name: string, nodeIDs: string[], key: string) =>
     call<MarketSupplyGroup>(token, '/v1/admin/market/supply-groups', json('POST', { name, node_ids: nodeIDs }), key),
+  supplyGroup: (token: string, groupID: string) => call<MarketSupplyGroup>(token, `/v1/admin/market/supply-groups/${id(groupID)}`),
+  supplyGroupReport: (token: string, groupID: string) =>
+    call<MarketPoolReport>(token, `/v1/admin/market/supply-groups/${id(groupID)}/report`).then((v) => ({ ...v, nodes: v?.nodes ?? [] })),
+  // Same node set again: endpoints take each node's current IP 归属.
+  updateSupplyGroup: (token: string, groupID: string, revision: number, name: string, nodeIDs: string[], key: string) =>
+    call<MarketSupplyGroup>(token, `/v1/admin/market/supply-groups/${id(groupID)}`,
+      json('PUT', { name, node_ids: nodeIDs, expected_revision: revision }), key),
   // Every admission of this controller: walks all pages (200 each) by next_cursor.
   async nodeAdmissions(token: string): Promise<MarketNodeAdmission[]> {
     const out: MarketNodeAdmission[] = []
@@ -890,11 +935,15 @@ export const marketApi = {
   deleteListingTemplate: (token: string, templateID: string, revision: number) =>
     call<void>(token, `/v1/admin/market/listing-templates/${id(templateID)}?revision=${revision}`, { method: 'DELETE' }),
   delistOffer: (token: string, offerID: string, key: string) =>
-    call<unknown>(token, `/v1/admin/market/offers/${id(offerID)}/delist`, json('POST', {}), key),
+    call<MarketOfferListing>(token, `/v1/admin/market/offers/${id(offerID)}/delist`, json('POST', {}), key),
+  // Soft delete of a draft or delisted offer without active subscriptions (409 offer_in_use / offer_not_delisted).
+  deleteOffer: (token: string, offerID: string, key: string) =>
+    call<{ id: string; deleted: boolean }>(token, `/v1/admin/market/offers/${id(offerID)}`, { method: 'DELETE' }, key),
   removeSupplyNodes: (token: string, groupIDs: string[], nodeIDs: string[]) =>
     call<unknown>(token, '/v1/admin/market/supply-node-removals', json('POST', { group_ids: groupIDs, node_ids: nodeIDs }))
       .then((v) => list<{ group_id: string; status: 'updated' | 'unchanged' | 'failed'; removed: string[]; error?: string }>(v)),
-  updateOfferLimits: (token: string, offerID: string, body: { limits: MarketLimit[]; prepaid_exhausted_action: MarketPrepaidAction }, key: string) =>
+  updateOfferLimits: (token: string, offerID: string,
+    body: { limits: MarketLimit[]; prepaid_exhausted_action: MarketPrepaidAction; expected_revision?: number }, key: string) =>
     call<MarketOfferListing>(token, `/v1/admin/market/offers/${id(offerID)}/limits`, json('PUT', body), key),
   publishOffer: (token: string, id: string) =>
     call<{ status: string }>(token, `/v1/admin/market/offers/${encodeURIComponent(id)}/publish`, { method: 'POST' }),

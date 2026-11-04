@@ -541,6 +541,16 @@ func (runtime *Runtime) SetMaintenance(maintenance *edgeskeleton.Maintenance) {
 	runtime.maintenance = maintenance
 }
 
+// SetMarketBenchmark serves (true) or stops serving (false) the node-market
+// benchmark object from the next Apply on: the node joined or left the
+// market (controller role assignment). The caller applies
+// again (dynamicRoutingManager.Reapply).
+func (runtime *Runtime) SetMarketBenchmark(joined bool) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.config.MarketBenchmark = joined
+}
+
 // Generation is the active index generation.
 func (runtime *Runtime) Generation() uint64 {
 	runtime.mu.Lock()

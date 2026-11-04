@@ -273,7 +273,7 @@ func (b batch) item(ctx context.Context, nodes []uuid.UUID, template map[string]
 	}
 	if err != nil {
 		release()
-		return fail(supplyCode(err), nil)
+		return fail(supplyCode(err), supplyDetail(err))
 	}
 	result.GroupID = &group.ID
 	if err := b.store.SaveItem(ctx, b.caller.ScopeID, digest, BatchItem{GroupID: &group.ID}); err != nil {
@@ -453,11 +453,23 @@ func marketDetail(raw []byte) json.RawMessage {
 	return raw
 }
 
+// supplyDetail is the node list of a location refusal.
+func supplyDetail(err error) json.RawMessage {
+	var unmapped *marketsupply.LocationUnmappedError
+	if !errors.As(err, &unmapped) {
+		return nil
+	}
+	raw, _ := json.Marshal(map[string]any{"nodes": unmapped.Nodes})
+	return raw
+}
+
 func supplyCode(err error) string {
 	var inUse *marketsupplyguard.InUseError
 	switch {
 	case errors.As(err, &inUse):
 		return "supply_keeps_online_node"
+	case errors.Is(err, marketsupply.ErrSupplyLocationUnmapped):
+		return "node_location_unmapped"
 	case errors.Is(err, marketsupply.ErrSupplyNodeUnusable):
 		return "node_unusable"
 	case errors.Is(err, marketsupply.ErrSupplyInvalid):

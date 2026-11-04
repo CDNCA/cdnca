@@ -248,7 +248,7 @@ func TestFilterKeepsProbeReadyMappedPublicNodes(t *testing.T) {
 	capable := capabilities(t, agentv1.CapabilityName_CAPABILITY_NAME_MARKET_PROBE)
 	old := capabilities(t, agentv1.CapabilityName_CAPABILITY_NAME_NODE_MONITORING)
 	ready, dual, legacy, noRegion, noCarrier, private := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	probeOnly, disabled, unreported := uuid.New(), uuid.New(), uuid.New()
+	probeOnly, disabled, unreported, abroad := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	addr := netip.MustParseAddr
 	s := New(nil, nil, nil, Config{}, quiet())
 	got := s.filter("pool", joinMarket([]candidate{
@@ -265,12 +265,15 @@ func TestFilterKeepsProbeReadyMappedPublicNodes(t *testing.T) {
 		{NodeID: legacy, Address: addr("9.9.9.9"), Region: "cn", Carrier: "联通", Capabilities: old},
 		{NodeID: legacy, Address: addr("9.9.9.10"), Region: "cn", Carrier: "联通", Capabilities: nil},
 		{NodeID: noRegion, Address: addr("8.8.4.4"), Region: "华南", Carrier: "移动", Capabilities: capable},
-		{NodeID: noCarrier, Address: addr("8.8.4.5"), Region: "us", Carrier: "Cogent", Capabilities: capable},
+		// A mainland node needs a carrier the DNS lines know; outside the mainland any carrier is reported as bgp.
+		{NodeID: noCarrier, Address: addr("8.8.4.5"), Region: "cn", Carrier: "Cogent", Capabilities: capable},
+		{NodeID: abroad, Address: addr("8.8.4.6"), Region: "us", Carrier: "Cogent", Capabilities: capable},
 		{NodeID: private, Address: addr("192.168.1.1"), Region: "cn", Carrier: "电信", Capabilities: capable},
 	}))
 	want := []marketclient.PoolNode{
 		{NodeID: ready.String(), IP: "8.8.8.8", Region: "cn", Carrier: "telecom"},
 		{NodeID: dual.String(), IP: "1.1.1.1", Region: "hk", Carrier: "bgp"},
+		{NodeID: abroad.String(), IP: "8.8.4.6", Region: "us", Carrier: "bgp"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("filter = %+v", got)

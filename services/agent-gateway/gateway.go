@@ -640,7 +640,7 @@ func (g *Gateway) Connect(stream grpc.BidiStreamingServer[agentv1.ConnectRequest
 	if err != nil {
 		return err
 	}
-	return g.serveSessionWithInstallation(stream, receive, lease, replay, first.request.Stream.Sequence, identity, hello.Capabilities.AgentVersion, hello.SupportedProtocolVersions, selected, hello.ArtifactEncryptionKeyId, upgradeInstallationID, authorization.SnapshotExpirationTime.AsTime(), authorization.DeploymentsAllowed, hasACMEHTTP01OverlayCapability(hello.Capabilities), hasCacheControlCapability(hello.Capabilities), activeIdentityCapable, activeIdentityCapable && ackReceiptCapable && g.receipts != nil, upgradeEnabled, upgradeStatusPubAckEnabled, upgradeStatusAckReceiptEnabled, firewallCapable, drainCapable, nodeMonitoringCapable, portTransitionEnabled, marketProbeEnabled, multiTenantEnabled, l4LiveVersion >= 1, l4LiveVersion >= 2, signerTrustEnabled, sched302Enabled, autoDefenseEnabled, securityBansEnabled, installationBanEnabled, endpointMigrationEnabled, siteDropEnabled, cacheCancelEnabled, gatewayAddressCapable, sshAccessCapable)
+	return g.serveSessionWithInstallation(stream, receive, lease, replay, first.request.Stream.Sequence, identity, hello.Capabilities.AgentVersion, hello.SupportedProtocolVersions, selected, hello.ArtifactEncryptionKeyId, upgradeInstallationID, authorization.SnapshotExpirationTime.AsTime(), authorization.DeploymentsAllowed, hasACMEHTTP01OverlayCapability(hello.Capabilities), hasCacheControlCapability(hello.Capabilities), activeIdentityCapable, activeIdentityCapable && ackReceiptCapable && g.receipts != nil, upgradeEnabled, upgradeStatusPubAckEnabled, upgradeStatusAckReceiptEnabled, firewallCapable, drainCapable, nodeMonitoringCapable, portTransitionEnabled, marketProbeEnabled, multiTenantEnabled, l4LiveVersion >= 1, l4LiveVersion >= 2, signerTrustEnabled, sched302Enabled, autoDefenseEnabled, securityBansEnabled, installationBanEnabled, endpointMigrationEnabled, siteDropEnabled, cacheCancelEnabled, gatewayAddressCapable, sshAccessCapable, marketProbeEnabled && marketRoleCapable(hello.Capabilities.Features))
 }
 
 // knownCapabilities lists every capability name this build understands
@@ -1193,6 +1193,8 @@ func (g *Gateway) serveSessionWithInstallation(
 	// configured; a node without SSH_ACCESS v1 is answered not_supported.
 	sshAccessCapable := len(cacheControlCapability) >= 24 && cacheControlCapability[23]
 	var sshAccessSource *sessionSSHAccess
+	// Market role assignments only to an Agent declaring MARKET_ROLE.
+	marketRolesCapable := len(cacheControlCapability) >= 25 && cacheControlCapability[24]
 	var siteDrops *sessionSiteDrops
 	// Disabled Gateway (ADR 0013 §5.2): once per session, ask the node to
 	// migrate; close the session at the eviction time unless re-enabled.
@@ -1429,7 +1431,7 @@ func (g *Gateway) serveSessionWithInstallation(
 	defer func() { autoDefense.stop(g.config.CommandOperationTimeout) }()
 	if marketProbeEnabled && deploymentsAllowed {
 		var err error
-		if marketProbes, err = g.startSessionMarketProbes(stream.Context(), identity.NodeID); err != nil {
+		if marketProbes, err = g.startSessionMarketProbes(stream.Context(), identity.NodeID, marketRolesCapable); err != nil {
 			return err
 		}
 	}
@@ -1875,7 +1877,7 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			if marketProbes, err = g.applyMarketProbeAuthorization(stream.Context(), identity.NodeID, marketProbes,
-				marketProbeEnabled && refreshed.deploymentsAllowed); err != nil {
+				marketProbeEnabled && refreshed.deploymentsAllowed, marketRolesCapable); err != nil {
 				return err
 			}
 		case <-offlineTimer.C:
@@ -1949,7 +1951,7 @@ func (g *Gateway) serveSessionWithInstallation(
 					return err
 				}
 				if marketProbes, err = g.applyMarketProbeAuthorization(stream.Context(), identity.NodeID, marketProbes,
-					marketProbeEnabled && refreshed.deploymentsAllowed); err != nil {
+					marketProbeEnabled && refreshed.deploymentsAllowed, marketRolesCapable); err != nil {
 					return err
 				}
 			}
