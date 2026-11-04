@@ -362,6 +362,35 @@ describe('ErrorPagesPage', () => {
     expect(vi.mocked(errorPagesApi.initiateAsset).mock.calls[1]).toEqual(firstInitiate)
   })
 
+  // 保存进行中不能关；结果未确认时关闭先确认，确认后关闭并刷新列表。
+  it('locks closing only while saving and lets an outcome-unknown editor close after a warning, then refreshes', async () => {
+    let rejectCreate!: (reason: unknown) => void
+    vi.mocked(errorPagesApi.createScopeOverride).mockReturnValueOnce(new Promise((_, reject) => { rejectCreate = reject }))
+    const user = userEvent.setup()
+    renderWithProviders(<ErrorPagesPage />)
+    const dialog = await openCreateDialog(user)
+    await selectOption(within(dialog).getByRole('combobox', { name: '节点选择' }), '41 节点A')
+    await selectOption(within(dialog).getByRole('combobox', { name: '配置项' }), '400错误')
+    await user.type(within(dialog).getByRole('textbox', { name: '400错误' }), '<html>x</html>')
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+
+    await waitFor(() => expect(errorPagesApi.createScopeOverride).toHaveBeenCalledOnce())
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled()
+    rejectCreate(new ApiError('lost', 0, 'network_error'))
+    expect(await within(dialog).findByText('操作结果尚未确认')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '按原操作重试' })).toBeEnabled()
+    const cancel = within(dialog).getByRole('button', { name: '取消' })
+    expect(cancel).toBeEnabled()
+
+    const reads = vi.mocked(errorPagesApi.listScopeOverrides).mock.calls.length
+    await user.click(cancel)
+    const confirm = (await screen.findByText('结果尚未确认，关闭后请刷新列表核对是否已生效')).closest<HTMLElement>('.ant-modal-confirm')!
+    expect(dialog).toBeInTheDocument()
+    await user.click(within(confirm).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(within(dialog).queryByRole('textbox', { name: '400错误' })).not.toBeInTheDocument())
+    await waitFor(() => expect(vi.mocked(errorPagesApi.listScopeOverrides).mock.calls.length).toBeGreaterThan(reads))
+  })
+
   it('removes an override with CAS and hides all writes from a read-only operator', async () => {
     vi.mocked(errorPagesApi.listScopeOverrides).mockResolvedValue({ items: [override], total: 1 })
     const user = userEvent.setup()

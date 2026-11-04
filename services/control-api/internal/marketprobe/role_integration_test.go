@@ -127,14 +127,18 @@ func TestAssignRolesJoinsPoolNodesAndWithdrawsTheRest(t *testing.T) {
 	if len(nodes.commands[member.String()]) != 1 {
 		t.Fatalf("join_market sent again: %d", len(nodes.commands[member.String()]))
 	}
-	// The pool report lists every node of the current revision with its role
-	// (no serving rows are seeded: none is serving yet).
+	// The pool report lists every node of the current revision with its role.
+	// Serving is derived (node_line_endpoint_serving view: enabled endpoint of
+	// an active node, no hold), so the joined member is reportable, the older
+	// Agent keeps probe_only and the disabled endpoint is not serving.
 	report, err := NewReporter(pool, s, "").Report(ctx, group)
-	if err != nil || report.Probe != "running" || report.Total != 3 || report.Reportable != 0 {
+	if err != nil || report.Probe != "running" || report.Total != 3 || report.Reportable != 1 {
 		t.Fatalf("report %+v %v", report, err)
 	}
+	want := map[uuid.UUID]string{member: "", older: ReasonNotJoinMarket, switchedOff: ReasonNotServing}
 	for _, n := range report.Nodes {
-		if n.Reason != ReasonNotServing || n.NodeID == member && (n.Role != "join_market" || !n.RoleCapable) ||
+		if reason, ok := want[n.NodeID]; !ok || n.Reason != reason ||
+			n.NodeID == member && (n.Role != "join_market" || n.RoleSource != RoleSourceAssigned || !n.RoleCapable) ||
 			n.NodeID == older && n.RoleCapable {
 			t.Fatalf("node %+v", n)
 		}

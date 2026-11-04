@@ -14,6 +14,7 @@ import {
 import { probeDNSPupModule } from '../api/probeDNSPup'
 import { useGrantedModules } from '../components/useGrantedModules'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
+import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import { TimeRangeFilter } from '@cdnca/ui'
 
 const monitorGroups = ['domestic', 'telecom', 'unicom', 'mobile', 'overseas'] as const
@@ -475,17 +476,24 @@ export function NodeBatchMonitorConfigModal({ nodes, open, canManage, getAccessT
     onDone()
   }
   const retryTargets = (results ?? []).filter((item) => item.status !== 'updated')
-  const closable = !pending && !retryTargets.some((item) => item.status === 'unknown')
+  // 请求进行中不能关；有结果未确认的节点时关闭先确认，确认后刷新节点列表再关闭。
+  const closable = !pending
+  const confirmClose = useConfirmUnconfirmedClose()
+  const close = () => {
+    if (pending) return
+    if (!retryTargets.some((item) => item.status === 'unknown')) { onClose(); return }
+    confirmClose(() => { onDone(); onClose() })
+  }
   const errorText = (code?: string) => t(`monitorConfig.saveErrors.${['version_conflict', 'probe_timeout_exceeds_interval', 'validation_error', 'permission_denied', 'node_not_found']
     .includes(code ?? '') ? code : 'unavailable'}`)
   return (
     <Modal className="node-modal node-monitor-config-modal" open={open} width={550} destroyOnHidden maskClosable={false}
       title={results ? t('batchMonitor.resultsTitle') : t('batchMonitor.title', { count: nodes.length })}
-      closable={closable} onCancel={() => { if (closable) onClose() }}
+      closable={closable} onCancel={close}
       footer={results ? [
         retryTargets.length ? <Button key="retry" type="primary" loading={pending} onClick={() => values && void run(retryTargets, values, results)}>
           {t('batchMonitor.retry', { count: retryTargets.length })}</Button> : null,
-        <Button key="close" disabled={!closable} onClick={onClose}>{t('actions.close')}</Button>,
+        <Button key="close" disabled={!closable} onClick={close}>{t('actions.close')}</Button>,
       ] : [
         <Tooltip key="confirm" title={canManage ? undefined : t('monitorConfig.manageRequired')}>
           <Button type="primary" disabled={!canManage || nodes.length === 0} loading={pending} onClick={() => form.submit()}>{t('monitorConfig.confirm')}</Button>

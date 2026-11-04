@@ -34,6 +34,7 @@ import {
 import { nodesApi } from '../api/nodes'
 import { useSessionStore } from '../auth/session'
 import '../i18n/errorPagesPage'
+import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import './ErrorPagesPage.css'
 
 type Owner = readonly ['platform', string, string, number]
@@ -358,6 +359,8 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
   const [saveError, setSaveError] = useState<string>()
   const [pendingSave, setPendingSave] = useState<SaveAttempt>()
   const [pendingDelete, setPendingDelete] = useState<DeleteAttempt>()
+  const [saving, setSaving] = useState(false)
+  const confirmClose = useConfirmUnconfirmedClose()
   const [selectedRows, setSelectedRows] = useState<React.Key[]>([])
   // Node and region pickers read GET /v1/nodes, which needs nodes.read on top of error_pages.*.
   const canListNodes = useSessionStore((state) => state.principal?.permissions.some((code) => code === 'nodes.read' || code === 'platform.admin') ?? false)
@@ -404,6 +407,12 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
     setEditorLoading(false)
     setSaveError(undefined)
     setPendingSave(undefined)
+  }
+  // 保存进行中不能关；结果未确认时关闭先确认，确认后关闭并刷新列表核对是否已生效。
+  const leaveEditor = () => {
+    if (saving) return
+    if (!pendingSave) { closeEditor(); return }
+    confirmClose(() => { closeEditor(); void client.invalidateQueries({ queryKey }) })
   }
 
   const openCreate = () => {
@@ -473,6 +482,7 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
 
   const executeSave = async (attempt: SaveAttempt) => {
     setSaveError(undefined)
+    setSaving(true)
     try {
       const accessToken = currentAccess(ownerKey, true)
       if (!accessToken) throw new ApiError('Permission denied', 403, 'permission_denied')
@@ -496,10 +506,13 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
     } catch (error) {
       if (isUnknownWrite(error)) setPendingSave(attempt)
       setSaveError(errorKey(error))
+    } finally {
+      setSaving(false)
     }
   }
 
   const save = async () => {
+    if (saving) return
     const marker = pendingSave ? undefined : draft.items.map((key) => templateMarkerIn(draft.contents[key] ?? '')).find(Boolean)
     if (marker) {
       setSaveError(`templateMarker:${marker}`)
@@ -596,9 +609,12 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
       width={520}
       open={Boolean(editor)}
       title={t(editor?.kind === 'edit' ? 'regional.dialogs.edit' : 'regional.dialogs.add')}
-      onCancel={closeEditor}
+      onCancel={leaveEditor}
+      closable={!saving}
+      maskClosable={!saving}
+      keyboard={!saving}
       destroyOnHidden
-      footer={<Space><Button type="primary" loading={editorLoading} onClick={() => void save()}>{t('regional.actions.confirm')}</Button><Button onClick={closeEditor}>{t('actions.cancel')}</Button></Space>}
+      footer={<Space><Button type="primary" loading={editorLoading || saving} onClick={() => void save()}>{t('regional.actions.confirm')}</Button><Button disabled={saving} onClick={leaveEditor}>{t('actions.cancel')}</Button></Space>}
     >
       <Spin spinning={editorLoading}>
         <div className="error-page-override-form">

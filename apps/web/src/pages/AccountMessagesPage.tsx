@@ -12,6 +12,7 @@ import { formatDateTime, formatNumber } from '../i18n/formatters'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { AnnouncementBody } from '../components/AnnouncementBody'
 import AccountEventMessages from './AccountEventMessages'
+import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import './AccountMessagesPage.css'
 
 export function SafeMarkdown({ value }: { value: string }) {
@@ -177,6 +178,8 @@ function AccountMessagesContent({
   }
   const uncertain = Boolean(attempt && writeError && outcomeUnknown(writeError))
   const writesLocked = stateMutation.isPending || uncertain
+  // 请求进行中 ×/遮罩/Esc 不能关；结果未确认时先确认，确认后走「关闭并刷新」。
+  const confirmClose = useConfirmUnconfirmedClose()
   const uncertainActions = uncertain ? <Space>
     <Button type="primary" loading={stateMutation.isPending} onClick={retryState}>{t('actions.retrySameRequest')}</Button>
     <Button disabled={stateMutation.isPending} onClick={closeAndRefresh}>{t('actions.closeAndRefresh')}</Button>
@@ -240,9 +243,10 @@ function AccountMessagesContent({
           : selected && !selected.read_at
             ? <Button type="primary" icon={<MailOpen size={15} />} loading={stateMutation.isPending} disabled={stateMutation.isPending} onClick={() => beginState(selected, 'read')}>{t('actions.markRead')}</Button>
             : <Button onClick={() => setSelected(null)}>{t('actions.close')}</Button>}
-        closable={!writesLocked}
-        maskClosable={!writesLocked}
-        onCancel={uncertain ? closeAndRefresh : () => setSelected(null)}
+        closable={!stateMutation.isPending}
+        maskClosable={!stateMutation.isPending}
+        keyboard={!stateMutation.isPending}
+        onCancel={() => { if (stateMutation.isPending) return; if (uncertain) confirmClose(closeAndRefresh); else setSelected(null) }}
         destroyOnHidden
       >
         {uncertain ? <Alert className="identity-alert" type="warning" showIcon message={t('uncertainty.title')} description={t('uncertainty.description')} /> : null}

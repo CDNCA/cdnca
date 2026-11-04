@@ -66,6 +66,7 @@ import '../i18n/siteCreate'
 import '../i18n/siteDomainExport'
 import '../i18n/domainTrust'
 import '../i18n/siteListTabs'
+import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import {
   clearSiteBatchRetry,
   persistSiteBatchRetry,
@@ -1441,6 +1442,7 @@ function SiteLockModal({
   state,
   pending,
   onCancel,
+  onAbandon,
   onReasonChange,
   onReload,
   onSubmit,
@@ -1448,14 +1450,22 @@ function SiteLockModal({
   state: LockDialogState | null
   pending: boolean
   onCancel: () => void
+  onAbandon: () => void
   onReasonChange: (reason: string) => void
   onReload: () => void
   onSubmit: () => void
 }) {
   const { t, i18n } = useTranslation('sites')
+  const confirmClose = useConfirmUnconfirmedClose()
   if (!state) return null
 
   const uncertain = Boolean(state.attempt && state.error && writeOutcomeUnknown(state.error))
+  // 请求进行中不能关；结果未确认时关闭先确认，确认后由 onAbandon 放弃原请求、关闭并刷新列表。
+  const close = () => {
+    if (pending) return
+    if (uncertain) confirmClose(onAbandon)
+    else onCancel()
+  }
   const isLock = state.action === 'lock'
   const reason = state.reason.trim()
   const invalidReason = isLock && (reason.length === 0 || reason.length > 500)
@@ -1484,11 +1494,11 @@ function SiteLockModal({
       okText={uncertain ? t('actions.retrySameRequest') : isLock ? t('actions.confirmLock') : t('actions.confirmUnlock')}
       cancelText={t('actions.cancel')}
       okButtonProps={{ disabled: uncertain ? pending : !canSubmit, danger: isLock }}
-      cancelButtonProps={{ disabled: pending || uncertain }}
-      closable={!pending && !uncertain}
-      maskClosable={!pending && !uncertain}
-      keyboard={!pending && !uncertain}
-      onCancel={onCancel}
+      cancelButtonProps={{ disabled: pending }}
+      closable={!pending}
+      maskClosable={!pending}
+      keyboard={!pending}
+      onCancel={close}
       onOk={onSubmit}
     >
       <p className="site-lock-target">{state.item.domain}</p>
@@ -3474,6 +3484,11 @@ function SiteListPageSession({
         state={lockDialog}
         pending={lockMutation.isPending}
         onCancel={() => setLockDialog(null)}
+        onAbandon={() => {
+          const owner = lockDialog?.attempt?.owner
+          setLockDialog(null)
+          if (owner) void queryClient.invalidateQueries({ queryKey: ['sites', owner] })
+        }}
         onReasonChange={(reason) =>
           setLockDialog((current) =>
             current

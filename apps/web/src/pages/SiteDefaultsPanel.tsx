@@ -18,6 +18,7 @@ import { useSessionStore } from '../auth/session'
 import { siteDefaultValueError } from './siteDefaultValue'
 import { CacheRulesDefaultEditor, CondOriginDefaultEditor } from './SiteDefaultDocumentEditors'
 import '../i18n/siteListTabs'
+import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 
 // 网站列表 > 默认设置（用户端）：租户给自己新建网站设的默认值。
 // 只影响之后新建的网站；新建时手动填写的值优先（后端 /v1/site-defaults，迁移 490）。
@@ -293,13 +294,18 @@ export default function SiteDefaultsPanel() {
     if (outcomeUnknown(error)) return t('defaults.errors.unknown')
     return t('defaults.errors.writeFailed')
   }
-  // SITE-CURRENT-04：请求中或结果未知时，X、Esc、遮罩与取消一样不能关闭
+  // SITE-CURRENT-04：请求中 X、Esc、遮罩与取消一样不能关闭；结果未确认时关闭先确认，确认后关闭并刷新列表。
+  const confirmClose = useConfirmUnconfirmedClose()
   const closeEditor = () => {
-    if (mutation.isPending || uncertain) return
-    attemptRef.current = null
-    setAttempt(null)
-    setWriteError(null)
-    setEditor(null)
+    if (mutation.isPending) return
+    const leave = () => {
+      attemptRef.current = null
+      setAttempt(null)
+      setWriteError(null)
+      setEditor(null)
+    }
+    if (!uncertain) { leave(); return }
+    confirmClose(() => { leave(); void queryClient.invalidateQueries({ queryKey: ['site-defaults'] }) })
   }
   const columns: TableColumnsType<SiteUserDefault> = [
     { title: t('defaults.columns.id'), dataIndex: 'display_id', width: 80 },
@@ -381,8 +387,8 @@ export default function SiteDefaultsPanel() {
       <Modal className="identity-modal" open={editor !== null} width={settingName && siteDefaultDocuments.has(settingName) ? 760 : 560} destroyOnHidden
         title={editor?.mode === 'edit' ? t('defaults.form.editTitle') : t('defaults.form.createTitle')}
         okText={uncertain ? t('defaults.actions.retry') : t('defaults.actions.save')} cancelText={t('defaults.actions.cancel')}
-        confirmLoading={mutation.isPending} cancelButtonProps={{ disabled: mutation.isPending || uncertain }}
-        closable={!mutation.isPending && !uncertain} maskClosable={!mutation.isPending && !uncertain} keyboard={!mutation.isPending && !uncertain}
+        confirmLoading={mutation.isPending} cancelButtonProps={{ disabled: mutation.isPending }}
+        closable={!mutation.isPending} maskClosable={!mutation.isPending} keyboard={!mutation.isPending}
         onCancel={closeEditor}
         onOk={() => uncertain ? mutation.mutate() : void form.validateFields().then(submit).catch(() => undefined)}>
         {writeError && editor ? <FeedbackWhen title={errorText(writeError)} /> : null}

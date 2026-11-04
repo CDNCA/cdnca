@@ -260,13 +260,15 @@ func TestNodeIdentityLifecycle(t *testing.T) {
 		t.Fatalf("unproven Renew persisted %d requests: %v", renewalCount, err)
 	}
 
-	secondToken := issueIdentityToken(t, pool, fixture, now, "re_enrollment")
+	// Only a re_enrollment token (console "重装此节点") replaces a live
+	// certificate; an initial_enrollment token stays refused.
+	secondToken := issueIdentityToken(t, pool, fixture, now, "initial_enrollment")
 	secondRequest := validAuthorizeRequest(t, testCSR(t, false))
 	secondRequest.EnrollmentToken = secondToken
 	secondRequest.ArtifactEncryptionPublicKey = bytesOf(32, 9)
 	secondAuthorization, err := service.Authorize(context.Background(), secondRequest)
 	if err != nil {
-		t.Fatalf("Authorize(re-enrollment) error = %v", err)
+		t.Fatalf("Authorize(second initial enrollment) error = %v", err)
 	}
 	secondComplete := CompleteRequest{RequestID: uuid.NewString(), AuthorizationID: secondAuthorization.ID,
 		GatewayWorkloadIdentity: secondRequest.GatewayWorkloadIdentity, GatewayInstanceID: secondRequest.GatewayInstanceID}
@@ -274,13 +276,13 @@ func TestNodeIdentityLifecycle(t *testing.T) {
 	serialBeforeRejectedEnrollment := signer.serial
 	signer.mu.Unlock()
 	if _, err := service.Complete(context.Background(), secondComplete); !errors.Is(err, ErrCertificateInvalid) {
-		t.Fatalf("Complete(re-enrollment with current certificate) error = %v", err)
+		t.Fatalf("Complete(initial enrollment with current certificate) error = %v", err)
 	}
 	signer.mu.Lock()
 	serialAfterRejectedEnrollment := signer.serial
 	signer.mu.Unlock()
 	if serialAfterRejectedEnrollment != serialBeforeRejectedEnrollment {
-		t.Fatal("re-enrollment with an existing current certificate reached the signer")
+		t.Fatal("initial enrollment with an existing current certificate reached the signer")
 	}
 	var oldStatus, newStatus string
 	if err := pool.QueryRow(context.Background(), `SELECT status FROM node_artifact_encryption_keys WHERE id=$1`, authorization.ArtifactEncryptionKeyID).Scan(&oldStatus); err != nil {

@@ -187,7 +187,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires nodes.manage in a platform scope. The request accepts at most 100 unique node IDs and preserves input order in the response. Nodes are locked in UUID order, successful items and their audits commit in one transaction, and validation or state failures are returned per item. Replaying the same idempotency key with the same normalized request returns the stored result without another revision or audit event. admin_state retired is the batch delete; it follows updateNode. Each deletion runs in its own savepoint, so a node in use fails alone with node_in_use (or node_not_found) and the others are still deleted; a deleted item reports status updated with the last node snapshot. Disabling or draining the last online available node of a node-market supply that still has a normal subscriber fails that item with supply_in_use (with online_available and normal_subscriptions); items are checked in UUID order against the ones applied before them.",
+   "description": "Requires nodes.manage in a platform scope. The request accepts at most 100 unique node IDs and preserves input order in the response. Nodes are locked in UUID order, successful items and their audits commit in one transaction, and validation or state failures are returned per item. Replaying the same idempotency key with the same normalized request returns the stored result without another revision or audit event. admin_state retired is the batch delete; it follows updateNode. Each deletion runs in its own savepoint, so a node in use fails alone with node_in_use (with reasons, or node_not_found) and the others are still deleted; a deleted item reports status updated with the last node snapshot. Disabling or draining the last online available node of a node-market supply that still has a normal subscriber fails that item with supply_in_use (with online_available and normal_subscriptions); items are checked in UUID order against the ones applied before them.",
    "params": [
     {
      "name": "Idempotency-Key",
@@ -655,6 +655,11 @@
        "name": "network_inventory",
        "type": "NodeNetworkInventoryStatus",
        "description": "Automatic default-egress address discovery. Verified means the same-family mTLS transport peer matched; it does not prove inbound service reachability. Older servers may omit this object."
+      },
+      {
+       "name": "market_supply_groups",
+       "type": "array<object>",
+       "description": "Hidden node-market supply groups whose current revision lists the node (no line group list shows them, but they hold the node against deletion like a line group); omitted when none."
       }
      ]
     },
@@ -694,7 +699,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires nodes.manage in a platform scope. If-Match supplies the expected revision. pending nodes cannot be activated or moved through an intermediate management state; first activation is reserved for the future Gateway CompleteEnrollment contract. disabled to active requires a node-bound consumed enrollment authorization. That authorization records permission to enroll only and does not prove certificate persistence, mTLS connectivity, or completed Gateway enrollment. retired is the delete operation and must be the only field: it physically deletes the node. It is rejected with node_in_use while the current revision of a live line group or a live L2 configuration lists the node, or while the node takes part in a queued or running cache operation or an active CC coordination. In one transaction it revokes the active certificates, writes a node.delete audit event (node ID, display ID, name, addresses, revoked certificate IDs and serial numbers, deleting user, time), and deletes the node row together with every row that only describes the node (certificates, identity, sessions, monitoring samples, deployment receipts, task projections). The response is the last node snapshot with admin_state retired. The Gateway ends the session on its next authorization refresh (at most 30 seconds) and rejects reconnects. The name and the licensed node slot are released at once; running the install command on the same host registers a new pending node, which may reuse the name but never the deleted node ID. Disabling or draining the last online available node (active, online, not isolated, not held) of a node-market supply that still has a normal subscriber is rejected with 409 supply_in_use, error.details {online_available, normal_subscriptions}; a supply already without online nodes is not blocked. Line groups only take nodes of their own region, so changing region is rejected with 409 node_region_in_use while the current revision of a live line group of another region lists the node (remove it from that line group first). When pending to active (initialize) leaves the node without a region and the region catalog has exactly one region, the node is put into that region; with several, the request may name one in region.",
+   "description": "Requires nodes.manage in a platform scope. If-Match supplies the expected revision. pending nodes cannot be activated or moved through an intermediate management state; first activation is reserved for the future Gateway CompleteEnrollment contract. disabled to active requires a node-bound consumed enrollment authorization. That authorization records permission to enroll only and does not prove certificate persistence, mTLS connectivity, or completed Gateway enrollment. retired is the delete operation and must be the only field: it physically deletes the node. It is rejected with node_in_use while the current revision of a live line group (hidden node-market supply groups included) or a live L2 configuration lists the node, or while the node takes part in a queued or running cache operation or an active CC coordination; error.details.reasons (NodeInUseReason) names what holds it. In one transaction it revokes the active certificates, writes a node.delete audit event (node ID, display ID, name, addresses, revoked certificate IDs and serial numbers, deleting user, time), and deletes the node row together with every row that only describes the node (certificates, identity, sessions, monitoring samples, deployment receipts, task projections). The response is the last node snapshot with admin_state retired. The Gateway ends the session on its next authorization refresh (at most 30 seconds) and rejects reconnects. The name and the licensed node slot are released at once; running the install command on the same host registers a new pending node, which may reuse the name but never the deleted node ID. Disabling or draining the last online available node (active, online, not isolated, not held) of a node-market supply that still has a normal subscriber is rejected with 409 supply_in_use, error.details {online_available, normal_subscriptions}; a supply already without online nodes is not blocked. Line groups only take nodes of their own region, so changing region is rejected with 409 node_region_in_use while the current revision of a live line group of another region lists the node (remove it from that line group first). When pending to active (initialize) leaves the node without a region and the region catalog has exactly one region, the node is put into that region; with several, the request may name one in region.",
    "params": [
     {
      "name": "id",
@@ -864,7 +869,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires nodes.manage in a platform scope. platform.admin remains a wildcard permission. The raw token is shown only in this response.",
+   "description": "Requires nodes.manage in a platform scope. platform.admin remains a wildcard permission. The raw token is shown only in this response (Cache-Control no-store). A re_enrollment token lets a reinstalled host take over this node: on enrollment the node keeps its ID and administrative state, and the previous host's live certificates are revoked in the same transaction.",
    "params": [
     {
      "name": "id",
@@ -924,6 +929,11 @@
        "type": "string",
        "required": true,
        "description": "One-time secret shown only in this response."
+      },
+      {
+       "name": "gateway",
+       "type": "object",
+       "description": "Only on POST /v1/nodes/{id}/enrollment-tokens. Direct Gateway entry the console writes into the reinstall command (\"Reinstall this node\") as --gateway-enrollment-address, --gateway-address and --gateway-server-name, the same values as the registration-credential response. Absent when the preferred entry is a WebSocket (CDN) tunnel or no Gateway entry is published."
       }
      ]
     },

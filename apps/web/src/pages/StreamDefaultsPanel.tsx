@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Pagination, Radio, Select, Table, type TableColumnsType } from 'antd'
+import { Alert, Button, Form, Input, Modal, Pagination, Radio, Select, Space, Table, type TableColumnsType } from 'antd'
 import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -21,6 +21,7 @@ import { useSessionStore } from '../auth/session'
 import { hasStreamReadPermission } from './streamForm'
 import { useStreamPanelWrites } from './StreamGroupsState'
 import '../i18n/streamPanels'
+import '../i18n/unconfirmedClose'
 
 interface DefaultFormValues {
   owner_id?: string
@@ -85,6 +86,7 @@ export default function StreamDefaultsPanel({
 }) {
   const { t } = useTranslation('streams')
   const { t: tp } = useTranslation('streamPanels')
+  const { t: tu } = useTranslation('unconfirmedClose')
   const queryClient = useQueryClient()
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
@@ -300,7 +302,7 @@ export default function StreamDefaultsPanel({
         </div>
       </div>
 
-      {writes.uncertain ? <OutcomeUnknown className="identity-alert" title={tp('unknown')} detail={tp('unknownDescription')} action={canManageDefaults ? <Button size="small" loading={pending} disabled={pending || lockWrites || query.isFetching || forbidden} onClick={writes.retry}>{tp('retryExact')}</Button> : undefined} /> : writeError ? <FeedbackWhen title={t('defaults.writeFailed')} detail={defaultErrorMessage(writeError, t)} onClose={writes.clearError} /> : null}
+      {writes.uncertain ? <OutcomeUnknown className="identity-alert" title={tp('unknown')} detail={tp('unknownDescription')} action={<Space size={4}><Button size="small" disabled={pending} onClick={writes.abandon}>{tu('abandonRefresh')}</Button>{canManageDefaults ? <Button size="small" loading={pending} disabled={pending || lockWrites || query.isFetching || forbidden} onClick={writes.retry}>{tp('retryExact')}</Button> : null}</Space>} /> : writeError ? <FeedbackWhen title={t('defaults.writeFailed')} detail={defaultErrorMessage(writeError, t)} onClose={writes.clearError} /> : null}
       {query.isError ? <FeedbackWhen title={t('defaults.listFailed')} detail={query.error instanceof ApiError ? defaultErrorMessage(query.error, t) : t('errors.requestFailed')} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
       <div className="identity-table-scroll" data-testid="stream-default-table-scroll" aria-busy={query.isPending || query.isFetching}>
         <Table<StreamUserConfig>

@@ -22,7 +22,7 @@ function publicOrigin(value: string): URL {
 // __CDNCA_CONTROL_CA_SHA256__ pins /downloads/gateway-ca.pem
 // when this console serves the installer-generated self-signed root; it is
 // empty for a publicly trusted certificate.
-type InstallRuntime = { __CDNCA_NODE_UPGRADE_TRUST_SHA256__?: string; __CDNCA_CONTROL_CA_SHA256__?: string }
+export type InstallRuntime = { __CDNCA_NODE_UPGRADE_TRUST_SHA256__?: string; __CDNCA_CONTROL_CA_SHA256__?: string }
 
 const registrationCredentialPattern = /^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/
 // Same forms install-node.sh accepts for node-install-defaults.
@@ -42,6 +42,23 @@ const gatewayServerPattern = /^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$/
 export function buildNodeInstallCommand(credential: string, origin: string, runtime: InstallRuntime = {}, language?: string,
   gateway?: NodeInstallGateway): string {
   if (!registrationCredentialPattern.test(credential)) throw new Error('invalid registration credential')
+  return installerCommand('--registration-key-stdin', credential, origin, runtime, language, gateway)
+}
+
+// Raw one-time token of POST /v1/nodes/{id}/enrollment-tokens (32 random bytes, base64url).
+const enrollmentTokenPattern = /^[A-Za-z0-9_-]{43}$/
+
+// 重装此节点: the same command with the node's one-time re_enrollment token on
+// stdin instead of the registration key. The installer skips registration and
+// enrolls as that node, keeping its ID and settings.
+export function buildNodeReinstallCommand(token: string, origin: string, runtime: InstallRuntime = {}, language?: string,
+  gateway?: NodeInstallGateway): string {
+  if (!enrollmentTokenPattern.test(token)) throw new Error('invalid enrollment token')
+  return installerCommand('--enrollment-token-stdin', token, origin, runtime, language, gateway)
+}
+
+function installerCommand(secretFlag: string, secret: string, origin: string, runtime: InstallRuntime, language?: string,
+  gateway?: NodeInstallGateway): string {
   // Published by install-control.sh together with node-install-defaults; a
   // console without it cannot hand out an upgradable node.
   if (!/^[0-9a-f]{64}$/.test(runtime.__CDNCA_NODE_UPGRADE_TRUST_SHA256__ ?? '')) throw new Error('invalid upgrade trust digest')
@@ -54,7 +71,7 @@ export function buildNodeInstallCommand(credential: string, origin: string, runt
     ` --gateway-server-name ${quote(gateway.server_name)} --gateway-transport grpc` : ''
   return buildInstallerCommand({
     urls: [`${control}/downloads/install-node.sh`], protocols: '=https', label: '[cdnca-edge]',
-    args: `--control-plane ${quote(control)} --registration-key-stdin${gatewayArgs}`, stdinSecret: credential, language,
+    args: `--control-plane ${quote(control)} ${secretFlag}${gatewayArgs}`, stdinSecret: secret, language,
     controlPlaneCA: caDigest ? { url: `${control}/downloads/gateway-ca.pem`, sha256: caDigest } : undefined,
   })
 }

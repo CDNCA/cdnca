@@ -661,6 +661,8 @@ func normalizeSecretRolloutFixedRequest(
 	request SecretRolloutRequest,
 	now time.Time,
 ) (normalizedSecretRolloutRequest, error) {
+	// Microseconds, as stored (normalizeRolloutRequestWithDeadline).
+	request.Deadline = request.Deadline.UTC().Truncate(time.Microsecond)
 	if request.ConfigurationScopeID == uuid.Nil || !validActor(request.Actor) || len(request.NodeIDs) == 0 ||
 		!validLabel(request.GeneratorName) || !validLabel(request.GeneratorVersion) ||
 		!validIdempotencyKey(request.IdempotencyKey) {
@@ -788,6 +790,8 @@ func normalizeSecretReplacementRequest(
 	request SecretReplacementRequest,
 	now time.Time,
 ) (normalizedSecretReplacementRequest, error) {
+	// Microseconds, as stored (normalizeRolloutRequestWithDeadline).
+	request.Deadline = request.Deadline.UTC().Truncate(time.Microsecond)
 	if !validActor(request.Actor) || request.ConfigurationScopeID == uuid.Nil || len(request.NodeIDs) == 0 ||
 		request.OriginalRolloutID == uuid.Nil || request.ExpectedRevision <= 0 ||
 		!validLabel(request.GeneratorName) || !validLabel(request.GeneratorVersion) ||

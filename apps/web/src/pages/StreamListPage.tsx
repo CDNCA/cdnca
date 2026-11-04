@@ -13,6 +13,7 @@ import {
   Radio,
   Result,
   Select,
+  Space,
   Switch,
   Table,
   Tag,
@@ -64,6 +65,7 @@ import {
 } from './streamForm'
 import './StreamListPage.css'
 import '../i18n/siteCnameRegeneration'
+import '../i18n/unconfirmedClose'
 import { cnameFailureText } from './site-edit/cnameFailureText'
 import CnameFailureActions from './site-edit/CnameFailureActions'
 
@@ -439,6 +441,7 @@ function StreamListContent({
   const { t: tW } = useTranslation('originWeight')
   const streamShareText = (share: number | null) => share === null ? tW('down') : tW('share', { share })
   const { t: tCname, i18n: i18nInstance } = useTranslation('siteCnameRegeneration')
+  const { t: tu } = useTranslation('unconfirmedClose')
   const protocolOptions = [
     { value: 'tcp', label: t('values.tcp') },
     { value: 'udp', label: t('values.udp') },
@@ -883,6 +886,13 @@ function StreamListContent({
 
   const pending = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending || batchBusy
   const writesLocked = pending || Boolean(retryAttempt) || query.isFetching
+  // 放弃这次未确认的写入：清掉原请求记录并刷新列表，由列表核对是否已生效。
+  const abandonWrite = () => {
+    if (!retryAttempt || pending) return
+    setRetryAttempt(null)
+    setWriteError(null)
+    void queryClient.invalidateQueries({ queryKey: ['streams', scopeKind, scopeID, sessionEpoch] })
+  }
   useEffect(() => {
     const active = rowActionConfirmRef.current
     if (!active) return
@@ -1115,7 +1125,7 @@ function StreamListContent({
 
       {filterError ? <Alert className="identity-alert" type="error" showIcon message={t(filterError)} /> : null}
       {/* 结果未知的记录离开页面后仍在（L4-007），回来时没有 writeError 也要显示原请求重试。 */}
-      {retryAttempt ? <OutcomeUnknown className="identity-alert" title={writeError ? errorMessage(writeError, t) : t('detail.unknown')} action={canManageStreams ? <Button size="small" loading={pending || query.isFetching} disabled={query.isFetching} onClick={retryWrite}>{t('actions.retry')}</Button> : undefined} />
+      {retryAttempt ? <OutcomeUnknown className="identity-alert" title={writeError ? errorMessage(writeError, t) : t('detail.unknown')} action={<Space size={4}><Button size="small" disabled={pending} onClick={abandonWrite}>{tu('abandonRefresh')}</Button>{canManageStreams ? <Button size="small" loading={pending || query.isFetching} disabled={query.isFetching} onClick={retryWrite}>{t('actions.retry')}</Button> : null}</Space>} />
         : writeError && !modalOpen ? <FeedbackWhen title={errorMessage(writeError, t)} onClose={() => setWriteError(null)} /> : null}
       {query.isError ? <FeedbackWhen title={t('errors.listFailed')} detail={error ? errorMessage(error, t) : t('errors.requestFailed')} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
       <div className="identity-table-scroll" data-testid="stream-table-scroll" aria-busy={query.isPending || query.isFetching}>

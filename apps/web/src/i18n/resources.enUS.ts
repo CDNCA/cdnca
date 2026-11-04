@@ -3330,7 +3330,7 @@ export const enUS = {
       activationRequiresIdentity: 'Enabling requires an enrollment authorization already consumed by this node.',
       batchActivationRequiresIdentity: 'Only nodes with a consumed enrollment authorization can be enabled.',
       deleteTitle: 'Delete node {{name}}?',
-      retireNodeWarning: 'The node, its certificates and its monitoring data will be permanently deleted; the operation stays in the system log. The gateway disconnects the node within one minute and rejects reconnects, and the node name and licensed node slot are released immediately. Nodes still used by a line group or L2 configuration, or with unfinished cache tasks, cannot be deleted. To bring the machine back, run the install command on it again to register a new pending node.',
+      retireNodeWarning: 'The node, its certificates and its monitoring data will be permanently deleted; the operation stays in the system log. The gateway disconnects the node within one minute and rejects reconnects, and the node name and licensed node slot are released immediately. Nodes still used by a line group (node market supply groups included) or L2 configuration, or with unfinished cache tasks, cannot be deleted. To bring the machine back, run the install command on it again to register a new pending node.',
     },
     notices: {
       created: 'Node created',

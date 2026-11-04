@@ -258,13 +258,27 @@ func TestNodeSelfRegistrationFlow(t *testing.T) {
 
 		inUse := nodeWriteRequest(t, env.client, http.MethodPatch, path, map[string]any{"admin_state": "retired"},
 			env.admin, "delete-in-use", quoteVersion(active.Revision), "delete-in-use")
-		assertError(t, inUse, http.StatusConflict, "node_in_use", "")
+		// The refusal names what holds the node (here the line group).
+		var inUseBody struct {
+			Error struct {
+				Code    string `json:"code"`
+				Details struct {
+					Reasons []nodedomain.InUseReason `json:"reasons"`
+				} `json:"details"`
+			} `json:"error"`
+		}
+		decodeResponse(t, inUse, http.StatusConflict, &inUseBody)
+		if reasons := inUseBody.Error.Details.Reasons; inUseBody.Error.Code != "node_in_use" || len(reasons) != 1 ||
+			reasons[0].Kind != nodedomain.InUseLineGroup || reasons[0].ID != groupID.String() || reasons[0].Name != "delete-guard" {
+			t.Fatalf("node_in_use refusal = %+v", inUseBody)
+		}
 		batch := nodeWriteRequest(t, env.client, http.MethodPost, env.url+"/v1/nodes/batch-admin-state", map[string]any{
 			"admin_state": "retired", "items": []map[string]any{{"id": item.Node.ID, "expected_revision": active.Revision}},
 		}, env.admin, "delete-in-use-batch", "", "delete-in-use-batch")
 		var batchResult nodedomain.BatchAdminStateResult
 		decodeResponse(t, batch, http.StatusOK, &batchResult)
-		if len(batchResult.Items) != 1 || batchResult.Items[0].Error == nil || batchResult.Items[0].Error.Code != "node_in_use" {
+		if len(batchResult.Items) != 1 || batchResult.Items[0].Error == nil || batchResult.Items[0].Error.Code != "node_in_use" ||
+			len(batchResult.Items[0].Error.Reasons) != 1 || batchResult.Items[0].Error.Reasons[0].Name != "delete-guard" {
 			t.Fatalf("batch delete of referenced node = %#v", batchResult)
 		}
 

@@ -401,7 +401,7 @@ func originAuthNodeStatesTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, t
 			 AND version.configuration_scope_id=rollout.configuration_scope_id
 			JOIN node_deployments deployment ON deployment.rollout_id=rollout.id
 			WHERE rollout.configuration_scope_id=$1 AND version.generator_name=$3 AND version.canonical_snapshot=$4
-			  AND deployment.node_id IN (SELECT node_id FROM target))
+			  AND deployment.node_id IN (SELECT node_id FROM target) AND `+edgedeployment.CurrentHostDeployment("deployment")+`)
 		SELECT target.node_id,
 		       EXISTS(SELECT 1 FROM nodes node
 		         JOIN node_presence presence ON presence.node_id=node.id AND presence.status='online'

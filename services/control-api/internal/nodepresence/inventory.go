@@ -11,6 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/marketsupplyguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/node"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -71,6 +72,17 @@ type InventoryItem struct {
 	node.Node
 	Presence         Presence                    `json:"presence"`
 	NetworkInventory node.NetworkInventoryStatus `json:"network_inventory"`
+	// MarketSupplyGroups are the hidden node-market supply groups whose
+	// current revision lists the node (they hold it against deletion like any
+	// line group, but no line group list shows them); omitted when none.
+	MarketSupplyGroups []MarketSupplyGroupRef `json:"market_supply_groups,omitempty"`
+}
+
+// MarketSupplyGroupRef names a market supply group: Name is the seller's
+// name, without the hidden-group prefix.
+type MarketSupplyGroupRef struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 type InventoryListRequest struct {
@@ -232,6 +244,9 @@ func (i *Inventory) List(ctx context.Context, request InventoryListRequest) (Inv
 		result.Items = items[:request.Limit]
 	}
 	i.attachLeaseSignals(ctx, result.Items)
+	if err := i.attachMarketSupplyGroups(ctx, result.Items); err != nil {
+		return InventoryListResult{}, err
+	}
 	return result, nil
 }
 
@@ -270,6 +285,9 @@ func (i *Inventory) Get(ctx context.Context, scopeID, nodeID uuid.UUID) (Invento
 	}
 	items := []InventoryItem{item}
 	i.attachLeaseSignals(ctx, items)
+	if err := i.attachMarketSupplyGroups(ctx, items); err != nil {
+		return InventoryItem{}, err
+	}
 	return items[0], nil
 }
 
@@ -363,6 +381,47 @@ func (i *Inventory) attachLeaseSignals(ctx context.Context, items []InventoryIte
 			items[index].Presence.LeaseSignal = LeaseAbsent
 		}
 	}
+}
+
+// attachMarketSupplyGroups reads, in one query, the live market supply
+// groups whose current revision lists each node (the membership a node
+// deletion refuses on, node.ensureNodeUnreferenced).
+func (i *Inventory) attachMarketSupplyGroups(ctx context.Context, items []InventoryItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(items))
+	for index := range items {
+		ids[index] = items[index].ID
+	}
+	rows, err := i.pool.Query(ctx, `
+		SELECT DISTINCT endpoint.node_id, line_group.id, line_group.name
+		FROM node_line_groups line_group
+		JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id = line_group.tenant_scope_id
+		 AND endpoint.line_group_id = line_group.id AND endpoint.config_revision = line_group.current_revision
+		WHERE line_group.purpose = 'market_supply' AND line_group.deleted_at IS NULL AND endpoint.node_id = ANY($1)
+		ORDER BY endpoint.node_id, line_group.name, line_group.id`, ids)
+	if err != nil {
+		return fmt.Errorf("read node market supply groups: %w", err)
+	}
+	defer rows.Close()
+	groups := make(map[uuid.UUID][]MarketSupplyGroupRef)
+	for rows.Next() {
+		var nodeID uuid.UUID
+		var group MarketSupplyGroupRef
+		if err := rows.Scan(&nodeID, &group.ID, &group.Name); err != nil {
+			return fmt.Errorf("scan node market supply groups: %w", err)
+		}
+		group.Name = strings.TrimPrefix(group.Name, marketsupplyguard.GroupNamePrefix)
+		groups[nodeID] = append(groups[nodeID], group)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read node market supply groups: %w", err)
+	}
+	for index := range items {
+		items[index].MarketSupplyGroups = groups[items[index].ID]
+	}
+	return nil
 }
 
 // validAdminState lists the states the inventory can be filtered by. Deleting

@@ -21,6 +21,7 @@ import '../i18n/dnsProviders'
 import '../i18n/dnsConfig'
 import CnameDomainPanel from './dns/CnameDomainPanel'
 import DnsConfigForm from './dns/DnsConfigForm'
+import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import './NodeDnsPage.css'
 
 interface CredentialField {
@@ -184,6 +185,8 @@ export function ProviderEditor({
   const errorMap = useMemo(() => ({ credentials: ['credentials', firstCredential] }), [firstCredential])
   const markSubmitError = useFormSubmitError(form, errorMap)
   const [fieldMarked, setFieldMarked] = useState(false)
+  // 请求进行中不能关；结果未确认时关闭先确认，确认后走「关闭并刷新」。
+  const confirmClose = useConfirmUnconfirmedClose()
   useEffect(() => {
     if (error && !uncertain) form.setFieldValue('credentials', {})
     setFieldMarked(Boolean(error && !uncertain && markSubmitError(error)))
@@ -198,11 +201,11 @@ export function ProviderEditor({
       confirmLoading={pending}
       okText={uncertain ? t('actions.retrySameRequest') : t('actions.save')}
       cancelText={t('actions.cancel')}
-      cancelButtonProps={{ disabled: pending || uncertain }}
-      closable={!pending && !uncertain}
-      maskClosable={!pending && !uncertain}
-      keyboard={!pending && !uncertain}
-      onCancel={onCancel}
+      cancelButtonProps={{ disabled: pending }}
+      closable={!pending}
+      maskClosable={!pending}
+      keyboard={!pending}
+      onCancel={() => { if (pending) return; if (uncertain) confirmClose(onCloseAndRefresh); else onCancel() }}
       onOk={() => uncertain ? onRetry() : void form.validateFields()
         .then((values) => onSubmit(reauthorizing ? { ...values, replace_credentials: true } : values))
         .catch(() => undefined)}

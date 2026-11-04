@@ -229,15 +229,19 @@ func lockCurrent(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, policy *Poli
 	return true, nil
 }
 
+// persistCurrent writes the policy's current revision. A new row has nothing
+// active yet (active_revision 0 pairs with a NULL active_sha256,
+// global_firewall_policies_check2); an existing row keeps its active pair,
+// which only the projection's settlement moves.
 func persistCurrent(ctx context.Context, tx pgx.Tx, policy Policy, digest [32]byte) error {
 	document, err := json.Marshal(policy.PolicyInput)
 	if err != nil {
 		return ErrInvalidInput
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO global_firewall_policies(id,tenant_scope_id,document,document_sha256,revision,active_revision,deployment_state,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(tenant_scope_id) DO UPDATE SET document=EXCLUDED.document,
+		VALUES($1,$2,$3,$4,$5,0,$6,$7,$8) ON CONFLICT(tenant_scope_id) DO UPDATE SET document=EXCLUDED.document,
 		document_sha256=EXCLUDED.document_sha256,revision=EXCLUDED.revision,deployment_state=EXCLUDED.deployment_state,updated_at=EXCLUDED.updated_at`,
-		policy.ID, policy.TenantScopeID, document, digest[:], policy.Revision, policy.ActiveRevision, policy.DeploymentState, policy.CreatedAt, policy.UpdatedAt)
+		policy.ID, policy.TenantScopeID, document, digest[:], policy.Revision, policy.DeploymentState, policy.CreatedAt, policy.UpdatedAt)
 	return err
 }
 

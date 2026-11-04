@@ -8,6 +8,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/certificateasset"
 	"github.com/cdnca/cdnca/services/control-api/internal/certificatepublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/certnotify"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
@@ -126,4 +127,34 @@ func buildCertificateRenewalDeliverer(
 	return certificatepublish.NewRenewalDeliverer(dependencies.Pool, assets, rollouts, producer,
 		certificatepublish.RenewalTargetNodes, notify, dependencies.OpaqueResolver,
 		certificatepublish.DefaultRenewalDelivererConfig(), time.Now)
+}
+
+// buildCertificateRedeliverer gives nodes that joined a site's line group,
+// were reinstalled or recovered the certificate versions their sites use
+// with the renewal delivery's envelope, key resolver and
+// signer, then republishes the scope to them (node_sync). It runs on the
+// automatic edge publication loop.
+func buildCertificateRedeliverer(
+	dependencies certificatePublicationProductionDependencies,
+) (*certificatepublish.Redeliverer, error) {
+	if dependencies.Pool == nil || dependencies.Enveloper == nil || dependencies.OpaqueResolver == nil ||
+		dependencies.Signer == nil {
+		return nil, errCertificatePublicationRuntimeInvalidConfiguration
+	}
+	assets, err := certificateasset.NewStore(dependencies.Pool, dependencies.Enveloper)
+	if err != nil {
+		return nil, errCertificatePublicationRuntimeInvalidConfiguration
+	}
+	rollouts, err := edgedeployment.NewStoreWithClockAndAuditor(dependencies.Pool, time.Now, audit.New(dependencies.Pool))
+	if err != nil {
+		return nil, errCertificatePublicationRuntimeInvalidConfiguration
+	}
+	producer, err := certificatepublish.NewProducer(dependencies.Signer)
+	if err != nil {
+		return nil, errCertificatePublicationRuntimeInvalidConfiguration
+	}
+	return certificatepublish.NewRedeliverer(dependencies.Pool, assets, rollouts, producer,
+		edgeautopublish.SitesTargetNodeIDsTx, certificatepublish.RedeliveryNodeReadyTx,
+		edgeautopublish.NewNodeSyncRetrier(dependencies.Pool).RetryNodeSync, dependencies.OpaqueResolver,
+		certificatepublish.DefaultRedelivererConfig(), time.Now)
 }

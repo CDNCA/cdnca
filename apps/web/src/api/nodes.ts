@@ -134,9 +134,17 @@ function nativeRuntime(presence: Record<string, unknown>): boolean {
     (code === undefined || (state === 'rolled_back' && typeof code === 'string' && nativeRuntimeCodePattern.test(code)))
 }
 
+/** A hidden node-market supply group whose current revision lists the node (name without the hidden-group prefix). */
+export interface NodeMarketSupplyGroupRef {
+  id: string
+  name: string
+}
+
 export interface NodeInventoryItem extends NodeRecord {
   presence: NodePresence
   network_inventory?: NodeNetworkInventory
+  /** Omitted when the node is in no market supply group (and by older servers). */
+  market_supply_groups?: NodeMarketSupplyGroupRef[]
 }
 
 export type NodeNetworkInventoryState = 'not_reported' | 'verified' | 'address_conflict' | 'peer_mismatch' |
@@ -544,6 +552,8 @@ export interface IssuedEnrollmentToken {
   created_at: string
   expires_at: string
   token: string
+  /** Only from POST /v1/nodes/{id}/enrollment-tokens: Gateway entry of the reinstall command. */
+  gateway?: NodeInstallGateway
 }
 
 // Scope-level credential embedded in the reusable node install command.
@@ -598,6 +608,9 @@ export interface BatchNodeAdminStateItemResult {
       | 'node_identity_required'
       | 'node_ip_conflict'
       | 'node_retired'
+      | 'node_in_use'
+    /** node_in_use: what holds the node (read through nodeInUseReasons). */
+    reasons?: unknown
   }
 }
 
@@ -1027,10 +1040,15 @@ function networkInventory(value: unknown, addresses: Record<string, unknown>): v
     (value.ipv6_state !== 'verified' || ipv6(addresses.ipv6))
 }
 
+function marketSupplyGroups(value: unknown): value is NodeMarketSupplyGroupRef[] {
+  return Array.isArray(value) && value.length > 0 && value.every((group) => record(group) && exactKeys(group, ['id', 'name']) &&
+    typeof group.id === 'string' && uuidPattern.test(group.id) && boundedString(group.name, 1, 128))
+}
+
 function inventoryItem(value: unknown): value is NodeInventoryItem {
   if (!record(value) || !exactKeys(value, [
     'id', 'display_id', 'name', 'description', 'region', 'admin_state', 'management_settings', 'revision', 'created_at', 'updated_at', 'presence',
-  ], ['ipv4', 'ipv6', 'network_inventory']) ||
+  ], ['ipv4', 'ipv6', 'network_inventory', 'market_supply_groups']) ||
     typeof value.id !== 'string' || !uuidPattern.test(value.id) ||
     typeof value.display_id !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value.display_id) ||
     !boundedString(value.name, 1, 128) || !boundedString(value.description, 0, 1024) ||
@@ -1038,6 +1056,7 @@ function inventoryItem(value: unknown): value is NodeInventoryItem {
     (value.ipv4 !== undefined && !ipv4(value.ipv4)) ||
     (value.ipv6 !== undefined && !ipv6(value.ipv6)) ||
     (value.network_inventory !== undefined && !networkInventory(value.network_inventory, value)) ||
+    (value.market_supply_groups !== undefined && !marketSupplyGroups(value.market_supply_groups)) ||
     !adminStates.has(value.admin_state as NodeAdminState) || !managementSettings(value.management_settings) || !positiveInteger(value.revision) ||
     !timestamp(value.created_at) || !timestamp(value.updated_at) || !record(value.presence)) return false
 

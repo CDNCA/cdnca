@@ -11,6 +11,7 @@ func init() {
 		e("node.batch_admin_state", CategoryNode, "批量启用/停用节点", "changed the admin state of nodes in bulk"),
 		e("node.dnspup_probe.verdict", CategoryNode, "节点 {resource} dnspup 拨测判定变化{changes}（{failed_checks}/{total_checks} 个检测点失败）", "node {resource} dnspup probe verdict changed{changes} ({failed_checks}/{total_checks} checkpoints failed)").f("failed_checks", "total_checks"),
 		e("node.register", CategoryNode, "节点 {resource} 注册到主控", "node {resource} registered with the controller"),
+		e("node.host_delivery.reset", CategoryNode, "节点 {resource} 重装后重置按主机的下发状态并重新发布其配置范围", "reset the per-host delivery state of reinstalled node {resource} and republished its scopes").f("republished_scope_ids"),
 		e("node.registration.identity_fetch", CategoryNode, "节点 {resource} 续装时取回已签发身份", "node {resource} fetched its issued identity to resume installation").f("serial_number", "csr_sha256"),
 		e("node.ssh_install.create", CategoryNode, "新建 SSH 远程安装任务 {resource}（主机 {host}:{port}，用户 {username}）", "created SSH install job {resource} (host {host}:{port}, user {username})").f("host", "port", "username", "batch_id", "auth_kind", "host_key_sha256"),
 		e("node.ssh_install.host_key.confirm", CategoryNode, "确认 SSH 主机 {host} 的指纹并开始安装 {resource}", "confirmed the host key of {host} and started SSH install {resource}").f("host", "port", "username", "batch_id"),

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/marketprobe"
+	"github.com/cdnca/cdnca/services/control-api/internal/marketsupplyguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodescheduler"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,7 +29,7 @@ import (
 const (
 	maxSupplyNodes   = 256
 	supplyGroupPort  = 443
-	supplyGroupLabel = "市场供给 "
+	supplyGroupLabel = marketsupplyguard.GroupNamePrefix
 )
 
 var (

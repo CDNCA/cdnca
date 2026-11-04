@@ -78,13 +78,14 @@ var targets = []target{{
 	table: "node_metric_samples", setting: nodeMetricsSetting,
 	cutoffSQL: `SELECT retention_cleanup_cutoff_320($1)`,
 	deleteSQL: `WITH expired AS (
-		SELECT sample.event_id FROM node_metric_samples sample
+		SELECT sample.event_id, sample.host_epoch FROM node_metric_samples sample
 		WHERE sample.observed_at < retention_cleanup_cutoff_320('node_metrics_days')
 		  AND EXISTS (SELECT 1 FROM node_metric_samples newer
-		      WHERE newer.node_id = sample.node_id AND newer.publication_sequence > sample.publication_sequence)
+		      WHERE newer.node_id = sample.node_id
+		        AND (newer.host_epoch, newer.publication_sequence) > (sample.host_epoch, sample.publication_sequence))
 		ORDER BY sample.observed_at
 		LIMIT $1)
-	DELETE FROM node_metric_samples WHERE event_id IN (SELECT event_id FROM expired)`,
+	DELETE FROM node_metric_samples WHERE (event_id, host_epoch) IN (SELECT event_id, host_epoch FROM expired)`,
 }, {
 	// Node traffic history: keep each node's newest evaluation and every
 	// evaluation a sync task still references.

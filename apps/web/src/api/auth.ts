@@ -116,6 +116,69 @@ function rulePackRefusal(raw: unknown): RulePackRefusal | undefined {
   return refusal
 }
 
+/** One thing that holds a node whose deletion was refused (node_in_use error.details.reasons):
+ * a line group or hidden market supply group (id, name; a supply group also its node count and
+ * normal subscriptions), an L2 configuration, or a count of unfinished cache operations / active
+ * CC coordinations. */
+export interface NodeInUseReason {
+  kind: 'line_group' | 'market_supply' | 'l2' | 'cache_operation' | 'cc_coordination'
+  id?: string
+  name?: string
+  count?: number
+  group_nodes?: number
+  normal_subscriptions?: number
+}
+
+const nodeInUseKinds = new Set(['line_group', 'market_supply', 'l2', 'cache_operation', 'cc_coordination'])
+
+/** The well-formed reasons of a node_in_use refusal (at most 50); others are dropped. */
+export function nodeInUseReasons(raw: unknown): NodeInUseReason[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const count = (value: unknown, minimum: number) => Number.isSafeInteger(value) && Number(value) >= minimum
+  const reasons = raw.slice(0, 50).flatMap((item: unknown): NodeInUseReason[] => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const value = item as Record<string, unknown>
+    if (!nodeInUseKinds.has(value.kind as string)) return []
+    const reason: NodeInUseReason = { kind: value.kind as NodeInUseReason['kind'] }
+    if (typeof value.id === 'string' && challengeUUIDPattern.test(value.id)) reason.id = value.id
+    if (typeof value.name === 'string' && value.name.length > 0 && value.name.length <= 128) reason.name = value.name
+    if (count(value.count, 1)) reason.count = Number(value.count)
+    if (count(value.group_nodes, 1)) reason.group_nodes = Number(value.group_nodes)
+    if (count(value.normal_subscriptions, 0)) reason.normal_subscriptions = Number(value.normal_subscriptions)
+    return [reason]
+  })
+  return reasons.length > 0 ? reasons : undefined
+}
+
+/** What still uses a line group whose delete was refused: package names, counts of
+ * subscription snapshots / sites / streams, and other kinds (escalation, fallback chain). */
+export interface LineGroupReferences {
+  products: string[]
+  subscriptions: number
+  sites: number
+  streams: number
+  other: Array<'escalate_package_policy' | 'escalate_site_route' | 'fallback_last_resort'>
+}
+
+const lineGroupReferenceKinds = new Set(['escalate_package_policy', 'escalate_site_route', 'fallback_last_resort'])
+
+/** The well-formed references of a line group delete refusal (undefined: none named). */
+export function lineGroupReferences(raw: unknown): LineGroupReferences | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const value = raw as Record<string, unknown>
+  const count = (item: unknown) => Number.isSafeInteger(item) && Number(item) > 0 ? Number(item) : 0
+  const list = (item: unknown) => Array.isArray(item) ? item.slice(0, 50) : []
+  const references: LineGroupReferences = {
+    products: list(value.products).filter((name): name is string => typeof name === 'string' && name.length > 0 && name.length <= 128),
+    subscriptions: count(value.subscriptions),
+    sites: count(value.sites),
+    streams: count(value.streams),
+    other: list(value.other).filter((kind): kind is LineGroupReferences['other'][number] => lineGroupReferenceKinds.has(kind as string)),
+  }
+  const named = references.products.length + references.subscriptions + references.sites + references.streams + references.other.length
+  return named > 0 ? references : undefined
+}
+
 /** The node and site of a release refused because the node has not installed
  * the site's JS challenge policy (challenge_policy_unavailable). */
 export interface ChallengePolicyRefusal {
@@ -210,8 +273,12 @@ export class ApiError extends Error {
   declare reasonCode?: string
   /** Retry-After of a 429 response, in seconds (1..86400). */
   declare retryAfter?: number
+  /** What holds a node whose deletion was refused (node_in_use error.details.reasons). */
+  declare nodeInUse?: NodeInUseReason[]
   /** D3: the sites still running a policy whose delete was refused (security_policy_in_use error.details.sites). */
   declare inUseSites?: { id: string; domain: string }[]
+  /** What still uses a line group whose delete was refused (node_scheduling_reference_conflict error.details). */
+  declare lineGroupInUse?: LineGroupReferences
   /** LIC-REC-03: whether an entitlement refresh error installed the lease (error.outcome). */
   declare outcome?: 'not_applied' | 'unknown' | 'applied'
   /** ADD-10: the target a cache operation create refused (invalid_request error.details). */
@@ -293,6 +360,14 @@ export async function responseApiError(response: Response): Promise<ApiError> {
           ? [{ id, domain }] : []
       })
     }
+  }
+  if (code === 'node_in_use') {
+    const reasons = nodeInUseReasons((body?.error?.details as { reasons?: unknown } | undefined)?.reasons)
+    if (reasons) error.nodeInUse = reasons
+  }
+  if (code === 'node_scheduling_reference_conflict') {
+    const references = lineGroupReferences(body?.error?.details)
+    if (references) error.lineGroupInUse = references
   }
   if (code === 'upgrade_target_blocked') {
     const reason = body?.error?.reason_code

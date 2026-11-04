@@ -105,7 +105,7 @@ func (projector *Projector) projectOne(ctx context.Context) (bool, error) {
 	now := projector.config.Now().UTC().Truncate(time.Microsecond)
 	projected := false
 	err := pgx.BeginFunc(ctx, projector.pool, func(tx pgx.Tx) error {
-		publication, found, err := claimGlobalPublication(ctx, tx, now)
+		publication, found, err := claimGlobalPublication(ctx, tx, now, now.Add(-redeliveryCommandTTL))
 		if err != nil || !found {
 			return err
 		}
@@ -134,7 +134,7 @@ func (projector *Projector) projectOne(ctx context.Context) (bool, error) {
 		}
 		for _, siteID := range sites {
 			for _, nodeID := range nodes {
-				command, digest, err := projector.command(ctx, tx, publication, siteID, nodeID, servesSite(serving, siteID, nodeID), now)
+				command, digest, err := projector.command(ctx, tx, publication, siteID, nodeID, servesSite(serving, siteID, nodeID), now, uuid.Nil)
 				if err != nil {
 					return err
 				}
@@ -149,7 +149,7 @@ func (projector *Projector) projectOne(ctx context.Context) (bool, error) {
 					publication_bundle_sha256,canonical_payload_sha256,runtime_snapshot_sha256,signing_key_id,
 					signature_algorithm,state,attempts,available_at,created_at,updated_at,global_revision)
 					VALUES($1,$2,$3,$4,$5,'global',NULL,$6,$7,$8,$9,$10,$11,$12,$13,$13,$13,$14,'ed25519','pending',0,$15,$15,$15,$16)
-					ON CONFLICT(publication_id,node_id,site_id) DO NOTHING`, commandID, installationID,
+					ON CONFLICT(publication_id,node_id,site_id,delivery) DO NOTHING`, commandID, installationID,
 					publication.TenantScopeID, siteID, publication.PolicyID, publication.ID, nodeID,
 					int64(command.PolicyVersion), int64(command.ExpectedActivePolicyVersion), command.IdempotencyKey,
 					encoded, digest[:], publication.DocumentSHA256[:], projector.signer.KeyID(), now, publication.Revision)
@@ -213,7 +213,11 @@ func failUnownedPublication(ctx context.Context, tx pgx.Tx, publication globalPu
 	return err
 }
 
-func claimGlobalPublication(ctx context.Context, tx pgx.Tx, now time.Time) (globalPublication, bool, error) {
+// claimGlobalPublication also waits while a redelivery of the policy is in
+// flight (created after redeliveredSince): the publication's commands expect
+// the active version the nodes report, and a redelivery acked after the
+// projection would move it.
+func claimGlobalPublication(ctx context.Context, tx pgx.Tx, now, redeliveredSince time.Time) (globalPublication, bool, error) {
 	var publication globalPublication
 	var document []byte
 	var digest []byte
@@ -222,8 +226,11 @@ func claimGlobalPublication(ctx context.Context, tx pgx.Tx, now time.Time) (glob
 		WHERE state IN ('pending','retryable') AND available_at<=$1 AND NOT EXISTS(
 			SELECT 1 FROM global_firewall_publication_outbox older WHERE older.tenant_scope_id=outbox.tenant_scope_id
 			AND older.revision<outbox.revision AND older.state NOT IN ('active','failed','rolled_back')
-			AND outbox.operation<>'recover')
-		ORDER BY available_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(&publication.ID, &publication.TenantScopeID,
+			AND outbox.operation<>'recover') AND NOT EXISTS(
+			SELECT 1 FROM firewall_command_outbox redelivery WHERE redelivery.tenant_scope_id=outbox.tenant_scope_id
+			AND redelivery.policy_id=outbox.policy_id AND redelivery.policy_kind='global' AND redelivery.delivery>0
+			AND redelivery.state IN ('pending','retryable','published') AND redelivery.created_at>$2)
+		ORDER BY available_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now, redeliveredSince).Scan(&publication.ID, &publication.TenantScopeID,
 		&publication.PolicyID, &publication.Revision, &publication.Operation, &publication.RecoveryReason, &document, &digest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return globalPublication{}, false, nil
@@ -329,12 +336,32 @@ func queryUUIDs(ctx context.Context, tx pgx.Tx, query string, argument uuid.UUID
 	return values, rows.Err()
 }
 
+// currentHostReceipt: the receipt (an acked command of alias) came from the
+// node's current host, after its latest initial enrollment (as
+// edgedeployment.CurrentHostDeployment bounds deployments). A host
+// reinstalled under the same node ID starts with an empty firewall state.
+func currentHostReceipt(alias string) string {
+	return alias + `.acked_at >= ` + currentHostSince(alias+".node_id")
+}
+
+// currentHostSince is the latest initial enrollment of node (the start of
+// its current host).
+func currentHostSince(node string) string {
+	return `COALESCE((SELECT max(enrollment.issued_at) FROM node_certificates enrollment
+		WHERE enrollment.node_id=` + node + ` AND enrollment.issuance_kind='initial'),'-infinity')`
+}
+
+// command builds and signs the command of publication for (siteID, nodeID).
+// redelivery is uuid.Nil for the publication's own projection; a
+// redelivery's command id seeds its own task, idempotency key and event, and
+// the command applies the publication's document to a host that lacks it.
 func (projector *Projector) command(ctx context.Context, tx pgx.Tx, publication globalPublication, siteID, nodeID uuid.UUID,
-	servesSite bool, now time.Time) (*agentv1.FirewallCommand, [32]byte, error) {
+	servesSite bool, now time.Time, redelivery uuid.UUID) (*agentv1.FirewallCommand, [32]byte, error) {
 	var activeVersion int64
-	err := tx.QueryRow(ctx, `SELECT COALESCE(max(active_policy_version),0) FROM firewall_command_outbox
-		WHERE tenant_scope_id=$1 AND site_id=$2 AND node_id=$3 AND policy_kind='global' AND policy_id=$4
-		AND terminal_state IN ('applied','rolled_back')`, publication.TenantScopeID, siteID, nodeID, publication.PolicyID).Scan(&activeVersion)
+	err := tx.QueryRow(ctx, `SELECT COALESCE(max(receipt.active_policy_version),0) FROM firewall_command_outbox receipt
+		WHERE receipt.tenant_scope_id=$1 AND receipt.site_id=$2 AND receipt.node_id=$3 AND receipt.policy_kind='global'
+		AND receipt.policy_id=$4 AND receipt.terminal_state IN ('applied','rolled_back') AND `+currentHostReceipt("receipt"),
+		publication.TenantScopeID, siteID, nodeID, publication.PolicyID).Scan(&activeVersion)
 	if err != nil {
 		return nil, [32]byte{}, err
 	}
@@ -342,24 +369,27 @@ func (projector *Projector) command(ctx context.Context, tx pgx.Tx, publication 
 	if err != nil {
 		return nil, [32]byte{}, err
 	}
-	taskID := publication.ID.String()
+	seed, taskID, deadline := publication.ID, publication.ID.String(), now.Add(projector.config.CommandTTL)
+	if redelivery != uuid.Nil {
+		seed, taskID, deadline = redelivery, redelivery.String(), now.Add(redeliveryCommandTTL)
+	}
 	operation := agentv1.FirewallOperation_FIREWALL_OPERATION_APPLY
 	recovery := agentv1.FirewallRecoveryReason_FIREWALL_RECOVERY_REASON_NOT_APPLICABLE
-	if publication.Operation == "recover" {
+	if publication.Operation == "recover" && redelivery == uuid.Nil {
 		operation = agentv1.FirewallOperation_FIREWALL_OPERATION_RECOVER
 		recovery = globalRecoveryReason(publication.RecoveryReason)
 		if recovery == agentv1.FirewallRecoveryReason_FIREWALL_RECOVERY_REASON_UNSPECIFIED {
 			return nil, [32]byte{}, ErrInvalidInput
 		}
 	}
-	idempotency := uuid.NewSHA1(publication.ID, []byte("global-firewall\x00"+siteID.String()+"\x00"+nodeID.String())).String()
+	idempotency := uuid.NewSHA1(seed, []byte("global-firewall\x00"+siteID.String()+"\x00"+nodeID.String())).String()
 	command := &agentv1.FirewallCommand{
-		Event: &commonv1.EventMetadata{EventId: uuid.NewSHA1(publication.ID, []byte("event\x00"+siteID.String()+"\x00"+nodeID.String())).String(),
+		Event: &commonv1.EventMetadata{EventId: uuid.NewSHA1(seed, []byte("event\x00"+siteID.String()+"\x00"+nodeID.String())).String(),
 			RequestId: publication.ID.String(), OccurredTime: timestamppb.New(now), CorrelationId: publication.PolicyID.String(), TaskId: &taskID},
 		Schema: agentv1.FirewallSchema_FIREWALL_SCHEMA_V1, TaskId: taskID, TaskRevision: uint64(publication.Revision),
 		IdempotencyKey: idempotency, TenantId: publication.TenantScopeID.String(), SiteId: siteID.String(), NodeId: nodeID.String(),
 		PolicyVersion: uint64(activeVersion + 1), ExpectedActivePolicyVersion: uint64(activeVersion), PolicyKind: "global", PolicyId: publication.PolicyID.String(),
-		Operation: operation, RecoveryReason: recovery, Targets: targets, DeadlineTime: timestamppb.New(now.Add(projector.config.CommandTTL)),
+		Operation: operation, RecoveryReason: recovery, Targets: targets, DeadlineTime: timestamppb.New(deadline),
 		SignatureAlgorithm: agentv1.ArtifactSignatureAlgorithm_ARTIFACT_SIGNATURE_ALGORITHM_ED25519, SigningKeyId: projector.signer.KeyID(),
 	}
 	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(command)

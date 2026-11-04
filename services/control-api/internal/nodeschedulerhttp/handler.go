@@ -697,6 +697,13 @@ func (handler *Handler) writeError(response http.ResponseWriter, request *http.R
 	if located, ok := fielderr.As(err); ok && status == http.StatusBadRequest {
 		body["error"]["details"] = map[string]string{"field": located.Field, "reason": located.Reason}
 	}
+	// A refused line group delete names what still routes to the group.
+	if inUse := new(nodescheduler.LineGroupInUseError); errors.As(err, &inUse) && status == http.StatusConflict {
+		body["error"]["details"] = map[string]any{
+			"products": inUse.Products, "subscriptions": inUse.Subscriptions, "sites": inUse.Sites,
+			"streams": inUse.Streams, "other": inUse.Other,
+		}
+	}
 	handler.writeJSON(response, status, body)
 }
 

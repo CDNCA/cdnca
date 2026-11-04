@@ -2261,7 +2261,7 @@ paths:
       operationId: batchUpdateNodeAdminState
       x-summary-zh: "批量修改节点的管理状态"
       summary: Update one administrative state across a batch of nodes
-      description: Requires nodes.manage in a platform scope. The request accepts at most 100 unique node IDs and preserves input order in the response. Nodes are locked in UUID order, successful items and their audits commit in one transaction, and validation or state failures are returned per item. Replaying the same idempotency key with the same normalized request returns the stored result without another revision or audit event. admin_state retired is the batch delete; it follows updateNode. Each deletion runs in its own savepoint, so a node in use fails alone with node_in_use (or node_not_found) and the others are still deleted; a deleted item reports status updated with the last node snapshot. Disabling or draining the last online available node of a node-market supply that still has a normal subscriber fails that item with supply_in_use (with online_available and normal_subscriptions); items are checked in UUID order against the ones applied before them.
+      description: Requires nodes.manage in a platform scope. The request accepts at most 100 unique node IDs and preserves input order in the response. Nodes are locked in UUID order, successful items and their audits commit in one transaction, and validation or state failures are returned per item. Replaying the same idempotency key with the same normalized request returns the stored result without another revision or audit event. admin_state retired is the batch delete; it follows updateNode. Each deletion runs in its own savepoint, so a node in use fails alone with node_in_use (with reasons, or node_not_found) and the others are still deleted; a deleted item reports status updated with the last node snapshot. Disabling or draining the last online available node of a node-market supply that still has a normal subscriber fails that item with supply_in_use (with online_available and normal_subscriptions); items are checked in UUID order against the ones applied before them.
       security:
         - bearerAuth: []
       parameters:
@@ -2368,8 +2368,9 @@ paths:
         authorization. That authorization records permission to enroll only and does not prove certificate
         persistence, mTLS connectivity, or completed Gateway enrollment. retired is the delete operation and must be
         the only field: it physically deletes the node. It is rejected with node_in_use while the current revision
-        of a live line group or a live L2 configuration lists the node, or while the node takes part in a queued or
-        running cache operation or an active CC coordination. In one transaction it revokes the active
+        of a live line group (hidden node-market supply groups included) or a live L2 configuration lists the node,
+        or while the node takes part in a queued or running cache operation or an active CC coordination;
+        error.details.reasons (NodeInUseReason) names what holds it. In one transaction it revokes the active
         certificates, writes a node.delete audit event (node ID, display ID, name, addresses, revoked certificate
         IDs and serial numbers, deleting user, time), and deletes the node row together with every row that only
         describes the node (certificates, identity, sessions, monitoring samples, deployment receipts, task
@@ -2722,7 +2723,11 @@ paths:
       operationId: issueNodeEnrollmentToken
       x-summary-zh: "签发一次性节点接入令牌"
       summary: Issue a one-time enrollment token
-      description: Requires nodes.manage in a platform scope. platform.admin remains a wildcard permission. The raw token is shown only in this response.
+      description: >-
+        Requires nodes.manage in a platform scope. platform.admin remains a wildcard permission. The raw token is
+        shown only in this response (Cache-Control no-store). A re_enrollment token lets a reinstalled host take over
+        this node: on enrollment the node keeps its ID and administrative state, and the previous host's live
+        certificates are revoked in the same transaction.
       security:
         - bearerAuth: []
       parameters:
@@ -8694,6 +8699,25 @@ components:
               $ref: '#/components/schemas/NodePresence'
             network_inventory:
               $ref: '#/components/schemas/NodeNetworkInventoryStatus'
+            market_supply_groups:
+              type: array
+              description: >-
+                Hidden node-market supply groups whose current revision lists the node (no line group list
+                shows them, but they hold the node against deletion like a line group); omitted when none.
+              minItems: 1
+              items:
+                type: object
+                additionalProperties: false
+                required: [id, name]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                    description: The seller's name of the supply group, without the hidden-group prefix.
     NodeNetworkInventoryStatus:
       type: object
       additionalProperties: false
@@ -9932,6 +9956,25 @@ components:
           description: One-time secret shown only in this response.
           minLength: 43
           maxLength: 43
+        gateway:
+          description: >-
+            Only on POST /v1/nodes/{id}/enrollment-tokens. Direct Gateway entry the console writes into the
+            reinstall command ("Reinstall this node") as --gateway-enrollment-address, --gateway-address and
+            --gateway-server-name, the same values as the registration-credential response. Absent when the
+            preferred entry is a WebSocket (CDN) tunnel or no Gateway entry is published.
+          type: object
+          additionalProperties: false
+          required: [enrollment_address, address, server_name]
+          properties:
+            enrollment_address:
+              type: string
+              pattern: '^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$'
+            address:
+              type: string
+              pattern: '^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$'
+            server_name:
+              type: string
+              pattern: '^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$'
     NodeListResponse:
       type: object
       additionalProperties: false
@@ -10413,6 +10456,42 @@ components:
           type: integer
           minimum: 1
           description: supply_in_use only. Normal (not unpaid-, ticket-stopped or cancelled) subscriptions of the market supply.
+        reasons:
+          type: array
+          minItems: 1
+          description: node_in_use only. What holds the node.
+          items:
+            $ref: '#/components/schemas/NodeInUseReason'
+    NodeInUseReason:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      description: >-
+        One thing that holds a node whose deletion was refused (node_in_use). line_group and market_supply
+        (a hidden node-market supply group, name without the hidden-group prefix) carry id and name, plus for
+        market_supply group_nodes (nodes in its current revision) and normal_subscriptions (as supply_in_use
+        counts them); l2 carries id and name; cache_operation (queued or running) and cc_coordination (active)
+        carry count. At most 20 line groups and supply groups and 20 L2 configurations are named.
+      properties:
+        kind:
+          type: string
+          enum: [line_group, market_supply, l2, cache_operation, cc_coordination]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        count:
+          type: integer
+          minimum: 1
+        group_nodes:
+          type: integer
+          minimum: 1
+        normal_subscriptions:
+          type: integer
+          minimum: 0
     BatchNodeAdminStateItemResult:
       type: object
       additionalProperties: false
@@ -10807,6 +10886,16 @@ components:
                   uniqueItems: true
                   items:
                     type: string
+            - type: object
+              description: Only on node_in_use (node deletion) when what holds the node is known.
+              additionalProperties: false
+              required: [reasons]
+              properties:
+                reasons:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/NodeInUseReason'
             - type: object
               description: Only on supply_in_use (node updates, ADR 0012 ML-18).
               additionalProperties: false

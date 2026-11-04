@@ -32,6 +32,10 @@ import (
 // stopped or cancelled subscription not count.
 const MaxStateAge = 10 * time.Minute
 
+// GroupNamePrefix starts the line group name of every market supply group
+// (marketsupply.SupplyGroups.Put); the seller's own name follows it.
+const GroupNamePrefix = "市场供给 "
+
 // ErrInUse matches every *InUseError.
 var ErrInUse = errors.New("market supply in use: keep at least one online node")
 
@@ -128,6 +132,18 @@ func OnlineAvailable(ctx context.Context, q interface {
 	var count int
 	if err := q.QueryRow(ctx, `SELECT `+groupOnline("$1"), groupID).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count market supply online nodes: %w", err)
+	}
+	return count, nil
+}
+
+// NormalSubscriptions counts the normal subscribers of a supply group (the
+// count Verify refuses with); a refused node deletion reports it.
+func NormalSubscriptions(ctx context.Context, q interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, groupID uuid.UUID) (int, error) {
+	var count int
+	if err := q.QueryRow(ctx, `SELECT `+normalSubscriptions, groupID, MaxStateAge.Seconds()).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count market supply normal subscriptions: %w", err)
 	}
 	return count, nil
 }

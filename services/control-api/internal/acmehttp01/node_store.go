@@ -14,6 +14,7 @@ import (
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/acmeworker"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -327,16 +328,21 @@ func (s *NodeStore) ChallengeStatus(ctx context.Context, challenge acmeworker.Ch
 	return status, rows.Err()
 }
 
-// served: the latest healthy generation carries the same host and token.
+// served: the latest healthy generation carries the same host and token and
+// was made for the node's current host (a reinstalled node, same node ID, new
+// host, holds nothing its previous host was sent; its latest healthy pointer
+// may only advance, so the generation's age is the proof).
 // failed: the newest attempt of the current generation is terminal and no
 // retry follows (attempts exhausted or not retryable).
-const nodeChallengeStatusSQL = `
+var nodeChallengeStatusSQL = `
 	SELECT target.node_id,
 	       EXISTS (
 	           SELECT 1 FROM acme_http01_node_overlay_generation_tokens token
+	           JOIN acme_http01_node_overlay_generations healthy ON healthy.id=token.generation_id
 	           JOIN acme_http01_node_challenges served ON served.tenant_scope_id=token.tenant_scope_id
 	            AND served.operation_id=token.operation_id AND served.attempt_id=token.attempt_id
 	           WHERE token.generation_id=state.latest_healthy_generation_id
+	             AND ` + edgedeployment.CurrentHostDeployment("healthy") + `
 	             AND served.domain=challenge.domain AND served.token_sha256=challenge.token_sha256
 	       ),
 	       COALESCE((
@@ -1147,8 +1153,10 @@ type NodeReconcileResult struct {
 
 // Reconcile times out attempts past their deadline (retrying them), gives a
 // node a new generation once its current one carries a withdrawn or expiring
-// token, and re-delivers the current generation to a node that still serves
-// stale tokens after its attempts were exhausted.
+// token, re-delivers the current generation to a node that still serves
+// stale tokens after its attempts were exhausted, and gives a reinstalled
+// node whose current generation carrying live tokens was healthy only on its
+// previous host a new one.
 func (s *NodeStore) Reconcile(ctx context.Context, limit int) (NodeReconcileResult, error) {
 	if ctx == nil || limit < 1 || limit > 1000 {
 		return NodeReconcileResult{}, ErrInvalidConfig
@@ -1213,7 +1221,10 @@ func (s *NodeStore) Reconcile(ctx context.Context, limit int) (NodeReconcileResu
 		       ) OR current.deadline_at <= $1 AND (current.token_count > 0 OR current.cleanup_debt_coverage_count > 0)
 		       OR EXISTS (SELECT 1 FROM acme_http01_overlay_backfill_nodes backfill
 		                  WHERE backfill.node_id=state.node_id AND backfill.state='pending') AS regenerate,
-		       latest.generation_id,latest.attempt,current.deadline_at
+		       latest.generation_id,latest.attempt,current.deadline_at,
+		       state.latest_healthy_generation_id=state.current_generation_id AND current.token_count > 0
+		       AND NOT `+edgedeployment.CurrentHostDeployment("current")+` AS reinstalled,
+		       state.current_generation
 		FROM acme_http01_node_overlay_states state
 		JOIN acme_http01_node_overlay_generations current ON current.id=state.current_generation_id
 		LEFT JOIN acme_http01_node_overlay_generations healthy ON healthy.id=state.latest_healthy_generation_id
@@ -1239,6 +1250,8 @@ func (s *NodeStore) Reconcile(ctx context.Context, limit int) (NodeReconcileResu
 		                               WHERE resolved.debt_id=debt.id
 		                                 AND resolved.event IN ('resolved_cleanup','resolved_required'))))
 		       AND latest.state IN ('failed','timed_out') AND latest.updated_at <= $2)
+		   OR (state.latest_healthy_generation_id=state.current_generation_id AND current.token_count > 0
+		       AND NOT `+edgedeployment.CurrentHostDeployment("current")+`)
 		ORDER BY state.node_id LIMIT $3`,
 		now.Add(s.config.ExpiryMargin), now.Add(-s.config.StaleRetryInterval), limit)
 	if err != nil {
@@ -1250,10 +1263,13 @@ func (s *NodeStore) Reconcile(ctx context.Context, limit int) (NodeReconcileResu
 		generationID *uuid.UUID
 		attempt      *int
 		deadline     time.Time
+		reinstalled  bool
+		current      int64
 	}
 	nodes, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (stale, error) {
 		var value stale
-		return value, row.Scan(&value.nodeID, &value.regenerate, &value.generationID, &value.attempt, &value.deadline)
+		return value, row.Scan(&value.nodeID, &value.regenerate, &value.generationID, &value.attempt, &value.deadline,
+			&value.reinstalled, &value.current)
 	})
 	if err != nil {
 		return result, err
@@ -1264,6 +1280,20 @@ func (s *NodeStore) Reconcile(ctx context.Context, limit int) (NodeReconcileResu
 				return err
 			}
 			now := s.now()
+			if item.reinstalled && !item.regenerate {
+				// The node's current generation is healthy on its previous host
+				// (made before the node's newest enrollment): the reinstalled host
+				// holds none of its live tokens and no attempt is left to send it.
+				// A generation above it carries the same tokens to the new host
+				// (the agent takes any higher revision); a writer that moved the
+				// node on in between makes the floor a no-op.
+				if err := s.settle(ctx, tx, nil, map[uuid.UUID]bool{item.nodeID: true}, now,
+					map[uuid.UUID]int64{item.nodeID: item.current + 1}); err != nil {
+					return err
+				}
+				result.Regenerated++
+				return nil
+			}
 			if item.regenerate || item.generationID == nil || !item.deadline.After(now.Add(s.config.AttemptTimeout)) {
 				if err := s.settle(ctx, tx, nil, map[uuid.UUID]bool{item.nodeID: true}, now, nil); err != nil {
 					return err

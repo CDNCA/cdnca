@@ -128,7 +128,14 @@ func (s *Server) writeNodeLifecycleError(w http.ResponseWriter, r *http.Request,
 			Message:   "the node is the last online node of a market supply that still has normal subscribers",
 			RequestID: requestID(r.Context()), Details: details}})
 	case errors.Is(err, node.ErrInUse):
-		s.writeAPIError(w, r, http.StatusConflict, "node_in_use", "node is still used by a line group, an L2 configuration or unfinished multi-node work")
+		var inUse *node.InUseError
+		var details any
+		if errors.As(err, &inUse) {
+			details = nodeInUseDetails{Reasons: inUse.Reasons}
+		}
+		writeJSONStatus(w, http.StatusConflict, errorEnvelope{Error: apiError{Code: "node_in_use",
+			Message:   "node is still used by a line group, an L2 configuration or unfinished multi-node work",
+			RequestID: requestID(r.Context()), Details: details}})
 	default:
 		s.writeError(w, r, err)
 	}
@@ -139,4 +146,11 @@ func (s *Server) writeNodeLifecycleError(w http.ResponseWriter, r *http.Request,
 type supplyInUseDetails struct {
 	OnlineAvailable     int `json:"online_available"`
 	NormalSubscriptions int `json:"normal_subscriptions"`
+}
+
+// nodeInUseDetails: what holds a node whose deletion was refused
+// (line groups and market supply groups by name, L2 configurations,
+// unfinished cache operations, active CC coordinations).
+type nodeInUseDetails struct {
+	Reasons []node.InUseReason `json:"reasons"`
 }

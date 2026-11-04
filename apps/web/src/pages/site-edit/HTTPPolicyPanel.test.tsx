@@ -243,6 +243,33 @@ describe('HTTPPolicyPanel', () => {
     expect(vi.mocked(httpPoliciesApi.update).mock.calls[1]).toEqual(frozen)
   })
 
+  // 结果未知时可「放弃并刷新」退出（重试进行中禁用），放弃后重新读取并解锁编辑。
+  it('abandons an unknown update only when no retry is in flight, then refetches and unlocks editing', async () => {
+    vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
+    let rejectRetry!: (reason: unknown) => void
+    vi.mocked(httpPoliciesApi.update)
+      .mockRejectedValueOnce(new ApiError('lost', 503, 'service_unavailable'))
+      .mockReturnValueOnce(new Promise((_, reject) => { rejectRetry = reject }))
+    const user = userEvent.setup()
+    renderPanel(['http_policies.read', 'http_policies.manage'])
+    const upload = await screen.findByLabelText('上传大小上限（字节）')
+    await user.clear(upload)
+    await user.type(upload, '4096')
+    fireEvent.blur(upload)
+    await screen.findByText('操作结果尚未确认', { selector: '.cdnca-outcome-bar .ant-alert-message' })
+    expect(screen.getByLabelText('上传大小上限（字节）')).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '按原请求重试' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '放弃并刷新' })).toBeDisabled())
+    rejectRetry(new ApiError('lost', 503, 'service_unavailable'))
+    await waitFor(() => expect(screen.getByRole('button', { name: '放弃并刷新' })).toBeEnabled())
+    const reads = vi.mocked(httpPoliciesApi.list).mock.calls.length
+    await user.click(screen.getByRole('button', { name: '放弃并刷新' }))
+    await waitFor(() => expect(vi.mocked(httpPoliciesApi.list).mock.calls.length).toBeGreaterThan(reads))
+    await waitFor(() => expect(screen.queryByRole('button', { name: '按原请求重试' })).not.toBeInTheDocument())
+    expect(screen.getByLabelText('上传大小上限（字节）')).toBeEnabled()
+    expect(httpPoliciesApi.update).toHaveBeenCalledTimes(2)
+  })
+
   it('uses the current revision for disable and delete, and exposes only the current-site preview summary', async () => {
     vi.mocked(httpPoliciesApi.list).mockResolvedValue({ items: [policy] })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)

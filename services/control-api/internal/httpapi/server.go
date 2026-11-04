@@ -2262,7 +2262,8 @@ func (s *Server) handleIssueEnrollmentToken(w http.ResponseWriter, r *http.Reque
 		s.writeError(w, r, err)
 		return
 	}
-	writeJSONStatus(w, http.StatusCreated, issued)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSONStatus(w, http.StatusCreated, issuedEnrollmentTokenResponse{IssuedToken: issued, Gateway: s.installGateway(r.Context())})
 }
 
 func (s *Server) authenticatedSessionPrincipal(r *http.Request) (identity.Principal, error) {

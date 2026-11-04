@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -112,7 +113,7 @@ func validateChallengePolicyTargets(ctx context.Context, tx pgx.Tx, scopeID uuid
 			 AND version.configuration_scope_id=rollout.configuration_scope_id
 			JOIN node_deployments deployment ON deployment.rollout_id=rollout.id AND deployment.state='healthy'
 			WHERE rollout.configuration_scope_id=$1 AND version.generator_name=$5
-			  AND deployment.node_id=ANY($2::uuid[]))
+			  AND deployment.node_id=ANY($2::uuid[]) AND `+edgedeployment.CurrentHostDeployment("deployment")+`)
 		SELECT installed.node_id,wanted.policy_id,wanted.policy_version FROM installed JOIN wanted
 		  ON (installed.policy->>'policy_version')::bigint=wanted.policy_version
 		 AND jsonb_path_exists(installed.policy,'strict $.rules[*] ? (@.rule_id == $id)',

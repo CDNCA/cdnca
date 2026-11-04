@@ -227,11 +227,14 @@ func terminalState(state agentv1.FirewallStatusState) string {
 func (t *postgresTx) settleGlobalPublication(ctx context.Context, commandID uuid.UUID, now time.Time) error {
 	var publicationID uuid.UUID
 	var kind string
-	if err := t.tx.QueryRow(ctx, `SELECT publication_id,policy_kind FROM firewall_command_outbox WHERE id=$1`, commandID).
-		Scan(&publicationID, &kind); err != nil {
+	var delivery int
+	if err := t.tx.QueryRow(ctx, `SELECT publication_id,policy_kind,delivery FROM firewall_command_outbox WHERE id=$1`, commandID).
+		Scan(&publicationID, &kind, &delivery); err != nil {
 		return err
 	}
-	if kind != "global" {
+	// A redelivery (delivery>0, firewallcontrol.Redeliverer) brings one node
+	// up to the already settled publication: its receipt settles nothing.
+	if kind != "global" || delivery > 0 {
 		return nil
 	}
 	var operation string
@@ -244,7 +247,8 @@ func (t *postgresTx) settleGlobalPublication(ctx context.Context, commandID uuid
 		count(*) FILTER (WHERE command.state IN ('acked','failed')),
 		count(*) FILTER (WHERE command.terminal_state='applied'),
 		count(*) FILTER (WHERE command.terminal_state='rolled_back')
-		FROM firewall_command_outbox command WHERE command.publication_id=$1 AND command.policy_kind='global'`, publicationID).
+		FROM firewall_command_outbox command WHERE command.publication_id=$1 AND command.policy_kind='global'
+		AND command.delivery=0`, publicationID).
 		Scan(&total, &terminal, &applied, &rolledBack)
 	if err != nil || total == 0 || terminal != total {
 		return err

@@ -196,7 +196,7 @@ func sweepChallengeRedeliveriesTx(ctx context.Context, tx pgx.Tx, scopeID uuid.U
 			 AND version.configuration_scope_id=rollout.configuration_scope_id
 			JOIN node_deployments deployment ON deployment.rollout_id=rollout.id
 			WHERE rollout.configuration_scope_id=$1 AND version.generator_name=$3
-			  AND deployment.node_id=ANY($2::uuid[])
+			  AND deployment.node_id=ANY($2::uuid[]) AND `+edgedeployment.CurrentHostDeployment("deployment")+`
 			  AND (deployment.state='healthy' OR deployment.state NOT IN ('failed','reverted','rollback_failed')
 			       AND deployment.deadline_at>clock_timestamp())),
 		need AS (

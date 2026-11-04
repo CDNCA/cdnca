@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Result, Select, Spin, Table, type TableColumnsType } from 'antd'
+import { Alert, Button, Form, Input, Modal, Result, Select, Space, Spin, Table, type TableColumnsType } from 'antd'
 import { useFormSubmitError, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { Pencil, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +11,7 @@ import { siteGroupsApi, type AdminSiteGroup, type SiteGroup } from '../api/siteG
 import { usersApi, type ManagedUser } from '../api/users'
 import { useSessionStore } from '../auth/session'
 import { clearSiteGroupRetry, persistSiteGroupRetry, restoreSiteGroupRetry, type SiteGroupAttempt, type SiteGroupRetry, type SiteGroupRetryOwner } from './siteGroupRetryRecord'
+import { useConfirmUnconfirmedClose } from '../hooks/useConfirmUnconfirmedClose'
 import './SiteGroupsPage.css'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -55,6 +56,8 @@ function createForState(state: unknown): CreateFor | null {
 
 function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal: Principal }) {
   const { t } = useTranslation('siteGroups')
+  const { t: tu } = useTranslation('unconfirmedClose')
+  const confirmClose = useConfirmUnconfirmedClose()
   const location = useLocation()
   const navigate = useNavigate()
   const [createFor] = useState(() => createForState(location.state))
@@ -254,13 +257,26 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
     return <Result status="403" title={t('errors.forbiddenTitle')} subTitle={t('errors.forbiddenDescription')} />
   }
   const writeLocked = pending || Boolean(journal) || blocked
+  // 放弃未确认的请求：清掉原请求记录并刷新列表核对是否已生效。请求进行中不能放弃、不能关弹窗；
+  // 结果未确认时关弹窗先确认，确认后放弃并关闭。
+  const abandon = () => {
+    if (pending || !journalRef.current) return
+    if (!finish()) return
+    setNotice(null)
+    void query.refetch()
+  }
+  const leave = (close: () => void) => {
+    if (pending) return
+    if (!journalRef.current) { close(); return }
+    confirmClose(() => { abandon(); close() })
+  }
   const items = !query.isError ? query.data?.items ?? [] : []
   const nextAttempt = journal?.items.find((item) => item.phase !== 'done')
   const readOnlyRetry = !nextAttempt || nextAttempt.phase === 'accepted'
   // Only once the request has stopped. OutcomeUnknown opens its own dialog, and a
   // closed antd Modal stops updating its content, so one rendered in flight stayed after a success.
   const retryPanel = blocked ? <Alert type="error" showIcon message={t('errors.storage')} /> : journal && !pending ?
-    <OutcomeUnknown title={t(notice ?? (readOnlyRetry ? 'errors.readback' : nextAttempt?.phase === 'unknown' ? 'errors.unknown' : 'errors.continueBatch'))} action={<Button size="small" loading={pending} disabled={!readOnlyRetry && !canManage} onClick={() => void runJournal(!readOnlyRetry)}>{t(readOnlyRetry ? 'actions.retryRead' : nextAttempt?.phase === 'unknown' ? 'actions.retryWrite' : 'actions.continueBatch')}</Button>} /> : null
+    <OutcomeUnknown title={t(notice ?? (readOnlyRetry ? 'errors.readback' : nextAttempt?.phase === 'unknown' ? 'errors.unknown' : 'errors.continueBatch'))} action={<Space size={4}><Button size="small" loading={pending} disabled={!readOnlyRetry && !canManage} onClick={() => void runJournal(!readOnlyRetry)}>{t(readOnlyRetry ? 'actions.retryRead' : nextAttempt?.phase === 'unknown' ? 'actions.retryWrite' : 'actions.continueBatch')}</Button><Button size="small" disabled={pending} onClick={abandon}>{tu('abandonRefresh')}</Button></Space>} /> : null
   const columns: TableColumnsType<SiteGroup> = [
     { title: t('columns.id'), dataIndex: 'display_id', width: 90, render: (value?: string) => value ?? t('unknownValue') },
     ...(platform ? [{ title: t('columns.user'), key: 'user', render: (_: unknown, value: SiteGroup) => {
@@ -296,8 +312,8 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
         onChange: (next, size) => { setSelectedKeys([]); setPage(size !== limit ? 1 : next); setLimit(size) } }} locale={{ emptyText: query.isPending ? ' ' : t('empty') }} />
     <Modal className="site-groups-editor" width={560} open={Boolean(editor)} title={editor?.item ? t('editor.renameTitle') : t('editor.createTitle')} okText={t('actions.save')} cancelText={t('actions.cancel')} confirmLoading={pending}
       okButtonProps={{ disabled: writeLocked || platform && !editor?.item && !selectedUser }}
-      closable={!writeLocked} maskClosable={!writeLocked} keyboard={!writeLocked} cancelButtonProps={{ disabled: writeLocked }}
-      onCancel={() => { if (!writeLocked) { draftGeneration.current += 1; setEditor(null) } }} onOk={() => {
+      closable={!pending} maskClosable={!pending} keyboard={!pending} cancelButtonProps={{ disabled: pending }}
+      onCancel={() => leave(() => { draftGeneration.current += 1; setEditor(null) })} onOk={() => {
         const generation = draftGeneration.current
         void form.validateFields().then((values) => {
           if (!editor || generation !== draftGeneration.current || writeLocked) return
@@ -324,8 +340,8 @@ function SiteGroupsScope({ ownerKey, principal }: { ownerKey: string; principal:
       </Form>
     </Modal>
     <Modal open={removeTargets.length > 0} title={t('delete.title')} okText={t('actions.delete')} okButtonProps={{ danger: true, disabled: writeLocked }} cancelText={t('actions.cancel')} confirmLoading={pending}
-      closable={!writeLocked} maskClosable={!writeLocked} keyboard={!writeLocked} cancelButtonProps={{ disabled: writeLocked }}
-      onCancel={() => { if (!writeLocked) setRemoveTargets([]) }} onOk={() => submitGroup(removeTargets.map((item) => ({ action: 'delete', id: item.id, revision: item.revision, scope: item.scope_id })))}>
+      closable={!pending} maskClosable={!pending} keyboard={!pending} cancelButtonProps={{ disabled: pending }}
+      onCancel={() => leave(() => setRemoveTargets([]))} onOk={() => submitGroup(removeTargets.map((item) => ({ action: 'delete', id: item.id, revision: item.revision, scope: item.scope_id })))}>
       {retryPanel}
       <p>{t('delete.description', { name: removeTargets.map((item) => item.name).join('、') })}</p>
     </Modal>

@@ -209,9 +209,13 @@ describe('SiteDefaultsPanel', () => {
     expect(fetchSpy.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false)
   })
 
-  it('keeps the editor open on X/Esc while the outcome is unknown (SITE-CURRENT-04)', async () => {
+  // SITE-CURRENT-04：请求进行中 X/取消不能关；结果未确认时可关，关闭先确认，确认后关闭并刷新列表。
+  it('locks closing only while saving and lets an unknown outcome close after a warning, then refreshes (SITE-CURRENT-04)', async () => {
+    let failWrite!: (reason: unknown) => void
+    let reads = 0
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
-      if (init?.method === 'POST') throw new TypeError('network down')
+      if (init?.method === 'POST') return new Promise<Response>((_, reject) => { failWrite = reject })
+      reads += 1
       return json({ items: [], total: 0, page: 1, limit: 10 })
     })
     const user = userEvent.setup({ delay: null })
@@ -220,10 +224,18 @@ describe('SiteDefaultsPanel', () => {
     const dialog = dialogs()[0]
     await user.type(within(dialog).getByRole('textbox', { name: '设置值' }), '8080')
     await user.click(within(dialog).getByRole('button', { name: '确定' }))
-    expect(await within(dialog).findByRole('button', { name: '重试' })).toBeInTheDocument()
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled())
     expect(dialog.querySelector('.ant-modal-close')).toBeNull()
-    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape', keyCode: 27 })
-    expect(within(dialog).getByRole('button', { name: '重试' })).toBeInTheDocument()
+    failWrite(new TypeError('network down'))
+    expect(await within(dialog).findByRole('button', { name: '重试' })).toBeEnabled()
+    expect(within(dialog).getByRole('textbox', { name: '设置值' })).toBeDisabled()
+    expect(dialog.querySelector('.ant-modal-close')).not.toBeNull()
+    const before = reads
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    const confirm = (await screen.findByText('结果尚未确认，关闭后请刷新列表核对是否已生效')).closest<HTMLElement>('.ant-modal-confirm')!
+    await user.click(within(confirm).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(reads).toBeGreaterThan(before))
+    await waitFor(() => expect(screen.getByRole('button', { name: /新增设置/ })).toBeEnabled())
   })
 
   // fp-site7 #4/#31：区域屏蔽预设按取值单选，列表按文案显示

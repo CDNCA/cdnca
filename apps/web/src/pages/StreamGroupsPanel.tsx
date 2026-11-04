@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, Modal, Pagination, Select, Table, type TableColumnsType } from 'antd'
+import { Alert, Button, Form, Input, Modal, Pagination, Select, Space, Table, type TableColumnsType } from 'antd'
 import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { Plus, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -20,6 +20,7 @@ import { useSessionStore } from '../auth/session'
 import { hasStreamReadPermission } from './streamForm'
 import { useStreamPanelWrites } from './StreamGroupsState'
 import '../i18n/streamPanels'
+import '../i18n/unconfirmedClose'
 
 interface GroupFormValues extends StreamGroupFields {
   owner_id?: string
@@ -76,6 +77,7 @@ export default function StreamGroupsPanel({
 }) {
   const { t } = useTranslation('streams')
   const { t: tp } = useTranslation('streamPanels')
+  const { t: tu } = useTranslation('unconfirmedClose')
   const queryClient = useQueryClient()
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
@@ -250,7 +252,7 @@ export default function StreamGroupsPanel({
         </div>
       </div>
 
-      {writes.uncertain ? <OutcomeUnknown className="identity-alert" title={tp('unknown')} detail={tp('unknownDescription')} action={canManageGroups ? <Button size="small" loading={pending} disabled={pending || lockWrites || query.isFetching || forbidden} onClick={writes.retry}>{tp('retryExact')}</Button> : undefined} /> : writeError ? <FeedbackWhen title={t('groups.writeFailed')} detail={groupErrorMessage(writeError, t)} onClose={writes.clearError} /> : null}
+      {writes.uncertain ? <OutcomeUnknown className="identity-alert" title={tp('unknown')} detail={tp('unknownDescription')} action={<Space size={4}><Button size="small" disabled={pending} onClick={writes.abandon}>{tu('abandonRefresh')}</Button>{canManageGroups ? <Button size="small" loading={pending} disabled={pending || lockWrites || query.isFetching || forbidden} onClick={writes.retry}>{tp('retryExact')}</Button> : null}</Space>} /> : writeError ? <FeedbackWhen title={t('groups.writeFailed')} detail={groupErrorMessage(writeError, t)} onClose={writes.clearError} /> : null}
       {query.isError ? <FeedbackWhen title={t('groups.listFailed')} detail={query.error instanceof ApiError ? groupErrorMessage(query.error, t) : t('errors.requestFailed')} action={<Button size="small" onClick={() => void query.refetch()}>{t('actions.retry')}</Button>} /> : null}
       <div className="identity-table-scroll" data-testid="stream-group-table-scroll" aria-busy={query.isPending || query.isFetching}>
         <Table<StreamGroup>

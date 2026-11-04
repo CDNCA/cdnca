@@ -88,12 +88,16 @@ func (store *PostgresStore) Put(ctx context.Context, sample Sample) (bool, error
 		var existing []byte
 		var pubAckStream, consumerDurable string
 		var pubAckSequence uint64
+		// A reinstalled host (migration 626 host_epoch) repeats the previous
+		// host's event IDs and sequences, so the stored copy of this very
+		// publication (same puback) is preferred over a namesake; any other
+		// match is a conflict.
 		err = tx.QueryRow(ctx, `
 			SELECT wire_sha256, puback_stream, puback_sequence, consumer_durable
 			FROM node_metric_samples
 			WHERE event_id=$1::uuid OR (node_id=$2::uuid AND publication_sequence=$3)
 			   OR (puback_stream=$4 AND puback_sequence=$5)
-			ORDER BY event_id=$1::uuid DESC LIMIT 1`, sample.EventID, sample.NodeID,
+			ORDER BY (puback_stream=$4 AND puback_sequence=$5) DESC, event_id=$1::uuid DESC LIMIT 1`, sample.EventID, sample.NodeID,
 			sample.PublicationSequence, sample.PubAckStream, sample.PubAckSequence).Scan(
 			&existing, &pubAckStream, &pubAckSequence, &consumerDurable)
 		if err != nil || !bytes.Equal(existing, sample.WireSHA256[:]) ||

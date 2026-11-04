@@ -460,8 +460,8 @@
    "auth": [
     "bearer"
    ],
-   "description": "A tenant session deletes line groups of its own scope; a platform session without target_scope_id deletes line groups of this control plane's platform scope, and naming a tenant scope returns 403. After deletion the line group is hidden from the list, current detail, history detail, probes and new topology snapshots; the same idempotency key can be replayed.",
-   "description_zh": "租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。",
+   "description": "A tenant session deletes line groups of its own scope; a platform session without target_scope_id deletes line groups of this control plane's platform scope, and naming a tenant scope returns 403. After deletion the line group is hidden from the list, current detail, history detail, probes and new topology snapshots; the same idempotency key can be replayed. While an undeleted package (spec node_group_id / backup_node_group_id), subscription snapshot, site, stream, escalation policy or route, or the fallback chain's last resort still uses the line group, it returns 409 node_scheduling_reference_conflict with what holds it in error.details (LineGroupReferences) and deletes nothing.",
+   "description_zh": "租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。仍被未删除的套餐（spec 的 node_group_id / backup_node_group_id）、订阅快照、网站、四层转发、攻击升级策略或路由、兜底链最后一级使用时返回 409 node_scheduling_reference_conflict，error.details（LineGroupReferences）列出引用方，不删除。",
    "params": [
     {
      "name": "id",

@@ -55,6 +55,35 @@ var (
 	ErrStorageExceedsDisk = errors.New("node cache limit exceeds the disk")
 )
 
+// What holds a node a deletion was refused for (InUseReason.Kind).
+const (
+	InUseLineGroup      = "line_group"
+	InUseMarketSupply   = "market_supply"
+	InUseL2             = "l2"
+	InUseCacheOperation = "cache_operation"
+	InUseCCCoordination = "cc_coordination"
+)
+
+// InUseReason is one thing that holds a node a deletion was refused for:
+// a line group or market supply group (ID, Name; a supply group's name
+// without the hidden-group prefix, its node count and normal subscriptions),
+// an L2 configuration (ID, Name), or Count unfinished cache operations or
+// active CC coordinations.
+type InUseReason struct {
+	Kind                string `json:"kind"`
+	ID                  string `json:"id,omitempty"`
+	Name                string `json:"name,omitempty"`
+	Count               *int   `json:"count,omitempty"`
+	GroupNodes          *int   `json:"group_nodes,omitempty"`
+	NormalSubscriptions *int   `json:"normal_subscriptions,omitempty"`
+}
+
+// InUseError is a deletion refused with ErrInUse, with what holds the node.
+type InUseError struct{ Reasons []InUseReason }
+
+func (e *InUseError) Error() string { return ErrInUse.Error() }
+func (e *InUseError) Unwrap() error { return ErrInUse }
+
 type Actor struct {
 	UserID  uuid.UUID
 	ScopeID uuid.UUID
@@ -220,6 +249,8 @@ type BatchAdminStateRequest struct {
 
 type BatchItemError struct {
 	Code string `json:"code"`
+	// What holds the node of a node_in_use refusal (when known).
+	Reasons []InUseReason `json:"reasons,omitempty"`
 	// Counts of a supply_in_use refusal (ADR 0012 ML-18).
 	OnlineAvailable     *int `json:"online_available,omitempty"`
 	NormalSubscriptions *int `json:"normal_subscriptions,omitempty"`

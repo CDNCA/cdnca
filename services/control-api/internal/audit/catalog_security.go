@@ -17,6 +17,9 @@ func init() {
 		e("security_policy.quick_block", CategorySecurity, "快速屏蔽 {resource}", "quick-blocked {resource}"),
 		e("firewall.policy.put", CategorySecurity, "修改网站 {resource} 的防火墙策略{changes}", "updated the firewall policy of site {resource}{changes}"),
 		e("firewall.policy.recover", CategorySecurity, "恢复网站 {resource} 的防火墙策略", "recovered the firewall policy of site {resource}"),
+		// 新加入、同 ID 重装或恢复上线而没有当前全局防火墙策略的节点，由系统补发。
+		e("firewall.policy.redeliver", CategorySecurity, "系统向节点 {resource} 补发全局防火墙策略（第 {revision} 版，{sites} 个网站）",
+			"the system redelivered global firewall policy revision {revision} ({sites} sites) to node {resource}").f("revision", "sites", "policy_id", "node_id"),
 		e("firewall.action.put", CategorySecurity, "修改网站 {resource} 的防火墙动作{changes}", "updated the firewall action of site {resource}{changes}"),
 		e("firewall.action.enable", CategorySecurity, "启用网站 {resource} 的防火墙动作（WAF 攻击自动封禁）", "enabled the firewall action of site {resource}"),
 		e("firewall.action.disable", CategorySecurity, "停用网站 {resource} 的防火墙动作（WAF 攻击自动封禁）", "disabled the firewall action of site {resource}"),
@@ -86,6 +89,9 @@ func init() {
 		// fix-dnscert4：用户改绑/发布同一网站时，进行中的续签下发让位并撤销，之后按新绑定重新安排。
 		e("certificate.renewal.superseded_by_user", CategoryCert, "修改了网站 {site_id} 的证书，进行中的续签证书 {resource} 下发已撤销，将按新的绑定重新安排",
 			"changed the certificate of site {site_id}; the in-flight delivery of renewed certificate {resource} was withdrawn and will be rescheduled for the new binding").f("site_id", "rollout_id", "attempt", "reason_code"),
+		// 新加入线路组、重装或恢复上线而缺证书的节点，由系统补发站点在用的证书版本。
+		e("certificate.redelivery.deliver", CategoryCert, "系统向节点 {resource} 补发 {sites} 个网站在用的证书",
+			"the system redelivered the certificates of {sites} sites to node {resource}").f("sites", "rollout_id", "node_id"),
 		e("certificate.challenge.terminal_cleanup", CategoryCert, "清理证书申请 {resource} 的验证记录", "cleaned up the challenge records of order {resource}"),
 		e("certificate.publication.recover", CategoryCert, "重新下发证书 {resource}", "re-published certificate {resource}"),
 		e("certificate.publication.unpublish", CategoryCert, "从节点撤下证书 {resource}", "withdrew certificate {resource} from nodes"),

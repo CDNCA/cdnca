@@ -370,6 +370,69 @@ func SiteTargetNodeIDsTx(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UU
 	return lineGroupNodeIDs(ctx, tx, scopeID, &siteID, nil)
 }
 
+// SitesTargetNodeIDsTx is SiteTargetNodeIDsTx for many sites in one query
+// (the same two site branches of lineGroupNodeIDs, filtered by site.id=ANY):
+// each live site of siteIDs with the nodes that serve it, sorted. A site
+// served by no node is absent. Certificate redelivery reads it every sweep.
+func SitesTargetNodeIDsTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs []uuid.UUID,
+) (map[uuid.UUID][]uuid.UUID, error) {
+	if ctx == nil || tx == nil || scopeID == uuid.Nil {
+		return nil, ErrInvalidInput
+	}
+	result := map[uuid.UUID][]uuid.UUID{}
+	if len(siteIDs) == 0 {
+		return result, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT site.id,endpoint.node_id
+		FROM sites site
+		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
+		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN escalate_site_routes route ON route.tenant_scope_id=site.scope_id AND route.site_id=site.id
+		JOIN node_line_groups line_group ON line_group.deleted_at IS NULL AND line_group.id IN (
+		     site.node_group_id,
+		     (subscription.product_snapshot->'spec'->>'node_group_id')::uuid,
+		     (subscription.product_snapshot->'spec'->>'backup_node_group_id')::uuid,
+		     route.line_group_id, route.next_group_id)
+		JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=line_group.tenant_scope_id
+		 AND endpoint.line_group_id=line_group.id AND endpoint.config_revision=line_group.current_revision
+		 AND endpoint.enabled AND endpoint.node_id IS NOT NULL
+		JOIN nodes node ON node.id=endpoint.node_id AND node.admin_state='active'
+		JOIN access_scopes node_scope ON node_scope.id=node.scope_id
+		WHERE site.scope_id=$1 AND site.deleted_at IS NULL AND site.id=ANY($2::uuid[])
+		  AND line_group.tenant_scope_id IN (site.scope_id, node.scope_id)
+		  AND (node.scope_id=$1 OR node_scope.kind='platform')
+		UNION
+		SELECT site.id,member.node_id
+		FROM sites site
+		JOIN site_origin_pools pool ON pool.site_id=site.id AND pool.l2_mode<>'off'
+		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=site.scope_id
+		 AND subscription.id=site.package_subscription_id AND subscription.deleted_at IS NULL
+		LEFT JOIN node_line_groups line_group ON pool.l2_mode='package' AND line_group.deleted_at IS NULL
+		 AND line_group.id=COALESCE(site.node_group_id, (subscription.product_snapshot->'spec'->>'node_group_id')::uuid)
+		JOIN l2_topology_configs config ON config.deleted_at IS NULL AND (
+		     pool.l2_mode='custom' AND config.tenant_scope_id=site.scope_id AND config.id=pool.l2_config_id OR
+		     pool.l2_mode='package' AND config.tenant_scope_id=line_group.tenant_scope_id AND config.id=line_group.l2_config_id)
+		JOIN l2_topology_nodes member ON member.tenant_scope_id=config.tenant_scope_id AND member.config_id=config.id
+		 AND member.enabled AND member.deleted_at IS NULL
+		JOIN nodes node ON node.id=member.node_id AND node.admin_state='active'
+		JOIN access_scopes node_scope ON node_scope.id=node.scope_id
+		WHERE site.scope_id=$1 AND site.deleted_at IS NULL AND site.id=ANY($2::uuid[])
+		  AND (node.scope_id=$1 OR node_scope.kind='platform')
+		ORDER BY 1,2`, scopeID, siteIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var siteID, nodeID uuid.UUID
+		if err := rows.Scan(&siteID, &nodeID); err != nil {
+			return nil, err
+		}
+		result[siteID] = append(result[siteID], nodeID)
+	}
+	return result, rows.Err()
+}
+
 // lineGroupNodeIDs is policyNodes plus the line-group nodes of the scope's
 // live sites and streams, or of the one site siteID when it is set (a stream
 // belongs to no site, migration 506).
@@ -477,6 +540,39 @@ func (FrozenRepublisher) RepublishFrozenTx(ctx context.Context, tx pgx.Tx, nodeI
 		Immediate: true,
 	})
 	return err
+}
+
+// RepublishReinstalledNodeTx queues, inside the enrollment transaction of a
+// node a new host took over ("重装此节点"), one republication of each scope
+// (scope order, the caller locked them) through the failed-sync channel: the
+// new host holds none of the scopes' configuration, and the artifacts must be
+// sealed to its new key (nodeidentity.NodeScopeRepublisher).
+func RepublishReinstalledNodeTx(ctx context.Context, tx pgx.Tx, nodeID uuid.UUID, scopeIDs []uuid.UUID,
+	sourceRequestID string) error {
+	if ctx == nil || tx == nil || nodeID == uuid.Nil || strings.TrimSpace(sourceRequestID) == "" {
+		return ErrInvalidInput
+	}
+	for _, scopeID := range scopeIDs {
+		var current int64
+		err := tx.QueryRow(ctx, `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1 FOR UPDATE`,
+			scopeID).Scan(&current)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, scopeID); err != nil {
+			return err
+		}
+		if _, err := RequestRepublicationTx(ctx, tx, RepublishRequest{
+			ScopeID: scopeID, Trigger: edgepublish.SystemTriggerNodeSync, SourceResourceID: nodeID,
+			SourceRequestID: sourceRequestID, FromRevision: current, Immediate: true,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // NodeSyncRetrier republishes a scope to a node held for failed sync (NF04).

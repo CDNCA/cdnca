@@ -93,13 +93,19 @@ func (store *Store) autoDisableCandidates(ctx context.Context) ([]autoDisableCan
 	return result, now, rows.Err()
 }
 
-// sequenceBefore is the newest telemetry sequence observed before start, so
+// samplePosition is a sample's place in its node's order (migration 626:
+// host_epoch, then publication_sequence; a reinstalled host starts its
+// sequence again) as one bigint for node_auto_disable_usage.last_sequence. A
+// node enrolled once is epoch 0, so the position is the sequence itself.
+const samplePosition = `(host_epoch::bigint<<40)|publication_sequence`
+
+// sequenceBefore is the newest telemetry position observed before start, so
 // accounting replays exactly the period's samples. It walks this node's
 // samples newest first and stops at the first older one.
 func (store *Store) sequenceBefore(ctx context.Context, nodeID uuid.UUID, start time.Time) (int64, error) {
 	var sequence int64
-	err := store.pool.QueryRow(ctx, `SELECT publication_sequence FROM node_metric_samples
-		WHERE node_id=$1 AND observed_at<$2 ORDER BY publication_sequence DESC LIMIT 1`, nodeID, start).Scan(&sequence)
+	err := store.pool.QueryRow(ctx, `SELECT `+samplePosition+` FROM node_metric_samples
+		WHERE node_id=$1 AND observed_at<$2 ORDER BY host_epoch DESC,publication_sequence DESC LIMIT 1`, nodeID, start).Scan(&sequence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
@@ -107,11 +113,12 @@ func (store *Store) sequenceBefore(ctx context.Context, nodeID uuid.UUID, start 
 }
 
 func (store *Store) networkSamples(ctx context.Context, nodeID uuid.UUID, after int64, end time.Time) ([]NetworkSample, error) {
-	rows, err := store.pool.Query(ctx, `SELECT publication_sequence,observed_at,
+	rows, err := store.pool.Query(ctx, `SELECT `+samplePosition+`,observed_at,
 			COALESCE(telemetry_json->'network_interfaces','[]'::jsonb)
 		FROM node_metric_samples
-		WHERE node_id=$1 AND publication_sequence>$2 AND telemetry_json IS NOT NULL AND observed_at<$3
-		ORDER BY publication_sequence LIMIT $4`, nodeID, after, end, autoDisableBatch)
+		WHERE node_id=$1 AND (host_epoch,publication_sequence)>($2::bigint>>40,$2::bigint&1099511627775)
+		  AND telemetry_json IS NOT NULL AND observed_at<$3
+		ORDER BY host_epoch,publication_sequence LIMIT $4`, nodeID, after, end, autoDisableBatch)
 	if err != nil {
 		return nil, err
 	}

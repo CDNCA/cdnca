@@ -306,6 +306,34 @@ describe('AccountMessagesPage', () => {
     )
   })
 
+  // 请求进行中 × 不可用；结果未确认时点 × 先确认，确认后关闭并刷新列表。
+  it('lets an unknown read close from × after a warning and refreshes the inbox', async () => {
+    authenticate()
+    const deliveredItem = { ...item, delivered_at: '2026-07-22T02:01:00Z' }
+    let fail!: () => void
+    let lists = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      if (!init?.method) { lists += 1; return json({ items: [deliveredItem] }) }
+      if (String(input).endsWith('/read')) return new Promise<Response>((_, reject) => { fail = () => reject(new TypeError('connection closed')) })
+      throw new Error(`unexpected request ${String(input)}`)
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<AccountMessagesPage />, ['/account/message'])
+    await flushUi()
+    await user.click(within((await screen.findByText('维护通知')).closest('tr')!).getByRole('button', { name: '查看' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: '标记已读' }))
+    await waitFor(() => expect(dialog.querySelector('.ant-modal-close')).toBeNull())
+    fail()
+    expect(await screen.findByText('操作结果待确认')).toBeInTheDocument()
+    const before = lists
+    await user.click(dialog.querySelector<HTMLElement>('.ant-modal-close')!)
+    const confirm = (await screen.findByText('结果尚未确认，关闭后请刷新列表核对是否已生效')).closest<HTMLElement>('.ant-modal-confirm')!
+    await user.click(within(confirm).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(lists).toBeGreaterThan(before))
+    await waitFor(() => expect(screen.queryByRole('button', { name: '使用同一请求重试' })).not.toBeInTheDocument())
+  })
+
   it('keeps an unknown delivered write locked to the same revision, body, and key', async () => {
     authenticate()
     let deliveries = 0

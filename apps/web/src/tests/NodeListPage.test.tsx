@@ -2129,3 +2129,75 @@ describe('NodeListPage IP location', () => {
     expect(await within(dialog).findByText(/还没有自动解析结果/)).toBeInTheDocument()
   })
 })
+
+describe('重装此节点 (reinstall keeps the node)', () => {
+  afterEach(() => { delete (window as { __CDNCA_NODE_UPGRADE_TRUST_SHA256__?: string }).__CDNCA_NODE_UPGRADE_TRUST_SHA256__ })
+
+  it('confirms, issues a one-hour re_enrollment token for this node and shows the reinstall command', async () => {
+    authenticate()
+    Object.assign(window, { __CDNCA_NODE_UPGRADE_TRUST_SHA256__: 'cd'.repeat(32) })
+    const rawToken = 'R'.repeat(43)
+    const tokenCalls: Array<{ url: string; body: unknown }> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.endsWith('/enrollment-tokens') && init?.method === 'POST') {
+        tokenCalls.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(json({
+          id: '018f0000-0000-7000-8000-000000000010', node_id: node.id, purpose: 're_enrollment',
+          created_at: '2026-07-22T09:00:00Z', expires_at: '2026-07-22T10:00:00Z', token: rawToken,
+          gateway: { enrollment_address: '203.0.113.20:29402', address: '203.0.113.20:20407', server_name: '203.0.113.20' },
+        }, 201))
+      }
+      return Promise.resolve(json({ items: [node] }))
+    })
+    const user = userEvent.setup({ delay: null })
+    const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    renderWithProviders(<NodeListPage />)
+    const row = (await screen.findByText('Edge Shanghai')).closest('tr')!
+
+    await openRowAction(user, row, '重装此节点')
+    const dialog = await screen.findByRole('dialog', { name: '重装节点 Edge Shanghai' })
+    expect(dialog).toHaveTextContent('原机器上 Agent 的证书会被吊销')
+    expect(dialog).toHaveTextContent('沿用本节点的 ID')
+    expect(tokenCalls).toHaveLength(0)
+    await user.click(within(dialog).getByRole('button', { name: '生成重装命令' }))
+
+    const result = await screen.findByRole('dialog', { name: '重装命令（仅显示一次）' })
+    expect(tokenCalls).toEqual([{ url: expect.stringContaining(`/v1/nodes/${node.id}/enrollment-tokens`),
+      body: { purpose: 're_enrollment', ttl_seconds: 3600 } }])
+    const command = (within(result).getByRole('textbox', { name: '节点重装命令' }) as HTMLTextAreaElement).value
+    expect(command).toContain(`printf '%s\\n' '${rawToken}' | bash "$f"`)
+    expect(command).toContain('--enrollment-token-stdin')
+    expect(command).not.toContain('--registration-key-stdin')
+    expect(command).toContain("--gateway-enrollment-address '203.0.113.20:29402'")
+    await user.click(within(result).getByRole('button', { name: '复制重装命令' }))
+    expect(clipboard).toHaveBeenCalledWith(command)
+    await user.click(within(result).getByRole('button', { name: '我已保存' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '重装命令（仅显示一次）' })).not.toBeInTheDocument())
+    expect(screen.queryByDisplayValue(command)).not.toBeInTheDocument()
+  })
+
+  it('warns in the plain token dialog too when the purpose is re-enrollment, not for initial enrollment', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ items: [node] })))
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<NodeListPage />)
+    const row = (await screen.findByText('Edge Shanghai')).closest('tr')!
+    await openRowAction(user, row, '令牌')
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('重装后原机器立即下线')
+    await user.click(within(dialog).getByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name: '首次注册' }))
+    await waitFor(() => expect(dialog).not.toHaveTextContent('重装后原机器立即下线'))
+  })
+
+  it('is not offered for a disabled node', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ items: [{ ...node, admin_state: 'disabled' as const }] })))
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<NodeListPage />)
+    const row = (await screen.findByText('Edge Shanghai')).closest('tr')!
+    await user.click(within(row).getByRole('button', { name: '更多' }))
+    expect(await screen.findByRole('menuitem', { name: '重装此节点' })).toHaveAttribute('aria-disabled', 'true')
+  })
+})

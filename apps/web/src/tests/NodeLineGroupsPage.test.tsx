@@ -530,6 +530,29 @@ describe('NodeLineGroupsPage', () => {
     expect(within(row).queryByRole('button', { name: '设为平台默认' })).not.toBeInTheDocument()
   })
 
+  it('names the packages, sites and subscriptions that still use a line group whose delete was refused', async () => {
+    const platformScopeID = '77777777-7777-4777-8777-777777777777'
+    authenticate(['node_scheduling.read', 'node_scheduling.manage'], ['platform_admin'], {
+      scope_kind: 'platform', scope_id: platformScopeID, tenant_id: null,
+    })
+    useSessionStore.setState({ sessionEpoch: 1 })
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => Promise.resolve(init?.method === 'DELETE'
+      ? json({ error: {
+        code: 'node_scheduling_reference_conflict', message: 'node line group is referenced by active configuration', request_id: 'req-line-group-delete',
+        details: { products: ['香港默认体验2G', '香港 5G'], subscriptions: 2, sites: 1, streams: 0, other: ['fallback_last_resort'] },
+      } }, 409)
+      : json({ items: [{ ...group, tenant_scope_id: platformScopeID, name: '香港线路' }] })))
+    const user = userEvent.setup()
+    renderWithProviders(<NodeLineGroupsPage />)
+    await user.click(within((await screen.findByText('香港线路')).closest('tr')!).getByRole('button', { name: '删除线路分组' }))
+    await user.click(within(await screen.findByRole('dialog', { name: '删除确认' })).getByRole('button', { name: '确定' }))
+    expect(await screen.findByText('线路分组删除失败')).toBeInTheDocument()
+    expect(screen.getByText(
+      '被套餐 香港默认体验2G、香港 5G、2 个订阅、1 个网站、兜底链最后一级引用，请先改它们的线路',
+    )).toBeInTheDocument()
+    expect(screen.getByText('香港线路')).toBeInTheDocument()
+  })
+
   it.each([
     ['a tenant with no user ID', {
       scope_kind: 'tenant' as const,

@@ -52,8 +52,8 @@ describe('批量修改监控', () => {
       .toEqual([[a, 2, 'pause', 8080], [b, 5, 'pause', null]])
     expect(screen.getByText('已保存')).toBeInTheDocument()
     expect(screen.getByText('结果待确认')).toBeInTheDocument()
-    // 结果未知时不能关闭。
-    expect(screen.getByRole('button', { name: '关闭' })).toBeDisabled()
+    // 结果未知时仍可关闭（关闭前确认，见下一用例）。
+    expect(screen.getByRole('button', { name: '关闭' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: /重试未成功的 1 个节点/ }))
     await waitFor(() => expect(screen.getAllByText('已保存')).toHaveLength(2))
     // 重试复用同一修订号与幂等键，不重新读取 B。
@@ -63,6 +63,32 @@ describe('批量修改监控', () => {
     expect(onDone).toHaveBeenCalledTimes(2)
     await user.click(screen.getByRole('button', { name: '关闭' }))
     expect(onClose).toHaveBeenCalled()
+  })
+
+  // 请求进行中不能关；结果未知时关闭先确认，确认后刷新节点列表再关闭。
+  it('结果未知时关闭先确认，确认后刷新并关闭；请求进行中不能关闭', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(nodeMonitoringApi, 'getOverride').mockResolvedValue(view(a, 2))
+    let fail!: () => void
+    vi.spyOn(nodeMonitoringApi, 'putOverride').mockImplementation(() => new Promise((_, reject) => { fail = () => reject(new ApiError('timeout', 0, 'network_error')) }))
+    const onDone = vi.fn()
+    const onClose = vi.fn()
+    renderWithProviders(<NodeBatchMonitorConfigModal open canManage nodes={[{ id: a, name: 'A' }]}
+      getAccessToken={() => 'token'} onDenied={vi.fn()} onDone={onDone} onClose={onClose} />)
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getAllByRole('radio', { name: '暂停' })[0]!)
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled())
+    expect(dialog.querySelector('.ant-modal-close')).toBeNull()
+    fail()
+    expect(await screen.findByText('结果待确认')).toBeInTheDocument()
+    onDone.mockClear()
+    await user.click(screen.getByRole('button', { name: '关闭' }))
+    const confirm = (await screen.findByText('结果尚未确认，关闭后请刷新列表核对是否已生效')).closest<HTMLElement>('.ant-modal-confirm')!
+    expect(onClose).not.toHaveBeenCalled()
+    await user.click(within(confirm).getByRole('button', { name: '关闭' }))
+    expect(onDone).toHaveBeenCalledOnce()
+    expect(onClose).toHaveBeenCalledOnce()
   })
 
   it('版本冲突列为失败，重试时重新读取最新版本；无权限立即交给页面处理', async () => {

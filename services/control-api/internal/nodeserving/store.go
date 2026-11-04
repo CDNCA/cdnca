@@ -72,7 +72,7 @@ func (store *Store) MonitorCandidates(ctx context.Context) ([]MonitorCandidate, 
 			override.monitor_port,override.monitor_action,dnspup.failing
 		FROM nodes node
 		LEFT JOIN LATERAL (SELECT healthy,probe_succeeded,ingested_at FROM node_metric_samples
-			WHERE node_id=node.id AND record_kind='metric' ORDER BY publication_sequence DESC LIMIT 1) sample ON true
+			WHERE node_id=node.id AND record_kind='metric' ORDER BY host_epoch DESC,publication_sequence DESC LIMIT 1) sample ON true
 		LEFT JOIN node_serving_holds hold ON hold.node_id=node.id AND hold.source=$1
 		LEFT JOIN node_availability_alert_states alert ON alert.node_id=node.id
 		LEFT JOIN node_monitoring_overrides override ON override.node_id=node.id AND override.scope_id=node.scope_id
@@ -193,7 +193,7 @@ func (store *Store) MonitorCandidates(ctx context.Context) ([]MonitorCandidate, 
 func countRecentHealthy(ctx context.Context, tx pgx.Tx, nodeID uuid.UUID, need int, since time.Time, target *int) error {
 	return tx.QueryRow(ctx, `SELECT count(*) FROM (
 		SELECT healthy AND probe_succeeded AS good,ingested_at FROM node_metric_samples
-		WHERE node_id=$1 AND record_kind='metric' ORDER BY publication_sequence DESC LIMIT $2) recent
+		WHERE node_id=$1 AND record_kind='metric' ORDER BY host_epoch DESC,publication_sequence DESC LIMIT $2) recent
 		WHERE good AND ingested_at>$3`, nodeID, need, since).Scan(target)
 }
 

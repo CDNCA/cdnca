@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Form, Input, Switch } from 'antd'
 import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +11,7 @@ import StreamOwnerSelect from './StreamOwnerSelect'
 import { useStreamDraftDefaults } from './streamDraftDefaults'
 import { batchLines, currentPrincipalCanManageStreams, defaultDomainDNSPolicy, emptyGeoPolicy, errorMessage, writeKey, writeOutcomeUnknown } from './streamForm'
 import { useWriteRecovery } from './streamWriteRecovery'
+import '../i18n/unconfirmedClose'
 
 interface BatchCreateValues {
   owner_id?: string
@@ -33,6 +35,8 @@ export default function StreamBatchCreatePanel({ isAdmin, scopeKind, scopeID, se
   onCreated: (result: BatchCreateStreamsResult) => void
 }) {
   const { t } = useTranslation('streams')
+  const { t: tu } = useTranslation('unconfirmedClose')
+  const queryClient = useQueryClient()
   const [form] = Form.useForm<BatchCreateValues>()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -61,6 +65,14 @@ export default function StreamBatchCreatePanel({ isAdmin, scopeKind, scopeID, se
       recovery.settle(attempt, writeOutcomeUnknown(error))
       setFailure(error instanceof ApiError ? error : new ApiError(t('errors.operationFailed')))
     }).finally(() => setBusy(false))
+  }
+
+  // 放弃这次未确认的批量创建：清掉原请求记录（表单解锁、保留已填内容）并刷新转发列表核对是否已生效。
+  const abandon = () => {
+    if (!unknown || busy) return
+    recovery.clear()
+    setFailure(null)
+    void queryClient.invalidateQueries({ queryKey: ['streams', scopeKind, scopeID, sessionEpoch] })
   }
 
   const submit = () => unknown ? send(unknown) : void form.validateFields().then((values) => {
@@ -133,7 +145,8 @@ export default function StreamBatchCreatePanel({ isAdmin, scopeKind, scopeID, se
           <Input placeholder={t('form.remarkPlaceholder')} />
         </Form.Item>
       </div>
-      {unknown ? <Alert className="stream-batch-alert" type="warning" showIcon role="alert" message={t('batchCreate.unknown')} />
+      {unknown ? <Alert className="stream-batch-alert" type="warning" showIcon role="alert" message={t('batchCreate.unknown')}
+        action={<Button size="small" disabled={busy} onClick={abandon}>{tu('abandonRefresh')}</Button>} />
         : failure ? <Alert className="stream-batch-alert" type="error" showIcon message={errorMessage(failure, t)} /> : null}
       {result ? <div className="stream-batch-result" role="status">
         <Alert type={result.committed ? (result.failed ? 'warning' : 'success') : 'error'} showIcon

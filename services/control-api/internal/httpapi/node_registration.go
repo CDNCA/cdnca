@@ -96,20 +96,33 @@ func (s *Server) serveNodeRegistrationCredential(w http.ResponseWriter, r *http.
 	writeJSONStatus(w, http.StatusOK, s.nodeRegistrationCredentialResponse(r.Context(), credential))
 }
 
-// nodeRegistrationCredentialResponse adds the direct Gateway entry; a failed
-// read only drops it (install-node.sh still reads node-install-defaults).
+// nodeRegistrationCredentialResponse adds the direct Gateway entry.
 func (s *Server) nodeRegistrationCredentialResponse(ctx context.Context, credential node.RegistrationCredential) nodeRegistrationCredentialResponse {
-	response := nodeRegistrationCredentialResponse{RegistrationCredential: credential}
+	return nodeRegistrationCredentialResponse{RegistrationCredential: credential, Gateway: s.installGateway(ctx)}
+}
+
+// installGateway is the direct Gateway entry of a copied install command; a
+// failed read only drops it (install-node.sh still reads node-install-defaults).
+func (s *Server) installGateway(ctx context.Context) *NodeInstallGateway {
 	if s.nodeInstallGateway == nil {
-		return response
+		return nil
 	}
 	gateway, ok, err := s.nodeInstallGateway(ctx)
 	if err != nil {
 		s.logger.Warn("node install command without the Gateway entry", "error", err)
-	} else if ok {
-		response.Gateway = &gateway
+		return nil
 	}
-	return response
+	if !ok {
+		return nil
+	}
+	return &gateway
+}
+
+// issuedEnrollmentTokenResponse: the console builds the reinstall command
+// ("重装此节点") from the token and the same Gateway entry.
+type issuedEnrollmentTokenResponse struct {
+	node.IssuedToken
+	Gateway *NodeInstallGateway `json:"gateway,omitempty"`
 }
 
 // NodeInstallGateway is the direct Gateway entry the console writes into the
@@ -230,7 +243,8 @@ func (s *Server) writeNodeRegistrationError(w http.ResponseWriter, r *http.Reque
 	case errors.Is(err, node.ErrInvalidRegistrationCredential):
 		s.writeAPIError(w, r, http.StatusUnauthorized, "invalid_registration_credential", "node registration credential is invalid or was reset")
 	case errors.Is(err, node.ErrNodeAlreadyRegistered):
-		s.writeAPIError(w, r, http.StatusConflict, "node_already_registered", "this machine is already registered")
+		s.writeAPIError(w, r, http.StatusConflict, "node_already_registered",
+			"this machine is already registered; to reinstall it, use the node's More -> Reinstall this node in the console")
 	case errors.Is(err, node.ErrRegisteredIdentityNotFound):
 		s.writeAPIError(w, r, http.StatusNotFound, "node_identity_not_found", "no issued identity matches this machine")
 	case errors.Is(err, node.ErrRegistrationLimit):

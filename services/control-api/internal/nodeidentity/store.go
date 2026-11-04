@@ -23,9 +23,18 @@ import (
 type Store struct {
 	pool    *pgxpool.Pool
 	auditor *audit.Log
+	// republishReinstalled queues the scopes of a node a new host took over.
+	republishReinstalled NodeScopeRepublisher
 }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool, auditor: audit.New(pool)} }
+
+// WithReinstallRepublisher sets how a re-enrolled node's scopes are
+// republished (resetHostDeliveryStateTx) and returns the store.
+func (s *Store) WithReinstallRepublisher(republish NodeScopeRepublisher) *Store {
+	s.republishReinstalled = republish
+	return s
+}
 
 type rowQuerier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
@@ -49,6 +58,9 @@ type enrollmentSigningClaim struct {
 	GatewayInstanceID       string
 	LeaseID                 uuid.UUID
 	Existing                *Certificate
+	// Purpose of the consumed token; re_enrollment takes over a node whose
+	// previous host still holds a live certificate (finalizeEnrollment revokes it).
+	Purpose string
 }
 
 type renewalSigningClaim struct {
@@ -400,11 +412,11 @@ func (s *Store) prepareEnrollmentSigning(ctx context.Context, authorizationID, r
 	err = tx.QueryRow(ctx, `
 		SELECT auth.node_id,auth.csr_der,auth.csr_sha256,auth.artifact_key_id,auth.status,
 		       auth.gateway_workload_identity,auth.gateway_instance_id,auth.expires_at,
-		       auth.signing_lease_expires_at,auth.issued_certificate_id,node.admin_state
+		       auth.signing_lease_expires_at,auth.issued_certificate_id,node.admin_state,auth.purpose
 		FROM node_identity_authorizations auth JOIN nodes node ON node.id=auth.node_id
 		WHERE auth.id=$1 FOR UPDATE OF auth,node`, authorizationID).Scan(&claim.NodeID, &claim.CSRDER, &csrHash,
 		&claim.ArtifactKeyID, &status, &storedWorkload, &storedInstance, &expiresAt,
-		&signingLeaseExpires, &certificateID, &nodeState)
+		&signingLeaseExpires, &certificateID, &nodeState, &claim.Purpose)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return enrollmentSigningClaim{}, ErrAuthorizationNotFound
 	}
@@ -462,7 +474,7 @@ func (s *Store) prepareEnrollmentSigning(ctx context.Context, authorizationID, r
 	if err != nil {
 		return enrollmentSigningClaim{}, err
 	}
-	if liveCertificate {
+	if liveCertificate && claim.Purpose != node.PurposeReEnrollment {
 		return enrollmentSigningClaim{}, ErrCertificateInvalid
 	}
 	if status == "signing" {
@@ -506,6 +518,9 @@ func (s *Store) finalizeEnrollment(ctx context.Context, claim enrollmentSigningC
 		return Certificate{}, ErrPersistence
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := lockNodeConfigurationScopesTx(ctx, tx, claim.NodeID); err != nil {
+		return Certificate{}, err
+	}
 	var status, nodeState string
 	var ownerScopeID uuid.UUID
 	var currentLease *uuid.UUID
@@ -564,7 +579,7 @@ func (s *Store) finalizeEnrollment(ctx context.Context, claim enrollmentSigningC
 	if err != nil {
 		return Certificate{}, err
 	}
-	if liveCertificate {
+	if liveCertificate && claim.Purpose != node.PurposeReEnrollment {
 		return Certificate{}, ErrCertificateInvalid
 	}
 	var installationID string
@@ -627,6 +642,22 @@ func (s *Store) finalizeEnrollment(ctx context.Context, claim enrollmentSigningC
 			return Certificate{}, ErrPersistence
 		}
 	}
+	// Reinstall (console "重装此节点"): an administrator issued this one-time
+	// token for this node, so the new host takes the node's identity and the
+	// previous host's certificates are revoked in the same transaction.
+	var revokedCertificates []string
+	if liveCertificate {
+		if revokedCertificates, err = revokeReplacedHostCertificates(ctx, tx, claim, now); err != nil {
+			return Certificate{}, err
+		}
+	}
+	// A node enrolled before is a host taking it over (or the same host
+	// enrolling again): reset what the distributors think it holds.
+	var enrolledBefore bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM node_certificates WHERE node_id=$1)`,
+		claim.NodeID).Scan(&enrolledBefore); err != nil {
+		return Certificate{}, ErrPersistence
+	}
 	if err := insertEnrollmentCertificate(ctx, tx, certificate, ownerScopeID, installationID, caEpochID,
 		claim.LifecycleRequestID, lifecycleDigest, now); err != nil {
 		return Certificate{}, err
@@ -681,6 +712,18 @@ func (s *Store) finalizeEnrollment(ctx context.Context, claim enrollmentSigningC
 	if len(retiredCertificates) > 0 {
 		payload["retired_expired_certificate_ids"] = retiredCertificates
 	}
+	if len(revokedCertificates) > 0 {
+		payload["purpose"] = claim.Purpose
+		payload["revoked_replaced_certificate_ids"] = revokedCertificates
+	}
+	if enrolledBefore {
+		republished, err := resetHostDeliveryStateTx(ctx, tx, s.republishReinstalled, claim.NodeID, claim.AuthorizationID)
+		if err != nil {
+			return Certificate{}, err
+		}
+		payload["host_delivery_reset"] = true
+		payload["republished_scope_ids"] = republished
+	}
 	if err := s.auditor.Append(ctx, tx, audit.Event{
 		ScopeID: ownerScopeID, ActorUserID: nil,
 		Action: "node_certificate.lifecycle.enroll", ResourceType: "node_certificate",
@@ -693,6 +736,75 @@ func (s *Store) finalizeEnrollment(ctx context.Context, claim enrollmentSigningC
 		return Certificate{}, ErrPersistence
 	}
 	return cloneCertificate(certificate.Certificate), nil
+}
+
+// reEnrollmentRevocationReason is recorded on certificates of a host replaced
+// through a re_enrollment token.
+const reEnrollmentRevocationReason = "replaced by re-enrollment"
+
+// revokeReplacedHostCertificates revokes the node's unexpired current/overlap
+// certificates with the same bound facts nodecertlifecycle.RevokeCertificate
+// writes (one authorization revision per revocation): the Gateway's next
+// authorization snapshot refuses the previous host's session, and its renewal
+// (prepareRenewal) and expired-certificate recovery are refused. IDs derive
+// from the enrollment request, so a rolled back attempt retried with the same
+// request writes the same facts.
+func revokeReplacedHostCertificates(ctx context.Context, tx pgx.Tx, claim enrollmentSigningClaim, now time.Time) ([]string, error) {
+	type replaced struct {
+		id, ownerScopeID, caEpochID uuid.UUID
+		installationID              string
+		leafDERHash                 []byte
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT id,owner_scope_id,installation_id,ca_epoch_id,leaf_der_sha256 FROM node_certificates
+		WHERE node_id=$1 AND status='active' AND rotation_status IN ('current','overlap') AND not_after>$2
+		ORDER BY issued_at,id FOR UPDATE`, claim.NodeID, now)
+	if err != nil {
+		return nil, ErrPersistence
+	}
+	certificates, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (replaced, error) {
+		var item replaced
+		err := row.Scan(&item.id, &item.ownerScopeID, &item.installationID, &item.caEpochID, &item.leafDERHash)
+		return item, err
+	})
+	if err != nil {
+		return nil, ErrPersistence
+	}
+	revoked := make([]string, 0, len(certificates))
+	for _, item := range certificates {
+		if len(item.leafDERHash) != sha256.Size {
+			return nil, ErrPersistence
+		}
+		requestID := uuid.NewSHA1(claim.LifecycleRequestID, []byte("re-enrollment-revocation:"+item.id.String()))
+		digest := sha256.Sum256([]byte("re-enrollment-revocation\x00" + claim.AuthorizationID.String() + "\x00" + item.id.String()))
+		var revision int64
+		if err := tx.QueryRow(ctx, `
+			UPDATE node_identity_state SET authorization_revision=authorization_revision+1,updated_at=GREATEST(updated_at,$2)
+			WHERE node_id=$1 RETURNING authorization_revision`, claim.NodeID, now).Scan(&revision); err != nil {
+			return nil, ErrPersistence
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO node_certificate_revocations(
+			request_id,request_digest,certificate_id,node_id,reason,revoked_at,authorization_revision,
+			owner_scope_id,installation_id,ca_epoch_id,leaf_der_sha256,effective_at,binding_status)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$6,'bound')`, requestID, digest[:], item.id, claim.NodeID,
+			reEnrollmentRevocationReason, now, revision, item.ownerScopeID, item.installationID, item.caEpochID,
+			item.leafDERHash); err != nil {
+			return nil, ErrPersistence
+		}
+		result, err := tx.Exec(ctx, `UPDATE node_certificates SET status='revoked',revoked_at=$2,revocation_reason=$3
+			WHERE id=$1 AND status='active'`, item.id, now, reEnrollmentRevocationReason)
+		if err != nil || result.RowsAffected() != 1 {
+			return nil, ErrPersistence
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO node_certificate_events
+			(id,node_id,certificate_id,event_type,reason,authorization_revision,occurred_at)
+			VALUES ($1,$2,$3,'revoked',$4,$5,$6)`, uuid.NewSHA1(requestID, []byte("node-certificate-revocation-event")),
+			claim.NodeID, item.id, reEnrollmentRevocationReason, revision, now); err != nil {
+			return nil, ErrPersistence
+		}
+		revoked = append(revoked, item.id.String())
+	}
+	return revoked, nil
 }
 
 // renewalAllowedForNodeState admits active and draining nodes, plus a

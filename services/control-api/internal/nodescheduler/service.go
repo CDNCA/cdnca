@@ -216,6 +216,8 @@ func (s *Service) deleteGroup(
 			if err := ensureMarketSupplyGroupUnused(ctx, tx, groupID); err != nil {
 				return err
 			}
+		} else if err := ensureLineGroupUnused(ctx, tx, actor.ResourceScopeID(), groupID); err != nil {
+			return err
 		}
 		command, err := tx.Exec(ctx, `UPDATE node_line_groups
 			SET deleted_at=$4,deleted_by_user_id=$5,updated_by_user_id=$5,updated_at=$4

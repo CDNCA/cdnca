@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 
-import { ApiError } from '../../api/auth'
+import { ApiError, type LineGroupReferences } from '../../api/auth'
 import type {
   NodeLineGroup,
   NodeLineGroupSnapshotInput,
@@ -96,8 +96,24 @@ export function schedulingError(error: unknown, t: TFunction<'nodeScheduling'>):
     'node_scheduling_unavailable',
     'l2_condition_invalid_regex',
   ])
-  const message = known.has(error.code) ? t(`errors.${error.code}`) : t('errors.requestFailed')
+  const message = error.lineGroupInUse ? lineGroupInUseMessage(error.lineGroupInUse, t)
+    : known.has(error.code) ? t(`errors.${error.code}`) : t('errors.requestFailed')
   return error.requestId ? t('errors.withRequestId', { message, requestId: error.requestId }) : message
+}
+
+/** 被套餐 X、Y、2 个网站引用，请先改它们的线路 (at most 5 package names). */
+function lineGroupInUseMessage(references: LineGroupReferences, t: TFunction<'nodeScheduling'>): string {
+  const separator = t('errors.lineGroupInUse.separator')
+  const shown = references.products.slice(0, 5).join(separator)
+  const holders = [
+    references.products.length > 5 ? t('errors.lineGroupInUse.productsMore', { names: shown, count: references.products.length })
+      : references.products.length > 0 ? t('errors.lineGroupInUse.products', { names: shown }) : '',
+    references.subscriptions > 0 ? t('errors.lineGroupInUse.subscriptions', { count: references.subscriptions }) : '',
+    references.sites > 0 ? t('errors.lineGroupInUse.sites', { count: references.sites }) : '',
+    references.streams > 0 ? t('errors.lineGroupInUse.streams', { count: references.streams }) : '',
+    ...references.other.map((kind) => t(`errors.lineGroupInUse.${kind}`)),
+  ].filter(Boolean)
+  return t('errors.lineGroupInUse.message', { holders: holders.join(separator) })
 }
 
 export function snapshotFromGroup(group: NodeLineGroup): NodeLineGroupSnapshotInput {

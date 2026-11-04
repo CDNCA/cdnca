@@ -579,6 +579,10 @@ func (s *Store) BatchAdminState(
 				})
 				if errors.Is(err, ErrInUse) || errors.Is(err, ErrNotFound) {
 					setBatchFailure(itemResult, batchErrorCode(err))
+					var inUse *InUseError
+					if errors.As(err, &inUse) {
+						itemResult.Error.Reasons = inUse.Reasons
+					}
 					continue
 				}
 				if err != nil {

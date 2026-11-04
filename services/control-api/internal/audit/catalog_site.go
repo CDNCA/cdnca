@@ -5,6 +5,7 @@ func init() {
 	register(
 		e("site.create", CategorySite, "新增网站 {resource}", "created site {resource}").f("domain"),
 		e("site.update", CategorySite, "修改网站 {resource} 的配置{changes}", "updated site {resource}{changes}"),
+		e("site.republish", CategorySite, "重新发布网站 {resource} 到节点", "republished site {resource} to its nodes").f("publish_mode"),
 		e("site.tls_profile.update", CategorySite, "修改网站 {resource} 的 TLS 设置{changes}", "updated the TLS settings of site {resource}{changes}").f("site_domain"),
 		e("site.delete", CategorySite, "删除网站 {resource}", "deleted site {resource}"),
 		e("site.transfer", CategorySite, "将网站 {resource} 更换给另一个用户", "moved site {resource} to another user").f("site_domain"),

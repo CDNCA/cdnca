@@ -5,7 +5,7 @@ import { ApiError } from '../api/auth'
 import { renderWithProviders } from '../test/render'
 import i18n from '../i18n'
 import './NodeListPage.locale'
-import NodeInstallCommand, { buildNodeInstallCommand } from './NodeInstallCommand'
+import NodeInstallCommand, { buildNodeInstallCommand, buildNodeReinstallCommand } from './NodeInstallCommand'
 
 const upgradeTrust = { __CDNCA_NODE_UPGRADE_TRUST_SHA256__: 'cd'.repeat(32) }
 const credential = (suffix = 'A') => ({
@@ -164,5 +164,25 @@ describe('reusable node installation command', () => {
 
   it.each([undefined, '', 'AB'.repeat(32), 'ab'.repeat(31), `${'ab'.repeat(32)}'; id`])('refuses to build a command without published upgrade trust (%s)', (digest) => {
     expect(() => buildNodeInstallCommand(credential().credential, 'https://control.example', { __CDNCA_NODE_UPGRADE_TRUST_SHA256__: digest })).toThrow()
+  })
+})
+
+describe('node reinstall command (重装此节点)', () => {
+  const token = 'T'.repeat(43)
+  it('has the install command shape with the one-time token on stdin', () => {
+    const gateway = { enrollment_address: '203.0.113.20:29402', address: '203.0.113.20:20407', server_name: '203.0.113.20' }
+    const reinstall = buildNodeReinstallCommand(token, 'https://control.example', upgradeTrust, 'zh-CN', gateway)
+    const install = buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'zh-CN', gateway)
+    expect(reinstall).toBe(install
+      .replace(credential().credential, token)
+      .replace('--registration-key-stdin', '--enrollment-token-stdin'))
+    expect(reinstall).not.toContain('--token ')
+  })
+
+  it('rejects anything but a raw enrollment token', () => {
+    for (const value of ['', 'T'.repeat(42), `${'T'.repeat(42)}'`, credential().credential]) {
+      expect(() => buildNodeReinstallCommand(value, 'https://control.example', upgradeTrust)).toThrow()
+    }
+    expect(() => buildNodeReinstallCommand(token, 'https://control.example', {})).toThrow('invalid upgrade trust digest')
   })
 })

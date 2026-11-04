@@ -307,6 +307,25 @@
   font-size: 12px;
 }
 
+/* 节点所在的隐藏市场供货组，悬停看名称。 */
+.node-region-cell > .node-region-supply {
+  flex: 0 0 auto;
+  color: var(--cdnca-color-warning);
+  font-size: 12px;
+  cursor: help;
+}
+
+/* 批量删除结果：被占用的原因另起一行。 */
+.node-result-list > div:has(.node-result-reason) {
+  flex-wrap: wrap;
+}
+
+.node-result-list .node-result-reason {
+  flex: 1 0 100%;
+  font-size: 12px;
+  white-space: normal;
+}
+
 .node-monitor-cell > button.node-monitor-link {
   flex: 0 0 auto;
   padding: 0;

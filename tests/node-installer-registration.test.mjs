@@ -77,7 +77,8 @@ jq -c . "$CURL_BODY"`, { response })
 test('register_node prints readable Chinese errors and fails closed', () => {
   for (const [status, code, pattern] of [
     ['401', 'invalid_registration_credential', /注册凭据无效或已被重置/],
-    ['409', 'node_already_registered', /已注册/],
+    // 未持重装令牌的注册仍被拒；报错指向控制台「更多 → 重装此节点」。
+    ['409', 'node_already_registered', /已注册.*「更多 → 重装此节点」获取重装命令/],
     ['429', 'node_registration_rate_limited', /过于频繁/],
     ['503', 'node_registration_unavailable', /未启用节点注册/],
     // 主控授权拒绝（entitlementguard → httpapi writeError）：不是连通性问题，指向授权/套餐。

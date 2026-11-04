@@ -101,5 +101,12 @@ export function useStreamPanelWrites<Input, Item extends { id: string }>({
     create: (input: Input) => { if (!retryAttempt) run({ kind: 'create', input, key: writeKey('create-stream-panel') }) },
     remove: (items: Item[]) => { if (!retryAttempt) run({ kind: 'delete', items: items.map((item) => ({ item, key: writeKey(`delete-${item.id}`) })) }) },
     retry: () => { if (retryAttempt) run(retryAttempt) },
+    // 放弃这次未确认的请求：清掉原请求记录并刷新列表，由列表核对是否已生效。
+    abandon: () => {
+      if (!retryAttempt || mutation.isPending || inFlight) return
+      setRetryAttempt(null)
+      setError(null)
+      void invalidate()
+    },
   }
 }

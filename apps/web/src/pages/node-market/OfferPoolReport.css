@@ -4,3 +4,10 @@
 .pool-report .subn-detail > * {
   min-width: 0;
 }
+
+/* A refusal reason is a sentence: it wraps inside its fixed-width column. */
+.pool-report .pool-report-reason {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
+}

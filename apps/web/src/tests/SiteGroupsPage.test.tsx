@@ -276,7 +276,7 @@ describe('SiteGroupsPage', () => {
     })
     const view = renderGroups(); const { user, dialog } = await siteGroupPageCreate('原始名称'); await user.click(within(dialog).getByRole('button', { name: '确定' }))
     await screen.findByRole('button', { name: '再试一次' }); await waitFor(() => expect(screen.getByRole('button', { name: '再试一次' })).not.toHaveClass('ant-btn-loading'))
-    expect(within(dialog).getByLabelText('名称')).toBeDisabled(); expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled()
+    expect(within(dialog).getByLabelText('名称')).toBeDisabled(); expect(within(dialog).getByRole('button', { name: '取消' })).toBeEnabled()
     view.unmount(); renderGroups(); expect(writes).toBe(1); act(() => useSessionStore.setState({ accessToken: 'refreshed-token' }))
     for (let retry = 0; retry < 3; retry += 1) {
       await user.click(await screen.findByRole('button', { name: '再试一次' })); await waitFor(() => expect(writes).toBe(retry + 2))
@@ -286,6 +286,24 @@ describe('SiteGroupsPage', () => {
     const requests = fetchSpy.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(new Set(requests.map(([, init]) => init?.body)).size).toBe(1); expect(new Set(requests.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))).size).toBe(1)
     expect(new Headers(requests[1][1]?.headers).get('Authorization')).toBe('Bearer refreshed-token'); expect(document.body.textContent).not.toContain('raw unknown')
+  })
+  // 请求进行中禁用关闭；结果未确认时关闭先确认，确认后放弃原请求记录、关闭并刷新列表。
+  it('locks the editor only in flight and lets an unknown write close after a warning, then refreshes and unlocks', async () => {
+    let release!: () => void
+    const { fetchSpy } = siteGroupPageFixture((_url, init) => init?.method === 'POST'
+      ? new Promise<Response>((resolve) => { release = () => resolve(json({ error: { code: 'result_unknown', message: 'unknown' } }, 503)) }) : undefined)
+    renderGroups(); const { user, dialog } = await siteGroupPageCreate('未确认'); await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled())
+    await act(async () => release())
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '再试一次' })[0]).not.toHaveClass('ant-btn-loading'))
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeEnabled()
+    const reads = groupRequests(fetchSpy.mock.calls).filter(([, init]) => !init?.method).length
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    const confirm = (await screen.findByText('结果尚未确认，关闭后请刷新列表核对是否已生效')).closest<HTMLElement>('.ant-modal-confirm')!
+    await user.click(within(confirm).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(groupRequests(fetchSpy.mock.calls).filter(([, init]) => !init?.method).length).toBeGreaterThan(reads))
+    await waitFor(() => expect(screen.getByRole('button', { name: '新增分组' })).toBeEnabled())
+    expect(sessionStorage.length).toBe(0)
   })
   it('allows only one in-flight write for double confirmation', async () => {
     let resolve!: (response: Response) => void

@@ -191,6 +191,8 @@ func run(args []string) error {
 		return runRecoverPlatformAdministrator(args[1:])
 	case "admin-access-allowlist":
 		return runAdminAccessAllowlist(args[1:], os.Stdout)
+	case "reset-node-host-delivery":
+		return runResetNodeHostDelivery(args[1:], os.Stdout)
 	case "bootstrap-node-ca":
 		return runBootstrapNodeCA(args[1:])
 	case "bootstrap-system-configuration":
@@ -2033,7 +2035,14 @@ func runServer() error {
 			return runtimeStageError{stage: "initialize global firewall dispatcher", err: dispatcherErr}
 		}
 		firewallDispatcher = dispatcher
-		edgeRuntime.workers = append(edgeRuntime.workers, projector, firewallDispatcher)
+		// Nodes owned, reinstalled or back online after a publication get the
+		// active global firewall policy.
+		redeliverer, redelivererErr := firewallcontrol.NewRedeliverer(pool, projector, firewallcontrol.RedelivererConfig{},
+			slog.Default().With("component", "global_firewall_redelivery"))
+		if redelivererErr != nil {
+			return runtimeStageError{stage: "initialize global firewall redelivery", err: redelivererErr}
+		}
+		edgeRuntime.workers = append(edgeRuntime.workers, projector, firewallDispatcher, redeliverer)
 		// HTTP 302 scheduling tables: signed like firewall
 		// commands, over the same edge NATS.
 		schedulePublisher, scheduleErr := sched302table.NewNATSPublisher(edgeNATS, 5*time.Second)
@@ -2463,13 +2472,18 @@ func runServer() error {
 	}
 	// automatic renewals reach the nodes and switch in
 	// on the automatic publication loop.
-	var certificateRenewalDeliverer edgeautopublish.RuntimeWorker
+	var certificateRenewalDeliverer, certificateRedeliverer edgeautopublish.RuntimeWorker
 	if certificatePublicationConfig.Enabled {
 		deliverer, delivererErr := buildCertificateRenewalDeliverer(certificatePublicationDependencies)
 		if delivererErr != nil {
 			return runtimeStageError{stage: "initialize certificate renewal delivery", err: delivererErr}
 		}
 		certificateRenewalDeliverer = deliverer
+		redeliverer, redelivererErr := buildCertificateRedeliverer(certificatePublicationDependencies)
+		if redelivererErr != nil {
+			return runtimeStageError{stage: "initialize certificate redelivery", err: redelivererErr}
+		}
+		certificateRedeliverer = redeliverer
 	}
 	edgeAutomaticPublicationRuntime, err := openEdgeAutomaticPublicationProductionRuntime(
 		edgeAutomaticPublicationConfig,
@@ -2477,6 +2491,7 @@ func runServer() error {
 			Pool: pool, Signer: edgePublishSigner, Entitlement: edgePublishEntitlement,
 			Resolver: edgePublishResolver, Clock: time.Now, ChallengeRedeliverer: challengeRedeliverer,
 			ErrorPageSource: errorPageSnapshotSource, RenewalDeliverer: certificateRenewalDeliverer,
+			CertificateRedeliverer: certificateRedeliverer,
 		},
 	)
 	if err != nil {
@@ -3856,7 +3871,9 @@ func openControlInternalRuntimeWithGateways(
 	if err != nil {
 		return nil, runtimeStageError{stage: "load node CA signer", err: err}
 	}
-	nodeIdentities, err := nodeidentity.NewService(nodeidentity.NewStore(pool), certificateSigner, nodeidentity.DefaultConfig())
+	nodeIdentities, err := nodeidentity.NewService(
+		nodeidentity.NewStore(pool).WithReinstallRepublisher(edgeautopublish.RepublishReinstalledNodeTx),
+		certificateSigner, nodeidentity.DefaultConfig())
 	if err != nil {
 		return nil, runtimeStageError{stage: "configure node identity service", err: err}
 	}
@@ -6191,7 +6208,7 @@ func existingBootstrapPlatformUser(ctx context.Context, pool *pgxpool.Pool, user
 }
 
 func usageError() error {
-	return errors.New("usage: control-api serve | migrate up|down | bootstrap-user --username USER --email EMAIL [--display-name NAME] [--existing-ok] | admin-access-allowlist disable|status | recover-platform-admin --user-id UUID --scope-id UUID --request-id UUID (--status | --expected-username OLD --expected-revision N --new-username NEW [--password-stdin]) | bootstrap-node-ca --username USER --certificate-file FILE [--key-id ID] | bootstrap-system-configuration --username USER | install-community --installation-id UUID | community-register --account NAME --password-stdin | community-refresh | install-entitlement --bundle FILE --trusted-keys FILE [--trusted-keyset FILE] [--revocation FILE] | fetch-entitlement-revocation --license-service URL --installation-id UUID --installation-key FILE | report-installation-endpoints --license-service URL --installation-key FILE --request-file FILE [--refresh-request] | native-backup COMMAND (see control-api native-backup) | control-host bind|status (see control-api control-host) | signer-revocation import-checkpoint|import-edge-trust --in FILE | plugin-webhook-attestation-key status|rotate | verify-native-upgrade --installation-id UUID --version VERSION --source-commit COMMIT --source-tree TREE --artifact-sha256 SHA --runner-sha256 SHA")
+	return errors.New("usage: control-api serve | migrate up|down | bootstrap-user --username USER --email EMAIL [--display-name NAME] [--existing-ok] | admin-access-allowlist disable|status | reset-node-host-delivery --node-id UUID | recover-platform-admin --user-id UUID --scope-id UUID --request-id UUID (--status | --expected-username OLD --expected-revision N --new-username NEW [--password-stdin]) | bootstrap-node-ca --username USER --certificate-file FILE [--key-id ID] | bootstrap-system-configuration --username USER | install-community --installation-id UUID | community-register --account NAME --password-stdin | community-refresh | install-entitlement --bundle FILE --trusted-keys FILE [--trusted-keyset FILE] [--revocation FILE] | fetch-entitlement-revocation --license-service URL --installation-id UUID --installation-key FILE | report-installation-endpoints --license-service URL --installation-key FILE --request-file FILE [--refresh-request] | native-backup COMMAND (see control-api native-backup) | control-host bind|status (see control-api control-host) | signer-revocation import-checkpoint|import-edge-trust --in FILE | plugin-webhook-attestation-key status|rotate | verify-native-upgrade --installation-id UUID --version VERSION --source-commit COMMIT --source-tree TREE --artifact-sha256 SHA --runner-sha256 SHA")
 }
 
 // approvalStepUpConsumer is the approval center's step-up consumer; a typed

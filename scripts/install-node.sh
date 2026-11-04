@@ -639,7 +639,7 @@ cleanup() {
     if [ -n "$NATIVE_RELEASE" ]; then warn "first installation rolled back; verified release retained at ${NATIVE_RELEASE}"; fi
     if "$PACKAGING_INSTALLED"; then warn "the signed Agent package remains under ${PACKAGE_RELEASE_ROOT} and ${PACKAGING_LIBEXEC}; its service is stopped and disabled"; fi
     if "$ENROLLMENT_ATTEMPTED"; then warn 'enrollment was attempted; identity/recovery state is retained and the one-time token may already be consumed'; fi
-    if [ -f "$INSTALL_STATE_FILE" ]; then warn "$(msg '安装未完成：修复上面的错误后，在原安装命令末尾加 --resume 续装（已完成的步骤会跳过）' 'installation not finished: fix the error above and rerun the original command with --resume (finished steps are skipped)')"; fi
+    if [ -f "$INSTALL_STATE_FILE" ]; then warn "$(msg '安装未完成：修复上面的错误后，在原安装命令最后一个参数后面加上 --resume 续装（已完成的步骤会跳过；控制台复制的命令外面有括号，--resume 要在右括号 ) 之前）' 'installation not finished: fix the error above and add --resume after the last argument of the original install command (finished steps are skipped; the command copied from the console is wrapped in parentheses, keep --resume before the closing ))')"; fi
   fi
   if [ -n "$NATIVE_STAGE_PARENT" ] && [ -d "$NATIVE_STAGE_PARENT" ]; then rm -rf -- "$NATIVE_STAGE_PARENT"; fi
   if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then rm -rf -- "$TEMP_DIR"; fi
@@ -1776,7 +1776,7 @@ install_state_value() { sed -n "s/^$1=//p" "$INSTALL_STATE_FILE" 2>/dev/null | t
 
 install_state_unfinished_hint() {
   [ -f "$INSTALL_STATE_FILE" ] && ! install_state_has step=done || return 0
-  warn "$(msg "上次节点安装未完成（${INSTALL_STATE_FILE}）：修复失败原因后，在原安装命令末尾加 --resume 续装，已完成的步骤会跳过" "the previous node installation did not finish (${INSTALL_STATE_FILE}): fix the cause and append --resume to the original install command; finished steps are skipped")"
+  warn "$(msg "上次节点安装未完成（${INSTALL_STATE_FILE}）：修复失败原因后，在原安装命令最后一个参数后面加上 --resume 续装（控制台复制的命令外面有括号，--resume 要在右括号 ) 之前），已完成的步骤会跳过" "the previous node installation did not finish (${INSTALL_STATE_FILE}): fix the cause and add --resume after the last argument of the original install command (keep it before the closing ) of the command copied from the console); finished steps are skipped")"
 }
 
 install_state_check_resumable() {
@@ -3135,7 +3135,7 @@ register_node() {
   rm -f -- "$response"
   case "$code" in
     invalid_registration_credential) fail "$(msg '节点注册凭据无效或已被重置，请从管理端「节点安装命令」重新复制最新命令' 'the node registration credential is invalid or was reset; copy the latest command from "Install node" in the console')" ;;
-    node_already_registered) fail "$(msg '本机已注册到管理端（已完成注册或已初始化）；如需重新安装，请先在管理端删除该节点' 'this host is already registered (registered or initialised); delete the node in the console before reinstalling')" ;;
+    node_already_registered) fail "$(msg '本机已注册到管理端（已完成注册或已初始化）。重装本机并沿用原节点的全部配置：在管理端「节点列表」该节点「更多 → 重装此节点」获取重装命令，在本机执行' 'this host is already registered (registered or initialised). To reinstall it and keep all of the node'"'"'s settings, open Nodes in the console, choose More -> Reinstall this node on that node, and run the reinstall command shown there on this host')" ;;
     node_registration_rate_limited) fail "$(msg '注册请求过于频繁，请 1 分钟后重试' 'too many registration requests; retry in a minute')" ;;
     node_registration_limit) fail "$(msg '待初始化节点过多，请先在管理端处理「待初始化」列表' 'too many pending nodes; handle the "Pending" list in the console first')" ;;
     node_registration_unavailable) fail "$(msg '管理端未启用节点注册，请检查主控配置' 'node registration is disabled on the console; check the control plane configuration')" ;;
@@ -3467,10 +3467,10 @@ verify_agent_connected() {
   fail "$(msg "服务已起但未连上主控网关 ${GATEWAY_ADDRESS}（等待 ${GATEWAY_SESSION_WAIT_SECONDS} 秒）${last_error:+；最近一次错误：${last_error}}。
   请检查：1) 主控防火墙/安全组已放行 TCP ${port}，本机能连通（timeout 5 bash -c 'exec 3<>/dev/tcp/${GATEWAY_ADDRESS%:*}/${port}'，IPv6 去掉方括号）；
   2) 本机时间准确（timedatectl）；3) 主控网关服务正常、证书名为 ${GATEWAY_SERVER_NAME}；4) 日志：journalctl -u ${SERVICE_NAME} -n 100。
-  服务保持运行并会自动重连；修好后在原安装命令末尾加 --resume 重新自检" "the service is up but did not connect to the control Gateway ${GATEWAY_ADDRESS} (waited ${GATEWAY_SESSION_WAIT_SECONDS} s)${last_error:+; last error: ${last_error}}.
+  服务保持运行并会自动重连；修好后在原安装命令最后一个参数后面加上 --resume 重新自检" "the service is up but did not connect to the control Gateway ${GATEWAY_ADDRESS} (waited ${GATEWAY_SESSION_WAIT_SECONDS} s)${last_error:+; last error: ${last_error}}.
   Check: 1) the control firewall / security group allows TCP ${port} and this host can reach it (timeout 5 bash -c 'exec 3<>/dev/tcp/${GATEWAY_ADDRESS%:*}/${port}', drop the brackets for IPv6);
   2) the clock of this host is correct (timedatectl); 3) the control Gateway is healthy and its certificate name is ${GATEWAY_SERVER_NAME}; 4) logs: journalctl -u ${SERVICE_NAME} -n 100.
-  The service keeps running and reconnects by itself; once fixed append --resume to the original install command to rerun the self-check")"
+  The service keeps running and reconnects by itself; once fixed add --resume after the last argument of the original install command to rerun the self-check")"
 }
 
 # The steps the installer cannot do itself: they need the console. --resume
@@ -3479,7 +3479,7 @@ node_next_steps() {
   printf '%s\n  1) %s\n  2) %s\n  3) %s\n  4) %s\n' "$(msg '下一步：' 'Next steps:')" \
     "$(msg '主控「节点列表 → 待初始化」找到本机，点「初始化」（第一次装主控时还需先建「区域」）' 'console Nodes -> Pending initialization: find this host and click Initialize (on a new console create a Region first)')" \
     "$(msg '把本机加入线路组（「线路组」→ 新建或编辑，端点选本机 80 端口），站点才会解析到本机' 'add this host to a line group (Line groups -> new or edit, endpoint this host port 80) so sites resolve to it')" \
-    "$(msg '（可选，只用于复核）初始化后在原安装命令末尾加 --resume 重新自检（本机已有身份，无需重新取注册密钥；直接 bash <安装器> ... --resume </dev/null 也可）；不执行也不影响节点开放' '(optional, re-check only) after initializing rerun the original install command with --resume (this host already has its identity, no need to fetch the registration key again; bash <installer> ... --resume </dev/null works too); the node opens without it')" \
+    "$(msg '（可选，只用于复核）初始化后在原安装命令最后一个参数后面加上 --resume 重新自检（本机已有身份，无需重新取注册密钥；直接 bash <安装器> ... --resume </dev/null 也可）；不执行也不影响节点开放' '(optional, re-check only) after initializing rerun the original install command with --resume (this host already has its identity, no need to fetch the registration key again; bash <installer> ... --resume </dev/null works too); the node opens without it')" \
     "$(msg "复核通过后可随时核对：${INSTALLER_COPY} check（应全部 OK）" "after the re-check verify any time: ${INSTALLER_COPY} check (every item must be OK)")" >&2
 }
 # Edge kernel baseline. Each entry is
@@ -3614,7 +3614,7 @@ check_installed() {
     check_ok "$(msg "网关会话：本次启动已与 ${value} 握手" "Gateway session: this start completed the handshake with ${value}")"
   else check_bad "$(msg "网关会话：未连上 ${value:-?}（journalctl -u $SERVICE_NAME | grep 'gateway session'）" "Gateway session: not connected to ${value:-?} (journalctl -u $SERVICE_NAME | grep 'gateway session')")"; fi
   if install_state_has step=done; then check_ok "$(msg "install-state 记录已完成（$INSTALL_STATE_FILE）" "install-state record finished ($INSTALL_STATE_FILE)")"
-  else check_bad "$(msg "安装未完成（$INSTALL_STATE_FILE 无 step=done）：在原安装命令末尾加 --resume 续装" "the installation did not finish ($INSTALL_STATE_FILE has no step=done): rerun the original install command with --resume")"; fi
+  else check_bad "$(msg "安装未完成（$INSTALL_STATE_FILE 无 step=done）：在原安装命令最后一个参数后面加上 --resume 续装" "the installation did not finish ($INSTALL_STATE_FILE has no step=done): rerun the original install command with --resume")"; fi
   version=$(/usr/local/openresty/bin/openresty -V 2>&1) || version=''
   value=$(jq -r '.openresty.version // empty' "$CONFIG_FILE" 2>/dev/null)
   if [ -n "$value" ] && grep -Fq "openresty/${value}" <<<"$version"; then check_ok "openresty ${value}"

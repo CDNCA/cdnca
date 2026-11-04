@@ -984,6 +984,40 @@ describe('SiteListPage', () => {
     })
   })
 
+  // 锁定请求进行中不能关；结果未确认时关闭先确认，确认后关闭并刷新网站列表。
+  it('lets an unknown lock close after a warning and refreshes the site list', async () => {
+    authenticate('admin')
+    const current = detailFor(site, 4)
+    let fail!: () => void
+    let lists = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url.startsWith('/v1/sites?')) { lists += 1; return Promise.resolve(response([site])) }
+      if (url === '/v1/sites/site-1' && !init?.method) return Promise.resolve(jsonResponse(current))
+      if (url.endsWith('/lock') && init?.method === 'POST') return new Promise<Response>((_, reject) => { fail = () => reject(new TypeError('connection reset')) })
+      return Promise.reject(new Error(`unexpected request ${url}`))
+    })
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<SiteListPage />, ['/site/list'])
+    await screen.findByText('www.example.com')
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    await user.click(await screen.findByText('锁定网站（继续服务，禁止用户修改）'))
+    const dialog = await findDialog('锁定网站')
+    await user.type(within(dialog).getByLabelText('锁定原因'), '异常流量调查')
+    await user.click(within(dialog).getByRole('button', { name: '确认锁定' }))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled())
+    fail()
+    expect(await within(dialog).findByText('操作结果待确认')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('锁定原因')).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: '使用同一请求重试' })).toBeEnabled()
+    const before = lists
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    const confirm = (await screen.findByText('结果尚未确认，关闭后请刷新列表核对是否已生效')).closest<HTMLElement>('.ant-modal-confirm')!
+    await user.click(within(confirm).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(lists).toBeGreaterThan(before))
+    await waitFor(() => expect(screen.queryByText('操作结果待确认')).not.toBeInTheDocument())
+  })
+
   it('requires a fresh revision after conflict and rotates the idempotency key', async () => {
     authenticate('admin')
     let detailReads = 0

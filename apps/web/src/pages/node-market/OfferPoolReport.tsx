@@ -119,18 +119,20 @@ function PoolSection({ id, report, error, loading }: { id: string; report?: Mark
       message={t('refreshFailed', { code: refresh.error instanceof ApiError ? refresh.error.code : 'request_failed' })} /> : null}
     <Table<MarketPoolReportNode> size="small" pagination={false} rowKey="node_id" loading={loading} dataSource={nodes}
       // A fixed width: the next-step text wraps in its column; a narrow screen scrolls the table, not the drawer.
-      scroll={{ x: 960 }}
+      // Every column has a width: a long status tag (antd Tag does not wrap) took the free
+      // width and squeezed the role column to one character per line.
+      scroll={{ x: 1180 }} tableLayout="fixed"
       columns={[
-        { title: t('columns.node'), key: 'node', render: (_: unknown, n) => n.name || n.node_id.slice(0, 8) },
-        { title: t('columns.address'), dataIndex: 'address' },
-        { title: t('columns.location'), key: 'location', render: (_: unknown, n) => t('location', { region: empty(n.region), carrier: empty(n.carrier) }) },
-        { title: t('columns.role'), key: 'role', render: (_: unknown, n) => <Space size={4} wrap>
+        { title: t('columns.node'), key: 'node', width: 170, render: (_: unknown, n) => n.name || n.node_id.slice(0, 8) },
+        { title: t('columns.address'), dataIndex: 'address', width: 150 },
+        { title: t('columns.location'), key: 'location', width: 120, render: (_: unknown, n) => t('location', { region: empty(n.region), carrier: empty(n.carrier) }) },
+        { title: t('columns.role'), key: 'role', width: 120, render: (_: unknown, n) => <Space size={4} wrap>
           <span>{t(`roles.${n.role || 'unknown'}`)}</span>
           {n.role_source ? <Typography.Text type="secondary">{t(`roleSources.${n.role_source}`)}</Typography.Text> : null}
         </Space> },
-        { title: t('columns.status'), key: 'status', render: (_: unknown, n) => n.reason === ''
+        { title: t('columns.status'), key: 'status', width: 300, render: (_: unknown, n) => n.reason === ''
           ? <Tag color="success">{t('ok')}</Tag>
-          : <Tag color="warning">{t(`reasons.${n.reason}`, { value: n.value || t('emptyValue') })}</Tag> },
+          : <Tag color="warning" className="pool-report-reason">{t(`reasons.${n.reason}`, { value: n.value || t('emptyValue') })}</Tag> },
         { title: t('columns.next'), key: 'next', width: 320, render: (_: unknown, n) => <Space direction="vertical" size={2}>
           <Typography.Text>{nextStep(n, t)}</Typography.Text>
           {n.reason === 'region_unmapped' || n.reason === 'carrier_unmapped'

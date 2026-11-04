@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Form, Input, InputNumber, Popconfirm, Radio, Result, Select, Spin, Switch, type FormInstance } from 'antd'
+import { Button, Form, Input, InputNumber, Popconfirm, Radio, Result, Select, Space, Spin, Switch, type FormInstance } from 'antd'
 import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { ArrowLeft, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +11,7 @@ import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/streamGuard'
 import '../i18n/originWeight'
+import '../i18n/unconfirmedClose'
 import { streamOriginShares } from './originWeightShare'
 import StreamPublicationModal, { streamPublicationFailure } from './StreamPublicationModal'
 import { dropWriteRecovery, useWriteRecovery } from './streamWriteRecovery'
@@ -107,6 +108,7 @@ function StreamDetailContent({ id, scopeKind, scopeID, sessionEpoch, canManage }
   const { t, i18n } = useTranslation('streams')
   const { t: tGuard } = useTranslation('streamGuard')
   const { t: tW } = useTranslation('originWeight')
+  const { t: tu } = useTranslation('unconfirmedClose')
   const queryClient = useQueryClient()
   const [form] = Form.useForm<StreamFormValues>()
   const [messageApi, context] = useFeedbackMessage()
@@ -302,6 +304,13 @@ function StreamDetailContent({ id, scopeKind, scopeID, sessionEpoch, canManage }
     const response = await query.refetch()
     if (response.data && mayRead()) { form.setFieldsValue(formValues(response.data)); form.setFields(draft.current) }
   }
+  // 放弃这次未确认的保存：清掉原请求记录和未保存的修改，按服务端最新内容重新填表。
+  const abandonWrite = async () => {
+    if (!retryAttempt || mutation.isPending) return
+    recovery.clear()
+    draft.current = []
+    await refresh()
+  }
   const [operationLabel, operationTone] = !item ? ['', undefined]
     : item.admin_status !== 'normal' ? [t(`adminStatus.${item.admin_status}`), 'is-warning']
       : item.eligibility_state === 'ineligible' ? [t('states.ineligible'), 'is-warning']
@@ -323,7 +332,7 @@ function StreamDetailContent({ id, scopeKind, scopeID, sessionEpoch, canManage }
       </div>
       {query.isPending ? <div className="stream-detail-loading"><Spin aria-label={t('detail.loading')} /></div> : null}
       {query.isError ? <FeedbackWhen title={t('detail.loadFailed')} /> : null}
-      {retryAttempt || writeError ? (retryAttempt ? <OutcomeUnknown type="error" title={t('detail.unknown')} action={canManage ? <Button size="small" loading={mutation.isPending} disabled={query.isFetching || mutation.isPending} onClick={() => { if (mayWrite() && !writing.current) { writing.current = true; mutation.mutate(retryAttempt) } }}>{t('detail.retryExact')}</Button> : null} /> : writeError ? <FeedbackWhen title={errorMessage(writeError, t)} /> : null) : null}
+      {retryAttempt || writeError ? (retryAttempt ? <OutcomeUnknown type="error" title={t('detail.unknown')} action={<Space size={4}><Button size="small" disabled={mutation.isPending} onClick={() => void abandonWrite()}>{tu('abandonRefresh')}</Button>{canManage ? <Button size="small" loading={mutation.isPending} disabled={query.isFetching || mutation.isPending} onClick={() => { if (mayWrite() && !writing.current) { writing.current = true; mutation.mutate(retryAttempt) } }}>{t('detail.retryExact')}</Button> : null}</Space>} /> : writeError ? <FeedbackWhen title={errorMessage(writeError, t)} /> : null) : null}
       {item ? <Form form={form} layout="vertical" requiredMark={false} disabled={locked} initialValues={formValues(item)} onValuesChange={rememberDraft}>
         <div id="stream-panel-basic" role="tabpanel" aria-labelledby="stream-tab-basic" hidden={tab !== 'basic'}>
           <section className="stream-detail-section">

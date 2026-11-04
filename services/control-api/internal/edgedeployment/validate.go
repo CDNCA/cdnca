@@ -313,6 +313,11 @@ func normalizeRolloutRequestWithDeadline(
 	now time.Time,
 	requireFutureDeadline bool,
 ) (normalizedRolloutRequest, error) {
+	// The command carries the deadline and node_deployments.deadline_at stores
+	// microseconds; edgeartifact refuses a command whose deadline differs from
+	// the stored one ("artifact integrity verification failed" on every fetch,
+	// seen for the sold-package publication and certificate redelivery).
+	request.Deadline = request.Deadline.UTC().Truncate(time.Microsecond)
 	if request.MaxAttempts == 0 {
 		request.MaxAttempts = 3
 	}

@@ -161,3 +161,46 @@ func TestValidateSecretArtifactBindingRejectsEveryIdentityMismatch(t *testing.T)
 		})
 	}
 }
+
+// node_deployments.deadline_at keeps microseconds and edgeartifact refuses a
+// command whose deadline differs from it (a certificate redelivery
+// from a wall clock was refused on every fetch). Normalization keeps what is stored.
+func TestNormalizeSecretRolloutRequestKeepsTheStoredDeadlinePrecision(t *testing.T) {
+	now := time.Date(2026, 7, 28, 1, 0, 0, 0, time.UTC)
+	scopeID := uuid.New()
+	actor, err := NewSessionActor(uuid.New(), scopeID, ScopeKindTenant, uuid.New(), "secret-rollout-test-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := now.Add(time.Hour + 123456789*time.Nanosecond)
+	request := SecretRolloutRequest{
+		Actor: actor, ConfigurationScopeID: scopeID, NodeIDs: []uuid.UUID{uuid.New()},
+		CanonicalSnapshot: []byte(`{"certificate_revision":7}`),
+		GeneratorName:     "certificate-publication", GeneratorVersion: "1",
+		PayloadDigest: sha256.Sum256([]byte("certificate-revision-7")),
+		HealthCheck: HealthCheckPolicy{
+			ActivationTimeout: time.Minute, ObservationWindow: time.Second,
+			RequiredConsecutiveSuccesses: 1,
+		},
+		Deadline: deadline, IdempotencyKey: "certificate-publication-7",
+		RequestID: uuid.NewString(), CorrelationID: uuid.NewString(),
+	}
+	normalized, err := normalizeSecretRolloutRequest(request, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := deadline.Truncate(time.Microsecond); !normalized.Deadline.Equal(want) {
+		t.Fatalf("secret rollout deadline %s, want %s", normalized.Deadline, want)
+	}
+	rollout, err := normalizeRolloutRequest(CreateRolloutRequest{
+		ConfigurationScopeID: scopeID, ConfigVersionID: uuid.New(), Action: agentv1.DeploymentAction_DEPLOYMENT_ACTION_APPLY,
+		NodeIDs: request.NodeIDs, HealthCheck: request.HealthCheck, Deadline: deadline, IdempotencyKey: "rollout-7",
+		RequestID: uuid.NewString(), CorrelationID: uuid.NewString(), MaxAttempts: 1,
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := deadline.Truncate(time.Microsecond); !rollout.Deadline.Equal(want) {
+		t.Fatalf("rollout deadline %s, want %s", rollout.Deadline, want)
+	}
+}

@@ -243,8 +243,26 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 				req.TargetScopeID, target.id, site.packageSubscriptionID).Scan(&packageChanged); err != nil {
 				return err
 			}
-			if !packageChanged || req.intentJobID == uuid.Nil {
+			if req.intentJobID == uuid.Nil {
 				return ErrConflict
+			}
+			// A tenant intent of the same
+			// package and CNAME (a site edit) was refused here on every
+			// attempt (ErrConflict until retries ran out). A platform intent
+			// refreshes in place below; a tenant one may not keep its
+			// hostname under a new job (113: only a platform refresh may), so
+			// it ends: the site is shown its settled CNAME again while that
+			// is still on the line group in effect, else node_group_unavailable.
+			if !packageChanged && req.platformIntentID == uuid.Nil && claimMatches(target.claim, zone, req.Hostname) {
+				if err := checkSettledLineGroup(ctx, tx, req.TargetScopeID, req.SiteID, target.jobID); err != nil {
+					return err
+				}
+				if err := projectBoundSites(ctx, tx, req.TargetScopeID, target.id, req.Domain, req.Hostname,
+					store.timestamp(), req.SiteID); err != nil {
+					return err
+				}
+				result, err = loadAllocation(ctx, tx, req.TargetScopeID, req.SiteID)
+				return err
 			}
 		}
 
@@ -519,6 +537,31 @@ func insertFrozenTarget(ctx context.Context, tx pgx.Tx, input frozenTargetInput,
 		return err
 	}
 	return writeFrozenTarget(ctx, tx, input, addresses, nodeGroupID, nodeGroupScopeID, nodeGroupRevision, now)
+}
+
+// checkSettledLineGroup: the site's settled targets (frozen by jobID) are on
+// the line group the site resolves to now (insertFrozenTarget's choice: the
+// site's own, else its package's, else the platform default), and that group
+// is live. Otherwise node_group_unavailable: a deleted group, or a line that
+// moved and that only a platform intent can re-freeze under the same hostname.
+func checkSettledLineGroup(ctx context.Context, tx pgx.Tx, scopeID, siteID, jobID uuid.UUID) error {
+	var current bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM sites selected_site
+		JOIN cname_allocation_targets frozen ON frozen.tenant_scope_id=selected_site.scope_id AND frozen.job_id=$3
+		LEFT JOIN package_subscriptions subscription ON subscription.tenant_scope_id=selected_site.scope_id
+		 AND subscription.id=selected_site.package_subscription_id
+		JOIN node_line_groups line_group ON line_group.tenant_scope_id=frozen.node_group_scope_id
+		 AND line_group.id=frozen.node_group_id AND line_group.deleted_at IS NULL
+		WHERE selected_site.scope_id=$1 AND selected_site.id=$2
+		  AND line_group.id=CASE WHEN selected_site.node_group_id IS NOT NULL THEN selected_site.node_group_id
+		      WHEN selected_site.package_subscription_id IS NOT NULL THEN (subscription.product_snapshot->'spec'->>'node_group_id')::uuid
+		      WHEN line_group.is_platform_default THEN line_group.id END)`, scopeID, siteID, jobID).Scan(&current); err != nil {
+		return err
+	}
+	if !current {
+		return failWith(FailureNodeGroupUnavailable, ErrNotFound)
+	}
+	return nil
 }
 
 func insertNoPackageFrozenTarget(ctx context.Context, tx pgx.Tx, input frozenTargetInput, now time.Time) error {

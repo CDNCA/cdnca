@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/marketsupplyguard"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -22,37 +24,110 @@ const purgeRevocationReason = "node deleted by administrator"
 const auditActionNodeDelete = "node.delete"
 
 // ensureNodeUnreferenced blocks deletion while the node is still in use:
-// listed by the current revision of a live line group or by a live L2
-// configuration (removing it silently would change customer resolution), or
-// taking part in multi-node work that is not finished yet (a queued/running
-// cache operation, an active cross-node CC coordination). The administrator
-// detaches it, or waits for the work to finish, and deletes again.
+// listed by the current revision of a live line group (a hidden market supply
+// group included) or by a live L2 configuration (removing it silently would
+// change customer resolution), or taking part in multi-node work that is not
+// finished yet (a queued/running cache operation, an active cross-node CC
+// coordination). The administrator detaches it, or waits for the work to
+// finish, and deletes again. The refusal is an *InUseError naming what holds
+// the node.
 func ensureNodeUnreferenced(ctx context.Context, tx pgx.Tx, nodeID uuid.UUID, now time.Time) error {
-	var referenced bool
-	if err := tx.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM node_line_endpoints endpoint
-			JOIN node_line_groups line_group ON line_group.tenant_scope_id = endpoint.tenant_scope_id
-			 AND line_group.id = endpoint.line_group_id AND line_group.current_revision = endpoint.config_revision
-			WHERE endpoint.node_id = $1 AND line_group.deleted_at IS NULL
-		) OR EXISTS (
-			SELECT 1 FROM l2_topology_nodes membership
-			JOIN l2_topology_configs config ON config.tenant_scope_id = membership.tenant_scope_id
-			 AND config.id = membership.config_id
-			WHERE membership.node_id = $1 AND membership.deleted_at IS NULL AND config.deleted_at IS NULL
-		) OR EXISTS (
-			SELECT 1 FROM cache_operation_nodes WHERE node_id = $1 AND state IN ('queued', 'running')
-		) OR EXISTS (
-			SELECT 1 FROM cc_coordination_states state
-			JOIN cc_coordination_facts fact ON fact.tenant_scope_id = state.tenant_scope_id AND fact.id = state.last_fact_id
-			WHERE fact.node_id = $1 AND state.state NOT IN ('released', 'failed') AND state.expires_at > $2
-		)`, nodeID, now).Scan(&referenced); err != nil {
-		return fmt.Errorf("check node references: %w", err)
+	reasons, err := nodeInUseReasons(ctx, tx, nodeID, now)
+	if err != nil {
+		return err
 	}
-	if referenced {
-		return ErrInUse
+	if len(reasons) > 0 {
+		return &InUseError{Reasons: reasons}
 	}
 	return nil
+}
+
+// maxInUseGroups bounds the line groups and L2 configurations a refusal
+// names; more are not listed.
+const maxInUseGroups = 20
+
+func nodeInUseReasons(ctx context.Context, tx pgx.Tx, nodeID uuid.UUID, now time.Time) ([]InUseReason, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT line_group.id, line_group.name, line_group.purpose,
+		       (SELECT count(DISTINCT member.node_id) FROM node_line_endpoints member
+		        WHERE member.tenant_scope_id = line_group.tenant_scope_id AND member.line_group_id = line_group.id
+		          AND member.config_revision = line_group.current_revision)
+		FROM node_line_groups line_group
+		WHERE line_group.deleted_at IS NULL AND EXISTS (
+			SELECT 1 FROM node_line_endpoints endpoint
+			WHERE endpoint.tenant_scope_id = line_group.tenant_scope_id AND endpoint.line_group_id = line_group.id
+			  AND endpoint.config_revision = line_group.current_revision AND endpoint.node_id = $1)
+		ORDER BY line_group.purpose = 'market_supply' DESC, line_group.name, line_group.id
+		LIMIT $2`, nodeID, maxInUseGroups)
+	if err != nil {
+		return nil, fmt.Errorf("read line groups of node: %w", err)
+	}
+	reasons, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (InUseReason, error) {
+		var reason InUseReason
+		var id uuid.UUID
+		var purpose string
+		var nodes int
+		if err := row.Scan(&id, &reason.Name, &purpose, &nodes); err != nil {
+			return InUseReason{}, err
+		}
+		reason.ID, reason.Kind = id.String(), InUseLineGroup
+		if purpose == "market_supply" {
+			reason.Kind = InUseMarketSupply
+			reason.Name = strings.TrimPrefix(reason.Name, marketsupplyguard.GroupNamePrefix)
+			reason.GroupNodes = &nodes
+		}
+		return reason, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read line groups of node: %w", err)
+	}
+	for index := range reasons {
+		if reasons[index].Kind != InUseMarketSupply {
+			continue
+		}
+		normal, err := marketsupplyguard.NormalSubscriptions(ctx, tx, uuid.MustParse(reasons[index].ID))
+		if err != nil {
+			return nil, err
+		}
+		reasons[index].NormalSubscriptions = &normal
+	}
+	rows, err = tx.Query(ctx, `
+		SELECT config.id, config.name FROM l2_topology_configs config
+		WHERE config.deleted_at IS NULL AND EXISTS (
+			SELECT 1 FROM l2_topology_nodes membership
+			WHERE membership.tenant_scope_id = config.tenant_scope_id AND membership.config_id = config.id
+			  AND membership.node_id = $1 AND membership.deleted_at IS NULL)
+		ORDER BY config.name, config.id LIMIT $2`, nodeID, maxInUseGroups)
+	if err != nil {
+		return nil, fmt.Errorf("read L2 configurations of node: %w", err)
+	}
+	l2, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (InUseReason, error) {
+		var id uuid.UUID
+		reason := InUseReason{Kind: InUseL2}
+		err := row.Scan(&id, &reason.Name)
+		reason.ID = id.String()
+		return reason, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read L2 configurations of node: %w", err)
+	}
+	reasons = append(reasons, l2...)
+	var cacheOperations, coordinations int
+	if err := tx.QueryRow(ctx, `
+		SELECT (SELECT count(DISTINCT operation_id) FROM cache_operation_nodes WHERE node_id = $1 AND state IN ('queued', 'running')),
+		       (SELECT count(*) FROM cc_coordination_states state
+		        JOIN cc_coordination_facts fact ON fact.tenant_scope_id = state.tenant_scope_id AND fact.id = state.last_fact_id
+		        WHERE fact.node_id = $1 AND state.state NOT IN ('released', 'failed') AND state.expires_at > $2)`,
+		nodeID, now).Scan(&cacheOperations, &coordinations); err != nil {
+		return nil, fmt.Errorf("check node work in progress: %w", err)
+	}
+	if cacheOperations > 0 {
+		reasons = append(reasons, InUseReason{Kind: InUseCacheOperation, Count: &cacheOperations})
+	}
+	if coordinations > 0 {
+		reasons = append(reasons, InUseReason{Kind: InUseCCCoordination, Count: &coordinations})
+	}
+	return reasons, nil
 }
 
 // lockHTTP01Overlay takes the lock every ACME HTTP-01 overlay writer takes

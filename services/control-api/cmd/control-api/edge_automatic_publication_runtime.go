@@ -50,6 +50,10 @@ type edgeAutomaticPublicationRuntimeDependencies struct {
 	// RenewalDeliverer, when the certificate publication runtime is on,
 	// delivers automatic renewals to the nodes and switches them in.
 	RenewalDeliverer edgeautopublish.RuntimeWorker
+	// CertificateRedeliverer, when the certificate publication runtime is on,
+	// gives nodes that joined, were reinstalled or recovered the certificate
+	// versions their sites use.
+	CertificateRedeliverer edgeautopublish.RuntimeWorker
 }
 
 type edgeAutomaticPublicationProductionRuntime struct {
@@ -253,6 +257,9 @@ func openEdgeAutomaticPublicationProductionRuntime(
 	}
 	if !nilRuntimeDependency(dependencies.RenewalDeliverer) {
 		chain = append(chain, dependencies.RenewalDeliverer)
+	}
+	if !nilRuntimeDependency(dependencies.CertificateRedeliverer) {
+		chain = append(chain, dependencies.CertificateRedeliverer)
 	}
 	core, err := edgeautopublish.NewRuntime(chain, coordinator, config.Runtime)
 	if err != nil {

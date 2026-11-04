@@ -43,7 +43,7 @@ func (distributor *Distributor) pendingNodes(ctx context.Context) ([]pendingNode
 			COALESCE(receipt.active_revision,0),
 			newest.revision IS NOT NULL AND EXISTS (SELECT 1 FROM node_deployments deployment
 			    WHERE deployment.node_id=node.id AND deployment.config_version_id=newest.config_version_id
-			      AND deployment.state='healthy')
+			      AND deployment.state='healthy' AND `+edgedeployment.CurrentHostDeployment("deployment")+`)
 		FROM nodes node
 		JOIN LATERAL (SELECT capabilities_snapshot,capabilities_sha256 FROM node_session_capabilities
 			WHERE node_id=node.id ORDER BY session_epoch DESC LIMIT 1) latest ON true
@@ -178,10 +178,12 @@ func segmentDigest(items []artifactset.Item, configID uuid.UUID, segments map[st
 }
 
 func (distributor *Distributor) history(ctx context.Context, nodeID uuid.UUID, configs []uuid.UUID) (map[uuid.UUID]deliveryHistory, error) {
+	// attempts counts every delivery (it names the next rollout); a delivery
+	// to a previous host of the node is neither healthy nor failed here.
 	rows, err := distributor.config.Pool.Query(ctx, `SELECT config_version_id, count(DISTINCT rollout_id),
-			COALESCE(max(updated_at) FILTER (WHERE state='healthy'),'epoch'),
-			COALESCE(max(updated_at) FILTER (WHERE state IN `+failedStates+`),'epoch')
-		FROM node_deployments WHERE node_id=$1 AND config_version_id=ANY($2::uuid[])
+			COALESCE(max(updated_at) FILTER (WHERE state='healthy' AND `+edgedeployment.CurrentHostDeployment("deployment")+`),'epoch'),
+			COALESCE(max(updated_at) FILTER (WHERE state IN `+failedStates+` AND `+edgedeployment.CurrentHostDeployment("deployment")+`),'epoch')
+		FROM node_deployments deployment WHERE node_id=$1 AND config_version_id=ANY($2::uuid[])
 		GROUP BY config_version_id`, nodeID, configs)
 	if err != nil {
 		return nil, fmt.Errorf("read node artifact deliveries: %w", err)

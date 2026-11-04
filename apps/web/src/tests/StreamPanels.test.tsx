@@ -110,6 +110,26 @@ describe.each(panels)('$kind natural states and write recovery', (panel) => {
     expect(await screen.findByText(panel.created)).toBeInTheDocument()
   })
 
+  it('lets an unknown create be abandoned (disabled while retrying), then refreshes the list and unlocks writes', async () => {
+    const retrying = deferred<StreamGroup & StreamUserConfig>()
+    const create = vi.spyOn(streamGroupsApi, panel.create).mockRejectedValueOnce(new ApiError('lost response', 0, 'network_error')).mockReturnValueOnce(retrying.promise)
+    const { user } = setup(panel)
+    const dialog = await openCreate(panel, user)
+    await user.click(within(dialog).getByRole('button', { name: '确认' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '按原请求重试' })).toBeEnabled())
+    expect(screen.getByRole('button', { name: '放弃并刷新' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: '按原请求重试' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '放弃并刷新' })).toBeDisabled())
+    await act(async () => retrying.reject(new ApiError('lost response', 0, 'network_error')))
+    await waitFor(() => expect(screen.getByRole('button', { name: '放弃并刷新' })).toBeEnabled())
+    const reads = vi.mocked(streamGroupsApi[panel.read]).mock.calls.length
+    await user.click(screen.getByRole('button', { name: '放弃并刷新' }))
+    await waitFor(() => expect(vi.mocked(streamGroupsApi[panel.read]).mock.calls.length).toBeGreaterThan(reads))
+    await waitFor(() => expect(screen.getByRole('button', { name: panel.add })).toBeEnabled())
+    expect(screen.queryByRole('button', { name: '按原请求重试' })).not.toBeInTheDocument()
+    expect(create).toHaveBeenCalledTimes(2)
+  })
+
   it('includes the selected owner tenant in administrator creates', async () => {
     const create = vi.spyOn(streamGroupsApi, panel.create).mockResolvedValue(panel.item as never)
     const { user } = setup(panel, true)

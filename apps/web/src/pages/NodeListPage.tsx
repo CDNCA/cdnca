@@ -27,7 +27,7 @@ import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import { ApiError, type Principal } from '../api/auth'
+import { ApiError, nodeInUseReasons, type NodeInUseReason, type Principal } from '../api/auth'
 import {
   isSchedule302Hostname,
   validNodeStorageDirectory,
@@ -68,7 +68,7 @@ import './NodeListPage.locale'
 import './NodeListPage.css'
 import RegionManagementPanel from './NodeRegionManagement'
 import { NodeRegionSelect, useRegionCatalogNames } from './NodeRegionSelect'
-import NodeInstallCommand from './NodeInstallCommand'
+import NodeInstallCommand, { buildNodeReinstallCommand, type InstallRuntime } from './NodeInstallCommand'
 import NodeSSHInstall from './NodeSSHInstall'
 import NodeSSHPanel from './NodeSSHPanel'
 import { NodeBatchMonitorConfigModal, NodeMonitorConfigModal, NodeMonitorLogModal } from './NodeListMonitorModals'
@@ -155,7 +155,20 @@ interface TokenAttempt {
   node: NodeInventoryItem
   ownerKey: string
   values: TokenFormValues
+  // 重装此节点: the result is shown as the node's reinstall command.
+  reinstall?: boolean
 }
+
+// Reinstall command shown once after "重装此节点" (command is null when this
+// console cannot build one; the raw token is shown instead).
+interface ReinstallResult {
+  name: string
+  token: IssuedEnrollmentToken
+  command: string | null
+}
+
+// The re_enrollment token of "重装此节点" covers downloading packages before enrollment.
+const reinstallTokenTTLSeconds = 3600
 
 const staleNodeRead = new Error('Node inventory session owner changed during read')
 // Region filter value for nodes without a region (no region name is empty).
@@ -238,11 +251,13 @@ function PresenceCell({ state, presence }: { state: NodeAdminState; presence: No
       ? t(`monitor.marketProbeRoles.${presence.market_probe_role}`)
       : t('empty.notReported')}`,
   ].join(' · ')
+  // An active node whose Agent is not online (presence offline, or never confirmed a session) shows offline.
+  const offline = state === 'active' && presence.status !== 'online'
   return (
     <Tooltip title={details} trigger={['hover', 'focus', 'click']}>
-      <span className="node-state-cell" tabIndex={0} aria-label={details} title={details}>
-        <span className="node-state-dot" style={{ background: stateMeta[state].dot() }} />
-        <span>{state === 'active' ? t('list.stateActive') : t(`states.${state}`)}</span>
+      <span className="node-state-cell" tabIndex={0} aria-label={details} title={details} data-offline={offline || undefined}>
+        <span className="node-state-dot" style={{ background: offline ? stateMeta.disabled.dot() : stateMeta[state].dot() }} />
+        <span>{offline ? t('list.stateOffline') : state === 'active' ? t('list.stateActive') : t(`states.${state}`)}</span>
       </span>
     </Tooltip>
   )
@@ -324,7 +339,29 @@ function errorCodeMessage(code: string, t: TFunction<'nodes'>): string {
   }
 }
 
+// What holds a node whose deletion was refused, one sentence per kind.
+function nodeInUseText(reasons: NodeInUseReason[], t: TFunction<'nodes'>): string {
+  const names = (kind: NodeInUseReason['kind']) => reasons.filter((reason) => reason.kind === kind)
+    .map((reason) => reason.name ?? reason.id ?? '').filter(Boolean).join('、')
+  const parts: string[] = []
+  if (names('line_group')) parts.push(t('inUse.lineGroup', { names: names('line_group') }))
+  for (const reason of reasons.filter((item) => item.kind === 'market_supply')) {
+    const name = reason.name ?? reason.id ?? ''
+    const subscriptions = reason.normal_subscriptions ?? 0
+    parts.push(subscriptions === 0 ? t('inUse.marketSupply', { name })
+      : (reason.group_nodes ?? 1) <= 1 ? t('inUse.marketSupplyLast', { name, count: subscriptions })
+        : t('inUse.marketSupplySubscribed', { name, count: subscriptions }))
+  }
+  if (names('l2')) parts.push(t('inUse.l2', { names: names('l2') }))
+  for (const kind of ['cache_operation', 'cc_coordination'] as const) {
+    const reason = reasons.find((item) => item.kind === kind)
+    if (reason) parts.push(t(kind === 'cache_operation' ? 'inUse.cacheOperation' : 'inUse.ccCoordination', { count: reason.count ?? 1 }))
+  }
+  return parts.length > 0 ? t('inUse.prefix') + parts.join('；') : t('errors.node_in_use')
+}
+
 function errorMessage(error: ApiError, t: TFunction<'nodes'>): string {
+  if (error.code === 'node_in_use' && error.nodeInUse) return nodeInUseText(error.nodeInUse, t)
   const inUse = supplyInUse(error)
   if (inUse) return i18n.t('marketSupplier:supplyInUse', { online: inUse.online_available, normal: inUse.normal_subscriptions })
   return localizedUnknownApiError(error, errorCodeMessage(error.code, t))
@@ -1212,6 +1249,7 @@ function NodeFormModal({
 function TokenIssueModal({
   item,
   initialPurpose,
+  reinstall,
   open,
   pending,
   uncertain,
@@ -1221,6 +1259,8 @@ function TokenIssueModal({
 }: {
   item: NodeInventoryItem | null
   initialPurpose: EnrollmentPurpose
+  // 重装此节点: fixed re_enrollment purpose, a warning and a longer default TTL.
+  reinstall: boolean
   open: boolean
   pending: boolean
   uncertain: boolean
@@ -1230,24 +1270,33 @@ function TokenIssueModal({
 }) {
   const { t } = useTranslation('nodes')
   const [form] = Form.useForm<TokenFormValues>()
+  // A re_enrollment token takes over this node even while its host is still online (same as 重装此节点).
+  const purpose = Form.useWatch('purpose', form)
   useEffect(() => {
-    if (open) form.setFieldsValue({ purpose: initialPurpose, ttl_seconds: 600 })
-  }, [form, initialPurpose, open])
+    if (open) form.setFieldsValue({ purpose: initialPurpose, ttl_seconds: reinstall ? reinstallTokenTTLSeconds : 600 })
+  }, [form, initialPurpose, open, reinstall])
   return (
     <Modal
       className="node-modal"
-      title={t('token.issueTitle')}
+      title={reinstall ? t('reinstall.title', { name: item?.name ?? '' }) : t('token.issueTitle')}
       open={open}
       width={500}
       confirmLoading={pending}
-      okButtonProps={{ disabled: uncertain }}
-      okText={t('actions.issue')}
+      okButtonProps={{ disabled: uncertain, danger: reinstall }}
+      okText={reinstall ? t('reinstall.confirm') : t('actions.issue')}
       cancelText={t('actions.cancel')}
       onCancel={onCancel}
       onOk={() => void form.validateFields().then(onSubmit).catch(() => undefined)}
       destroyOnHidden
     >
-      <p className="node-modal-target">{item?.name}</p>
+      {reinstall ? (
+        <Alert className="node-modal-alert" type="warning" showIcon
+          message={t('reinstall.warningTitle')} description={t('reinstall.warning')} />
+      ) : <p className="node-modal-target">{item?.name}</p>}
+      {!reinstall && purpose === 're_enrollment' ? (
+        <Alert className="node-modal-alert" type="warning" showIcon
+          message={t('reinstall.warningTitle')} description={t('reinstall.warning')} />
+      ) : null}
       {uncertain ? (
         <Alert
           className="node-modal-alert"
@@ -1258,7 +1307,7 @@ function TokenIssueModal({
         />
       ) : error ? <Alert className="node-modal-alert" type="error" showIcon message={errorMessage(error, t)} /> : null}
       <Form form={form} layout="vertical" requiredMark={false} disabled={pending || uncertain}>
-        <Form.Item name="purpose" label={t('form.tokenPurpose')} rules={[{ required: true }]}>
+        <Form.Item name="purpose" label={t('form.tokenPurpose')} rules={[{ required: true }]} hidden={reinstall}>
           <Select
             placement="bottomLeft"
             virtual={false}
@@ -1271,7 +1320,7 @@ function TokenIssueModal({
             ]}
           />
         </Form.Item>
-        <Form.Item name="ttl_seconds" label={t('form.ttlSeconds')} rules={[{ required: true, type: 'number', min: 60, max: 86400 }]}>
+        <Form.Item name="ttl_seconds" label={reinstall ? t('reinstall.ttl') : t('form.ttlSeconds')} rules={[{ required: true, type: 'number', min: 60, max: 86400 }]}>
           <InputNumber min={60} max={86400} precision={0} />
         </Form.Item>
       </Form>
@@ -1314,6 +1363,51 @@ function TokenResultModal({ token, onClose }: { token: IssuedEnrollmentToken | n
         </div>
       </Modal>
     </>
+  )
+}
+
+function ReinstallResultModal({ result, onClose }: { result: ReinstallResult | null; onClose: () => void }) {
+  const { t, i18n } = useTranslation('nodes')
+  const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
+  useEffect(() => { setCopied(false); setCopyFailed(false) }, [result])
+  if (!result) return null
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(result.command ?? result.token.token)
+      setCopied(true)
+      setCopyFailed(false)
+    } catch {
+      setCopyFailed(true)
+    }
+  }
+  return (
+    <Modal
+      className="node-modal"
+      title={t('reinstall.resultTitle')}
+      open
+      width={760}
+      footer={<Button type="primary" onClick={onClose}>{t('actions.savedToken')}</Button>}
+      closable={false}
+      maskClosable={false}
+    >
+      <Alert
+        className="node-modal-alert"
+        type="warning"
+        showIcon
+        message={t('token.cannotViewAgain')}
+        description={t('reinstall.resultDescription', {
+          name: result.name, date: dateTime(result.token.expires_at, i18n.resolvedLanguage ?? i18n.language),
+        })}
+      />
+      {result.command ? null : <Alert className="node-modal-alert" type="error" showIcon message={t('reinstall.unavailable')} />}
+      {copyFailed ? <Alert className="node-modal-alert" type="error" showIcon message={t('reinstall.copyFailed')} /> : null}
+      <div className="node-install-command">
+        <Input.TextArea aria-label={result.command ? t('reinstall.commandLabel') : t('reinstall.tokenLabel')}
+          value={result.command ?? result.token.token} readOnly autoSize={{ minRows: 3, maxRows: 8 }} />
+      </div>
+      <Button icon={<Copy size={16} />} onClick={() => void copy()}>{t(copied ? 'reinstall.copied' : 'reinstall.copy')}</Button>
+    </Modal>
   )
 }
 
@@ -1728,6 +1822,8 @@ function NodeListContent({
   const [tokenPurpose, setTokenPurpose] = useState<EnrollmentPurpose>('re_enrollment')
   const [tokenUnknown, setTokenUnknown] = useState(false)
   const [issuedToken, setIssuedToken] = useState<IssuedEnrollmentToken | null>(null)
+  const [tokenReinstall, setTokenReinstall] = useState(false)
+  const [reinstallResult, setReinstallResult] = useState<ReinstallResult | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [portBatch, setPortBatch] = useState<{ token: string, nodes: Array<{ id: string, name: string, revision: number }> } | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
@@ -1747,9 +1843,10 @@ function NodeListContent({
   const createResultsRef = useRef(new WeakMap<CreateAttempt, Awaited<ReturnType<typeof nodesApi.create>>>())
   const tokenResultsRef = useRef(new WeakMap<TokenAttempt, IssuedEnrollmentToken>())
   const writeLocked = retryAttempt !== null || updateRecord !== null || updateStorageBlocked
-  const openTokenIssue = (item: NodeInventoryItem, purpose: EnrollmentPurpose) => {
+  const openTokenIssue = (item: NodeInventoryItem, purpose: EnrollmentPurpose, reinstall = false) => {
     setWriteError(null)
     setTokenPurpose(purpose)
+    setTokenReinstall(reinstall)
     setTokenNode(item)
     setTokenModalOpen(true)
   }
@@ -2269,7 +2366,18 @@ function NodeListContent({
       setTokenUnknown(false)
       setTokenModalOpen(false)
       setTokenNode(null)
-      setIssuedToken(token)
+      if (!attempt.reinstall) {
+        setIssuedToken(token)
+        return
+      }
+      let command: string | null = null
+      try {
+        command = buildNodeReinstallCommand(token.token, window.location.origin, window as InstallRuntime,
+          i18n.resolvedLanguage, token.gateway)
+      } catch {
+        command = null
+      }
+      setReinstallResult({ name: attempt.node.name, token, command })
     },
     onError: (error, attempt) => {
       tokenResultsRef.current.delete(attempt)
@@ -2491,7 +2599,7 @@ function NodeListContent({
     },
     {
       title: t('columns.region'), dataIndex: 'region', width: 140,
-      render: (value: string) => (
+      render: (value: string, item) => (
         <div className="node-region-cell">
           {/* Line groups only take catalogued regions: once the catalog has
               regions an empty one keeps the node out of every line group. */}
@@ -2502,6 +2610,14 @@ function NodeListContent({
             <Link to="/node/line-group">
               {t('region.lineGroupCount', { count: lineGroupCounts.get(value?.trim() ?? '') ?? 0 })}
             </Link>
+          ) : null}
+          {/* Hidden market supply groups hold the node too but no line group list shows them. */}
+          {item.market_supply_groups?.length ? (
+            <Tooltip title={t('region.marketSupplyHint', { names: item.market_supply_groups.map((group) => group.name).join('、') })}>
+              <span className="node-region-supply" tabIndex={0}>
+                {t('region.marketSupplyCount', { count: item.market_supply_groups.length })}
+              </span>
+            </Tooltip>
           ) : null}
         </div>
       ),
@@ -2598,6 +2714,12 @@ function NodeListContent({
               onClick: () => openTokenIssue(item, 're_enrollment'),
             },
             {
+              key: 'reinstall',
+              label: t('reinstall.action'),
+              disabled: writeLocked || item.admin_state === 'retired' || item.admin_state === 'disabled',
+              onClick: () => openTokenIssue(item, 're_enrollment', true),
+            },
+            {
               key: 'advanced',
               label: <Link to={`/node/list/${item.id}`}>{t('editModal.advancedDetails')}</Link>,
             },
@@ -2615,7 +2737,7 @@ function NodeListContent({
           ].filter((entry): entry is NonNullable<typeof entry> => entry !== null),
           onClick: ({ key }) => {
             if (key === 'delete') changeState(item, 'retired')
-            else if (key !== 'edit' && key !== 'token' && key !== 'status' && key !== 'advanced') changeState(item, key as ManagedNodeAdminState)
+            else if (key !== 'edit' && key !== 'token' && key !== 'reinstall' && key !== 'status' && key !== 'advanced') changeState(item, key as ManagedNodeAdminState)
           },
         }
         return (
@@ -3029,6 +3151,7 @@ function NodeListContent({
       <TokenIssueModal
         item={tokenNode}
         initialPurpose={tokenPurpose}
+        reinstall={tokenReinstall}
         open={tokenModalOpen}
         pending={tokenMutation.isPending}
         uncertain={tokenUnknown}
@@ -3041,11 +3164,12 @@ function NodeListContent({
         }}
         onSubmit={(values) => {
           if (tokenNode && !writeLocked && canManage && currentSessionAccess('manage')) {
-            tokenMutation.mutate({ node: tokenNode, values, ownerKey })
+            tokenMutation.mutate({ node: tokenNode, values, ownerKey, reinstall: tokenReinstall })
           }
         }}
       />
       <TokenResultModal token={issuedToken} onClose={() => setIssuedToken(null)} />
+      <ReinstallResultModal result={reinstallResult} onClose={() => setReinstallResult(null)} />
       <NodeGatewayPortBatchModal open={portBatch !== null} accessToken={portBatch?.token ?? ''} nodes={portBatch?.nodes ?? []}
         onClose={() => { setPortBatch(null); void query.refetch() }} />
 
@@ -3080,6 +3204,8 @@ function NodeListContent({
               // A deleted node is gone from the refreshed list; its result
               // carries the last snapshot.
               const resultNode = query.data?.items.find((item) => item.id === result.id) ?? result.node
+              const inUseReasons = result.status === 'failed' && result.error?.code === 'node_in_use'
+                ? nodeInUseReasons(result.error.reasons) : undefined
               return (
                 <div key={result.id}>
                   <span className="node-result-id" title={result.id}>
@@ -3090,6 +3216,9 @@ function NodeListContent({
                   ) : (
                     <Tag color="error">{result.error?.code ? errorCodeMessage(result.error.code, t) : t('batch.failed')}</Tag>
                   )}
+                  {inUseReasons ? (
+                    <Typography.Text type="secondary" className="node-result-reason">{nodeInUseText(inUseReasons, t)}</Typography.Text>
+                  ) : null}
                 </div>
               )
             })}
