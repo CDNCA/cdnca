@@ -21,11 +21,14 @@
 | name.com | 不支持，记录字段只有 host/type/answer/ttl/priority | 无（只写默认线路） | 无 | false；TTL 下限 300 |
 | DNS.COM | 支持，`view_id`（线路 ID） | 运行时按域名调 `getView`，按线路名匹配 ID（不硬编码），缓存 1 小时；默认线路不传 `view_id` | 文档写 `mx` 字段对非 MX 记录是权重（1–55） | true，按凭据里的套餐档位开放（见下）；`Weight` false |
 | DNSLA | 支持，`lineId` | 默认为空串；`电信` 84613316902921216（tele）、`联通` 84613316923892736（unic）、`移动` 84613316953252864（mobi）、`境外` 84613317016167424（abr，海外） | 支持，`weight` 1–10，与 `lineId` 同一请求 | true；`Weight` 仍 false |
+| ClouDNS | 不支持运营商线路；GeoDNS 按地理位置（`geodns-location`），不是运营商 | 无（只写默认线路；带 GeoDNS 位置或停用的记录读作外来线路） | 无 | false；TTL 只能取 60/300/900/1800/3600/…/2592000，向下取 |
+| Namecheap | 不支持，host 字段只有 Name/Type/Address/MXPref/TTL | 无（只写默认线路） | 无 | false；TTL 60–60000；setHosts 整组覆盖 |
+| 京东云 | 支持，`viewValue`（线路 ID） | `默认` -1、`电信` 1、`联通` 2、`移动` 3、`境外` 4（免费版无境外，写入被拒报 `line_not_in_plan`） | 有 `weight`，本次不做 | true；TTL 下限 120（免费版） |
 | 自定义 HTTP 接口（custom_http） | 支持，记录的 `line` 字段 | 原样传统一值（`默认`/`电信`/`联通`/`移动`/`境外`），由对接方映射（[协议](custom-http-provider.md)） | 不支持 | true；`Weight` false |
 
 `Weight` 只有 DNSPod 为 true：阿里云要额外的非原子调用，华为云权重粒度是记录集，DNSLA 范围 1–10，都与我们“每个 IP 0–100”的模型不一致，本次不做。
 
-不支持分线路的服务商（Cloudflare、name.com）按 ADR 0008 §6.4 只做全局主备：只接受默认线路，带线路的写入在发请求前返回 `dns_provider_remote_unsupported`。
+不支持分线路的服务商（Cloudflare、name.com、ClouDNS、Namecheap）按 ADR 0008 §6.4 只做全局主备：只接受默认线路，带线路的写入在发请求前返回 `dns_provider_remote_unsupported`。
 
 ## 各家依据
 
@@ -107,3 +110,15 @@ go -C services/control-api test -count=1 -run 'Line|SupportedLines|ProviderCapab
 - `cmd/dns-provider-propagation-live`（`scripts/dns-provider-propagation-live.sh`，手册 `docs/runbooks/dns-provider-live-propagation.md`）只验 TXT 在默认线路上的写入与传播；`cmd/dns-reconcile-live` 只支持 Cloudflare。两者都不覆盖分线路。
 - 分线路的真实验收需要从不同运营商出口查询权威 DNS（例如电信/联通/移动各一个拨测点，加一个境外点），比对同一 owner 在各线路的应答；在没有这类拨测点之前，只能在厂商控制台或列表接口核对记录的线路字段。
 
+### ClouDNS / Namecheap / 京东云
+
+- ClouDNS：官方 wiki [API 总览 41](https://www.cloudns.net/wiki/article/41/)、[records.json 57](https://www.cloudns.net/wiki/article/57/)、
+  [add-record 58](https://www.cloudns.net/wiki/article/58/)（TTL 取值表、GeoDNS 参数 `geodns-location`/`geodns-code`）、
+  [delete-record 59](https://www.cloudns.net/wiki/article/59/)、[mod-record 60](https://www.cloudns.net/wiki/article/60/)。
+  官方未给成功响应样例与限流文案，按 dnscontrol `providers/cloudns` 与 lego `providers/dns/cloudns` 的实现。
+- Namecheap：官方 API 文档 getHosts / setHosts / domains.getList / Global Parameters / API FAQ（官网被 Cloudflare 挑战拦截，读 Wayback 存档）。
+  setHosts 的 RecordType 只有 A/AAAA/ALIAS/CAA/CNAME/MX/MXE/NS/TXT/URL/URL301/FRAME，没有线路字段。
+- 京东云：云解析 OpenAPI v2（service `domainservice`）[接口概览](https://docs.jdcloud.com/cn/jd-cloud-dns/api/overview)、
+  [describeViewTree](https://docs.jdcloud.com/cn/jd-cloud-dns/api/describeviewtree)、[解析线路](https://docs.jdcloud.com/cn/jd-cloud-dns/parsed-route)、
+  [价格总览](https://docs.jdcloud.com/cn/jd-cloud-dns/price-overview)（免费版国内 10 条线路、最低 TTL 120）。线路 ID -1/1/2/3/4 官方页未列出，
+  取自开源 dnsmgr `app/lib/DnsHelper.php` 的 `line_name`；未用真实账号核对。

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -348,7 +349,9 @@ func (repository *postgresRepository) WithJobLock(
 		connection.Release()
 		return false, nil
 	}
+	release := database.HoldResident("dns_credential_rewrap_lock", true)
 	defer func() {
+		defer release()
 		unlockContext, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		var unlocked bool

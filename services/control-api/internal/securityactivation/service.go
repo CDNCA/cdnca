@@ -298,11 +298,18 @@ func (store *Store) Reconcile(
 			return ErrConflict
 		}
 		eventKey := derivedEventKey("reconcile", input.IdempotencyKey)
+		rechecked := false
 		if action, replay, err := loadActivationEventReplay(ctx, tx, candidate.ID, eventKey, digest); err != nil {
 			return err
-		} else if replay {
+		} else if replay && action != string(actionWait) {
 			result = ReconcileResult{Candidate: candidate, Action: action, Replayed: true}
 			return nil
+		} else if replay {
+			// A stored wait is decided again (recheckedEventKey): the worker
+			// key only moves with candidate and node facts, so a deadline that
+			// passed or a recovery that became provable under the same key
+			// would otherwise be replayed as wait for good.
+			rechecked = true
 		}
 		now := store.clock().UTC().Truncate(time.Microsecond)
 		if recoveryTerminal(candidate.Status) {
@@ -328,7 +335,11 @@ func (store *Store) Reconcile(
 				}
 				action = actionRecover
 			}
-			if err := appendActivationEvent(ctx, tx, candidate, actor, eventKey, digest,
+			if rechecked && action == actionWait {
+				result = ReconcileResult{Candidate: candidate, Action: string(action), Replayed: true}
+				return nil
+			}
+			if err := appendActivationEvent(ctx, tx, candidate, actor, recheckedEventKey(eventKey, rechecked, action), digest,
 				string(action), candidate.Status, candidate.Status, input.RequestID, now); err != nil {
 				return err
 			}
@@ -423,7 +434,12 @@ func (store *Store) Reconcile(
 		default:
 			return ErrConflict
 		}
-		if err := appendActivationEvent(ctx, tx, candidate, actor, eventKey, digest, string(action), from, candidate.Status, input.RequestID, now); err != nil {
+		if rechecked && action == actionWait && candidate.Status == from {
+			result = ReconcileResult{Candidate: candidate, Action: string(action), Replayed: true}
+			return nil
+		}
+		if err := appendActivationEvent(ctx, tx, candidate, actor, recheckedEventKey(eventKey, rechecked, action), digest,
+			string(action), from, candidate.Status, input.RequestID, now); err != nil {
 			return err
 		}
 		result = ReconcileResult{Candidate: candidate, Action: string(action)}
@@ -492,11 +508,14 @@ func (store *Store) reconcileRevokedCandidate(
 			return ErrConflict
 		}
 		eventKey := derivedEventKey("permission-revoked", input.IdempotencyKey)
+		rechecked := false
 		if action, replay, err := loadActivationEventReplay(ctx, tx, candidate.ID, eventKey, digest); err != nil {
 			return err
-		} else if replay {
+		} else if replay && action != string(actionWait) {
 			result = ReconcileResult{Candidate: candidate, Action: action, Replayed: true}
 			return nil
+		} else if replay {
+			rechecked = true // as in Reconcile: a stored wait is decided again
 		}
 		now := store.clock().UTC().Truncate(time.Microsecond)
 		from := candidate.Status
@@ -537,8 +556,12 @@ func (store *Store) reconcileRevokedCandidate(
 		default:
 			return ErrConflict
 		}
-		if err := appendActivationEvent(ctx, tx, candidate, actor, eventKey, digest, string(action),
-			from, candidate.Status, input.RequestID, now); err != nil {
+		if rechecked && action == actionWait {
+			result = ReconcileResult{Candidate: candidate, Action: string(action), Replayed: true}
+			return nil
+		}
+		if err := appendActivationEvent(ctx, tx, candidate, actor, recheckedEventKey(eventKey, rechecked, action), digest,
+			string(action), from, candidate.Status, input.RequestID, now); err != nil {
 			return err
 		}
 		if err := store.auditor.Append(ctx, tx, audit.Event{
@@ -1751,6 +1774,16 @@ func canonicalDigest(value any) ([sha256.Size]byte, error) {
 func derivedKey(prefix, value string) string {
 	digest := sha256.Sum256([]byte(prefix + ":" + value))
 	return prefix + "." + hex.EncodeToString(digest[:])
+}
+
+// recheckedEventKey is the key a rechecked wait records its new outcome
+// under: the stored wait keeps the request's key, so the new event takes one
+// derived from that key and the outcome (unique per candidate and key).
+func recheckedEventKey(eventKey string, rechecked bool, action reconcileAction) string {
+	if !rechecked {
+		return eventKey
+	}
+	return derivedEventKey("recheck", eventKey+":"+string(action))
 }
 
 func derivedEventKey(prefix, value string) string {

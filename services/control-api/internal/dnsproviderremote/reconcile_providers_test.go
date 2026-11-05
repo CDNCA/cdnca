@@ -403,10 +403,22 @@ func reconcileHTTPProviderConfig(provider string) ProviderConfig {
 		config.Credentials = map[string]string{"api_id": "provider-id", "api_secret": "provider-secret"}
 	case providerNameCom:
 		config.Credentials = map[string]string{"username": "provider-user", "api_token": "provider-token"}
+	case providerClouDNS:
+		config.Credentials = map[string]string{"sub_auth_id": "4321", "auth_password": "provider-password"}
+	case providerNamecheap:
+		config.Credentials = map[string]string{"username": "provider-user", "api_key": "provider-key", "source_ip": "192.0.2.1"}
+	case providerJDCloud:
+		config.Credentials = map[string]string{"access_key_id": "provider-ak", "access_key_secret": "provider-sk"}
 	case providerCustomHTTP:
 		config.Credentials = map[string]string{"endpoint": "https://dns.example.net/cdnca", "secret": "provider-secret-0123"}
 	case providerPlugin:
 		config.Credentials = map[string]string{PluginCredentialField: "com.example.dnsplus"}
+	case providerDNSPodCom:
+		config.Credentials = map[string]string{"dp_id": "12345", "dp_key": "provider-secret"}
+	case providerGoDaddy:
+		config.Credentials = map[string]string{"api_key": "provider-key", "api_secret": "provider-secret"}
+	case providerNamesilo:
+		config.Credentials = map[string]string{"key": "provider-key"}
 	}
 	return config
 }

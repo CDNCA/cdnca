@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.50.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
 	github.com/aws/smithy-go v1.24.2
+	github.com/cdnca/cdnca/libs/dbpoolmon v0.0.0
 	github.com/cdnca/cdnca/libs/edgeconfig v0.0.0
 	github.com/cdnca/cdnca/libs/entitlement v0.0.0
 	github.com/cdnca/cdnca/libs/mail v0.0.0
@@ -40,6 +41,8 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/go-sql-driver/mysql v1.9.3
 )
+
+replace github.com/cdnca/cdnca/libs/dbpoolmon => ../../libs/dbpoolmon
 
 replace github.com/cdnca/cdnca/libs/edgeconfig => ../../libs/edgeconfig
 

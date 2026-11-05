@@ -254,6 +254,30 @@ func (remote *providerReconcileRemote) hostedDomains(ctx context.Context, config
 			}
 			return names, total, nil
 		}
+	case providerDNSPodCom:
+		fetch = (&dnsPodComProvider{adapter: adapter}).domainPage(ctx, config, zoneApexPageSize)
+	case providerGoDaddy:
+		fetch = (&goDaddyProvider{adapter: adapter}).domainPage(ctx, config, zoneApexPageSize)
+	case providerNamesilo:
+		fetch = (&namesiloProvider{adapter: adapter}).domainPage(ctx, config, zoneApexPageSize)
+	case providerClouDNS:
+		provider := &clouDNSProvider{adapter: adapter}
+		fetch = func(page int) ([]string, int, error) {
+			names, err := provider.zoneNames(ctx, config, page, zoneApexPageSize)
+			return names, (page-1)*zoneApexPageSize + len(names) + zoneApexPageSize, err
+		}
+	case providerNamecheap:
+		provider := &namecheapProvider{adapter: adapter}
+		fetch = func(page int) ([]string, int, error) {
+			names, err := provider.zoneNames(ctx, config, page, zoneApexPageSize)
+			return names, (page-1)*zoneApexPageSize + len(names) + zoneApexPageSize, err
+		}
+	case providerJDCloud:
+		provider := &jdCloudProvider{adapter: adapter}
+		fetch = func(page int) ([]string, int, error) {
+			names, err := provider.zoneNames(ctx, config, page, zoneApexPageSize)
+			return names, (page-1)*zoneApexPageSize + len(names) + zoneApexPageSize, err
+		}
 	default:
 		return nil, failure(CodeUnsupported, false)
 	}

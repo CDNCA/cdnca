@@ -180,6 +180,7 @@ type Server struct {
 	themeHandler                         http.Handler
 	pluginUIHandler                      http.Handler
 	pluginProviderHandler                http.Handler
+	systemDBPoolHandler                  http.Handler
 	systemCleanupSettingsHandler         http.Handler
 	systemUserSettingsHandler            http.Handler
 	systemMailSettingsHandler            http.Handler
@@ -332,6 +333,7 @@ type Config struct {
 	// PluginProviderHandlerFactory (PA-22) lists third-party provider
 	// plugins with their contract results and enables / disables them.
 	PluginProviderHandlerFactory        MountedHandlerFactory
+	SystemDBPoolHandlerFactory          MountedHandlerFactory // internal/poolmon
 	SystemCleanupSettingsHandlerFactory MountedHandlerFactory
 	SystemUserSettingsHandlerFactory    MountedHandlerFactory
 	SystemMailSettingsHandlerFactory    MountedHandlerFactory
@@ -743,6 +745,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 		{name: "themes", factory: config.ThemeHandlerFactory, target: &server.themeHandler},
 		{name: "plugin ui", factory: config.PluginUIHandlerFactory, target: &server.pluginUIHandler},
 		{name: "plugin providers", factory: config.PluginProviderHandlerFactory, target: &server.pluginProviderHandler},
+		{name: "system database pool", factory: config.SystemDBPoolHandlerFactory, target: &server.systemDBPoolHandler},
 		{name: "system cleanup settings", factory: config.SystemCleanupSettingsHandlerFactory, target: &server.systemCleanupSettingsHandler},
 		{name: "system user settings", factory: config.SystemUserSettingsHandlerFactory, target: &server.systemUserSettingsHandler},
 		{name: "system mail settings", factory: config.SystemMailSettingsHandlerFactory, target: &server.systemMailSettingsHandler},
@@ -1604,6 +1607,9 @@ func (s *Server) Handler() http.Handler {
 		}},
 		{handler: s.pluginProviderHandler, patterns: []string{
 			"GET /v1/admin/plugin-providers", "POST /v1/admin/plugin-providers/{plugin_id}/{action}",
+		}},
+		{handler: s.systemDBPoolHandler, patterns: []string{
+			"/v1/admin/system-db-pool",
 		}},
 		{handler: s.systemCleanupSettingsHandler, preserveRaw: true, patterns: []string{
 			"/v1/admin/system-cleanup-settings",

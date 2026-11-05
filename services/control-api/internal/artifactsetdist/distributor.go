@@ -45,6 +45,7 @@ import (
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/artifactsync"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -184,6 +185,7 @@ func (distributor *Distributor) listen(ctx context.Context) {
 	for ctx.Err() == nil {
 		conn, err := distributor.config.Pool.Acquire(ctx)
 		if err == nil {
+			release := database.HoldResident("node_artifact_delivery_listen", true)
 			_, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{distributor.config.WakeChannel}.Sanitize())
 			for err == nil {
 				if _, err = conn.Conn().WaitForNotification(ctx); err == nil {
@@ -191,6 +193,7 @@ func (distributor *Distributor) listen(ctx context.Context) {
 				}
 			}
 			conn.Release()
+			release()
 		}
 		if ctx.Err() != nil {
 			return

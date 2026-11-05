@@ -31,6 +31,10 @@ var providerLineCodes = map[string]map[string]string{
 		LineDefault: "", LineTelecom: "84613316902921216", LineUnicom: "84613316923892736",
 		LineMobile: "84613316953252864", LineOverseas: "84613317016167424",
 	},
+	// JD Cloud viewValue (jdcloud.go: top-level 解析线路; IDs per dnsmgr DnsHelper line_name).
+	providerJDCloud: {
+		LineDefault: "-1", LineTelecom: "1", LineUnicom: "2", LineMobile: "3", LineOverseas: "4",
+	},
 }
 
 // SupportedLines returns the unified lines the provider adapter writes, in a

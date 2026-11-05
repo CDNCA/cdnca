@@ -20,6 +20,9 @@ const (
 )
 
 type DNSPodProviderVerifier struct {
+	// endpoint/host: DNSPod.com (api.dnspod.com); empty is dnsapi.cn.
+	endpoint     string
+	host         string
 	testEndpoint string
 	client       *http.Client
 	timeout      time.Duration
@@ -58,7 +61,10 @@ func (v *DNSPodProviderVerifier) Verify(ctx context.Context, dpID, dpKey string)
 		"lang":           {"en"},
 		"login_token":    {dpID + "," + dpKey},
 	}.Encode()
-	endpoint := dnspodVerifyEndpoint
+	endpoint, host := dnspodVerifyEndpoint, dnspodVerifyHost
+	if v.endpoint != "" {
+		endpoint, host = v.endpoint, v.host
+	}
 	if v.testEndpoint != "" {
 		endpoint = v.testEndpoint
 	}
@@ -74,7 +80,7 @@ func (v *DNSPodProviderVerifier) Verify(ctx context.Context, dpID, dpKey string)
 	if err != nil {
 		return ErrProviderVerificationUnavailable
 	}
-	request.Host = dnspodVerifyHost
+	request.Host = host
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("User-Agent", dnspodVerifyUserAgent)

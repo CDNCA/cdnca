@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/eventspool"
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/gatewaytunnel"
 )
 
 type Spool interface {
@@ -94,6 +95,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	w.setSnapshot(func(value *WorkerSnapshot) { value.Running = true })
 	defer w.setSnapshot(func(value *WorkerSnapshot) { value.Running = false })
 	backoff := w.config.InitialBackoff
+	var identity gatewaytunnel.IdentityRetry
 	for {
 		result, err := w.spool.Flush(ctx, w.publisher, w.config.MaximumEvents)
 		if ctx.Err() != nil {
@@ -120,6 +122,10 @@ func (w *Worker) Run(ctx context.Context) error {
 			if permanent || delay < 0 || delay > w.config.MaximumBackoff {
 				delay = w.config.MaximumBackoff
 			}
+			if gatewaytunnel.IdentityRejected(err) {
+				delay = identity.Delay(w.jitter)
+				gatewaytunnel.LogIdentityRejected("telemetry", delay, err)
+			}
 			if retryAfter := RetryAfter(err); retryAfter > delay {
 				delay = retryAfter
 			}
@@ -135,6 +141,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			value.LastErrorCode = ""
 		})
 		backoff = w.config.InitialBackoff
+		identity.Reset()
 		if result.Published == 0 {
 			if err := sleep(ctx, w.config.EmptyInterval); err != nil {
 				return err
@@ -157,6 +164,7 @@ func (w *Worker) RunConnections(ctx context.Context) error {
 	w.setSnapshot(func(value *WorkerSnapshot) { value.Running = true })
 	defer w.setSnapshot(func(value *WorkerSnapshot) { value.Running = false })
 	backoff := w.config.InitialBackoff
+	var identity gatewaytunnel.IdentityRetry
 	maximum := w.config.MaximumEvents
 	if maximum > maxConnectionsBatchRecords {
 		maximum = maxConnectionsBatchRecords
@@ -187,6 +195,10 @@ func (w *Worker) RunConnections(ctx context.Context) error {
 			if permanent || delay < 0 || delay > w.config.MaximumBackoff {
 				delay = w.config.MaximumBackoff
 			}
+			if gatewaytunnel.IdentityRejected(err) {
+				delay = identity.Delay(w.jitter)
+				gatewaytunnel.LogIdentityRejected("telemetry", delay, err)
+			}
 			if retryAfter := RetryAfter(err); retryAfter > delay {
 				delay = retryAfter
 			}
@@ -203,6 +215,7 @@ func (w *Worker) RunConnections(ctx context.Context) error {
 			value.LastErrorCode = ""
 		})
 		backoff = w.config.InitialBackoff
+		identity.Reset()
 		if result.Published == 0 {
 			if err := sleep(ctx, w.config.EmptyInterval); err != nil {
 				return err

@@ -316,7 +316,7 @@ paths:
               additionalProperties: false
               required: [provider_type, ttl, ip_weight]
               properties:
-                provider_type: {type: string, enum: [aliyun, huawei, dns_la, dnspod_cn, dns_com, cloudflare, namecom, custom_http]}
+                provider_type: {type: string, enum: [aliyun, huawei, dns_la, dnspod_cn, dns_com, cloudflare, namecom, custom_http, dnspod_com, godaddy, namesilo, cloudns, namecheap, jdcloud]}
                 credentials:
                   description: Every credential field of the provider; omitted keeps the stored credentials of the same provider.
                   type: object
@@ -1249,7 +1249,7 @@ components:
       description: >-
         Persisted provider type. dnsdun is retained only so disabled legacy
         records can be listed; new configurations must use a creatable type.
-      enum: [aliyun, cloudflare, huawei, dnspod_cn, dns_com, dns_la, namecom, custom_http, dnsdun]
+      enum: [aliyun, cloudflare, huawei, dnspod_cn, dns_com, dns_la, namecom, custom_http, dnsdun, dnspod_com, godaddy, namesilo, cloudns, namecheap, jdcloud]
     ProviderList:
       type: object
       required: [items]
@@ -1297,6 +1297,30 @@ components:
               properties:
                 provider_type: {type: string, const: custom_http}
                 credentials: {$ref: '#/components/schemas/CustomHTTPCredentials'}
+            - title: DNSPod.com (international) provider
+              properties:
+                provider_type: {type: string, const: dnspod_com}
+                credentials: {$ref: '#/components/schemas/DNSPodComCredentials'}
+            - title: GoDaddy provider
+              properties:
+                provider_type: {type: string, const: godaddy}
+                credentials: {$ref: '#/components/schemas/GoDaddyCredentials'}
+            - title: Namesilo provider
+              properties:
+                provider_type: {type: string, const: namesilo}
+                credentials: {$ref: '#/components/schemas/NamesiloCredentials'}
+            - title: ClouDNS provider
+              properties:
+                provider_type: {type: string, const: cloudns}
+                credentials: {$ref: '#/components/schemas/ClouDNSCredentials'}
+            - title: Namecheap provider
+              properties:
+                provider_type: {type: string, const: namecheap}
+                credentials: {$ref: '#/components/schemas/NamecheapCredentials'}
+            - title: JD Cloud DNS provider
+              properties:
+                provider_type: {type: string, const: jdcloud}
+                credentials: {$ref: '#/components/schemas/JDCloudCredentials'}
     UpdateProvider:
       type: object
       additionalProperties: false
@@ -1324,6 +1348,9 @@ components:
             DNSPod CN requires only dp_id and dp_key; DNS.COM requires only
             api_key and api_secret; DNS.LA requires only api_id and api_secret;
             Name.com requires only username and api_token; custom_http requires only endpoint and secret.
+            DNSPod.com requires only dp_id and dp_key; GoDaddy requires only api_key and api_secret; Namesilo requires only key.
+            ClouDNS requires only sub_auth_id and auth_password; Namecheap requires only username, api_key and source_ip;
+            JD Cloud requires only access_key_id and access_key_secret.
     ProviderCredentials:
       anyOf:
         - $ref: '#/components/schemas/CloudflareCredentials'
@@ -1334,6 +1361,12 @@ components:
         - $ref: '#/components/schemas/DNSLACredentials'
         - $ref: '#/components/schemas/NameComCredentials'
         - $ref: '#/components/schemas/CustomHTTPCredentials'
+        - $ref: '#/components/schemas/DNSPodComCredentials'
+        - $ref: '#/components/schemas/GoDaddyCredentials'
+        - $ref: '#/components/schemas/NamesiloCredentials'
+        - $ref: '#/components/schemas/ClouDNSCredentials'
+        - $ref: '#/components/schemas/NamecheapCredentials'
+        - $ref: '#/components/schemas/JDCloudCredentials'
     CloudflareCredentials:
       type: object
       additionalProperties: false
@@ -1406,6 +1439,73 @@ components:
           minLength: 1
           maxLength: 256
           pattern: '^[!-~]+$'
+    DNSPodComCredentials:
+      type: object
+      additionalProperties: false
+      required: [dp_id, dp_key]
+      description: >-
+        DNSPod.com (international) legacy API token (login_token=ID,Token).
+        Records are written on the default line only (carrier lines need the
+        Enterprise plan); minimum TTL 600 (Free plan).
+      properties:
+        dp_id: {type: string, minLength: 1, maxLength: 20, pattern: '^[1-9][0-9]{0,19}$'}
+        dp_key: {type: string, minLength: 1, maxLength: 256, pattern: '^[!-\x2B\x2D-\x7E]+$', description: Printable ASCII excluding comma.}
+    GoDaddyCredentials:
+      type: object
+      additionalProperties: false
+      required: [api_key, api_secret]
+      description: >-
+        GoDaddy Domains v1 API key and secret (Authorization sso-key
+        KEY:SECRET). Default line only; minimum TTL 600.
+      properties:
+        api_key: {type: string, minLength: 1, maxLength: 128, pattern: '^[!-\x39\x3B-\x7E]+$', description: Printable ASCII excluding colon.}
+        api_secret: {type: string, minLength: 1, maxLength: 256, pattern: '^[!-~]+$'}
+    NamesiloCredentials:
+      type: object
+      additionalProperties: false
+      required: [key]
+      description: >-
+        Namesilo API key (the key query parameter). Default line only; TTLs
+        below 3600 are written as 3600.
+      properties:
+        key: {type: string, minLength: 1, maxLength: 128, pattern: '^[!-~]+$'}
+    ClouDNSCredentials:
+      type: object
+      additionalProperties: false
+      required: [sub_auth_id, auth_password]
+      description: >-
+        ClouDNS HTTP API sub-user (sub-auth-id and auth-password). Records are
+        written on the default line only (GeoDNS is by location, not carrier);
+        TTLs come from ClouDNS's fixed list (60 to 2592000): lower TTLs are
+        written as 60, others as the largest listed value not above them.
+      properties:
+        sub_auth_id: {type: string, minLength: 1, maxLength: 20, pattern: '^[1-9][0-9]{0,19}$'}
+        auth_password: {type: string, minLength: 1, maxLength: 256, pattern: '^[!-~]+$'}
+    NamecheapCredentials:
+      type: object
+      additionalProperties: false
+      required: [username, api_key, source_ip]
+      description: >-
+        Namecheap XML API (ApiUser/UserName, ApiKey, ClientIp). source_ip is
+        the control plane's egress IPv4 and must be on the Namecheap account's
+        API whitelist. setHosts replaces the domain's whole host set: every
+        write reads the set, writes it back and reads it again. Default line
+        only; TTL 60 to 60000.
+      properties:
+        username: {type: string, minLength: 1, maxLength: 64, pattern: '^[!-~]+$'}
+        api_key: {type: string, minLength: 1, maxLength: 128, pattern: '^[!-~]+$'}
+        source_ip: {type: string, format: ipv4, maxLength: 15}
+    JDCloudCredentials:
+      type: object
+      additionalProperties: false
+      required: [access_key_id, access_key_secret]
+      description: >-
+        JD Cloud OpenAPI AccessKey (JDCLOUD2-HMAC-SHA256, service
+        domainservice). Lines 默认/电信/联通/移动/境外 (the free plan has no
+        境外); minimum TTL 120.
+      properties:
+        access_key_id: {type: string, minLength: 1, maxLength: 128, pattern: '^[!-~]+$'}
+        access_key_secret: {type: string, minLength: 1, maxLength: 256, pattern: '^[!-~]+$'}
     NameComCredentials:
       type: object
       additionalProperties: false

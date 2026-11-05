@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const dir = join(root, "docs/architecture/marketplace-openapi");
 const docs = ["seller", "service", "catalog", "buyer", "payments", "admin-plugins", "admin-nodes", "admin-finance"];
 const adminDocs = new Set(["admin-plugins", "admin-nodes", "admin-finance"]);
-const owners = new Set(["live", "M1", "M2", "M4", "M6", "M9"]);
+const owners = new Set(["live", "M1", "M2", "M4", "M6", "M9", "market-geo"]);
 const methods = ["get", "put", "post", "delete", "patch"];
 const redocly = ["--package=@redocly/cli@1.34.5", "dlx", "redocly"];
 const env = {...process.env, REDOCLY_TELEMETRY: "off", REDOCLY_SUPPRESS_UPDATE_NOTICE: "true"};

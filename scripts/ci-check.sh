@@ -70,7 +70,7 @@ go_race() {
 
 # Shared libraries (used by control-api through go.work); each is its own
 # module with GOWORK=off.
-readonly GO_LIBS=(libs/edgeconfig libs/entitlement libs/mail libs/marketproto libs/mtlstunnel libs/passwordpolicy libs/rulepack libs/sitetheme libs/themepack)
+readonly GO_LIBS=(libs/dbpoolmon libs/edgeconfig libs/entitlement libs/mail libs/marketproto libs/mtlstunnel libs/passwordpolicy libs/rulepack libs/sitetheme libs/themepack)
 
 check_go_libs() {
   local module

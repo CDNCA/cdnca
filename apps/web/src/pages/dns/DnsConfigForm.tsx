@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { ApiError } from '../../api/auth'
-import { dnsProviderSplitsCarrierLines, dnsProviderWritesWeights } from '../../api/dns'
+import { dnsProviderSplitsCarrierLines, dnsProviderWritesWeights, isValidKeyedDNSCredential } from '../../api/dns'
 import { dnsPlatformApi, type PlatformDNSConfig, type PlatformDNSOperation } from '../../api/dnsPlatform'
 import { pluginProvidersApi, usableDNSPlugins } from '../../api/pluginProviders'
 import '../../i18n/dnsConfig'
@@ -19,7 +19,7 @@ import DnsErrorStatus from './DnsErrorStatus'
 
 const newKey = (action: string) => `dns-config-${action}-${crypto.randomUUID()}`
 
-interface Fields { identifier: string; secret: string; region: string; projectID: string; plan: string; ttl: string; weight: boolean }
+interface Fields { identifier: string; secret: string; region: string; projectID: string; plan: string; ttl: string; weight: boolean; sourceIP: string }
 
 function fieldsFrom(config: PlatformDNSConfig | undefined, type: ProviderChoice): Fields {
   const same = config?.provider_type === type
@@ -29,6 +29,7 @@ function fieldsFrom(config: PlatformDNSConfig | undefined, type: ProviderChoice)
     region: (same && config?.identifiers.region) || huaweiRegions[0], projectID: (same && config?.identifiers.project_id) || '',
     plan: dnsComPlanOf(same ? config?.identifiers.plan : undefined),
     ttl: String(config?.ttl ?? 600), weight: config?.ip_weight ?? false,
+    sourceIP: (same && config?.identifiers.source_ip) || '',
   }
 }
 
@@ -84,7 +85,8 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
   const unchanged = config?.provider_type === type && config.secret_saved &&
     (!spec.identifier || fields.identifier.trim() === (config.identifiers[spec.identifier] ?? '')) &&
     (type !== 'huawei' || (fields.region === config.identifiers.region && fields.projectID.trim() === config.identifiers.project_id)) &&
-    (type !== 'dns_com' || fields.plan === dnsComPlanOf(config.identifiers.plan))
+    (type !== 'dns_com' || fields.plan === dnsComPlanOf(config.identifiers.plan)) &&
+    (type !== 'namecheap' || fields.sourceIP.trim() === config.identifiers.source_ip)
   const validate = (): string | null => {
     if (type === 'plugin') {
       if (!pluginCredentials(selected)) return t('errors.pluginRequired')
@@ -92,6 +94,7 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
     }
     if (spec.identifier && !fields.identifier.trim()) return t('errors.identifierRequired', { label: idLabel })
     if (type === 'huawei' && !/^[a-f0-9]{32}$/.test(fields.projectID.trim())) return t('errors.projectRequired')
+    if (type === 'namecheap' && !isValidKeyedDNSCredential('source_ip', fields.sourceIP.trim())) return t('errors.sourceIPRequired')
     if (!validTTL(type, fields.ttl)) return t('errors.ttlRange', { min: spec.minTTL, max: spec.maxTTL })
     if (!fields.secret.trim() && !unchanged) {
       return config?.secret_saved ? t('errors.secretNeeded', { label: secretLabel }) : t('errors.secretRequired', { label: secretLabel })
@@ -161,6 +164,7 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
     }
     if (spec.identifier && !fields.identifier.trim()) { setConnection({ ok: false, text: t('errors.identifierRequired', { label: idLabel }) }); return }
     if (type === 'huawei' && !/^[a-f0-9]{32}$/.test(fields.projectID.trim())) { setConnection({ ok: false, text: t('errors.projectRequired') }); return }
+    if (type === 'namecheap' && !isValidKeyedDNSCredential('source_ip', fields.sourceIP.trim())) { setConnection({ ok: false, text: t('errors.sourceIPRequired') }); return }
     if (fields.secret.trim()) testMutation.mutate({ credentials: dnsConfigCredentials(type, fields), epoch: draftEpoch.current })
     else if (unchanged) testMutation.mutate({ credentials: null, epoch: draftEpoch.current })
     else setConnection({ ok: false, text: t('connection.noSaved', { label: secretLabel }) })
@@ -238,7 +242,9 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
           placeholder={enter(idLabel)} onChange={(event) => edit({ identifier: event.target.value })} />
       </Form.Item> : null}
       {type === 'plugin' ? <Alert className="identity-alert" type="info" showIcon message={t('hints.plugin')} /> : null}
-      {type !== 'plugin' ? <Form.Item label={secretLabel} className="dns-field-wide" {...refusedStatus('secret')} extra={type === 'cloudflare' ? t('hints.cloudflareToken') : type === 'namecom' ? t('hints.nameComToken') : type === 'custom_http' ? t('hints.customHTTP') : undefined}>
+      {type !== 'plugin' ? <Form.Item label={secretLabel} className="dns-field-wide" {...refusedStatus('secret')} extra={type === 'cloudflare' ? t('hints.cloudflareToken') : type === 'namecom' ? t('hints.nameComToken') : type === 'custom_http' ? t('hints.customHTTP')
+        : type === 'dnspod_com' ? t('hints.dnspodComToken') : type === 'godaddy' ? t('hints.goDaddyKey') : type === 'namesilo' ? t('hints.namesiloKey')
+          : type === 'cloudns' || type === 'jdcloud' ? t(`hints.${type}Credentials`) : undefined}>
         <Input.Password aria-label={secretLabel} value={fields.secret} disabled={disabled || !spec.supported} autoComplete="new-password"
           placeholder={config?.secret_saved && config.provider_type === type ? t('placeholders.secretKept') : enter(secretLabel)}
           onChange={(event) => edit({ secret: event.target.value })} />
@@ -253,6 +259,10 @@ export default function DnsConfigForm({ accessToken, owner, canManage }: { acces
             placeholder={enter(t('fields.projectID'))} onChange={(event) => edit({ projectID: event.target.value })} />
         </Form.Item>
       </> : null}
+      {type === 'namecheap' ? <Form.Item label={t('fields.sourceIP')} className="dns-field-wide" extra={t('hints.namecheapSourceIP')}>
+        <Input aria-label={t('fields.sourceIP')} value={fields.sourceIP} disabled={disabled} autoComplete="off"
+          placeholder={enter(t('fields.sourceIP'))} onChange={(event) => edit({ sourceIP: event.target.value })} />
+      </Form.Item> : null}
       {type === 'dns_com' ? <Form.Item label={t('fields.dnsComPlan')} className="dns-field-provider" extra={t('hints.dnsComPlan')}>
         <Select aria-label={t('fields.dnsComPlan')} value={dnsComPlanOf(fields.plan)} disabled={disabled}
           options={dnsComPlans.map((value) => ({ value, label: t(`dnsComPlans.${value}`) }))}

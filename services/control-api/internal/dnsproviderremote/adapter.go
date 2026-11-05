@@ -728,8 +728,20 @@ func (a *Adapter) provider(providerType string) (remoteProvider, error) {
 		return &dnsLAProvider{adapter: a}, nil
 	case providerNameCom:
 		return &nameComProvider{adapter: a}, nil
+	case providerClouDNS:
+		return &clouDNSProvider{adapter: a}, nil
+	case providerNamecheap:
+		return &namecheapProvider{adapter: a}, nil
+	case providerJDCloud:
+		return &jdCloudProvider{adapter: a}, nil
 	case providerCustomHTTP, providerPlugin:
 		return newRecordProvider(a, providerType), nil
+	case providerDNSPodCom:
+		return &dnsPodComProvider{adapter: a}, nil
+	case providerGoDaddy:
+		return &goDaddyProvider{adapter: a}, nil
+	case providerNamesilo:
+		return &namesiloProvider{adapter: a}, nil
 	default:
 		return nil, failure(CodeUnsupported, false)
 	}

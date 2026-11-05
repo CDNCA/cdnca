@@ -1776,6 +1776,10 @@ func runServer() error {
 	if err != nil {
 		return runtimeStageError{stage: "initialize plugin provider runtime", err: err}
 	}
+	systemDBPoolHandlerFactory, err := startDBPoolMonitor(ctx, pool, identityService)
+	if err != nil {
+		return runtimeStageError{stage: "initialize database pool monitor", err: err}
+	}
 	var themeHandlerFactory httpapi.MountedHandlerFactory
 	if identityService != nil && identityService.Configured() {
 		themeHandlerFactory, err = buildThemeHandlerFactory(pool, identityService, entitlementguard.NewGuard(pool, time.Now, trust))
@@ -2788,6 +2792,7 @@ func runServer() error {
 		SystemSettingsHandlerFactory:        systemSettingsHandlerFactory,
 		PluginUIHandlerFactory:              pluginUIHandlerFactory,
 		PluginProviderHandlerFactory:        pluginProviderHandlerFactory,
+		SystemDBPoolHandlerFactory:          systemDBPoolHandlerFactory,
 		BrandAssetHandlerFactory:            brandAssetHandlerFactory,
 		ThemeHandlerFactory:                 themeHandlerFactory,
 		SystemCleanupSettingsHandlerFactory: systemCleanupSettingsHandlerFactory,

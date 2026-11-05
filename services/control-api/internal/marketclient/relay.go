@@ -132,7 +132,20 @@ func (c *Client) Receive(ctx context.Context, self Identity, cursor int64) (mess
 	return messages, next, errs
 }
 
-// Ack lets the relay forget everything up to seq for this member.
+// Ack records that this member processed everything up to seq (Cursor).
+// The relay keeps the messages: a Receive from a lower cursor returns them
+// again.
 func (c *Client) Ack(ctx context.Context, seq int64) error {
 	return c.do(ctx, http.MethodPost, "/v1/relay/ack", map[string]int64{"seq": seq}, nil, requestTimeout)
+}
+
+// Cursor is the last sequence this member acknowledged (0: none).
+func (c *Client) Cursor(ctx context.Context) (int64, error) {
+	var response struct {
+		AckedSeq int64 `json:"acked_seq"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/v1/relay/cursor", nil, &response, requestTimeout); err != nil {
+		return 0, err
+	}
+	return response.AckedSeq, nil
 }

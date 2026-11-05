@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,8 +42,10 @@ type MTLSDialerConfig struct {
 }
 
 type mtlsDialer struct {
-	address string
-	options []grpc.DialOption
+	address     string
+	credentials credentials.TransportCredentials
+	tunnel      func(context.Context, string) (net.Conn, error)
+	options     []grpc.DialOption
 }
 
 type grpcConnection struct {
@@ -82,28 +85,37 @@ func NewMTLSDialer(config MTLSDialerConfig) (Dialer, error) {
 		RootCAs: roots, Certificates: []tls.Certificate{certificate},
 	}
 	options := []grpc.DialOption{
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 		grpc.WithSharedWriteBuffer(true), // see gatewayclient
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(config.MaximumReceiveBytes), grpc.MaxCallSendMsgSize(config.MaximumSendBytes)),
 	}
-	address := config.Address
+	dialer := &mtlsDialer{address: config.Address, credentials: credentials.NewTLS(tlsConfig), options: options}
 	if config.Transport == gatewaytunnel.TransportWS {
 		tunnel, err := gatewaytunnel.NodeTunnel(config.Address, config.TunnelHost, config.TunnelAudience, rootPEM, certificate)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidConfiguration, err)
 		}
-		options = append(options, grpc.WithContextDialer(tunnel))
-		address = "passthrough:///" + config.Address
+		dialer.tunnel = tunnel
+		dialer.address = "passthrough:///" + config.Address
 	} else if !gatewaytunnel.ValidTransport(config.Transport) {
 		return nil, fmt.Errorf("%w: gateway transport must be grpc or ws", ErrInvalidConfiguration)
 	}
-	return &mtlsDialer{address: address, options: options}, nil
+	return dialer, nil
 }
 
+// Dial watches for a node identity rejection (tunnel 401 or a refusing TLS
+// alert): it ends the dial at once and the error carries
+// gatewaytunnel.ErrNodeIdentityRejected.
 func (d *mtlsDialer) Dial(ctx context.Context) (Connection, error) {
-	connection, err := grpc.DialContext(ctx, d.address, append(d.options, grpc.WithBlock(), grpc.WithReturnConnectionError())...)
+	ctx, watch := gatewaytunnel.NewDialWatch(ctx)
+	defer watch.Stop()
+	options := append(append([]grpc.DialOption(nil), d.options...), grpc.WithTransportCredentials(watch.Credentials(d.credentials)),
+		grpc.WithBlock(), grpc.WithReturnConnectionError())
+	if d.tunnel != nil {
+		options = append(options, grpc.WithContextDialer(watch.Dialer(d.tunnel)))
+	}
+	connection, err := grpc.DialContext(ctx, d.address, options...)
 	if err != nil {
-		return nil, err
+		return nil, watch.Err(err)
 	}
 	return &grpcConnection{connection: connection, client: agentv1.NewAgentGatewayServiceClient(connection)}, nil
 }

@@ -22,10 +22,27 @@ func TestOpenAPIDerivesScopeFromAuthenticationAndExposesNoTargetScopeQuery(t *te
 	}
 }
 
+// openAPIAdditionalProperties is additionalProperties as a boolean; a schema
+// value (an open map such as Effective.sources) reads as true.
+type openAPIAdditionalProperties bool
+
+func (value *openAPIAdditionalProperties) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.ScalarNode {
+		*value = true
+		return nil
+	}
+	var closed bool
+	if err := node.Decode(&closed); err != nil {
+		return err
+	}
+	*value = openAPIAdditionalProperties(closed)
+	return nil
+}
+
 type openRestySecurityOpenAPISchema struct {
 	Type                 string                                    `yaml:"type"`
 	Ref                  string                                    `yaml:"$ref"`
-	AdditionalProperties *bool                                     `yaml:"additionalProperties"`
+	AdditionalProperties *openAPIAdditionalProperties              `yaml:"additionalProperties"`
 	Required             []string                                  `yaml:"required"`
 	Properties           map[string]openRestySecurityOpenAPISchema `yaml:"properties"`
 	Items                *openRestySecurityOpenAPISchema           `yaml:"items"`
@@ -54,12 +71,12 @@ func TestOpenAPIErrorEnvelopeMatchesHandler(t *testing.T) {
 	if !ok {
 		t.Fatal("OpenAPI Error schema is missing")
 	}
-	if envelope.Type != "object" || envelope.AdditionalProperties == nil || *envelope.AdditionalProperties ||
+	if envelope.Type != "object" || envelope.AdditionalProperties == nil || bool(*envelope.AdditionalProperties) ||
 		!reflect.DeepEqual(envelope.Required, []string{"error"}) {
 		t.Fatalf("Error schema=%+v", envelope)
 	}
 	detail, ok := envelope.Properties["error"]
-	if !ok || detail.Type != "object" || detail.AdditionalProperties == nil || *detail.AdditionalProperties ||
+	if !ok || detail.Type != "object" || detail.AdditionalProperties == nil || bool(*detail.AdditionalProperties) ||
 		!reflect.DeepEqual(detail.Required, []string{"code", "request_id"}) {
 		t.Fatalf("Error.error schema=%+v present=%v", detail, ok)
 	}

@@ -1,7 +1,10 @@
 // 节点管理 > DNS配置 provider choices in the competitor's order, with the
 // ID / Token labels it shows and our credential contract (api/dns.ts).
 
-export type ProviderChoice = 'aliyun' | 'huawei' | 'dns_la' | 'dnspod_cn' | 'dnspod_intl' | 'dns_com' | 'cloudflare' | 'namecom' | 'custom_http' | 'plugin'
+import { isValidKeyedDNSCredential } from '../../api/dns'
+
+export type ProviderChoice = 'aliyun' | 'huawei' | 'dns_la' | 'dnspod_cn' | 'dnspod_com' | 'dns_com' | 'cloudflare' | 'namecom' | 'custom_http' | 'plugin'
+  | 'godaddy' | 'namesilo' | 'cloudns' | 'namecheap' | 'jdcloud'
 
 export interface ProviderSpec {
   // [ID label, Token label]; Cloudflare has no ID field (API Token only).
@@ -17,7 +20,8 @@ export interface ProviderSpec {
   lines: 'all' | 'none' | 'plan'
 }
 
-export const providerChoices: ProviderChoice[] = ['aliyun', 'huawei', 'dns_la', 'dnspod_cn', 'dnspod_intl', 'dns_com', 'cloudflare', 'namecom', 'custom_http']
+export const providerChoices: ProviderChoice[] = ['aliyun', 'huawei', 'dns_la', 'dnspod_cn', 'dnspod_com', 'dns_com', 'cloudflare', 'namecom', 'custom_http',
+  'godaddy', 'namesilo', 'cloudns', 'namecheap', 'jdcloud']
 export const huaweiRegions = ['cn-north-4', 'ap-southeast-3']
 // DNS.COM plan tiers (credential field "plan"; absent = free).
 export const dnsComPlans = ['free', 'enterprise', 'flagship'] as const
@@ -40,14 +44,25 @@ export const providerSpecs: Record<ProviderChoice, ProviderSpec> = {
   huawei: { labels: ['Access Key Id', 'Secret Access Key'], identifier: 'access_key', secret: 'secret_key', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
   dns_la: { labels: ['APIID', 'API密钥'], identifier: 'api_id', secret: 'api_secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
   dnspod_cn: { labels: ['ID', 'Token'], identifier: 'dp_id', secret: 'dp_key', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
-  dnspod_intl: { labels: ['ID', 'Token'], identifier: 'dp_id', secret: 'dp_key', minTTL: 1, maxTTL: 86400, supported: false, lines: 'none' },
+  // DNSPod.com legacy API (api.dnspod.com, ID,Token); Free plan TTL floor 600; carrier lines are Enterprise-only and not written.
+  dnspod_com: { labels: ['ID', 'Token'], identifier: 'dp_id', secret: 'dp_key', minTTL: 600, maxTTL: 86400, supported: true, lines: 'none' },
   dns_com: { labels: ['API Key', 'API Secret'], identifier: 'api_key', secret: 'api_secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'plan' },
   cloudflare: { labels: ['', 'API Token'], secret: 'api_token', minTTL: 60, maxTTL: 86400, supported: true, lines: 'none' },
   // name.com Core API: Basic username + API token; TTL floor 300; no lines.
   namecom: { labels: ['Username', 'API Token'], identifier: 'username', secret: 'api_token', minTTL: 300, maxTTL: 86400, supported: true, lines: 'none' },
   custom_http: { labels: ['接口地址', '签名密钥'], identifier: 'endpoint', secret: 'secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
+  // GoDaddy Domains v1 sso-key KEY:SECRET; TTL floor 600; no lines.
+  godaddy: { labels: ['Key', 'Secret'], identifier: 'api_key', secret: 'api_secret', minTTL: 600, maxTTL: 86400, supported: true, lines: 'none' },
+  // Namesilo API key only (no ID field); TTL floor 3600; no lines.
+  namesilo: { labels: ['', 'Key'], secret: 'key', minTTL: 3600, maxTTL: 86400, supported: true, lines: 'none' },
   // Third-party DNS plugins (PA-22): no secret, the plugin is chosen by id.
   plugin: { labels: ['', ''], secret: '', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
+  // ClouDNS sub-user; fixed TTL list from 60 (others written as the largest allowed value below them); GeoDNS is not carrier lines.
+  cloudns: { labels: ['SUB_AUTH_ID', 'AUTH_PASSWORD'], identifier: 'sub_auth_id', secret: 'auth_password', minTTL: 60, maxTTL: 86400, supported: true, lines: 'none' },
+  // Namecheap: USERNAME + API_KEY + SOURCEIP (whitelisted egress IPv4); TTL 60..60000 (higher written as 60000).
+  namecheap: { labels: ['USERNAME', 'API_KEY'], identifier: 'username', secret: 'api_key', minTTL: 60, maxTTL: 86400, supported: true, lines: 'none' },
+  // JD Cloud AccessKey; lines 默认/电信/联通/移动/境外 (free plan without 境外, TTL from 120).
+  jdcloud: { labels: ['ACCESS_KEY_ID', 'ACCESS_KEY_SECRET'], identifier: 'access_key_id', secret: 'access_key_secret', minTTL: 120, maxTTL: 86400, supported: true, lines: 'all' },
 }
 
 // Select values of third-party DNS plugins: plugin:<plugin id>.
@@ -70,6 +85,7 @@ export interface CredentialFields {
   region: string
   projectID: string
   plan?: string
+  sourceIP?: string
 }
 
 // dnsConfigCredentials maps the form to the provider's credential fields, or
@@ -87,6 +103,11 @@ export function dnsConfigCredentials(type: ProviderChoice, form: CredentialField
     credentials.project_id = form.projectID.trim()
   }
   if (type === 'dns_com') credentials.plan = dnsComPlanOf(form.plan)
+  if (type === 'namecheap') {
+    const sourceIP = (form.sourceIP ?? '').trim()
+    if (!isValidKeyedDNSCredential('source_ip', sourceIP)) return null
+    credentials.source_ip = sourceIP
+  }
   return credentials
 }
 

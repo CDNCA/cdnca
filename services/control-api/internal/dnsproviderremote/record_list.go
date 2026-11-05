@@ -80,8 +80,20 @@ func (remote *providerReconcileRemote) listZoneRecords(ctx context.Context, conf
 		records, err = (&dnsLAProvider{adapter: remote.adapter}).listRecords(ctx, validated, relative)
 	case providerNameCom:
 		records, err = (&nameComProvider{adapter: remote.adapter}).listRecords(ctx, validated)
+	case providerJDCloud:
+		records, err = (&jdCloudProvider{adapter: remote.adapter}).listRecords(ctx, validated, relative)
+	case providerNamecheap:
+		records, err = (&namecheapProvider{adapter: remote.adapter}).listRecords(ctx, validated)
+	case providerClouDNS:
+		records, err = (&clouDNSProvider{adapter: remote.adapter}).listRecords(ctx, validated, relative)
 	case providerCustomHTTP, providerPlugin:
 		records, err = newRecordProvider(remote.adapter, validated.ProviderType).listRecords(ctx, validated, canonicalOwner, relative)
+	case providerDNSPodCom:
+		records, err = (&dnsPodComProvider{adapter: remote.adapter}).listRecords(ctx, validated)
+	case providerGoDaddy:
+		records, err = (&goDaddyProvider{adapter: remote.adapter}).listRecords(ctx, validated)
+	case providerNamesilo:
+		records, err = (&namesiloProvider{adapter: remote.adapter}).listRecords(ctx, validated)
 	default:
 		return nil, 0, failure(CodeUnsupported, false)
 	}

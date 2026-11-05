@@ -33,6 +33,11 @@ type fakeLeaf struct {
 	calls   []string
 	// nodes is supply.site_status "nodes" per leaf (fix-mktsiteconf7 §1).
 	nodes map[uuid.UUID]map[string]string
+	// newer makes a leaf answer a commit as one that already runs that newer
+	// revision (siteconf.Reply.AppliedRevision) and keep its config.
+	newer map[uuid.UUID]int64
+	// rollbackOf lists the RollbackOf of every rollback commit received.
+	rollbackOf []int64
 }
 
 func (f *fakeLeaf) Call(_ context.Context, leaf Leaf, op string, _ []string, _ string, body any) (siteconf.Reply, error) {
@@ -56,8 +61,14 @@ func (f *fakeLeaf) Call(_ context.Context, leaf Leaf, op string, _ []string, _ s
 			id = uuid.New()
 			f.sites[leaf.LeafMemberID] = id
 		}
+		if req.RollbackOf != 0 {
+			f.rollbackOf = append(f.rollbackOf, req.RollbackOf)
+		}
+		if newer := f.newer[leaf.LeafMemberID]; newer > req.Revision {
+			return siteconf.Reply{OK: true, LeafSiteID: &id, Revision: req.Revision, AppliedRevision: newer}, nil
+		}
 		f.applied[leaf.LeafMemberID] = req.Config
-		return siteconf.Reply{OK: true, LeafSiteID: &id}, nil
+		return siteconf.Reply{OK: true, LeafSiteID: &id, Revision: req.Revision, AppliedRevision: req.Revision}, nil
 	case siteconf.OpDelete:
 		delete(f.applied, leaf.LeafMemberID)
 		delete(f.sites, leaf.LeafMemberID)
@@ -172,6 +183,67 @@ func TestApplyThreeStepWithRollback(t *testing.T) {
 	var status string
 	if err := pool.QueryRow(ctx, `SELECT status FROM site_supplies WHERE id=$1`, supply).Scan(&status); err != nil || status != "suspended" {
 		t.Fatalf("supply status = %s %v", status, err)
+	}
+}
+
+// A rollback commit names the revision it rolls back, so a leaf
+// orders it after that revision; a leaf that answers it already runs a newer
+// revision (a later apply reached it first) keeps that one, and the receipt
+// records it instead of the rolled-back-to revision.
+func TestRollbackNamesFailedRevisionAndKeepsNewer(t *testing.T) {
+	pool := testPool(t)
+	ctx := t.Context()
+	platform, site := seedSite(t, pool)
+	sub, leafA, leafB, gA, gB := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	leaves := &fakeLeaf{applied: map[uuid.UUID]siteconf.Config{}, sites: map[uuid.UUID]uuid.UUID{},
+		block: map[uuid.UUID]bool{}, failCom: map[uuid.UUID]bool{}}
+	svc := New(pool, fakeMarket{targets: []marketclient.SupplyTarget{
+		{SubscriptionID: sub, Aggregate: true, FQDN: "rb.supply.example"},
+		{SubscriptionID: sub, LeafMemberID: leafA, NodePoolRef: "pa", GrantID: &gA},
+		{SubscriptionID: sub, LeafMemberID: leafB, NodePoolRef: "pb", GrantID: &gB},
+	}}, leaves)
+	if _, err := svc.SyncTargets(ctx, platform); err != nil {
+		t.Fatal(err)
+	}
+	var supply uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT id FROM site_supplies WHERE market_subscription_id=$1`, sub).Scan(&supply); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Bind(ctx, site, supply, "primary", 10); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := svc.Apply(ctx, site, 1, config("203.0.113.61")); err != nil || !r.Applied {
+		t.Fatalf("revision 1 = %+v %v", r, err)
+	}
+	leaves.failCom[leafB] = true
+	r, err := svc.Apply(ctx, site, 2, config("203.0.113.62"))
+	if err != nil || r.Applied || r.Leaves[0].State != "rolled_back" {
+		t.Fatalf("failed revision 2 = %+v %v", r, err)
+	}
+	if len(leaves.rollbackOf) != 1 || leaves.rollbackOf[0] != 2 {
+		t.Fatalf("rollback must name the failed revision: %v", leaves.rollbackOf)
+	}
+	// Revision 3 is stored and reached leaf A before the rollback of 4 does.
+	third := config("203.0.113.63")
+	if err := third.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(third)
+	if _, err := pool.Exec(ctx, `INSERT INTO site_supply_config_revisions (site_id,revision,config,digest,created_at)
+		VALUES ($1,3,$2,$3,now())`, site, raw, third.Digest()); err != nil {
+		t.Fatal(err)
+	}
+	leaves.newer = map[uuid.UUID]int64{leafA: 3}
+	r, err = svc.Apply(ctx, site, 4, config("203.0.113.64"))
+	if err != nil || r.Applied || r.Leaves[0].State != "applied" || r.Leaves[1].State != "failed" {
+		t.Fatalf("revision 4 over a leaf on 3 = %+v %v", r, err)
+	}
+	var state, digest string
+	var revision int64
+	if err := pool.QueryRow(ctx, `SELECT state, applied_revision, applied_digest FROM site_supply_leaf_sites
+		WHERE site_id=$1 AND leaf_member_id=$2`, site, leafA).Scan(&state, &revision, &digest); err != nil ||
+		state != "applied" || revision != 3 || digest != third.Digest() {
+		t.Fatalf("leaf A receipt = %s %d %s %v", state, revision, digest, err)
 	}
 }
 

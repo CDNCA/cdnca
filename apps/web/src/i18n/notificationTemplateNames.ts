@@ -66,6 +66,8 @@ export const notificationTemplateNames: Record<string, string> = {
   'node.bandwidth.exceeded': '节点带宽超限停用', 'node.line_group.backup_ip_activated': '线路组启用备用 IP',
   'node.bandwidth.recovered': '节点带宽恢复', 'node.line_group.primary_ip_restored': '线路组恢复主 IP',
   'node.certificate.recovered': '节点证书过期自动恢复',
+  'control.db_pool.saturated': '主控数据库连接池满载',
+  'control.db_pool.recovered': '主控数据库连接池恢复',
   'node.dnspup.recovered': 'dnspup 拨测节点已恢复',
   'node.dnspup.unreachable': 'dnspup 拨测节点不可达',
   'node.security.event': '节点安全事件',
@@ -138,6 +140,8 @@ export const notificationVariableNames: Record<string, string> = {
   window_minutes: '统计窗口（分钟）', window_start: '统计开始时间', xdp_event: 'XDP 事件', xdp_reason: 'XDP 原因代码',
   xdp_reason_text: 'XDP 原因说明',
   market_health: '市场判定', seller: '卖家',
+  instance: '主控实例', in_use: '使用中连接', max_conns: '连接上限', resident_conns: '常驻连接', request_capacity: '留给请求的连接',
+  queued: '排队次数', avg_wait_ms: '平均等待（毫秒）', reasons: '满载原因', cause: '恢复原因',
 }
 
 const localeSuffix = /\.(zh-cn|en-us)$/

@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import { dnsApi, type CreateDNSProviderInput, type UpdateDNSProviderInput } from '../api/dns'
+import { dnsApi, dnsProviderSplitsCarrierLines, type CreateDNSProviderInput, type UpdateDNSProviderInput } from '../api/dns'
 
 function response(value: unknown, status = 200): Promise<Response> {
   return Promise.resolve(new Response(status === 204 ? null : JSON.stringify(value), {
@@ -60,6 +60,58 @@ describe('dnsApi', () => {
         `invalid-namecom-${index}`)).rejects.toMatchObject({ code: 'validation_error' })
     }
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts DNSPod国际版 ID + Token, GoDaddy Key + Secret and Namesilo Key; rejects malformed ones before fetch', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => response({}))
+    const valid: CreateDNSProviderInput[] = [
+      { name: 'DNSPod.com', provider_type: 'dnspod_com', credentials: { dp_id: '730060', dp_key: 'fixture-token' } },
+      { name: 'GoDaddy', provider_type: 'godaddy', credentials: { api_key: 'fixture-key', api_secret: 'fixture-secret' } },
+      { name: 'Namesilo', provider_type: 'namesilo', credentials: { key: 'fixture-namesilo-key' } },
+    ]
+    for (const [index, input] of valid.entries()) await dnsApi.create('token', input, `intl-dns-${index}`)
+    expect(fetch.mock.calls.map((call) => JSON.parse(String(call[1]?.body)))).toEqual(valid)
+    for (const [index, [providerType, credentials]] of ([
+      ['dnspod_com', { dp_id: '730060' }],
+      ['godaddy', { api_key: 'fixture:key', api_secret: 'secret' }],
+      ['godaddy', { api_key: 'key' }],
+      ['godaddy', { api_key: 'key', api_secret: 's'.repeat(257) }],
+      ['namesilo', { key: 'has space' }],
+      ['namesilo', { key: 'k', api_secret: 's' }],
+      ['namesilo', { api_key: 'fixture-namesilo-key' }],
+      ['namesilo', {}],
+    ] as const).entries()) {
+      await expect(dnsApi.create('token', { name: 'x', provider_type: providerType, credentials } as CreateDNSProviderInput,
+        `invalid-intl-dns-${index}`)).rejects.toMatchObject({ code: 'validation_error' })
+    }
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('accepts ClouDNS / Namecheap / JD Cloud credentials and rejects malformed ones before fetch', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => response({}))
+    const valid: CreateDNSProviderInput[] = [
+      { name: 'ClouDNS', provider_type: 'cloudns', credentials: { sub_auth_id: '4321', auth_password: 'p@ss' } },
+      { name: 'Namecheap', provider_type: 'namecheap', credentials: { username: 'u', api_key: 'k', source_ip: '192.0.2.44' } },
+      { name: 'JD Cloud', provider_type: 'jdcloud', credentials: { access_key_id: 'AK', access_key_secret: 'SK' } },
+    ]
+    for (const [index, input] of valid.entries()) await dnsApi.create('token', input, `more-dns-${index}`)
+    expect(fetch).toHaveBeenCalledTimes(3)
+    for (const [index, [providerType, credentials]] of ([
+      ['cloudns', { sub_auth_id: 'user', auth_password: 'p' }],
+      ['cloudns', { sub_auth_id: '01', auth_password: 'p' }],
+      ['namecheap', { username: 'u', api_key: 'k', source_ip: '2001:db8::1' }],
+      ['namecheap', { username: 'u', api_key: 'k', source_ip: '192.0.2.256' }],
+      ['namecheap', { username: 'u', api_key: 'k' }],
+      ['jdcloud', { access_key_id: 'AK', access_key_secret: 'S K' }],
+      ['jdcloud', { access_key_id: 'AK', access_key_secret: 'SK', region: 'cn-north-1' }],
+    ] as const).entries()) {
+      await expect(dnsApi.create('token', { name: 'x', provider_type: providerType, credentials } as CreateDNSProviderInput,
+        `invalid-more-dns-${index}`)).rejects.toMatchObject({ code: 'validation_error' })
+    }
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(dnsProviderSplitsCarrierLines('jdcloud')).toBe(true)
+    expect(dnsProviderSplitsCarrierLines('cloudns')).toBe(false)
+    expect(dnsProviderSplitsCarrierLines('namecheap')).toBe(false)
   })
 
   it('accepts the DNS.LA 4096-byte boundary and rejects invalid creates before fetch', async () => {

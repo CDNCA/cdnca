@@ -131,6 +131,9 @@ func Dial(ctx context.Context, config DialConfig) (net.Conn, error) {
 	ws, response, err := dialer.DialContext(ctx, url, header)
 	if err != nil {
 		if response != nil {
+			if response.StatusCode == http.StatusUnauthorized && config.Path == TunnelPath {
+				return nil, fmt.Errorf("gateway tunnel upgrade %s: %w: %w", response.Status, ErrNodeIdentityRejected, err)
+			}
 			return nil, fmt.Errorf("gateway tunnel upgrade %s: %w", response.Status, err)
 		}
 		return nil, fmt.Errorf("gateway tunnel: %w", err)

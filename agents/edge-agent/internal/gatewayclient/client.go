@@ -24,6 +24,7 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/challenge"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/deployment"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/firewall"
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/gatewaytunnel"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/objectstore"
 	"github.com/cdnca/cdnca/libs/edgeconfig/autodefense"
 	"github.com/cdnca/cdnca/libs/edgeconfig/sched302"
@@ -1375,6 +1376,10 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}
 	backoff := c.config.InitialBackoff
+	// identity backs off dials the gateway refused for the node certificate
+	// (not registered there, or its node CA was rebuilt); other failures
+	// keep backoff.
+	var identity gatewaytunnel.IdentityRetry
 	for {
 		if err := nodeMonitoringFailure(); err != nil {
 			return err
@@ -1386,6 +1391,7 @@ func (c *Client) Run(ctx context.Context) error {
 			return err
 		}
 		if c.recoverer != nil && c.recoverer.RecoveryDue() {
+			identity.Reset()
 			if err := c.recoverCertificate(ctx); err != nil {
 				return err
 			}
@@ -1421,10 +1427,24 @@ func (c *Client) Run(ctx context.Context) error {
 			errors.Is(err, errCapabilitiesLearned) || errors.Is(err, errArtifactCapabilitiesChanged) ||
 			errors.Is(err, errLiveCapabilityChanged) {
 			backoff = c.config.InitialBackoff
+			identity.Reset()
 			continue
 		}
 		if errors.Is(err, ErrInvalidMessage) || errors.Is(err, ErrCommandConflict) || errors.Is(err, ErrPermanentProtocol) {
 			return err
+		}
+		if established {
+			identity.Reset()
+		} else if gatewaytunnel.IdentityRejected(err) {
+			delay := identity.Delay(c.jitter)
+			gatewaytunnel.LogIdentityRejected("gateway", delay, err)
+			if err := waitOrDone(ctx, delay); err != nil {
+				if monitoringErr := nodeMonitoringFailure(); monitoringErr != nil {
+					return monitoringErr
+				}
+				return err
+			}
+			continue
 		}
 		stableSession := established && time.Since(sessionStarted) >= c.config.MaximumBackoff
 		if stableSession {
@@ -1451,6 +1471,17 @@ func (c *Client) Run(ctx context.Context) error {
 				backoff = c.config.MaximumBackoff
 			}
 		}
+	}
+}
+
+func waitOrDone(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 

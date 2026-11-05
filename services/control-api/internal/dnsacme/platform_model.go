@@ -40,6 +40,21 @@ func PlatformMinTTLFor(providerType string) int {
 	case "namecom":
 		// name.com: "a minimum TTL of 300, or 5 minutes".
 		return 300
+	case "dnspod_com", "godaddy":
+		// DNSPod.com Free plan 600s (docs.dnspod.com/dns/help-ttl); GoDaddy
+		// "The minimum TTL is 600 seconds" (dnsproviderremote.providerTTLFloors).
+		return 600
+	case "namesilo":
+		return 3600
+	case "cloudns":
+		// ClouDNS: lowest TTL of its fixed list (wiki article 58).
+		return 60
+	case "namecheap":
+		// Namecheap setHosts: TTL 60..60000.
+		return 60
+	case "jdcloud":
+		// JD Cloud DNS: lowest TTL 120 on the free plan (price-overview).
+		return 120
 	}
 	return PlatformMinTTL
 }
@@ -164,4 +179,8 @@ var identifierFields = map[string][]string{
 	"aliyun": {"access_key_id"}, "huawei": {"access_key", "region", "project_id"}, "dns_la": {"api_id"},
 	"dnspod_cn": {"dp_id"}, "dns_com": {"api_key", "plan"}, "cloudflare": {}, "custom_http": {"endpoint"}, "namecom": {"username"},
 	ProviderTypePlugin: {PluginCredentialField},
+	"dnspod_com":       {"dp_id"}, "godaddy": {"api_key"}, "namesilo": {},
+	"cloudns":   {"sub_auth_id"},
+	"namecheap": {"username", "source_ip"},
+	"jdcloud":   {"access_key_id"},
 }

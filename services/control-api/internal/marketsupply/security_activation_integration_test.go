@@ -356,6 +356,34 @@ func TestLeafCCPolicyFromSiteconf(t *testing.T) {
 	if policies, err := svc.loadLeafPolicies(ctx, &tenant.scopeID, &leafSite); err != nil || len(policies) != 1 || policies[0].kind != "cc" {
 		t.Fatalf("leaf policies %+v %v", policies, err)
 	}
+	// The subscriber detached its CC library (the leaf node must stop answering
+	// 429): a later commit without the block disables the leaf policy, so the
+	// reconciler activates a version the nodes skip; sending it again re-enables.
+	stateOf := func() (bool, int64) {
+		var enabled bool
+		var rev int64
+		if err := pool.QueryRow(ctx, `SELECT enabled, revision FROM security_policies WHERE scope_id=$1 AND name=$2 AND kind='cc'
+			AND deleted_at IS NULL`, tenant.scopeID, leafPolicyName(securitypolicy.KindCC, leafSite)).Scan(&enabled, &rev); err != nil {
+			t.Fatal(err)
+		}
+		return enabled, rev
+	}
+	bare := cfg
+	bare.CC = nil
+	for range 2 {
+		if err := svc.applySecurity(ctx, tenant, leafSite, siteconf.CommitRequest{SiteID: request.SiteID, Revision: 2, Config: bare}); err != nil {
+			t.Fatalf("apply without cc: %v", err)
+		}
+	}
+	if enabled, rev := stateOf(); enabled || rev != 2 {
+		t.Fatalf("detached cc policy enabled=%v revision=%d, want disabled at 2", enabled, rev)
+	}
+	if err := svc.applySecurity(ctx, tenant, leafSite, siteconf.CommitRequest{SiteID: request.SiteID, Revision: 3, Config: cfg}); err != nil {
+		t.Fatalf("apply cc again: %v", err)
+	}
+	if enabled, rev := stateOf(); !enabled || rev != 3 {
+		t.Fatalf("re-attached cc policy enabled=%v revision=%d, want enabled at 3", enabled, rev)
+	}
 }
 
 // fix-mktsiteconf3 ⑥: a WAF rule naming a carried IP list runs against the

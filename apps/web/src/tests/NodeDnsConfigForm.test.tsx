@@ -80,7 +80,7 @@ describe('节点管理 DNS配置 tab', () => {
     expect(buttons).toEqual(expect.arrayContaining(['保存配置', '记录修复', '清除CDN无关解析']))
   })
 
-  it('switches the ID/Token labels per provider, hides the ID for Cloudflare and disables DNSPod国际版', async () => {
+  it('switches the ID/Token labels per provider, hides the ID for Cloudflare and Namesilo', async () => {
     authenticate()
     mockAPI({ config: emptyConfig })
     const user = userEvent.setup()
@@ -92,7 +92,8 @@ describe('节点管理 DNS配置 tab', () => {
     const options = [...document.querySelectorAll('.ant-select-item-option-content')]
     expect(options.map((option) => option.textContent)).toEqual(['阿里云 (aliyun.com, alibabacloud.com)', '华为云 (huaweicloud.com)',
       'DNSLA (dns.la)', 'DNSPod (dnspod.cn)', 'DNSPod国际版 (dnspod.com)', '帝恩思 (51dns.com)', 'Cloudflare (cloudflare.com)',
-      'Name.com (name.com)', '自定义 HTTP 接口'])
+      'Name.com (name.com)', '自定义 HTTP 接口', 'GoDaddy (godaddy.com)', 'Namesilo (namesilo.com)', 'ClouDNS (cloudns.net)', 'Namecheap (namecheap.com)',
+      '京东云 (jdcloud.com)'])
     await user.click(screen.getByText('Cloudflare (cloudflare.com)', { selector: '.ant-select-item-option-content' }))
     expect(await screen.findByLabelText('API Token')).toBeInTheDocument()
     expect(screen.queryByLabelText('ID')).not.toBeInTheDocument()
@@ -102,8 +103,20 @@ describe('节点管理 DNS配置 tab', () => {
     expect(screen.getByLabelText('项目ID')).toBeInTheDocument()
     await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
     await user.click(screen.getByText('DNSPod国际版 (dnspod.com)', { selector: '.ant-select-item-option-content' }))
-    expect(await screen.findByText(/DNSPod国际版已迁移到腾讯云国际站/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /保存配置/ })).toBeDisabled()
+    expect(await screen.findByLabelText('ID')).toBeInTheDocument()
+    expect(screen.getByLabelText('Token')).toBeInTheDocument()
+    expect(screen.getByText(/免费版记录 TTL 最低 600 秒/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /保存配置/ })).toBeEnabled()
+    await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
+    await user.click(screen.getByText('GoDaddy (godaddy.com)', { selector: '.ant-select-item-option-content' }))
+    expect(await screen.findByLabelText('Key')).toBeInTheDocument()
+    expect(screen.getByLabelText('Secret')).toBeInTheDocument()
+    expect(screen.getByText(/OTE 测试环境的 Key 不可用/)).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
+    await user.click(screen.getByText('Namesilo (namesilo.com)', { selector: '.ant-select-item-option-content' }))
+    expect(await screen.findByLabelText('Key')).toBeInTheDocument()
+    expect(screen.queryByLabelText('ID')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Secret')).not.toBeInTheDocument()
     await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
     await user.click(screen.getByText('自定义 HTTP 接口', { selector: '.ant-select-item-option-content' }))
     expect(await screen.findByLabelText('接口地址')).toBeInTheDocument()
@@ -366,7 +379,14 @@ describe('节点管理 DNS配置 tab', () => {
     expect(dnsConfigCredentials('dns_com', form)).toEqual({ api_key: 'id', api_secret: 'secret', plan: 'free' })
     expect(dnsConfigCredentials('dns_com', { ...form, plan: 'flagship' })).toEqual({ api_key: 'id', api_secret: 'secret', plan: 'flagship' })
     expect(dnsConfigCredentials('dns_com', { ...form, plan: 'custom' })).toEqual({ api_key: 'id', api_secret: 'secret', plan: 'free' })
-    expect(dnsConfigCredentials('dnspod_intl', form)).toBeNull()
+    expect(dnsConfigCredentials('dnspod_com', form)).toEqual({ dp_id: 'id', dp_key: 'secret' })
+    expect(dnsConfigCredentials('godaddy', form)).toEqual({ api_key: 'id', api_secret: 'secret' })
+    expect(dnsConfigCredentials('namesilo', form)).toEqual({ key: 'secret' })
+    expect(dnsConfigCredentials('godaddy', { ...form, identifier: '' })).toBeNull()
+    for (const [type, floor] of [['dnspod_com', 600], ['godaddy', 600], ['namesilo', 3600]] as const) {
+      expect(validTTL(type, String(floor - 1))).toBe(false)
+      expect(validTTL(type, String(floor))).toBe(true)
+    }
     expect(dnsConfigCredentials('aliyun', { ...form, secret: ' ' })).toBeNull()
     expect(validTTL('cloudflare', '30')).toBe(false)
     expect(validTTL('cloudflare', '60')).toBe(true)
@@ -375,6 +395,43 @@ describe('节点管理 DNS配置 tab', () => {
     expect(dnsConfigCredentials('namecom', form)).toEqual({ username: 'id', api_token: 'secret' })
     expect(validTTL('namecom', '60')).toBe(false)
     expect(validTTL('namecom', '300')).toBe(true)
+    expect(dnsConfigCredentials('cloudns', form)).toEqual({ sub_auth_id: 'id', auth_password: 'secret' })
+    expect(dnsConfigCredentials('jdcloud', form)).toEqual({ access_key_id: 'id', access_key_secret: 'secret' })
+    expect(dnsConfigCredentials('namecheap', form)).toBeNull()
+    expect(dnsConfigCredentials('namecheap', { ...form, sourceIP: '2001:db8::1' })).toBeNull()
+    expect(dnsConfigCredentials('namecheap', { ...form, sourceIP: ' 192.0.2.44 ' }))
+      .toEqual({ username: 'id', api_key: 'secret', source_ip: '192.0.2.44' })
+    expect(validTTL('cloudns', '30')).toBe(false)
+    expect(validTTL('jdcloud', '60')).toBe(false)
+    expect(validTTL('jdcloud', '120')).toBe(true)
+  })
+
+  it('saves Namecheap with SOURCEIP, warns about carrier lines; JD Cloud shows its lines', async () => {
+    authenticate()
+    const state = { config: { ...emptyConfig } as Record<string, unknown> }
+    const fetchMock = mockAPI(state)
+    const user = userEvent.setup()
+    renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    await user.click(await screen.findByRole('combobox', { name: 'DNS提供商' }))
+    await user.click(screen.getByText('京东云 (jdcloud.com)', { selector: '.ant-select-item-option-content' }))
+    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外')).toBeInTheDocument()
+    expect(screen.getByText(/免费版 TTL 最低 120 秒/)).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
+    await user.click(screen.getByText('Namecheap (namecheap.com)', { selector: '.ant-select-item-option-content' }))
+    expect(await screen.findByRole('note')).toHaveTextContent('该服务商不支持按运营商分线路')
+    expect(screen.getByText(/只接受白名单 IP 的 API 请求/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('USERNAME'), 'fixture-user')
+    await user.type(screen.getByLabelText('API_KEY'), 'fixture-key')
+    await user.click(screen.getByRole('button', { name: /保存配置/ }))
+    expect(await screen.findByText('请输入 Namecheap 白名单里的主控出口 IPv4')).toBeInTheDocument()
+    expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: '知道了' }))
+    await user.type(screen.getByLabelText('SOURCEIP（来源 IP）'), '192.0.2.44')
+    await user.click(screen.getByRole('button', { name: /保存配置/ }))
+    await waitFor(() => expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(1))
+    const body = JSON.parse(String(calls(fetchMock, '/v1/dns/platform-config', 'PUT')[0][1]!.body))
+    expect(body).toEqual({ provider_type: 'namecheap',
+      credentials: { username: 'fixture-user', api_key: 'fixture-key', source_ip: '192.0.2.44' }, ttl: 600, ip_weight: false })
   })
 
   it('shows Name.com without carrier lines, disables IP weight and saves username + API token at TTL >= 300', async () => {
@@ -407,6 +464,49 @@ describe('节点管理 DNS配置 tab', () => {
     const body = JSON.parse(String(calls(fetchMock, '/v1/dns/platform-config', 'PUT')[0][1]!.body))
     expect(body).toEqual({ provider_type: 'namecom', credentials: { username: 'fixture-user', api_token: 'fixture-token' },
       ttl: 300, ip_weight: false })
+  })
+})
+
+describe('节点管理 DNS配置 DNSPod国际版 / GoDaddy / Namesilo', () => {
+  it('saves Namesilo with the API key only, no carrier lines or IP weight, at TTL >= 3600', async () => {
+    authenticate()
+    const state = { config: { ...emptyConfig, ip_weight: true } as Record<string, unknown> }
+    const fetchMock = mockAPI(state)
+    const user = userEvent.setup()
+    renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    await user.click(await screen.findByRole('combobox', { name: 'DNS提供商' }))
+    await user.click(screen.getByText('Namesilo (namesilo.com)', { selector: '.ant-select-item-option-content' }))
+    expect(await screen.findByRole('note')).toHaveTextContent('该服务商不支持按运营商分线路')
+    expect(screen.getByRole('switch', { name: '开启IP权重' })).toBeDisabled()
+    expect(screen.getByText(/3600 秒下限/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Key'), 'fixture-namesilo-key')
+    await user.clear(screen.getByLabelText('TTL'))
+    await user.type(screen.getByLabelText('TTL'), '600')
+    await user.click(screen.getByRole('button', { name: /保存配置/ }))
+    expect(await screen.findByText('TTL 须为 3600-86400 的整数')).toBeInTheDocument()
+    expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(0)
+    await waitFor(() => expect(document.activeElement?.closest('.cdnca-feedback')).not.toBeNull())
+    await user.clear(screen.getByLabelText('TTL'))
+    await user.type(screen.getByLabelText('TTL'), '3600')
+    await user.click(screen.getByRole('button', { name: /保存配置/ }))
+    await waitFor(() => expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(1))
+    expect(JSON.parse(String(calls(fetchMock, '/v1/dns/platform-config', 'PUT')[0][1]!.body))).toEqual({
+      provider_type: 'namesilo', credentials: { key: 'fixture-namesilo-key' }, ttl: 3600, ip_weight: false })
+  })
+
+  it('saves DNSPod国际版 as provider_type dnspod_com with ID + Token', async () => {
+    authenticate()
+    const fetchMock = mockAPI({ config: { ...emptyConfig } as Record<string, unknown> })
+    const user = userEvent.setup()
+    renderWithProviders(<NodeDnsPage />, ['/node/dns'])
+    await user.click(await screen.findByRole('combobox', { name: 'DNS提供商' }))
+    await user.click(screen.getByText('DNSPod国际版 (dnspod.com)', { selector: '.ant-select-item-option-content' }))
+    await user.type(await screen.findByLabelText('ID'), '730060')
+    await user.type(screen.getByLabelText('Token'), 'fixture-token')
+    await user.click(screen.getByRole('button', { name: /保存配置/ }))
+    await waitFor(() => expect(calls(fetchMock, '/v1/dns/platform-config', 'PUT')).toHaveLength(1))
+    expect(JSON.parse(String(calls(fetchMock, '/v1/dns/platform-config', 'PUT')[0][1]!.body))).toEqual({
+      provider_type: 'dnspod_com', credentials: { dp_id: '730060', dp_key: 'fixture-token' }, ttl: 600, ip_weight: false })
   })
 })
 
@@ -472,7 +572,7 @@ describe('DNS provider capabilities (NET-03/NET-04)', () => {
     for (const type of ['aliyun', 'huawei', 'dnspod_cn', 'dns_com', 'dns_la', 'custom_http', 'plugin']) {
       expect(dnsProviderSplitsCarrierLines(type)).toBe(true)
     }
-    for (const type of ['cloudflare', 'namecom', 'dnspod_intl', 'dnsdun', undefined]) {
+    for (const type of ['cloudflare', 'namecom', 'dnspod_com', 'godaddy', 'namesilo', 'dnsdun', undefined]) {
       expect(dnsProviderSplitsCarrierLines(type)).toBe(false)
     }
     expect(['aliyun', 'huawei', 'dnspod_cn', 'dns_com', 'dns_la', 'cloudflare', 'namecom', 'custom_http', 'plugin', undefined]

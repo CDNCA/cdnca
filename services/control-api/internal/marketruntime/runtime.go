@@ -69,6 +69,7 @@ type Market interface {
 	Receive(ctx context.Context, self marketclient.Identity, cursor int64) ([]marketclient.Inbound, int64, []error)
 	Send(ctx context.Context, self marketclient.Identity, out marketclient.Outbound) (int64, error)
 	Ack(ctx context.Context, seq int64) error
+	Cursor(ctx context.Context) (int64, error)
 }
 
 // Supply is the subset of marketsupply.Service the runtime drives.
@@ -322,10 +323,21 @@ func (r *Runtime) grantLoop(ctx context.Context) {
 	}
 }
 
-// relayLoop starts from cursor 0 on every boot: the relay keeps everything
-// not yet acked, and every handler is idempotent, so a replay is harmless.
+// relayLoop resumes after the last acknowledged sequence. The relay keeps
+// every message, acknowledged or not, so a loop starting from 0 would run the
+// whole history again on every boot; handlers are idempotent per message (a
+// redelivered message gets the same reply identity), not across messages: an
+// old site commit handled again rewrote the site and its security policies
+// with the old configuration. Messages handled but not yet
+// acknowledged when the process stopped (at most the last batch) are
+// redelivered; the leaf skips the site requests among them that it already
+// applied (marketsupply applied.go). A market that cannot report the cursor
+// is retried; one without the endpoint starts the loop from 0.
 func (r *Runtime) relayLoop(ctx context.Context) {
-	var cursor int64
+	cursor, ok := r.relayCursor(ctx)
+	if !ok {
+		return
+	}
 	for ctx.Err() == nil {
 		self := r.identity()
 		messages, next, errs := r.market.Receive(ctx, self, cursor)
@@ -350,6 +362,27 @@ func (r *Runtime) relayLoop(ctx context.Context) {
 		// Back off on errors; a healthy long poll paces itself.
 		if (failed || len(errs) > 0 && len(messages) == 0) && !sleep(ctx, 10*time.Second) {
 			return
+		}
+	}
+}
+
+// relayCursor is the sequence relayLoop starts after; false once ctx ends.
+func (r *Runtime) relayCursor(ctx context.Context) (int64, bool) {
+	for {
+		cursor, err := r.market.Cursor(ctx)
+		if err == nil {
+			return cursor, true
+		}
+		// Only a market without the endpoint starts the loop from 0; any
+		// other refusal (an expired certificate) fails Receive just the same.
+		if status, _, rejected := marketclient.Rejected(err); rejected &&
+			(status == http.StatusNotFound || status == http.StatusMethodNotAllowed) {
+			r.log.Warn("market relay cursor unsupported, starting from the first message", "status", status)
+			return 0, true
+		}
+		r.log.Warn("market relay cursor failed", "err", err)
+		if !sleep(ctx, 10*time.Second) {
+			return 0, false
 		}
 	}
 }
@@ -385,7 +418,7 @@ func (r *Runtime) answer(ctx context.Context, self marketclient.Identity, m mark
 		}
 		return nil
 	}
-	reply, err := r.supply.Handle(ctx, m.Header, m.Payload)
+	reply, err := r.supply.Handle(marketsupply.WithRelaySeq(ctx, m.Seq), m.Header, m.Payload)
 	if err != nil {
 		return err
 	}
@@ -394,10 +427,11 @@ func (r *Runtime) answer(ctx context.Context, self marketclient.Identity, m mark
 		return err
 	}
 	// The reply's message id follows the request's like its key: a request
-	// handled again (the relay redelivers unacked messages from cursor 0 on
-	// every boot) resends the same reply identity, which the relay answers
-	// with the stored one instead of 409 (a random id wedged this loop on the
-	// replayed message, so no later request reached the handler).
+	// handled again (relayLoop redelivers what it handled but had not acked
+	// when the process stopped) resends the same reply identity, which the
+	// relay answers with the stored one instead of 409 (a random id wedged
+	// this loop on the replayed message, so no later request reached the
+	// handler).
 	key := "reply-" + m.Header.MessageID.String()
 	_, err = r.market.Send(ctx, self, marketclient.Outbound{To: m.Header.SenderMemberID,
 		GrantID: m.Header.GrantID, MessageID: replyMessageID(key), Operation: siteconf.OpReply,

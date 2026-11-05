@@ -57,6 +57,13 @@ func TestReconcileDecision(t *testing.T) {
 			t.Fatalf("decision = %+v", got)
 		}
 	})
+	t.Run("leaf already runs a newer revision: delivered, not retried", func(t *testing.T) {
+		got := reconcileDecision(base, siteconf.Reply{OK: true, LeafSiteID: &leafSite, Revision: 7, AppliedRevision: 9},
+			nil, now, policy)
+		if got.state != "applied" || got.running != 9 || got.leafSite == nil || *got.leafSite != leafSite || got.notify {
+			t.Fatalf("decision = %+v", got)
+		}
+	})
 	t.Run("leaf normalized differently gives up at once", func(t *testing.T) {
 		got := reconcileDecision(base, siteconf.Reply{OK: true, LeafSiteID: &leafSite, Digest: "other"}, nil, now, policy)
 		if got.state != "inconsistent" || !got.notify {

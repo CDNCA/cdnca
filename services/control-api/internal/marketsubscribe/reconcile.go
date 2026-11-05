@@ -78,6 +78,9 @@ type pendingReceipt struct {
 type reconcileOutcome struct {
 	state    string // applied, committing, inconsistent
 	leafSite *uuid.UUID
+	// running is the newer revision the leaf kept instead of this one
+	// (siteconf.Reply.AppliedRevision); the receipt records it as applied.
+	running  int64
 	attempts int
 	next     time.Time
 	reason   string
@@ -87,6 +90,10 @@ type reconcileOutcome struct {
 // reconcileDecision turns one re-sent commit's reply into the receipt to save.
 func reconcileDecision(p pendingReceipt, reply siteconf.Reply, err error, now time.Time, policy ReconcilePolicy) reconcileOutcome {
 	switch {
+	case err == nil && reply.OK && reply.LeafSiteID != nil && reply.AppliedRevision > p.revision:
+		// The leaf already runs a newer revision and did not apply this one:
+		// delivered, not retried.
+		return reconcileOutcome{state: "applied", leafSite: reply.LeafSiteID, running: reply.AppliedRevision}
 	case err == nil && reply.OK && reply.Digest != "" && reply.Digest != p.digest:
 		// The leaf runs this revision with other content: retrying cannot fix it.
 		return reconcileOutcome{state: "inconsistent", leafSite: p.leafSite, attempts: p.attempts + 1,
@@ -255,6 +262,16 @@ func (s *Service) revisionConfig(ctx context.Context, siteID uuid.UUID, revision
 // receipt was settled.
 func (s *Service) saveReconciled(ctx context.Context, p pendingReceipt, outcome reconcileOutcome, now time.Time) (bool, error) {
 	settled := false
+	// What the receipt records as applied: this revision, or the newer one
+	// the leaf kept instead.
+	appliedRevision, appliedDigest := p.revision, p.digest
+	if outcome.running > 0 {
+		appliedRevision = outcome.running
+		var err error
+		if appliedDigest, err = s.revisionDigest(ctx, p.siteID, appliedRevision); err != nil {
+			return false, err
+		}
+	}
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var tag interface{ RowsAffected() int64 }
 		var err error
@@ -265,11 +282,12 @@ func (s *Service) saveReconciled(ctx context.Context, p pendingReceipt, outcome 
 			// Applied: the node delivery check starts (node_check.go).
 			_, nextCheck := nodeTracking("applied", now, s.reconcilePolicy())
 			tag, err = tx.Exec(ctx, `UPDATE site_supply_leaf_sites SET state='applied', leaf_site_id=$7,
-				applied_revision=$5, applied_digest=$6, last_error='', pending_revision=0, pending_digest='',
+				applied_revision=$10, applied_digest=$11, last_error='', pending_revision=0, pending_digest='',
 				reconcile_attempts=0, next_reconcile_at=NULL, updated_at=$8,
 				node_state='delivering', node_reason='', node_detail='', node_check_attempts=0, node_checked_at=NULL,
 				next_node_check_at=$9 WHERE `+match,
-				p.siteID, p.supplyID, p.leaf.LeafMemberID, p.leaf.NodePoolRef, p.revision, p.digest, outcome.leafSite, now, nextCheck)
+				p.siteID, p.supplyID, p.leaf.LeafMemberID, p.leaf.NodePoolRef, p.revision, p.digest, outcome.leafSite, now, nextCheck,
+				appliedRevision, appliedDigest)
 		case "inconsistent":
 			tag, err = tx.Exec(ctx, `UPDATE site_supply_leaf_sites SET state='inconsistent', leaf_site_id=$7,
 				last_error=$8, pending_revision=0, pending_digest='', reconcile_attempts=$9, next_reconcile_at=NULL,

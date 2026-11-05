@@ -67,6 +67,9 @@ var supportedEventTypes = [...]string{
 	"probe.dnspup.balance_exhausted",
 	// 429: expired node certificate self-recovery (internal/nodeidentity).
 	"node.certificate.recovered",
+	// 633: control-api database pool saturated / recovered (internal/poolmon).
+	"control.db_pool.saturated",
+	"control.db_pool.recovered",
 	// 302_tickets (internal/tickets).
 	"ticket.created",
 	"ticket.replied",

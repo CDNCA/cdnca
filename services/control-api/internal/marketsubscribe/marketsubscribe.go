@@ -255,11 +255,13 @@ func (s *Service) run(ctx context.Context, siteID uuid.UUID, revision int64, cfg
 	}
 	result := Result{Revision: revision, Digest: cfg.Digest()}
 	raw, _ := json.Marshal(cfg)
-	if err := s.claim(ctx, siteID, revision, raw, result.Digest, commit); err != nil {
-		return Result{}, err
-	}
+	// Targets first: a site without a pushable market binding stores no
+	// revision (a stored one would later read as a conflicting claim).
 	targets, err := s.targets(ctx, siteID)
 	if err != nil {
+		return Result{}, err
+	}
+	if err := s.claim(ctx, siteID, revision, raw, result.Digest, commit); err != nil {
 		return Result{}, err
 	}
 	if commit {
@@ -357,6 +359,16 @@ func (s *Service) run(ctx context.Context, siteID uuid.UUID, revision int64, cfg
 			siteconf.CommitRequest{SiteID: siteID, LeafSiteID: t.leafSite, Revision: revision, Digest: result.Digest, Config: cfg})
 		if err == nil && reply.OK && reply.LeafSiteID != nil {
 			targets[i].leafSite = reply.LeafSiteID
+			if reply.AppliedRevision > revision {
+				// The leaf already runs a newer revision (another apply got there
+				// first) and kept it: delivered, and nothing to roll back here.
+				if err := s.recordRunning(ctx, siteID, targets[i], reply.AppliedRevision); err != nil {
+					result.Leaves[i].State, result.Leaves[i].LeafSiteID = "receipt_pending", reply.LeafSiteID
+					result.Leaves[i].Error = "receipt not saved: " + err.Error()
+					result.Reason = "receipt_pending"
+				}
+				continue
+			}
 			committed = append(committed, i)
 			if err := s.record(ctx, siteID, targets[i], revision, result.Digest, "applied", ""); err != nil {
 				// The leaf runs revision but we hold no receipt: neither
@@ -482,7 +494,8 @@ func (s *Service) rollback(ctx context.Context, siteID uuid.UUID, t target, fail
 			siteID, t.revision).Scan(&raw); err == nil {
 			if err = json.Unmarshal(raw, &prev); err == nil {
 				reply, err = s.caller.Call(ctx, t.leaf, siteconf.OpCommit, prev.Domains, key, siteconf.CommitRequest{
-					SiteID: siteID, LeafSiteID: t.leafSite, Revision: t.revision, Digest: prev.Digest(), Config: prev})
+					SiteID: siteID, LeafSiteID: t.leafSite, Revision: t.revision, Digest: prev.Digest(), Config: prev,
+					RollbackOf: failed})
 			}
 		}
 	}
@@ -492,6 +505,12 @@ func (s *Service) rollback(ctx context.Context, siteID uuid.UUID, t target, fail
 			msg = err.Error()
 		}
 		return "inconsistent", s.record(ctx, siteID, t, failed, "", "inconsistent", msg)
+	}
+	if reply.AppliedRevision > t.revision && reply.LeafSiteID != nil {
+		// The leaf kept a revision newer than the one that failed (a later
+		// apply reached it first): it runs that one, not ours to roll back.
+		t.leafSite = reply.LeafSiteID
+		return "applied", s.recordRunning(ctx, siteID, t, reply.AppliedRevision)
 	}
 	state := "applied"
 	if t.revision == 0 {
@@ -521,6 +540,27 @@ func (s *Service) record(ctx context.Context, siteID uuid.UUID, t target, revisi
 		siteID, t.supplyID, t.leaf.LeafMemberID, t.leaf.NodePoolRef, t.leafSite, revision, digest, state, msg, now,
 		nodeState, nextCheck)
 	return err
+}
+
+// recordRunning saves that the leaf runs revision, newer than the one just
+// sent (siteconf.Reply.AppliedRevision), with that revision's digest.
+func (s *Service) recordRunning(ctx context.Context, siteID uuid.UUID, t target, revision int64) error {
+	digest, err := s.revisionDigest(ctx, siteID, revision)
+	if err != nil {
+		return err
+	}
+	return s.record(ctx, siteID, t, revision, digest, "applied", "")
+}
+
+// revisionDigest is the stored digest of one revision ("" if not stored).
+func (s *Service) revisionDigest(ctx context.Context, siteID uuid.UUID, revision int64) (string, error) {
+	var digest string
+	err := s.pool.QueryRow(ctx, `SELECT digest FROM site_supply_config_revisions WHERE site_id=$1 AND revision=$2`,
+		siteID, revision).Scan(&digest)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return digest, err
 }
 
 // targetsQuery lists the site's active market bindings, each with whether it

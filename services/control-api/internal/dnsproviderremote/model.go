@@ -60,8 +60,8 @@ type ProviderCapability struct {
 
 // ProviderCapabilityMatrix returns a fresh fixed-size value so callers cannot
 // mutate the package's code-authoritative provider capability contract.
-func ProviderCapabilityMatrix() [9]ProviderCapability {
-	return [9]ProviderCapability{
+func ProviderCapabilityMatrix() [15]ProviderCapability {
+	return [15]ProviderCapability{
 		{ProviderType: providerAliyun, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
 		{ProviderType: providerCloudflare, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
 		{ProviderType: providerHuawei, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
@@ -71,10 +71,22 @@ func ProviderCapabilityMatrix() [9]ProviderCapability {
 		{ProviderType: providerDNSLA, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
 		// name.com records have no line field: default line only; TTL floor 300.
 		{ProviderType: providerNameCom, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		// ClouDNS GeoDNS is by location, not carrier: default line only; fixed TTL list.
+		{ProviderType: providerClouDNS, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		// Namecheap hosts have no line field: default line only; setHosts rewrites the whole set.
+		{ProviderType: providerNamecheap, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		// JD Cloud viewValue lines (默认/电信/联通/移动/境外; 境外 not on the free plan); TTL floor 120.
+		{ProviderType: providerJDCloud, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
 		// The endpoint receives unified line names and maps them itself.
 		{ProviderType: providerCustomHTTP, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true},
 		// Third-party DNS plugins speak the same unified lines (PA-22 contract).
 		{ProviderType: providerPlugin, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true},
+		// DNSPod.com (international): carrier lines are Enterprise-plan only, not written; default line, TTL floor 600.
+		{ProviderType: providerDNSPodCom, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		// GoDaddy records have no line field: default line only; TTL floor 600.
+		{ProviderType: providerGoDaddy, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		// Namesilo records have no line field: default line only; TTL floor 3600.
+		{ProviderType: providerNamesilo, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
 	}
 }
 
@@ -708,6 +720,10 @@ func supportedProvider(provider string) bool {
 	case providerCloudflare, providerAliyun, providerHuawei, providerDNSPodCN, providerDNSCom, providerDNSLA, providerNameCom,
 		providerCustomHTTP, providerPlugin:
 		return true
+	case providerDNSPodCom, providerGoDaddy, providerNamesilo:
+		return true
+	case providerClouDNS, providerNamecheap, providerJDCloud:
+		return true
 	default:
 		return false
 	}
@@ -741,6 +757,20 @@ func validateCredentials(provider string, credentials map[string]string) error {
 		fields = map[string]credentialRule{"api_id": {maximum: 4096}, "api_secret": {maximum: 4096}}
 	case providerNameCom:
 		fields = map[string]credentialRule{"username": {maximum: 128}, "api_token": {maximum: 256}}
+	case providerDNSPodCom:
+		fields = map[string]credentialRule{"dp_id": {maximum: 20}, "dp_key": {maximum: 256}}
+	case providerGoDaddy:
+		fields = map[string]credentialRule{"api_key": {maximum: 128}, "api_secret": {maximum: 256}}
+	case providerNamesilo:
+		// "key" (the API's own parameter name): an "api_key"-only map would
+		// also read as a GoDaddy / DNS.COM map missing its secret.
+		fields = map[string]credentialRule{"key": {maximum: 128}}
+	case providerClouDNS:
+		fields = map[string]credentialRule{"sub_auth_id": {maximum: 20}, "auth_password": {maximum: 256}}
+	case providerNamecheap:
+		fields = map[string]credentialRule{"username": {maximum: 64}, "api_key": {maximum: 128}, "source_ip": {maximum: 15}}
+	case providerJDCloud:
+		fields = map[string]credentialRule{"access_key_id": {maximum: 128}, "access_key_secret": {maximum: 256}}
 	case providerCustomHTTP:
 		// The address policy is applied by the client at connect time.
 		if !dnscustomhttp.ValidShape(credentials) {
@@ -791,6 +821,23 @@ func validateCredentials(provider string, credentials map[string]string) error {
 	case providerNameCom:
 		// Basic authentication: the username cannot hold the separator.
 		if strings.Contains(credentials["username"], ":") {
+			return failure(CodeInvalidInput, false)
+		}
+	case providerDNSPodCom:
+		if !dnspodIDPattern.MatchString(credentials["dp_id"]) || strings.Contains(credentials["dp_key"], ",") {
+			return failure(CodeInvalidInput, false)
+		}
+	case providerGoDaddy:
+		// "sso-key KEY:SECRET": the key cannot hold the separator.
+		if strings.Contains(credentials["api_key"], ":") {
+			return failure(CodeInvalidInput, false)
+		}
+	case providerClouDNS:
+		if !clouDNSSubAuthIDPattern.MatchString(credentials["sub_auth_id"]) {
+			return failure(CodeInvalidInput, false)
+		}
+	case providerNamecheap:
+		if !validNamecheapClientIP(credentials["source_ip"]) {
 			return failure(CodeInvalidInput, false)
 		}
 	case providerDNSLA:

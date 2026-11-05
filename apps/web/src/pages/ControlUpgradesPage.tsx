@@ -37,6 +37,7 @@ import { formatDateTime, formatNumber } from '../i18n/formatters'
 import ControlUpgradesNative from './ControlUpgradesPage.native'
 import NodeInstallCommand from './NodeInstallCommand'
 import ControlBackupPanel from './ControlBackupPanel'
+import ControlDBPoolPanel from './ControlDBPoolPanel'
 import NodeGatewayAddressPanel from './NodeGatewayAddressPanel'
 import { nativeControlUpgradesApi } from '../api/controlUpgrades.native'
 import UpgradeLogModal from './UpgradeLogModal'
@@ -443,6 +444,7 @@ function MaintenanceOverview({
             {controlUpgradeAvailable ? <ControlUpgradesNative variant="inline" /> : null}</div>
         </div>
       </section>
+      <ControlDBPoolPanel accessToken={accessToken} />
       <section className="maintenance-card node-upgrade-section" aria-labelledby="node-upgrade-title">
         <div className="maintenance-section-heading"><div><h2 id="node-upgrade-title">{mt('nodeTitle')}</h2><p>{mt('nodeDescription')}</p></div><Space><Button type="primary" icon={<UploadCloud size={15} />} disabled={!canUpgradeSelection} onClick={() => openUpgrade(selectedNodeIDs.length > 0 ? selectedNodeIDs.filter(nodeUpgradable) : upgradableNodeIDs)}>{selectedNodeIDs.length ? `${mt('upgradeNodes')}（${selectedNodeIDs.length}）` : mt('upgradeNodes')}</Button><Button icon={<RefreshCw size={15} />} loading={controlQuery.isFetching || nodeQuery.isFetching || rolloutQuery.isFetching || nodeStatusQueries.some((query) => query.isFetching)} onClick={() => void refresh()}>{mt('refresh')}</Button></Space></div>
         <div className="maintenance-pills" aria-label={mt('nodeVersionSummary')}><span>{mt('requiredVersion')} <strong>{requiredVersion}</strong></span><span>{mt(nodeQuery.hasNextPage || cursorRepeated || nodeQuery.isError ? 'loadedNodes' : 'nodeCount')} <strong>{canNodeRead && nodeQuery.data ? formatNumber(rows.length, i18n.resolvedLanguage) : mt('nodeCountUnavailable')}</strong></span></div>

@@ -52,8 +52,20 @@ func (remote *providerReconcileRemote) lookup(ctx context.Context, config Provid
 		return (&dnsLAProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
 	case providerNameCom:
 		return (&nameComProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
+	case providerJDCloud:
+		return (&jdCloudProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
+	case providerNamecheap:
+		return (&namecheapProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
+	case providerClouDNS:
+		return (&clouDNSProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
 	case providerCustomHTTP, providerPlugin:
 		return newRecordProvider(remote.adapter, config.ProviderType).reconcileLookup(ctx, config, operation)
+	case providerDNSPodCom:
+		return (&dnsPodComProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
+	case providerGoDaddy:
+		return (&goDaddyProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
+	case providerNamesilo:
+		return (&namesiloProvider{adapter: remote.adapter}).reconcileLookup(ctx, config, operation)
 	default:
 		return ReconcileLookup{}, failure(CodeUnsupported, false)
 	}
@@ -88,8 +100,20 @@ func (remote *providerReconcileRemote) mutate(ctx context.Context, config Provid
 		return (&dnsLAProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
 	case providerNameCom:
 		return (&nameComProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
+	case providerJDCloud:
+		return (&jdCloudProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
+	case providerNamecheap:
+		return (&namecheapProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
+	case providerClouDNS:
+		return (&clouDNSProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
 	case providerCustomHTTP, providerPlugin:
 		return newRecordProvider(remote.adapter, config.ProviderType).reconcileMutate(ctx, config, operation)
+	case providerDNSPodCom:
+		return (&dnsPodComProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
+	case providerGoDaddy:
+		return (&goDaddyProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
+	case providerNamesilo:
+		return (&namesiloProvider{adapter: remote.adapter}).reconcileMutate(ctx, config, operation)
 	default:
 		return "", failure(CodeUnsupported, false)
 	}

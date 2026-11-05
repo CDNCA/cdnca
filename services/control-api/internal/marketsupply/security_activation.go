@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/libs/marketproto/siteconf"
+	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/securityactivation"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/google/uuid"
@@ -60,9 +61,11 @@ func tenantActor(tenant tenantRef) securitypolicy.Actor {
 	return securitypolicy.Actor{UserID: tenant.userID, ScopeID: tenant.scopeID, ScopeKind: "tenant"}
 }
 
-// applySecurity writes the site's ACL and CC policies as the tenant owner. A
-// block the subscriber does not send is not managed; an unchanged block
-// writes nothing, so a retried commit adds no revision.
+// applySecurity writes the site's ACL, CC and WAF policies as the tenant
+// owner. A kind the subscriber no longer sends (it detached the library or
+// disabled it) disables the leaf policy, so the reconciler activates a version
+// the nodes skip; an unchanged block writes nothing, so a retried commit adds
+// no revision.
 func (s *Service) applySecurity(ctx context.Context, tenant tenantRef, leafSiteID uuid.UUID, req siteconf.CommitRequest) error {
 	var wanted []securitypolicy.PolicyFields
 	if access, err := req.Config.DecodeAccess(); err != nil {
@@ -110,13 +113,16 @@ func (s *Service) applySecurity(ctx context.Context, tenant tenantRef, leafSiteI
 		}
 		wanted, quickBlock = append(wanted, withLeafIPLists(fields, mapped)), waf.QuickBlock
 	}
-	if len(wanted) == 0 {
-		return nil
-	}
 	if s.policies == nil {
+		if len(wanted) == 0 {
+			return nil
+		}
 		return errors.New("market supply: security policies are not configured")
 	}
 	actor := tenantActor(tenant)
+	if err := s.disableUnsent(ctx, tenant, actor, leafSiteID, req.SiteID, wanted); err != nil {
+		return err
+	}
 	for _, fields := range wanted {
 		fields.Name = leafPolicyName(fields.Kind, leafSiteID)
 		id, err := s.leafPolicyID(ctx, tenant, fields.Name, fields.Kind)
@@ -154,6 +160,45 @@ func (s *Service) applySecurity(ctx context.Context, tenant tenantRef, leafSiteI
 			if err := s.applyQuickBlock(ctx, actor, current, quickBlock, key); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// disableUnsent disables the site's leaf policy of every kind the commit does
+// not carry (otherwise a detached CC library keeps limiting on the leaf node).
+func (s *Service) disableUnsent(ctx context.Context, tenant tenantRef, actor securitypolicy.Actor, leafSiteID, siteID uuid.UUID,
+	wanted []securitypolicy.PolicyFields) error {
+	for _, kind := range []string{securitypolicy.KindACL, securitypolicy.KindCC, securitypolicy.KindWAF} {
+		if slices.ContainsFunc(wanted, func(f securitypolicy.PolicyFields) bool { return f.Kind == kind }) {
+			continue
+		}
+		id, err := s.leafPolicyID(ctx, tenant, leafPolicyName(kind, leafSiteID), kind)
+		if err != nil {
+			return err
+		}
+		if id == uuid.Nil {
+			continue
+		}
+		current, err := s.policies.Get(ctx, actor, id)
+		if err != nil {
+			return err
+		}
+		if !current.Enabled {
+			continue
+		}
+		// Quick block rules are the store's (applyQuickBlock); the rest is kept
+		// as last sent so a re-attach compares like any other commit.
+		rules := slices.DeleteFunc(slices.Clone(current.Rules), func(rule securitypolicy.Rule) bool {
+			return securitypolicy.IsQuickBlockRuleID(rule.ID)
+		})
+		fields := securitypolicy.PolicyFields{Kind: current.Kind, Name: current.Name, Description: current.Description,
+			Enabled: false, DefaultAction: current.DefaultAction, Rules: rules, CCSettings: current.CCSettings,
+			WAFSettings: current.WAFSettings}
+		key := "market-sec-" + siteID.String() + "-" + kind
+		if _, err := s.policies.Update(ctx, actor, securitypolicy.UpdateRequest{ID: id, ExpectedRevision: current.Revision,
+			Fields: fields, IdempotencyKey: key + "-off-r" + itoa(current.Revision), RequestID: key}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -439,6 +484,7 @@ func (s *Service) listenNodeConfig(ctx context.Context, channel string, wake cha
 	for ctx.Err() == nil {
 		conn, err := s.pool.Acquire(ctx)
 		if err == nil {
+			release := database.HoldResident("market_security_listen", true)
 			_, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
 			for err == nil {
 				if _, err = conn.Conn().WaitForNotification(ctx); err == nil {
@@ -449,6 +495,7 @@ func (s *Service) listenNodeConfig(ctx context.Context, channel string, wake cha
 				}
 			}
 			conn.Release()
+			release()
 		}
 		if ctx.Err() != nil {
 			return

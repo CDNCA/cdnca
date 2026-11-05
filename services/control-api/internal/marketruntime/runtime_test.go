@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +26,9 @@ type fakeMarket struct {
 	sent    []marketclient.Outbound
 	acked   []int64
 	sendErr error
+	// cursor / cursorErr: what Cursor reports.
+	cursor    int64
+	cursorErr error
 
 	grants           []grant.Grant
 	grantSubscribers map[uuid.UUID]uuid.UUID
@@ -68,6 +72,11 @@ func (f *fakeMarket) Send(_ context.Context, _ marketclient.Identity, out market
 	}
 	f.sent = append(f.sent, out)
 	return int64(len(f.sent)), nil
+}
+func (f *fakeMarket) Cursor(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cursor, f.cursorErr
 }
 func (f *fakeMarket) Ack(_ context.Context, seq int64) error {
 	f.mu.Lock()
@@ -219,4 +228,66 @@ func (f *refuseKey) Send(ctx context.Context, id marketclient.Identity, out mark
 		return 0, &marketclient.RejectedError{Status: 403, Code: "forbidden"}
 	}
 	return f.fakeMarket.Send(ctx, id, out)
+}
+
+// seqSupply records the relay sequence each handled message carried.
+type seqSupply struct {
+	mu   sync.Mutex
+	seqs []int64
+}
+
+func (s *seqSupply) Sync(context.Context, []grant.Grant) ([]marketsupply.Outcome, error) {
+	return nil, nil
+}
+func (s *seqSupply) Handle(ctx context.Context, h envelope.Header, _ []byte) (siteconf.Reply, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seqs = append(s.seqs, marketsupply.RelaySeq(ctx))
+	return siteconf.Reply{Operation: h.Operation, OK: true}, nil
+}
+
+func (s *seqSupply) handled() []int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]int64(nil), s.seqs...)
+}
+
+// The loop resumes after the acknowledged cursor instead of
+// running the whole relay history again on every boot, and hands the leaf
+// each message's relay sequence; a market that refuses the cursor for good
+// starts from the first message.
+func TestRelayResumesAfterAcknowledgedCursor(t *testing.T) {
+	sender := uuid.New()
+	msg := func(seq int64) marketclient.Inbound {
+		return marketclient.Inbound{Seq: seq, Header: envelope.Header{MessageID: uuid.New(), SenderMemberID: sender,
+			GrantID: uuid.New(), Operation: siteconf.OpStatus}}
+	}
+	for _, test := range []struct {
+		name      string
+		cursor    int64
+		cursorErr error
+		want      []int64
+	}{
+		{name: "resume", cursor: 2, want: []int64{3}},
+		{name: "older market", cursorErr: &marketclient.RejectedError{Status: 404, Code: "not_found"}, want: []int64{1, 2, 3}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			market := &fakeMarket{inbox: []marketclient.Inbound{msg(1), msg(2), msg(3)}, cursor: test.cursor,
+				cursorErr: test.cursorErr}
+			supply := &seqSupply{}
+			r := New(Config{StateDir: t.TempDir()}, nil, market, supply, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			done := make(chan struct{})
+			go func() { r.relayLoop(ctx); close(done) }()
+			for len(supply.handled()) < len(test.want) && ctx.Err() == nil {
+				time.Sleep(20 * time.Millisecond)
+			}
+			cancel()
+			<-done
+			if got := supply.handled(); !slices.Equal(got, test.want) {
+				t.Fatalf("handled sequences = %v, want %v", got, test.want)
+			}
+		})
+	}
 }

@@ -3,8 +3,11 @@
 package marketsubscribe
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type fakeClock struct{ at time.Time }
@@ -53,6 +56,47 @@ func TestReconcileCompletesPendingReceipt(t *testing.T) {
 		t.Fatalf("audit events = %d %v", audits, err)
 	}
 	// Idempotent: nothing is due any more.
+	if n, err := svc.ReconcileReceipts(t.Context()); err != nil || n != 0 {
+		t.Fatalf("second reconcile = %d %v", n, err)
+	}
+}
+
+// The reconciler resends revision 1 to a leaf that already runs
+// revision 2 (applied by a later apply) and does not apply 1 again. The
+// receipt is settled as delivered, recording revision 2 with its digest, and
+// is not retried.
+func TestReconcileRecordsNewerRevisionTheLeafRuns(t *testing.T) {
+	pool := testPool(t)
+	svc, leaves, site, member := singleLeaf(t, pool)
+	clock := &fakeClock{at: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)}
+	svc.WithReconcile(clock.now, DefaultReconcilePolicy(), nil)
+	drop := injectReceiptCheck(t, pool, site, "state = 'applied'")
+	if _, err := svc.Apply(t.Context(), site, 1, config("203.0.113.50")); err == nil {
+		t.Fatal("apply with an unsavable receipt succeeded")
+	}
+	drop()
+	newer := config("203.0.113.51")
+	if err := newer.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(newer)
+	if _, err := pool.Exec(t.Context(), `INSERT INTO site_supply_config_revisions (site_id,revision,config,digest,created_at)
+		VALUES ($1,2,$2,$3,$4)`, site, raw, newer.Digest(), clock.at); err != nil {
+		t.Fatal(err)
+	}
+	leaves.newer = map[uuid.UUID]int64{member: 2}
+	clock.at = clock.at.Add(DefaultReconcilePolicy().Grace + time.Second)
+	if n, err := svc.ReconcileReceipts(t.Context()); err != nil || n != 1 {
+		t.Fatalf("reconcile = %d %v", n, err)
+	}
+	var state, digest string
+	var revision, pending int64
+	if err := pool.QueryRow(t.Context(), `SELECT state, applied_revision, applied_digest, pending_revision
+		FROM site_supply_leaf_sites WHERE site_id=$1 AND leaf_member_id=$2`, site, member).
+		Scan(&state, &revision, &digest, &pending); err != nil || state != "applied" || revision != 2 ||
+		digest != newer.Digest() || pending != 0 {
+		t.Fatalf("receipt = %s %d %s pending %d %v", state, revision, digest, pending, err)
+	}
 	if n, err := svc.ReconcileReceipts(t.Context()); err != nil || n != 0 {
 		t.Fatalf("second reconcile = %d %v", n, err)
 	}

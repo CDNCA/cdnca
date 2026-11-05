@@ -24,6 +24,9 @@ describe('marketReason (MC12 E3)', () => {
 
   it('maps close codes exactly, then by range', () => {
     expect(closeReason(20002, 'zh-CN')).toMatchObject({ known: true, reason: '连续违反 SLA' })
+    // The operator deleted the buyer or the seller.
+    expect(closeReason(30004, 'zh-CN')).toMatchObject({ known: true, reason: '平台删除了买方或卖方账号' })
+    expect(closeReason(30004, 'en-US').reason).toBe('The platform deleted the buyer or seller account')
     expect(closeReason(10099, 'zh-CN')).toMatchObject({ known: false, reason: '卖方关闭（10099）' })
     expect(closeReason(1, 'en-US').reason).toBe('Cancelled by the buyer')
   })

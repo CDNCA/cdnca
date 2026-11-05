@@ -100,6 +100,19 @@ func (s *Service) Handle(ctx context.Context, header envelope.Header, payload []
 			return fail(siteconf.ErrInvalid)
 		}
 		reply.SiteID, reply.Revision = req.SiteID, req.Revision
+		applied, err := s.loadApplied(ctx, tenant, req.SiteID)
+		if err != nil {
+			return siteconf.Reply{}, err
+		}
+		reply.AppliedRevision = applied.applied
+		seq, ordered := RelaySeq(ctx), order(req.Revision, req.RollbackOf)
+		if header.Operation == siteconf.OpCommit && applied.staleCommit(ordered, seq) {
+			// A replay, or an older revision than the leaf runs: nothing is
+			// written; the reply names what runs, so the subscriber records it
+			// and does not retry this one.
+			reply.OK, reply.LeafSiteID = true, applied.leafSite
+			return reply, nil
+		}
 		if err := req.Config.Normalize(); err != nil {
 			return fail(err)
 		}
@@ -187,7 +200,12 @@ func (s *Service) Handle(ctx context.Context, header envelope.Header, payload []
 		// The credentials go to the nodes now; what does
 		// not reach them yet is advisory, the reconciler retries it.
 		reply.Blockers = append(reply.Blockers, s.deliverOriginAuth(ctx, tenant, req.Config)...)
-		reply.OK, reply.LeafSiteID = true, &leafID
+		if err := s.saveApplied(ctx, tenant, req.SiteID, &leafID, req.Revision, ordered, seq); err != nil {
+			// Not answered: the relay redelivers it, and applying it again
+			// writes nothing new.
+			return siteconf.Reply{}, err
+		}
+		reply.OK, reply.LeafSiteID, reply.AppliedRevision = true, &leafID, req.Revision
 		return reply, nil
 	case siteconf.OpAbort:
 		// Prepare stages nothing, so there is nothing to discard.
@@ -199,6 +217,17 @@ func (s *Service) Handle(ctx context.Context, header envelope.Header, payload []
 			return fail(siteconf.ErrInvalid)
 		}
 		reply.SiteID, reply.LeafSiteID = ref.SiteID, &ref.LeafSiteID
+		applied, err := s.loadApplied(ctx, tenant, ref.SiteID)
+		if err != nil {
+			return siteconf.Reply{}, err
+		}
+		reply.AppliedRevision = applied.applied
+		seq := RelaySeq(ctx)
+		if header.Operation == siteconf.OpDelete && applied.staleDelete(seq) {
+			// Sent before what the leaf applied last (a replay): the site stays.
+			reply.OK, reply.LeafSiteID = true, applied.leafSite
+			return reply, nil
+		}
 		current, err := s.ownedSite(ctx, actor, tenant, ref.LeafSiteID)
 		if err != nil {
 			return fail(err)
@@ -233,7 +262,10 @@ func (s *Service) Handle(ctx context.Context, header envelope.Header, payload []
 			RequestID: "market-" + header.MessageID.String()}); err != nil {
 			return fail(err)
 		}
-		reply.OK = true
+		if err := s.saveApplied(ctx, tenant, ref.SiteID, nil, 0, 0, seq); err != nil {
+			return siteconf.Reply{}, err
+		}
+		reply.OK, reply.AppliedRevision = true, 0
 		return reply, nil
 	case siteconf.OpPurge:
 		if s.purge == nil {

@@ -9,7 +9,7 @@ import (
 )
 
 func TestProviderCapabilityMatrixIsExactAndCallerImmutable(t *testing.T) {
-	want := [9]ProviderCapability{
+	want := [15]ProviderCapability{
 		{ProviderType: providerAliyun, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
 		{ProviderType: providerCloudflare, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
 		{ProviderType: providerHuawei, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
@@ -17,8 +17,14 @@ func TestProviderCapabilityMatrixIsExactAndCallerImmutable(t *testing.T) {
 		{ProviderType: providerDNSCom, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
 		{ProviderType: providerDNSLA, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
 		{ProviderType: providerNameCom, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		{ProviderType: providerClouDNS, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		{ProviderType: providerNamecheap, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		{ProviderType: providerJDCloud, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true, RetryAfterClassification: true},
 		{ProviderType: providerCustomHTTP, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true},
 		{ProviderType: providerPlugin, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, Line: true},
+		{ProviderType: providerDNSPodCom, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		{ProviderType: providerGoDaddy, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
+		{ProviderType: providerNamesilo, DNS01TXT: true, ReconcileA: true, ReconcileAAAA: true, ReconcileCNAME: true, RetryAfterClassification: true},
 	}
 	got := ProviderCapabilityMatrix()
 	if !reflect.DeepEqual(got, want) {
@@ -91,8 +97,14 @@ func TestSupportedLinesFollowCapabilityAndMappings(t *testing.T) {
 		providerDNSCom:     {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
 		providerDNSLA:      append(basicLines(), provinceLines()...),
 		providerNameCom:    {LineDefault},
+		providerClouDNS:    {LineDefault},
+		providerNamecheap:  {LineDefault},
+		providerJDCloud:    {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
 		providerCustomHTTP: {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
 		providerPlugin:     {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
+		providerDNSPodCom:  {LineDefault},
+		providerGoDaddy:    {LineDefault},
+		providerNamesilo:   {LineDefault},
 	}
 	for _, capability := range ProviderCapabilityMatrix() {
 		got := SupportedLines(capability.ProviderType)

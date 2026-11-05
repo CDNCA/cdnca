@@ -32,6 +32,12 @@ type endpointSet struct {
 	dnscom     endpoint
 	dnsla      endpoint
 	namecom    endpoint
+	dnspodcom  endpoint
+	godaddy    endpoint
+	namesilo   endpoint
+	cloudns    endpoint
+	namecheap  endpoint
+	jdcloud    endpoint
 }
 
 func productionEndpoints() endpointSet {
@@ -47,6 +53,18 @@ func productionEndpoints() endpointSet {
 		dnsla:  endpoint{baseURL: "https://api.dns.la", host: "api.dns.la"},
 		// name.com Core API production host (sandbox: api.dev.name.com).
 		namecom: endpoint{baseURL: "https://api.name.com", host: "api.name.com"},
+		// DNSPod.com (international) legacy API: https://api.dnspod.com/<Method>.
+		dnspodcom: endpoint{baseURL: "https://api.dnspod.com", host: "api.dnspod.com"},
+		// GoDaddy Domains v1 production (OpenAPI domains-v1.json servers).
+		godaddy: endpoint{baseURL: "https://api.godaddy.com", host: "api.godaddy.com"},
+		// Namesilo API: https://www.namesilo.com/api/<operation>.
+		namesilo: endpoint{baseURL: "https://www.namesilo.com", host: "www.namesilo.com"},
+		// ClouDNS HTTP API (api.cloudns.net, wiki article 41).
+		cloudns: endpoint{baseURL: "https://api.cloudns.net", host: "api.cloudns.net"},
+		// Namecheap production XML API (sandbox: api.sandbox.namecheap.com).
+		namecheap: endpoint{baseURL: "https://api.namecheap.com", host: "api.namecheap.com"},
+		// JD Cloud DNS OpenAPI v2 (service domainservice).
+		jdcloud: endpoint{baseURL: "https://domainservice.jdcloud-api.com", host: "domainservice.jdcloud-api.com"},
 	}
 }
 

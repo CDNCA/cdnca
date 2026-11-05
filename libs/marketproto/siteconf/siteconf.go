@@ -244,6 +244,11 @@ type CommitRequest struct {
 	Revision   int64      `json:"revision"`
 	Digest     string     `json:"digest"`
 	Config     Config     `json:"config"`
+	// RollbackOf is set on a rollback: Revision is the previous revision sent
+	// again because RollbackOf failed on another leaf. A leaf orders it as
+	// RollbackOf, so the rollback is applied over RollbackOf but not over a
+	// revision newer than RollbackOf. A leaf that predates it ignores it.
+	RollbackOf int64 `json:"rollback_of,omitempty"`
 }
 
 type SiteRef struct {
@@ -269,4 +274,10 @@ type Reply struct {
 	Blockers   []Blocker       `json:"blockers,omitempty"`
 	Digest     string          `json:"digest,omitempty"`
 	Status     json.RawMessage `json:"status,omitempty"`
+	// AppliedRevision is the subscriber revision the leaf runs for the site
+	// (0: none, or a leaf that predates it). On a commit it may differ from
+	// Revision: the leaf already applied a newer revision (or a newer
+	// rollback) and did not apply this older one; the subscriber records
+	// AppliedRevision as delivered and does not retry Revision.
+	AppliedRevision int64 `json:"applied_revision,omitempty"`
 }

@@ -73,6 +73,7 @@ type TunnelRouter struct {
 	done       chan struct{}
 	closeOnce  sync.Once
 	limiter    *sourceRateLimiter
+	rejects    *tunnelRejectLog
 }
 
 const (
@@ -112,6 +113,7 @@ func NewTunnelRouter(config TunnelRouterConfig) (*TunnelRouter, error) {
 		tunnels:   map[SharedListenerKind]chan net.Conn{SharedListenerEnrollment: make(chan net.Conn), SharedListenerAgent: make(chan net.Conn)},
 		done:      make(chan struct{}),
 		limiter:   newSourceRateLimiter(config.EnrollmentRate, time.Minute, config.Now),
+		rejects:   newTunnelRejectLog(config.Now, config.Logf),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc(TunnelPath, router.serveTunnel)
@@ -244,7 +246,7 @@ func (r *TunnelRouter) remote(request *http.Request) net.Addr {
 
 func (r *TunnelRouter) serveTunnel(w http.ResponseWriter, request *http.Request) {
 	if _, err := r.verifier.verify(request.Context(), request.Header.Get(TunnelNodeCertificateHeader), request.Header.Get(TunnelNodeAuthHeader), TunnelPath); err != nil {
-		r.config.Logf("agent-gateway tunnel rejected peer=%s error=%q", request.RemoteAddr, err.Error())
+		r.rejects.record(request, err)
 		http.Error(w, "unauthenticated", http.StatusUnauthorized)
 		return
 	}

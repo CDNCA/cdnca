@@ -142,6 +142,8 @@ const typeTranslationKeys: Record<string, string> = {
   'installation_ban.rejected': 'installationBanRejected',
   'node.install_trust.failed': 'nodeInstallTrustFailed',
   'node.certificate.recovered': 'nodeCertificateRecovered',
+  'control.db_pool.saturated': 'controlDBPoolSaturated',
+  'control.db_pool.recovered': 'controlDBPoolRecovered',
   'aggregated_edge.schedule.alert': 'aggregatedEdgeScheduleAlert',
   'aggregated_edge.tenant.switch': 'aggregatedEdgeTenantSwitch',
   'probe.dnspup.degraded': 'dnspupProbeDegraded',

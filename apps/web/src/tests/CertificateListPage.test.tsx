@@ -1673,6 +1673,97 @@ describe('CertificateListPage', () => {
     })
   })
 
+  it('offers DNSPod国际版 and GoDaddy in the shared DNS API editor and creates GoDaddy with Key + Secret', async () => {
+    authenticate(['certificates.read', 'certificates.manage', 'dns.read', 'dns.manage'])
+    vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
+    vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [] })
+    let createInput: unknown
+    const create = vi.spyOn(dnsApi, 'create').mockImplementation(async (_token, input) => {
+      createInput = { ...input, credentials: { ...input.credentials } }
+      return { ...provider, name: 'GoDaddy', provider_type: 'godaddy', status: 'unverified' as const }
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    await user.click(screen.getByRole('tab', { name: 'DNS API' }))
+    await user.click(screen.getByRole('button', { name: '新增 DNS API' }))
+    const dialog = getDialog('新增DNS API')
+    await user.click(within(dialog).getByRole('combobox', { name: 'DNS 服务商' }))
+    // jsdom renders the virtual list's first 10 options; Namesilo (11th) is covered by dnsApi/NodeDnsConfigForm tests.
+    expect(await screen.findByText('DNSPod 国际版', { selector: '.ant-select-item-option-content' })).toBeInTheDocument()
+    await user.click(screen.getByText('GoDaddy', { selector: '.ant-select-item-option-content' }))
+    expect(await within(dialog).findByText(/该服务商不支持按运营商分线路/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('名称'), 'GoDaddy')
+    await user.type(within(dialog).getByLabelText('API Key'), 'fixture:key')
+    await user.type(within(dialog).getByLabelText('API Secret'), 'fixture-secret')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    expect(await within(dialog).findByText('请输入有效的凭据字段')).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+    await user.clear(within(dialog).getByLabelText('API Key'))
+    await user.type(within(dialog).getByLabelText('API Key'), 'fixture-key')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(createInput).toEqual({
+      name: 'GoDaddy', remark: '', provider_type: 'godaddy', credentials: { api_key: 'fixture-key', api_secret: 'fixture-secret' },
+    })
+  })
+
+  it('creates ClouDNS / Namecheap / JD Cloud DNS providers with their credential fields', async () => {
+    authenticate(['certificates.read', 'certificates.manage', 'dns.read', 'dns.manage'])
+    vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
+    vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [] })
+    const inputs: unknown[] = []
+    const create = vi.spyOn(dnsApi, 'create').mockImplementation(async (_token, input) => {
+      inputs.push({ ...input, credentials: { ...input.credentials } })
+      return { ...provider, name: input.name, provider_type: input.provider_type, status: 'unverified' as const }
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<CertificateListPage />, ['/site/cert'])
+    await user.click(screen.getByRole('tab', { name: 'DNS API' }))
+    const open = async (label: string) => {
+      await user.click(screen.getByRole('button', { name: '新增 DNS API' }))
+      const dialog = getDialog('新增DNS API')
+      await user.click(within(dialog).getByRole('combobox', { name: 'DNS 服务商' }))
+      await user.click(await screen.findByText(label, { selector: '.ant-select-item-option-content' }))
+      await user.type(within(dialog).getByLabelText('名称'), label)
+      return dialog
+    }
+    // Namecheap: SOURCEIP must be the whitelisted IPv4; the hint says so.
+    let dialog = await open('Namecheap')
+    expect(await within(dialog).findByText(/该服务商不支持按运营商分线路/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/只接受白名单 IP 发来的 API 请求/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('用户名'), 'fixture-user')
+    await user.type(within(dialog).getByLabelText('API Key'), 'fixture-key')
+    await user.type(within(dialog).getByLabelText('SOURCEIP（来源 IP）'), '2001:db8::1')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    expect(await within(dialog).findByText('请输入有效的凭据字段')).toBeInTheDocument()
+    expect(create).not.toHaveBeenCalled()
+    await user.clear(within(dialog).getByLabelText('SOURCEIP（来源 IP）'))
+    await user.type(within(dialog).getByLabelText('SOURCEIP（来源 IP）'), '192.0.2.44')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    // ClouDNS: numeric SUB_AUTH_ID + AUTH_PASSWORD, default line only.
+    dialog = await open('ClouDNS')
+    expect(await within(dialog).findByText(/该服务商不支持按运营商分线路/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('SUB_AUTH_ID（子用户 ID）'), '4321')
+    await user.type(within(dialog).getByLabelText('AUTH_PASSWORD（子用户密码）'), 'fixture-password')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2))
+    // JD Cloud splits carrier lines: no warning.
+    dialog = await open('京东云 DNS')
+    expect(within(dialog).queryByText(/不支持按运营商分线路/)).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/免费版没有境外线路/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('AccessKey ID'), 'FIXTUREAK')
+    await user.type(within(dialog).getByLabelText('AccessKey Secret'), 'fixture-sk')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(3))
+    expect(inputs).toEqual([
+      { name: 'Namecheap', remark: '', provider_type: 'namecheap',
+        credentials: { username: 'fixture-user', api_key: 'fixture-key', source_ip: '192.0.2.44' } },
+      { name: 'ClouDNS', remark: '', provider_type: 'cloudns', credentials: { sub_auth_id: '4321', auth_password: 'fixture-password' } },
+      { name: '京东云 DNS', remark: '', provider_type: 'jdcloud', credentials: { access_key_id: 'FIXTUREAK', access_key_secret: 'fixture-sk' } },
+    ])
+  })
+
   it('keeps DNS credentials in the same-request retry path and clears them after closing an unknown result', async () => {
     authenticate(['certificates.read', 'certificates.manage', 'dns.read', 'dns.manage'])
     vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })

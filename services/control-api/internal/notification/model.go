@@ -109,6 +109,11 @@ const (
 	// Expired node certificate recovered with the node's own key (ADR 0013
 	// GW-02, migration 432), to nodes.manage holders.
 	EventTypeNodeCertificateRecovered = "node.certificate.recovered"
+	// control-api's database pool saturated / recovered (migration
+	// 633, internal/poolmon), to control.upgrades.read and
+	// platform.admin holders.
+	EventTypeControlDBPoolSaturated = "control.db_pool.saturated"
+	EventTypeControlDBPoolRecovered = "control.db_pool.recovered"
 )
 
 // MarketEventTypes are the node market notices (ADR 0012 §8, ML-10,
@@ -199,6 +204,7 @@ func PlatformEventType(eventType string) bool {
 		eventType == EventTypeProbeDNSPupDegraded || eventType == EventTypeNodeCertificateRecovered ||
 		eventType == EventTypeNodeDNSPupUnreachable || eventType == EventTypeNodeDNSPupRecovered ||
 		eventType == EventTypeProbeDNSPupBalanceLow || eventType == EventTypeProbeDNSPupBalanceExhausted ||
+		eventType == EventTypeControlDBPoolSaturated || eventType == EventTypeControlDBPoolRecovered ||
 		eventType == "ticket.staff.created" || eventType == "ticket.staff.replied" ||
 		eventType == "ticket.staff.overdue" ||
 		slices.Contains(MarketEventTypes, eventType)

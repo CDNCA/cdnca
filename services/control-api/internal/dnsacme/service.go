@@ -712,6 +712,14 @@ func supportedProvider(value string) bool {
 	switch value {
 	case "aliyun", "cloudflare", "huawei", "dnspod_cn", "dns_com", "dns_la", "namecom", dnscustomhttp.ProviderType, ProviderTypePlugin:
 		return true
+	case "dnspod_com", "godaddy", "namesilo":
+		return true
+	case "namecheap":
+		return true
+	case "jdcloud":
+		return true
+	case "cloudns":
+		return true
 	default:
 		return false
 	}
@@ -726,7 +734,7 @@ func normalizeProviderCredentials(providerType string, input map[string]string) 
 
 func matchesSupportedProviderCredentialSchema(input map[string]string) bool {
 	for _, providerType := range []string{"aliyun", "cloudflare", "huawei", "dnspod_cn", "dns_com", "dns_la", "namecom", dnscustomhttp.ProviderType,
-		ProviderTypePlugin} {
+		ProviderTypePlugin, "dnspod_com", "godaddy", "namesilo", "cloudns", "namecheap", "jdcloud"} {
 		if validProviderCredentialSchema(providerType, input) {
 			return true
 		}
@@ -756,6 +764,24 @@ func validProviderCredentialSchema(providerType string, input map[string]string)
 		return err == nil
 	case "namecom":
 		_, _, err := exactNameComCredentials(input)
+		return err == nil
+	case "dnspod_com":
+		_, _, err := exactDNSPodCredentials(input)
+		return err == nil
+	case "godaddy":
+		_, _, err := exactGoDaddyCredentials(input)
+		return err == nil
+	case "namesilo":
+		_, err := exactNamesiloCredentials(input)
+		return err == nil
+	case "cloudns":
+		_, _, err := exactClouDNSCredentials(input)
+		return err == nil
+	case "namecheap":
+		_, _, _, err := exactNamecheapCredentials(input)
+		return err == nil
+	case "jdcloud":
+		_, _, err := exactJDCloudCredentials(input)
 		return err == nil
 	case dnscustomhttp.ProviderType:
 		// A literal internal address is refused when saved; resolved

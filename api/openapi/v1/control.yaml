@@ -66,6 +66,8 @@ paths:
     $ref: '../../control-system-mail-settings.openapi.yaml#/paths/~1v1~1admin~1system-mail-settings'
   /v1/admin/system-other-settings:
     $ref: '../../control-system-other-settings.openapi.yaml#/paths/~1v1~1admin~1system-other-settings'
+  /v1/admin/system-db-pool:
+    $ref: '../../control-system-db-pool.openapi.yaml#/paths/~1v1~1admin~1system-db-pool'
   /v1/auth/register:
     $ref: './account-registration.yaml#/paths/~1v1~1auth~1register'
   /v1/auth/registration-challenges:
@@ -3457,7 +3459,7 @@ paths:
               additionalProperties: false
               required: [provider_type, ttl, ip_weight]
               properties:
-                provider_type: {type: string, enum: [aliyun, huawei, dns_la, dnspod_cn, dns_com, cloudflare, namecom, custom_http]}
+                provider_type: {type: string, enum: [aliyun, huawei, dns_la, dnspod_cn, dns_com, cloudflare, namecom, custom_http, dnspod_com, godaddy, namesilo, cloudns, namecheap, jdcloud]}
                 credentials:
                   description: Every credential field of the provider; omitted keeps the stored credentials of the same provider.
                   type: object
@@ -7778,7 +7780,7 @@ components:
         provider_type:
           type: string
           description: dnsdun is a disabled legacy read-only value; new configurations use dns_la.
-          enum: [aliyun, cloudflare, huawei, dnspod_cn, dns_com, dns_la, namecom, custom_http, dnsdun]
+          enum: [aliyun, cloudflare, huawei, dnspod_cn, dns_com, dns_la, namecom, custom_http, dnsdun, dnspod_com, godaddy, namesilo, cloudns, namecheap, jdcloud]
         credentials_configured: {type: boolean, const: true}
         status:
           type: string

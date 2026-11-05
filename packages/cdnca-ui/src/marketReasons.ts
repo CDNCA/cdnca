@@ -274,13 +274,13 @@ const closeZH: Record<number, string> = {
   1: '买方主动退订', 2: '买方设置为不续费', 3: '续费价格条件不满足，未续',
   10001: '卖方下架了报价', 10002: '卖方退役了节点', 10003: '卖方因不稳定关闭', 10004: '卖方平稳退出', 10005: '卖方零在线节点超时，买方退订',
   20001: '余额用尽且超过宽限期', 20002: '连续违反 SLA', 20003: '隔离超过期限',
-  30001: '合规下架', 30002: '欺诈处置', 30003: '争议裁决',
+  30001: '合规下架', 30002: '欺诈处置', 30003: '争议裁决', 30004: '平台删除了买方或卖方账号',
 }
 const closeEN: Record<number, string> = {
   1: 'Cancelled by the buyer', 2: 'Buyer chose not to renew', 3: 'Renewal price condition not met',
   10001: 'Seller delisted the offer', 10002: 'Seller retired the nodes', 10003: 'Seller closed it for instability', 10004: 'Seller exited', 10005: 'No online node past the limit; buyer cancelled',
   20001: 'Balance used up past the grace period', 20002: 'Repeated SLA breaches', 20003: 'Quarantine past its limit',
-  30001: 'Compliance takedown', 30002: 'Fraud', 30003: 'Dispute ruling',
+  30001: 'Compliance takedown', 30002: 'Fraud', 30003: 'Dispute ruling', 30004: 'The platform deleted the buyer or seller account',
 }
 
 export function closeReason(code: number, language?: string): MarketReason {

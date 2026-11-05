@@ -29,6 +29,12 @@ type ProviderVerifierDispatcher struct {
 	dnscom     *DNSComProviderVerifier
 	dnsla      *DNSLAProviderVerifier
 	namecom    *NameComProviderVerifier
+	dnspodcom  *DNSPodProviderVerifier
+	godaddy    *GoDaddyProviderVerifier
+	namesilo   *NamesiloProviderVerifier
+	namecheap  *NamecheapProviderVerifier
+	jdcloud    *JDCloudProviderVerifier
+	cloudns    *ClouDNSProviderVerifier
 	// customHTTP overrides the custom HTTP client options (tests only).
 	customHTTP *dnscustomhttp.Options
 }
@@ -43,6 +49,12 @@ func NewProviderVerifierDispatcher() *ProviderVerifierDispatcher {
 	)
 	dispatcher.dnsla = NewDNSLAProviderVerifier()
 	dispatcher.namecom = NewNameComProviderVerifier()
+	dispatcher.dnspodcom = NewDNSPodComProviderVerifier()
+	dispatcher.godaddy = NewGoDaddyProviderVerifier()
+	dispatcher.namesilo = NewNamesiloProviderVerifier()
+	dispatcher.namecheap = NewNamecheapProviderVerifier()
+	dispatcher.jdcloud = NewJDCloudProviderVerifier()
+	dispatcher.cloudns = NewClouDNSProviderVerifier()
 	return dispatcher
 }
 
@@ -163,6 +175,60 @@ func (v *ProviderVerifierDispatcher) VerifyCredentials(
 			return ErrProviderVerificationUnavailable
 		}
 		return v.namecom.Verify(ctx, username, apiToken)
+	case "dnspod_com":
+		dpID, dpKey, err := exactDNSPodCredentials(credentials)
+		if err != nil {
+			return err
+		}
+		if ctx == nil || v.dnspodcom == nil {
+			return ErrProviderVerificationUnavailable
+		}
+		return v.dnspodcom.Verify(ctx, dpID, dpKey)
+	case "godaddy":
+		apiKey, apiSecret, err := exactGoDaddyCredentials(credentials)
+		if err != nil {
+			return err
+		}
+		if ctx == nil || v.godaddy == nil {
+			return ErrProviderVerificationUnavailable
+		}
+		return v.godaddy.Verify(ctx, apiKey, apiSecret)
+	case "namesilo":
+		apiKey, err := exactNamesiloCredentials(credentials)
+		if err != nil {
+			return err
+		}
+		if ctx == nil || v.namesilo == nil {
+			return ErrProviderVerificationUnavailable
+		}
+		return v.namesilo.Verify(ctx, apiKey)
+	case "namecheap":
+		username, apiKey, sourceIP, err := exactNamecheapCredentials(credentials)
+		if err != nil {
+			return err
+		}
+		if ctx == nil || v.namecheap == nil {
+			return ErrProviderVerificationUnavailable
+		}
+		return v.namecheap.Verify(ctx, username, apiKey, sourceIP)
+	case "jdcloud":
+		accessKeyID, accessKeySecret, err := exactJDCloudCredentials(credentials)
+		if err != nil {
+			return err
+		}
+		if ctx == nil || v.jdcloud == nil {
+			return ErrProviderVerificationUnavailable
+		}
+		return v.jdcloud.Verify(ctx, accessKeyID, accessKeySecret)
+	case "cloudns":
+		subAuthID, authPassword, err := exactClouDNSCredentials(credentials)
+		if err != nil {
+			return err
+		}
+		if ctx == nil || v.cloudns == nil {
+			return ErrProviderVerificationUnavailable
+		}
+		return v.cloudns.Verify(ctx, subAuthID, authPassword)
 	case dnscustomhttp.ProviderType:
 		if _, _, err := dnscustomhttp.Credentials(credentials); err != nil {
 			return ErrProviderCredentialsInvalid

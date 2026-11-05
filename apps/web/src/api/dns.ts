@@ -1,6 +1,7 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
 
-export const creatableDNSProviderTypes = ['aliyun', 'cloudflare', 'huawei', 'dnspod_cn', 'dns_com', 'dns_la', 'namecom', 'custom_http'] as const
+export const creatableDNSProviderTypes = ['aliyun', 'cloudflare', 'huawei', 'dnspod_cn', 'dns_com', 'dns_la', 'namecom', 'custom_http',
+  'dnspod_com', 'godaddy', 'namesilo', 'cloudns', 'namecheap', 'jdcloud'] as const
 export type CreatableDNSProviderType = (typeof creatableDNSProviderTypes)[number]
 export type DNSProviderType = CreatableDNSProviderType | 'dnsdun'
 export type DNSProviderStatus = 'unverified' | 'verified' | 'disabled'
@@ -145,6 +146,12 @@ const credentialKeys: Record<CreatableDNSProviderType, readonly string[]> = {
   dns_la: ['api_id', 'api_secret'],
   namecom: ['username', 'api_token'],
   custom_http: ['endpoint', 'secret'],
+  dnspod_com: ['dp_id', 'dp_key'],
+  godaddy: ['api_key', 'api_secret'],
+  namesilo: ['key'],
+  cloudns: ['sub_auth_id', 'auth_password'],
+  namecheap: ['username', 'api_key', 'source_ip'],
+  jdcloud: ['access_key_id', 'access_key_secret'],
 }
 
 // 自定义 HTTP 接口: an https endpoint (no credentials, query or fragment;
@@ -179,11 +186,38 @@ export function isValidNameComCredential(name: 'username' | 'api_token', value: 
   return name === 'username' ? value.length <= 128 && !value.includes(':') : value.length <= 256
 }
 
+// GoDaddy "sso-key KEY:SECRET" (the key cannot hold ':') and Namesilo API
+// key: printable ASCII.
+export function isValidGoDaddyCredential(name: 'api_key' | 'api_secret', value: unknown): boolean {
+  if (typeof value !== 'string' || !/^[\x21-\x7e]+$/.test(value)) return false
+  return name === 'api_key' ? value.length <= 128 && !value.includes(':') : value.length <= 256
+}
+
+export function isValidNamesiloCredential(value: unknown): boolean {
+  return typeof value === 'string' && /^[\x21-\x7e]{1,128}$/.test(value)
+}
+
+// ClouDNS sub-user (sub_auth_id is a number), Namecheap (source_ip is the
+// IPv4 address whitelisted in the Namecheap account: the control plane's
+// egress IP), JD Cloud AccessKey: printable ASCII as the server checks.
+export function isValidKeyedDNSCredential(name: string, value: unknown): boolean {
+  if (typeof value !== 'string' || !/^[\x21-\x7e]+$/.test(value)) return false
+  switch (name) {
+    case 'sub_auth_id': return /^[1-9][0-9]{0,19}$/.test(value)
+    case 'source_ip': return /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(value)
+    case 'username': return value.length <= 64
+    case 'api_key': case 'access_key_id': return value.length <= 128
+    default: return value.length <= 256
+  }
+}
+
 // Providers whose adapter writes carrier lines (dnsproviderremote
 // ProviderCapabilityMatrix Line). Cloudflare and name.com answer on the
 // default line only; an unknown, unsupported or not yet loaded provider is
 // never assumed to split lines.
-const carrierLineProviders: readonly string[] = ['aliyun', 'huawei', 'dnspod_cn', 'dns_com', 'dns_la', 'custom_http', 'plugin']
+const carrierLineProviders: readonly string[] = ['aliyun', 'huawei', 'dnspod_cn', 'dns_com', 'dns_la', 'custom_http', 'plugin',
+  // JD Cloud viewValue lines (默认/电信/联通/移动/境外; 境外 not on its free plan); ClouDNS and Namecheap: default only.
+  'jdcloud']
 
 export function dnsProviderSplitsCarrierLines(providerType: string | undefined): boolean {
   return providerType !== undefined && carrierLineProviders.includes(providerType)
@@ -210,6 +244,13 @@ function validProviderCredentials(providerType: string, credentials: unknown): b
   }
   if (providerType === 'namecom') {
     return isValidNameComCredential('username', values.username) && isValidNameComCredential('api_token', values.api_token)
+  }
+  if (providerType === 'godaddy') {
+    return isValidGoDaddyCredential('api_key', values.api_key) && isValidGoDaddyCredential('api_secret', values.api_secret)
+  }
+  if (providerType === 'namesilo') return isValidNamesiloCredential(values.key)
+  if (providerType === 'cloudns' || providerType === 'namecheap' || providerType === 'jdcloud') {
+    return actual.every((key) => isValidKeyedDNSCredential(key, values[key]))
   }
   return providerType !== 'dns_la'
     || (isValidDNSLACredential('api_id', values.api_id)

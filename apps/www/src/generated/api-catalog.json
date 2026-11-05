@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 646,
+ "total": 647,
  "api_key_count": 141,
  "groups": [
   {
@@ -2590,6 +2590,26 @@
      "api_key": false,
      "source": "api/control-system-cleanup-settings.openapi.yaml",
      "operation_id": "updatePlatformSystemCleanupSettings"
+    }
+   ]
+  },
+  {
+   "id": "admin-system-db-pool",
+   "prefix": "/v1/admin/system-db-pool",
+   "count": 1,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/admin/system-db-pool",
+     "summary": "Read the answering control-api's database pool, last hour, resident connections and alert state",
+     "summary_zh": "读取应答主控进程的数据库连接池：当前值、最近 1 小时、常驻连接与告警状态",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-system-db-pool.openapi.yaml",
+     "operation_id": "readControlDBPool"
     }
    ]
   },

@@ -878,7 +878,7 @@
     "fields": [
      {
       "name": "provider_type",
-      "type": "string: aliyun / huawei / dns_la / dnspod_cn / dns_com / cloudflare / namecom / custom_http",
+      "type": "string",
       "required": true
      },
      {
@@ -1641,7 +1641,7 @@
       },
       {
        "name": "provider_type",
-       "type": "string: aliyun / cloudflare / huawei / dnspod_cn / dns_com / dns_la / namecom / custom_http / dnsdun",
+       "type": "string",
        "required": true,
        "description": "Persisted provider type. dnsdun is retained only so disabled legacy records can be listed; new configurations must use a creatable type."
       },
@@ -1759,7 +1759,7 @@
      {
       "name": "credentials",
       "type": "object",
-      "description": "To pass verification, replacement credentials must match the existing provider type. Cloudflare requires only api_token; Aliyun requires only access_key_id and access_key_secret; Huawei Cloud requires only access_key, secret_key, region, and project_id; DNSPod CN requires only dp_id and dp_key; DNS.COM requires only api_key and api_secret; DNS.LA requires only api_id and api_secret; Name.com requires only username and api_token; custom_http requires only endpoint and secret."
+      "description": "To pass verification, replacement credentials must match the existing provider type. Cloudflare requires only api_token; Aliyun requires only access_key_id and access_key_secret; Huawei Cloud requires only access_key, secret_key, region, and project_id; DNSPod CN requires only dp_id and dp_key; DNS.COM requires only api_key and api_secret; DNS.LA requires only api_id and api_secret; Name.com requires only username and api_token; custom_http requires only endpoint and secret. DNSPod.com requires only dp_id and dp_key; GoDaddy requires only api_key and api_secret; Namesilo requires only key. ClouDNS requires only sub_auth_id and auth_password; Namecheap requires only username, api_key and source_ip; JD Cloud requires only access_key_id and access_key_secret."
      }
     ]
    },
@@ -1791,7 +1791,7 @@
       },
       {
        "name": "provider_type",
-       "type": "string: aliyun / cloudflare / huawei / dnspod_cn / dns_com / dns_la / namecom / custom_http / dnsdun",
+       "type": "string",
        "required": true,
        "description": "Persisted provider type. dnsdun is retained only so disabled legacy records can be listed; new configurations must use a creatable type."
       },
@@ -1969,7 +1969,7 @@
       },
       {
        "name": "provider_type",
-       "type": "string: aliyun / cloudflare / huawei / dnspod_cn / dns_com / dns_la / namecom / custom_http / dnsdun",
+       "type": "string",
        "required": true,
        "description": "dnsdun is a disabled legacy read-only value; new configurations use dns_la."
       },

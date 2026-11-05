@@ -440,6 +440,14 @@ func supportedProviderType(providerType string) bool {
 	switch providerType {
 	case "cloudflare", "aliyun", "huawei", "dnspod_cn", "dns_com", "dns_la", "namecom", "custom_http", "plugin":
 		return true
+	case "dnspod_com", "godaddy", "namesilo":
+		return true
+	case "jdcloud":
+		return true
+	case "namecheap":
+		return true
+	case "cloudns":
+		return true
 	default:
 		return false
 	}
@@ -509,10 +517,22 @@ func credentialFields(providerType string) (map[string]struct{}, bool) {
 		fields = []string{"api_id", "api_secret"}
 	case "namecom":
 		fields = []string{"username", "api_token"}
+	case "cloudns":
+		fields = []string{"sub_auth_id", "auth_password"}
+	case "namecheap":
+		fields = []string{"username", "api_key", "source_ip"}
+	case "jdcloud":
+		fields = []string{"access_key_id", "access_key_secret"}
 	case "custom_http":
 		fields = []string{"endpoint", "secret"}
 	case "plugin":
 		fields = []string{"plugin_id"}
+	case "dnspod_com":
+		fields = []string{"dp_id", "dp_key"}
+	case "godaddy":
+		fields = []string{"api_key", "api_secret"}
+	case "namesilo":
+		fields = []string{"key"}
 	default:
 		return nil, false
 	}

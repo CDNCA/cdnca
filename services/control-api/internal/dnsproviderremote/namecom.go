@@ -37,6 +37,9 @@ func ProviderMinTTL(providerType string) uint32 {
 	if providerType == providerNameCom {
 		return NameComMinTTL
 	}
+	if minimum, ok := providerTTLFloors[providerType]; ok {
+		return minimum
+	}
 	return 1
 }
 
@@ -46,7 +49,7 @@ func EffectiveTTL(providerType string, requested uint32) (uint32, bool) {
 	if minimum := ProviderMinTTL(providerType); requested > 0 && requested < minimum {
 		return minimum, true
 	}
-	return requested, false
+	return providerWrittenTTL(providerType, requested), false
 }
 
 type nameComProvider struct{ adapter *Adapter }

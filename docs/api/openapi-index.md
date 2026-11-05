@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 888 个 operation，并包含
-862 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 889 个 operation，并包含
+863 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -43,7 +43,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，613 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，614 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -236,6 +236,7 @@
 | `control.yaml` | `GET` | `/v1/admin/system-backup-runs` | `listSystemBackupRuns` |
 | `control.yaml` | `GET` | `/v1/admin/system-cleanup-settings` | `getPlatformSystemCleanupSettings` |
 | `control.yaml` | `PUT` | `/v1/admin/system-cleanup-settings` | `updatePlatformSystemCleanupSettings` |
+| `control.yaml` | `GET` | `/v1/admin/system-db-pool` | `readControlDBPool` |
 | `control.yaml` | `GET` | `/v1/admin/system-mail-settings` | `getPlatformSystemMailSettings` |
 | `control.yaml` | `PUT` | `/v1/admin/system-mail-settings` | `updatePlatformSystemMailSettings` |
 | `control.yaml` | `GET` | `/v1/admin/system-other-settings` | `getPlatformSystemOtherSettings` |

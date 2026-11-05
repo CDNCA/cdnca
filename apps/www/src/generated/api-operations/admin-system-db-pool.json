@@ -1,0 +1,105 @@
+{
+ "id": "admin-system-db-pool",
+ "prefix": "/v1/admin/system-db-pool",
+ "operations": [
+  {
+   "operation_id": "readControlDBPool",
+   "method": "GET",
+   "path": "/v1/admin/system-db-pool",
+   "summary": "Read the answering control-api's database pool, last hour, resident connections and alert state",
+   "summary_zh": "读取应答主控进程的数据库连接池：当前值、最近 1 小时、常驻连接与告警状态",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform identity with control.upgrades.read or platform.admin (the maintenance page). The figures come from the memory of the control-api process that answers, sampled every 10 seconds: a cycle is bad when in use reaches max_conns - saturation_margin, the average acquire wait exceeds slow_acquire_ms, or an acquire gave up while the pool was full or queued (canceled_acquire, which alerts at once). enter_cycles consecutive bad cycles notify the platform members holding control.upgrades.read or platform.admin (control.db_pool.saturated, also in the administrator message center); recover_cycles consecutive clean cycles send control.db_pool.recovered. An alert entered within dedup_minutes of the last notified one is not sent (notified=false) unless it is still firing once that window has passed. Notifications are written on a connection outside the pool. Only the session check reads the database. Read-only, not audited.",
+   "permissions": [
+    "control.upgrades.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The pool monitor of the answering process.",
+     "fields": [
+      {
+       "name": "instance",
+       "type": "string",
+       "required": true,
+       "description": "Host name of the answering control-api."
+      },
+      {
+       "name": "interval_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "thresholds",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "current",
+       "type": "DBPoolSample | null",
+       "required": true,
+       "description": "Latest sample; null for the first 10 seconds after start."
+      },
+      {
+       "name": "series",
+       "type": "array<DBPoolSample>",
+       "required": true,
+       "description": "The last hour, oldest first."
+      },
+      {
+       "name": "residents",
+       "type": "array<Resident>",
+       "required": true
+      },
+      {
+       "name": "firing",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "firing_since",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "firing_reasons",
+       "type": "array<string: saturated / slow_acquire / canceled_acquire>",
+       "required": true
+      },
+      {
+       "name": "notified",
+       "type": "boolean",
+       "required": true,
+       "description": "The current alert has been sent (false when not firing or folded into the last notified one)."
+      },
+      {
+       "name": "last_notified_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "pending_notifications",
+       "type": "integer",
+       "required": true,
+       "description": "Notification writes waiting to be retried (the database refused them)."
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid."
+    },
+    {
+     "status": "403",
+     "description": "Not a platform identity with control.upgrades.read or platform.admin."
+    },
+    {
+     "status": "405",
+     "description": "Only GET is supported."
+    }
+   ]
+  }
+ ]
+}

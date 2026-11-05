@@ -1,0 +1,157 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Database Pool Monitor API
+  version: 0.1.0
+  description: >-
+    The database pool of the control-api process that answers: sampled every 10 seconds in
+    memory, saturation notified to the platform as control.db_pool.saturated / control.db_pool.recovered.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/system-db-pool:
+    get:
+      operationId: readControlDBPool
+      x-summary-zh: "读取应答主控进程的数据库连接池：当前值、最近 1 小时、常驻连接与告警状态"
+      summary: Read the answering control-api's database pool, last hour, resident connections and alert state
+      description: >-
+        Platform identity with control.upgrades.read or platform.admin (the maintenance page). The figures come from
+        the memory of the control-api process that answers, sampled every 10 seconds (internal/poolmon, rule shared
+        with market-service in libs/dbpoolmon): a cycle is bad when in use reaches max_conns - saturation_margin, the
+        average acquire wait exceeds slow_acquire_ms, or an acquire gave up while the pool was full or queued
+        (canceled_acquire, which alerts at once). enter_cycles consecutive bad cycles notify the platform members
+        holding control.upgrades.read or platform.admin (control.db_pool.saturated, also in the administrator message
+        center); recover_cycles consecutive clean cycles send control.db_pool.recovered. An alert entered within
+        dedup_minutes of the last notified one is not sent (notified=false) unless it is still firing once that window
+        has passed. Notifications are written on a connection outside the pool. Only the session check reads the
+        database. Read-only, not audited.
+      x-required-permissions: [control.upgrades.read]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The pool monitor of the answering process.
+          headers:
+            Cache-Control:
+              schema: {type: string, const: no-store}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DBPoolStatus'}
+        '401':
+          description: Authentication failed or the session is invalid.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '403':
+          description: Not a platform identity with control.upgrades.read or platform.admin.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '405':
+          description: Only GET is supported.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  schemas:
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string, enum: [authentication_required, permission_denied, method_not_allowed, not_found]}
+            message: {type: string}
+            request_id: {type: string}
+    Reason:
+      type: string
+      enum: [saturated, slow_acquire, canceled_acquire]
+    DBPoolSample:
+      type: object
+      additionalProperties: false
+      required: [at, max_conns, total_conns, in_use, idle, constructing, resident_conns, request_capacity, acquires, queued,
+        canceled, avg_wait_ms, reasons]
+      properties:
+        at: {type: string, format: date-time}
+        max_conns: {type: integer}
+        total_conns: {type: integer}
+        in_use: {type: integer}
+        idle: {type: integer}
+        constructing: {type: integer}
+        resident_conns:
+          type: integer
+          description: Pool connections held for a long time (LISTEN loops, session advisory locks) at this sample.
+        request_capacity:
+          type: integer
+          description: max_conns - resident_conns, the share left for requests and short jobs.
+        acquires: {type: integer, description: Acquires that succeeded this cycle.}
+        queued: {type: integer, description: Acquires this cycle that found no idle connection and waited.}
+        canceled: {type: integer, description: Acquires this cycle that gave up because their context ended.}
+        avg_wait_ms: {type: number, description: Average acquire wait this cycle (0 without acquires).}
+        reasons:
+          type: array
+          items: {$ref: '#/components/schemas/Reason'}
+    Resident:
+      type: object
+      additionalProperties: false
+      required: [name, in_pool, since]
+      properties:
+        name:
+          type: string
+          description: >-
+            market_security_listen, node_artifact_delivery_listen, package_traffic_wake_listen,
+            aggregated_edge_quota_lock, dns_credential_rewrap_lock.
+        in_pool:
+          type: boolean
+          description: Counts against max_conns; false for a session hijacked out of the pool (uses only a PostgreSQL slot).
+        since: {type: string, format: date-time}
+    DBPoolStatus:
+      type: object
+      additionalProperties: false
+      required: [instance, interval_seconds, thresholds, current, series, residents, firing, firing_since, firing_reasons,
+        notified, last_notified_at, pending_notifications]
+      properties:
+        instance: {type: string, description: Host name of the answering control-api.}
+        interval_seconds: {type: integer, const: 10}
+        thresholds:
+          type: object
+          additionalProperties: false
+          required: [enter_cycles, recover_cycles, saturation_margin, slow_acquire_ms, dedup_minutes]
+          properties:
+            enter_cycles: {type: integer}
+            recover_cycles: {type: integer}
+            saturation_margin: {type: integer}
+            slow_acquire_ms: {type: integer}
+            dedup_minutes: {type: integer}
+        current:
+          oneOf:
+            - {$ref: '#/components/schemas/DBPoolSample'}
+            - {type: 'null'}
+          description: Latest sample; null for the first 10 seconds after start.
+        series:
+          type: array
+          maxItems: 360
+          description: The last hour, oldest first.
+          items: {$ref: '#/components/schemas/DBPoolSample'}
+        residents:
+          type: array
+          items: {$ref: '#/components/schemas/Resident'}
+        firing: {type: boolean}
+        firing_since: {type: [string, 'null'], format: date-time}
+        firing_reasons:
+          type: array
+          items: {$ref: '#/components/schemas/Reason'}
+        notified:
+          type: boolean
+          description: The current alert has been sent (false when not firing or folded into the last notified one).
+        last_notified_at: {type: [string, 'null'], format: date-time}
+        pending_notifications:
+          type: integer
+          description: Notification writes waiting to be retried (the database refused them).

@@ -10,6 +10,9 @@ import {
   isValidCustomHTTPCredential,
   isValidDNSLACredential,
   isValidNameComCredential,
+  isValidGoDaddyCredential,
+  isValidNamesiloCredential,
+  isValidKeyedDNSCredential,
   dnsProviderSplitsCarrierLines,
   type CreatableDNSProviderType,
   type DNSProvider,
@@ -33,6 +36,9 @@ interface CredentialField {
   pattern?: RegExp
   max?: number
   validate?: (value: unknown) => boolean
+  // credentials.<label> instead of credentials.<name>; credentials.<hint> below the input.
+  label?: string
+  hint?: string
 }
 
 export interface ProviderForm {
@@ -82,6 +88,28 @@ export const credentialFields: Record<CreatableDNSProviderType, CredentialField[
   custom_http: [
     { name: 'endpoint', validate: (value) => isValidCustomHTTPCredential('endpoint', value) },
     { name: 'secret', secret: true, validate: (value) => isValidCustomHTTPCredential('secret', value) },
+  ],
+  dnspod_com: [
+    { name: 'dp_id', secret: true, pattern: /^[1-9][0-9]{0,19}$/, max: 20 },
+    { name: 'dp_key', secret: true, max: 256 },
+  ],
+  godaddy: [
+    { name: 'api_key', secret: true, validate: (value) => isValidGoDaddyCredential('api_key', value) },
+    { name: 'api_secret', secret: true, validate: (value) => isValidGoDaddyCredential('api_secret', value) },
+  ],
+  namesilo: [{ name: 'key', secret: true, validate: isValidNamesiloCredential }],
+  cloudns: [
+    { name: 'sub_auth_id', label: 'cloudns_sub_auth_id', hint: 'cloudnsHint', validate: (value) => isValidKeyedDNSCredential('sub_auth_id', value) },
+    { name: 'auth_password', secret: true, label: 'cloudns_auth_password', validate: (value) => isValidKeyedDNSCredential('auth_password', value) },
+  ],
+  namecheap: [
+    { name: 'username', validate: (value) => isValidKeyedDNSCredential('username', value) },
+    { name: 'api_key', secret: true, validate: (value) => isValidKeyedDNSCredential('api_key', value) },
+    { name: 'source_ip', hint: 'sourceIPHint', validate: (value) => isValidKeyedDNSCredential('source_ip', value) },
+  ],
+  jdcloud: [
+    { name: 'access_key_id', secret: true, hint: 'jdcloudHint', validate: (value) => isValidKeyedDNSCredential('access_key_id', value) },
+    { name: 'access_key_secret', secret: true, validate: (value) => isValidKeyedDNSCredential('access_key_secret', value) },
   ],
 }
 
@@ -258,6 +286,7 @@ export function ProviderEditor({
         <Form.Item name="provider_type" label={t('editor.providerType')} rules={[{ required: true }]}>
           <Select
             disabled={editor?.mode === 'edit'}
+            virtual={false}
             options={providerOptions}
             onChange={() => form.setFieldValue('credentials', {})}
           />
@@ -298,8 +327,8 @@ export function ProviderEditor({
           <Form.Item
             key={field.name}
             name={['credentials', field.name]}
-            label={t(`credentials.${field.name}`)}
-            extra={field.name === 'plan' ? t('credentials.planHint') : undefined}
+            label={t(`credentials.${field.label ?? field.name}`)}
+            extra={field.name === 'plan' ? t('credentials.planHint') : field.hint ? t(`credentials.${field.hint}`) : undefined}
             initialValue={field.select && field.selectLabels ? field.select[0] : undefined}
             rules={[
               ...(field.validate ? [{
