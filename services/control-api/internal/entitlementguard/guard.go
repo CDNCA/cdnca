@@ -169,8 +169,14 @@ func (g *Guard) readValidLeaseFeatures(ctx context.Context, tx pgx.Tx) (map[stri
 	if err != nil || !leaseUsable(verified.Status) {
 		return features, nil
 	}
+	stopped, err := LocallyDisabledCodes(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
 	for _, feature := range verified.Lease.Features {
-		features[feature.Code] = true
+		if !stopped[feature.Code] {
+			features[feature.Code] = true
+		}
 	}
 	return features, nil
 }
@@ -360,6 +366,16 @@ func (g *Guard) checkLeaseFeature(ctx context.Context, tx pgx.Tx, check FeatureC
 	}
 	if requireFeature && !verified.Lease.HasFeature(check.Feature) {
 		return FeatureDecision{}, g.denyFeature(ctx, tx, decision, ErrFeatureDenied, string(status), "feature_missing")
+	}
+	// A plugin code this controller stopped is denied as if the lease lacked it.
+	if _, _, plugin := entitlement.ParseModuleFeatureCode(check.Feature); requireFeature && plugin {
+		stopped, err := LocallyDisabledCodes(ctx, tx)
+		if err != nil {
+			return FeatureDecision{}, err
+		}
+		if stopped[check.Feature] {
+			return FeatureDecision{}, g.denyFeature(ctx, tx, decision, ErrFeatureDenied, string(status), ReasonLocallyDisabled)
+		}
 	}
 	if check.Quota == "" {
 		return decision, nil

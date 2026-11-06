@@ -394,10 +394,13 @@ local function config_path()
     return prefix .. "config.json"
 end
 
+local first_packet_ffi -- (first packet section below)
+
 -- Runs in the master before workers fork: workers drop to the unprivileged
 -- nginx user and cannot open the agent's sealed version directory. A reload
 -- runs it again for the new generation; workers inherit the bytes by fork.
 function _M.preload()
+    first_packet_ffi() -- the layout self-check, once, before the workers fork
     local path = config_path()
     if not path then return end
     preloaded[path] = read_file(path)
@@ -784,12 +787,16 @@ end
 -- peeking, so the kernel still holds everything; a PROXY header is already
 -- consumed), UDP the datagram nginx put in c->buffer (not consumed). The
 -- ngx_connection_t prefix below is the same in nginx 1.27.1 and 1.31.1 with
--- --with-compat (both node builds); a self-check against $remote_addr and
--- the socket type turns the condition off (no match, logged) on any other
--- layout instead of reading the wrong memory.
+-- --with-compat (both node builds); without it the fields after
+-- addr_text move (quic / ssl are left out), so the set-up refuses a build
+-- that lacks it or is not a 64-bit little-endian one (checked once, at
+-- preload in the master, logged). A per-connection self-check against
+-- $remote_addr and the socket type also turns the condition off (no match,
+-- logged) instead of reading the wrong memory.
 local ffi_ok, ffi = pcall(require, "ffi")
 local first_packet_state -- nil: not set up; false: unavailable; true: ready
 local first_packet_problem
+local first_packet_reason = "ffi" -- why first_packet_state is false
 local first_packet_buffer
 local EAGAIN, EINTR = 11, 4
 local MSG_PEEK, MSG_DONTWAIT = 0x2, 0x40
@@ -804,8 +811,14 @@ local function first_packet_unavailable(reason)
     return nil
 end
 
-local function first_packet_ffi()
+first_packet_ffi = function()
     if first_packet_state ~= nil then return first_packet_state end
+    local configure = ngx.config and ngx.config.nginx_configure and ngx.config.nginx_configure() or ""
+    if ffi_ok and (not ffi.abi("64bit") or not ffi.abi("le") or not configure:find("--with-compat", 1, true)) then
+        first_packet_state, first_packet_reason = false, "layout"
+        first_packet_unavailable("layout")
+        return false
+    end
     first_packet_state = ffi_ok and pcall(ffi.cdef, [[
         typedef struct { unsigned char *pos; unsigned char *last; int64_t file_pos; int64_t file_last;
             unsigned char *start; unsigned char *end_; } cdnca_l4_buf_t;
@@ -881,7 +894,7 @@ end
 -- many bytes that is and the connection, for read_first_rest; guard()
 -- judges first on what came and reads the rest only when that cannot.
 function _M.read_first_packet(wait, rules)
-    if not first_packet_ffi() then return first_packet_unavailable("ffi") end
+    if not first_packet_ffi() then return first_packet_unavailable(first_packet_reason) end
     local ok, base = pcall(require, "resty.core.base")
     local request = ok and base.get_request and base.get_request()
     if not request then return first_packet_unavailable("request") end
@@ -901,7 +914,15 @@ function _M.read_first_packet(wait, rules)
     if c.type ~= SOCK_STREAM or c.fd < 0 then return first_packet_unavailable("tcp_socket") end
     first_packet_buffer = first_packet_buffer or ffi.new("uint8_t[?]", GUARD_FIRST_BYTES)
     local size = rules and rules.first_bytes or GUARD_FIRST_BYTES
-    local deadline, pause = ngx.now() + wait, 0.005
+    -- Data that is not there yet (the client's first write often follows the
+    -- accept by a few microseconds) is looked for again on the next event
+    -- loop turn, then after 1, 2, 4 ... ms (at most 100 ms apart) until wait
+    -- has passed. Waiting for readability itself is not possible here: the
+    -- request socket's peek() has no timeout of its own (only
+    -- preread_timeout, which ends the session, whereas a client that sends
+    -- nothing must go on after wait), and once it waits the preread phase
+    -- leaves a sleeping thread asleep until data comes.
+    local deadline, pause = ngx.now() + wait, 0
     while true do
         -- No yield between recv and the copy: the buffer is shared.
         local n = tonumber(ffi.C.cdnca_l4_recv(c.fd, first_packet_buffer, size, MSG_PEEK + MSG_DONTWAIT))
@@ -914,7 +935,7 @@ function _M.read_first_packet(wait, rules)
         if n == 0 or (errno ~= EAGAIN and errno ~= EINTR) then return "" end -- closed or reset
         if ngx.now() >= deadline then return "" end
         ngx.sleep(pause)
-        pause = math.min(pause * 2, 0.1)
+        pause = pause == 0 and 0.001 or math.min(pause * 2, 0.1)
     end
 end
 

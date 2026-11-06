@@ -19,9 +19,10 @@ import (
 const ModulesChangedAction = "system.entitlement_modules.change"
 
 // ModuleGrants is the module, pack and theme codes the verified local lease
-// grants right now. Codes is empty unless Status is valid: CheckFeature
-// denies every non-valid state (grace included), and the menu, API entry and
-// publication gate must agree with it.
+// grants right now, less the ones this controller stopped (local_disables.go).
+// Codes is empty unless Status is valid: CheckFeature denies every non-valid
+// state (grace included), and the menu, API entry and publication gate must
+// agree with it.
 type ModuleGrants struct {
 	Status      string
 	LeaseSerial uint64
@@ -93,6 +94,11 @@ func (g *Guard) GrantedModules(ctx context.Context, tx pgx.Tx) (ModuleGrants, er
 		return ModuleGrants{}, err
 	}
 	codes = append(codes, purchased...)
+	stopped, err := LocallyDisabledCodes(ctx, tx)
+	if err != nil {
+		return ModuleGrants{}, err
+	}
+	codes = slices.DeleteFunc(codes, func(code string) bool { return stopped[code] })
 	sort.Strings(codes)
 	return ModuleGrants{Status: string(entitlement.StatusValid), Codes: slices.Compact(codes)}, nil
 }
@@ -148,7 +154,15 @@ func (g *Guard) grantedLeaseModules(ctx context.Context, tx pgx.Tx) (ModuleGrant
 	}
 	grants := ModuleGrants{Status: string(status), LeaseSerial: verified.Lease.Serial, Codes: []string{}}
 	if leaseUsable(status) {
-		grants.Codes = verified.Lease.ModuleCodes()
+		stopped, err := LocallyDisabledCodes(ctx, tx)
+		if err != nil {
+			return ModuleGrants{}, err
+		}
+		for _, code := range verified.Lease.ModuleCodes() {
+			if !stopped[code] {
+				grants.Codes = append(grants.Codes, code)
+			}
+		}
 	}
 	return grants, nil
 }

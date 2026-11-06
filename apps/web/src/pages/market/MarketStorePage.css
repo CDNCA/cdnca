@@ -1,7 +1,52 @@
-.market-store-card { height: 100%; }
+/* 卡片是 flex 列，卡片体撑满剩余高度，操作条 margin-top:auto 贴底：同一行（Row 拉伸等高）的操作条底边对齐，
+   上方的说明小字多一行也不会把它挤到别的高度。不用 antd Card actions（它给链接套描述灰并把整格当按钮）。 */
+.market-store-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.market-store-card > .ant-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.market-store-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+.market-store-status + .market-store-toggle { margin-inline-start: 8px; }
+.market-store-footer .market-store-toggle { margin-inline-start: auto; }
+.market-store-dependents { margin: 4px 0; padding-inline-start: 20px; }
 .market-store-card--revoked { border-color: var(--ant-color-error-border, var(--cdnca-color-red4, #ffccc7)); }
 .market-store-title { padding: 0; height: auto; font-weight: 600; white-space: normal; text-align: left; }
-.market-store-action { display: flex; justify-content: flex-end; padding-inline: 12px; }
 .market-store-revoked { margin: 8px 0 0; font-size: 12px; }
 .market-store-qr { display: grid; justify-items: center; gap: 12px; padding-block: 8px; }
 .market-store-badge { display: block; width: 100%; height: 100%; }
+/* 可用插件的状态位直接去配置页，样式同标签、可点 */
+.market-store-goto { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid; border-radius: 4px; font-size: 12px; line-height: 20px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.market-store-goto:hover { transform: translateY(-1px); box-shadow: 0 2px 6px var(--cdnca-color-shadow-soft, rgba(0, 0, 0, 0.08)); }
+.market-store-goto:active { transform: scale(0.97); }
+/* 原先读 --ant-color-success（未定义）回退到 --cdnca-color-green6，主题里那是 #edfbf3，和背景几乎同色，
+   详情抽屉里只有悬停（链接变蓝）才看得见。改用共享成功色加深到正文对比度（约 5:1），悬停不换色；卡片与抽屉同一条规则。 */
+.market-store-goto.market-store-goto--ready,
+.market-store-goto.market-store-goto--ready:hover {
+  color: color-mix(in srgb, var(--cdnca-color-success) 65%, #000);
+  border-color: color-mix(in srgb, var(--cdnca-color-success) 45%, #fff);
+  background: var(--cdnca-color-success-bg);
+}
+.market-store-goto.market-store-goto--unconfigured,
+.market-store-goto.market-store-goto--unconfigured:hover,
+.market-store-goto.market-store-goto--off,
+.market-store-goto.market-store-goto--off:hover {
+  color: color-mix(in srgb, var(--cdnca-color-warning) 55%, #000);
+  border-color: color-mix(in srgb, var(--cdnca-color-warning) 45%, #fff);
+  background: var(--cdnca-color-warning-bg);
+}
+.market-store-details { padding-inline: 4px; height: auto; }

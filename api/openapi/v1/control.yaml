@@ -96,6 +96,10 @@ paths:
     $ref: '../../control-maintenance-upgrade-status.openapi.yaml#/paths/~1v1~1admin~1maintenance-upgrade-status'
   /v1/admin/market/plugin-library:
     $ref: '../../control-market-plugins.openapi.yaml#/paths/~1v1~1admin~1market~1plugin-library'
+  /v1/admin/market/plugin-library/{plugin_id}/disable:
+    $ref: '../../control-market-plugins.openapi.yaml#/paths/~1v1~1admin~1market~1plugin-library~1{plugin_id}~1disable'
+  /v1/admin/market/plugin-library/{plugin_id}/enable:
+    $ref: '../../control-market-plugins.openapi.yaml#/paths/~1v1~1admin~1market~1plugin-library~1{plugin_id}~1enable'
   /v1/admin/market/plugin-downloads:
     $ref: '../../control-market-plugins.openapi.yaml#/paths/~1v1~1admin~1market~1plugin-downloads'
   /v1/internal/control-upgrade/plan:

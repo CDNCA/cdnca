@@ -37,6 +37,16 @@ export const CONTRACT_EXEMPTIONS = [
     reason: "marketsubscribehttp writes {\"error\":\"<code>\"} and passes market errors through in the same shape; changing it would break existing clients."
   },
   {
+    rule: "error-body", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/admin/market/plugin-library/{plugin_id}/disable",
+    statuses: ["400", "401", "403", "409", "500"],
+    reason: "marketsubscribehttp writes {\"error\":\"<code>\"} for every route (401/403 from the shared Handler.handle gate); apps/web/src/api/market.ts call() reads error as a string, as for the other market routes."
+  },
+  {
+    rule: "error-body", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/admin/market/plugin-library/{plugin_id}/enable",
+    statuses: ["400", "401", "403", "409", "500"],
+    reason: "marketsubscribehttp writes {\"error\":\"<code>\"} for every route (401/403 from the shared Handler.handle gate); apps/web/src/api/market.ts call() reads error as a string, as for the other market routes."
+  },
+  {
     rule: "error-body", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/streams/batch",
     statuses: ["422"],
     reason: "Atomic batch rejection returns the per-line result (BatchCreateStreamsRejected, committed=false) so the caller sees which line failed; it is a result document, not an error envelope."

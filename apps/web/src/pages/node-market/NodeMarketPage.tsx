@@ -48,6 +48,7 @@ import { AdvancedFilters, PageSection, useFeedback, useLiveApply, FeedbackWhen, 
 import { closeReason, marketReason } from '@cdnca/ui/market-reasons'
 import { outcomeUnknown, useIdempotencyKey } from '../market/idempotency'
 import { clearPending, loadPending, pendingAccount, savePending } from './pendingPurchase'
+import { SubscriptionCode } from './MarketLabel'
 import { formatYuan, minorToYuan, yuanToMinor } from '@cdnca/ui/offer-terms'
 
 function useToken() {
@@ -764,7 +765,8 @@ function SuppliesTab() {
       {none ? null : <Table<MarketSupply> rowKey="id" loading={query.isLoading} dataSource={query.error ? [] : query.data ?? []} pagination={false}
         scroll={{ x: 'max-content' }} locale={query.error ? { emptyText: t('supplies.loadFailedShort') } : undefined}
         columns={[
-          { title: t('supplies.name'), dataIndex: 'name' },
+          { title: t('supplies.name'), key: 'name', render: (_: unknown, s) => <Space direction="vertical" size={0}>
+            <span>{s.name}</span><SubscriptionCode id={s.market_subscription_id} /></Space> },
           { title: t('supplies.target'), dataIndex: 'target', render: (v: string) => v ? <Typography.Text copyable code>{v}</Typography.Text> : '—' },
           { title: t('supplies.leaves'), key: 'leaves', render: (_: unknown, s) => s.leaves.length },
           // MC05: an active contract without any leaf has no supply to serve with (the contract itself stays).

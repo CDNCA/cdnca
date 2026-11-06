@@ -68,6 +68,35 @@ func TestSyncProvisionsRenewsAndNeverCancels(t *testing.T) {
 	if again := mustSync(t, svc, first); again[0].Action != "unchanged" || again[0].SubscriptionID != sub.id {
 		t.Fatalf("idempotent re-sync = %+v", again[0])
 	}
+	// the hidden tenant is named by the supply group and the
+	// buyer's subscription short code.
+	tenantName := func() (string, string) {
+		t.Helper()
+		var user, tenant string
+		if err := pool.QueryRow(ctx, `SELECT u.display_name, tn.display_name FROM users u
+			JOIN memberships m ON m.user_id=u.id JOIN access_scopes sc ON sc.id=m.scope_id JOIN tenants tn ON tn.id=sc.tenant_id
+			WHERE sc.id=$1 AND starts_with(u.username,'mkt-')`, outcomes[0].TenantScopeID).Scan(&user, &tenant); err != nil {
+			t.Fatal(err)
+		}
+		return user, tenant
+	}
+	var groupName string
+	if err := pool.QueryRow(ctx, `SELECT name FROM node_line_groups WHERE id=$1`, poolID).Scan(&groupName); err != nil {
+		t.Fatal(err)
+	}
+	if user, tenant := tenantName(); user != "市场订阅 · "+groupName+" · "+path[0].String()[:8] || tenant != user {
+		t.Fatalf("hidden tenant named %q / %q", user, tenant)
+	}
+	// A tenant still carrying the old name (made before this naming) is
+	// renamed from the group's current name on the next sync.
+	if _, err := pool.Exec(ctx, `UPDATE users SET display_name='市场订阅 0123abcd' WHERE id IN (SELECT user_id FROM memberships
+		WHERE scope_id=$1)`, outcomes[0].TenantScopeID); err != nil {
+		t.Fatal(err)
+	}
+	mustSync(t, svc, first)
+	if user, _ := tenantName(); user != "市场订阅 · "+groupName+" · "+path[0].String()[:8] {
+		t.Fatalf("old name not corrected: %q", user)
+	}
 	// The tenant publishes automatically to the pool's serving node; an
 	// unchanged node set adds no policy revision.
 	var revisions int

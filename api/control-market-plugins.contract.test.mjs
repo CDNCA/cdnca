@@ -12,6 +12,7 @@ const root = resolve(apiDir, '..')
 const aggregateSource = readFileSync(join(apiDir, 'openapi/v1/control.yaml'), 'utf8')
 const buyerSource = readFileSync(join(root, 'services/control-api/internal/marketsubscribehttp/buyer.go'), 'utf8')
 const memberSource = readFileSync(join(root, 'services/control-api/internal/marketsubscribehttp/member.go'), 'utf8')
+const handlerSource = readFileSync(join(root, 'services/control-api/internal/marketsubscribehttp/handler.go'), 'utf8')
 const temporaryDir = mkdtempSync(join(tmpdir(), 'cdnca-market-plugins-openapi-'))
 
 try {
@@ -44,6 +45,25 @@ try {
   for (const code of ['200', '400', '402', '403', '501', '502']) assert.ok(download.post.responses[code], `downloads ${code}`)
   assert.deepEqual(document.components.schemas.ControlError.required, ['error'])
 
+  // local stop / enable, platform administrators with an Idempotency-Key.
+  for (const [op, operationId] of [['disable', 'disableMarketPluginLocally'], ['enable', 'enableMarketPluginLocally']]) {
+    assert.match(buyerSource, new RegExp(`${op}Pattern += "POST /v1/admin/market/plugin-library/\\{plugin_id\\}/${op}"`))
+    assert.match(buyerSource, new RegExp(`h\\.handle\\(${op}Pattern, accessPluginSwitch,`))
+    const route = document.paths[`/v1/admin/market/plugin-library/{plugin_id}/${op}`]
+    assert.deepEqual(Object.keys(route), ['post'])
+    assert.equal(route.post.operationId, operationId)
+    assert.deepEqual(route.post['x-required-any-permission'], ['plugin_installations.platform.manage', 'platform.admin'])
+    const resolve = (p) => (p.$ref ? document.components.parameters[p.$ref.split('/').pop()] : p)
+    assert.deepEqual(route.post.parameters.map(resolve).map((p) => `${p.in}:${p.name}:${p.required}`), ['path:plugin_id:true', 'header:Idempotency-Key:true'])
+    for (const code of ['200', '400', '403', '409']) assert.ok(route.post.responses[code], `${op} ${code}`)
+    assert.ok(aggregateSource.includes(`../../control-market-plugins.openapi.yaml#/paths/~1v1~1admin~1market~1plugin-library~1{plugin_id}~1${op}'`))
+  }
+  const switchFields = [...handlerSource.match(/case accessPluginSwitch:\n\t\treturn ([^\n]+)/)[1].matchAll(/"([a-z_.]+)"/g)].map((m) => m[1])
+  assert.deepEqual(switchFields.slice(1), ['plugin_installations.platform.manage', 'platform.admin'])
+  // The stop takes the feature code only, and answers no reason.
+  assert.deepEqual(document.components.schemas.LocalDisableInput.required, ['feature_code'])
+  assert.deepEqual(Object.keys(document.components.schemas.LocalDisableInput.properties), ['feature_code'])
+  assert.equal(document.components.schemas.LocalDisable.properties.reason, undefined)
   assert.ok(aggregateSource.includes("../../control-market-plugins.openapi.yaml#/paths/~1v1~1admin~1market~1plugin-library'"))
   assert.ok(aggregateSource.includes("../../control-market-plugins.openapi.yaml#/paths/~1v1~1admin~1market~1plugin-downloads'"))
 } finally {

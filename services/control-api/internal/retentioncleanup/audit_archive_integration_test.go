@@ -158,6 +158,7 @@ func grantCleanupRole(t *testing.T, pool interface {
 		GRANT SELECT, DELETE ON cache_operations, cache_operation_commands, cache_operation_targets,
 			cache_operation_nodes, cache_operation_node_targets, cache_operation_node_attempts,
 			cache_operation_target_results, cache_operation_cancel_deliveries, security_ban_entries TO cdnca_retention_cleanup;
+		GRANT SELECT, DELETE ON probe_dnspup_plugin_requests TO cdnca_retention_cleanup;
 	END $$`); err != nil {
 		t.Fatal(err)
 	}

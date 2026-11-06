@@ -194,6 +194,9 @@ type SupplyTarget struct {
 	GrantID        *uuid.UUID `json:"grant_id,omitempty"`
 	FQDN           string     `json:"fqdn"`
 	Previous       []string   `json:"previous"`
+	// OfferName is the subscription's offer name as frozen at purchase (the
+	// seller's own name); older markets leave it out ("").
+	OfferName string `json:"offer_name"`
 	// State is the slot's service state (ADR 0012 §7, ML-06): serving,
 	// paused, stopped or overloaded; an aggregate row has its leaves' best.
 	State string `json:"state"`

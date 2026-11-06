@@ -7,13 +7,16 @@
 package marketsubscribe
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cdnca/cdnca/libs/marketproto/siteconf"
 	"github.com/cdnca/cdnca/services/control-api/internal/cnameallocation"
@@ -96,6 +99,7 @@ func (s *Service) SyncTargets(ctx context.Context, platform uuid.UUID) (int, err
 	}
 	type entry struct {
 		fqdn   string
+		name   string
 		leaves []Leaf
 	}
 	subs := map[uuid.UUID]*entry{}
@@ -104,6 +108,9 @@ func (s *Service) SyncTargets(ctx context.Context, platform uuid.UUID) (int, err
 		if e == nil {
 			e = &entry{leaves: []Leaf{}}
 			subs[t.SubscriptionID] = e
+		}
+		if e.name == "" {
+			e.name = supplyName(t.OfferName)
 		}
 		if t.Aggregate {
 			e.fqdn = t.FQDN
@@ -120,9 +127,9 @@ func (s *Service) SyncTargets(ctx context.Context, platform uuid.UUID) (int, err
 					target,target_synced_at,leaves,status,created_at,updated_at)
 				VALUES ($1,$2,'market_subscription',$3,$4,$5,$6,$7,'active',$6,$6)
 				ON CONFLICT (market_subscription_id) WHERE market_subscription_id IS NOT NULL DO UPDATE SET
-					target=EXCLUDED.target, target_synced_at=EXCLUDED.target_synced_at, leaves=EXCLUDED.leaves,
+					name=CASE WHEN $8 THEN EXCLUDED.name ELSE site_supplies.name END, target=EXCLUDED.target, target_synced_at=EXCLUDED.target_synced_at, leaves=EXCLUDED.leaves,
 					status=CASE WHEN site_supplies.status='retired' THEN 'retired' ELSE 'active' END, updated_at=EXCLUDED.updated_at`,
-				uuid.New(), platform, "市场订阅 "+id.String()[:8], id, e.fqdn, now, leaves); err != nil {
+				uuid.New(), platform, cmp.Or(e.name, "市场订阅 "+id.String()[:8]), id, e.fqdn, now, leaves, e.name != ""); err != nil {
 				return err
 			}
 			seen = append(seen, id)
@@ -132,6 +139,21 @@ func (s *Service) SyncTargets(ctx context.Context, platform uuid.UUID) (int, err
 		return err
 	})
 	return len(subs), err
+}
+
+// supplyName is the market's offer name as a site_supplies name (1..128
+// runes, trimmed, no control characters); "" when there is none to use.
+func supplyName(offer string) string {
+	offer = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, offer))
+	if runes := []rune(offer); len(runes) > 128 {
+		offer = strings.TrimSpace(string(runes[:128]))
+	}
+	return offer
 }
 
 // Bind attaches a market supply to a site. Local node groups need no row:

@@ -95,7 +95,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Installed means an installation head exists in any tenant; enabled that one is enabled; withdrawn that a materialized artifact (data pack, ui_page, provider) was withdrawn by the platform because the licence moved to another controller or ended. No query parameters are accepted.",
+   "description": "Installed means an installation head exists in any tenant; enabled that one is enabled; withdrawn that a materialized artifact (data pack, ui_page, provider) was withdrawn by the platform because the licence moved to another controller or ended; locally_disabled that the platform administrator stopped the plugin on this controller (POST .../disable). No query parameters are accepted.",
    "any_permissions": [
     "marketplace.browse",
     "marketplace.purchase",
@@ -124,6 +124,189 @@
     {
      "status": "403",
      "description": "Required marketplace permission is missing (forbidden)"
+    },
+    {
+     "status": "500",
+     "description": "Local store failure (internal)"
+    }
+   ]
+  },
+  {
+   "operation_id": "disableMarketPluginLocally",
+   "method": "POST",
+   "path": "/v1/admin/market/plugin-library/{plugin_id}/disable",
+   "summary": "Stop a plugin on this controller for every tenant",
+   "summary_zh": "在本主控停用插件：本机所有租户不再可用其功能，授权与计费不变",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Takes the plugin's feature code (module.*, pack.*, theme.*) out of the lease's grant on this controller: the module API, its workers, menus and publication treat it as not licensed (entitlement_feature_denied), and sites mounting a rule pack that needs it are republished without that pack. The licence, the lease, billing and the plugin's configuration are untouched. A plugin already stopped keeps its first stop (same answer). Installable plugins (themes, market rule packs, page plugins) are paused through their platform installation record instead.",
+   "any_permissions": [
+    "plugin_installations.platform.manage",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "plugin_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Per-user key: a retry with the same key and body returns the first answer; another body under the same key answers 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "feature_code",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The plugin's local state (stopped)",
+     "fields": [
+      {
+       "name": "plugin_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "feature_code",
+       "type": "string",
+       "required": true,
+       "description": "The stopped feature code; empty when the plugin was not stopped."
+      },
+      {
+       "name": "locally_disabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "disabled_by",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "disabled_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request (idempotency_key_required, invalid_plugin_id, invalid_body; invalid: not a plugin feature code, or the code is stopped under another plugin)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Not a platform session with plugin_installations.platform.manage or platform.admin (forbidden)"
+    },
+    {
+     "status": "409",
+     "description": "The Idempotency-Key was used with another request (idempotency_conflict)"
+    },
+    {
+     "status": "500",
+     "description": "Local store failure (internal)"
+    }
+   ]
+  },
+  {
+   "operation_id": "enableMarketPluginLocally",
+   "method": "POST",
+   "path": "/v1/admin/market/plugin-library/{plugin_id}/enable",
+   "summary": "Enable a plugin stopped on this controller again",
+   "summary_zh": "在本主控重新启用已停用的插件",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Lifts the local stop: the lease's grant applies again and sites mounting its rule packs are republished. A plugin that is not stopped answers its state (locally_disabled false) and nothing changes.",
+   "any_permissions": [
+    "plugin_installations.platform.manage",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "plugin_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Per-user key: a retry with the same key and body returns the first answer; another body under the same key answers 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The plugin's local state (not stopped)",
+     "fields": [
+      {
+       "name": "plugin_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "feature_code",
+       "type": "string",
+       "required": true,
+       "description": "The stopped feature code; empty when the plugin was not stopped."
+      },
+      {
+       "name": "locally_disabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "disabled_by",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "disabled_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request (idempotency_key_required, invalid_plugin_id, invalid_body; invalid: not a plugin feature code, or the code is stopped under another plugin)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Not a platform session with plugin_installations.platform.manage or platform.admin (forbidden)"
+    },
+    {
+     "status": "409",
+     "description": "The Idempotency-Key was used with another request (idempotency_conflict)"
     },
     {
      "status": "500",

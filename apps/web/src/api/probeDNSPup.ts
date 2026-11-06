@@ -192,6 +192,8 @@ export interface ProbePurposeStatus {
   enabled: boolean
   monthly_cap: number
   interval_seconds: number
+  /** edge_health only: tcping (default) / https. */
+  probe_type?: EdgeProbeType
   used_this_month: number
   gate: ProbeGate
 }
@@ -208,7 +210,11 @@ export interface ProbePurposeInput {
   enabled: boolean
   monthly_cap: number
   interval_seconds: number
+  probe_type?: EdgeProbeType
 }
+
+export const edgeProbeTypes = ['tcping', 'https'] as const
+export type EdgeProbeType = typeof edgeProbeTypes[number]
 
 export interface ProbeMatrixCell {
   area: string

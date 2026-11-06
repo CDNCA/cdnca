@@ -471,8 +471,9 @@ describe('我的插件与已购名称', () => {
     const catalog = new Map([autodefense, third].map((p) => [p.plugin_id, p as never]))
     const rows = ownedRows([license('io.cdnca.autodefense'), license('bob.theme'), { ...license('gone.x'), status: 'expired' }] as never,
       [{ plugin_id: 'old.y', installed: true, enabled: false, withdrawn: true }], ['module.autodefense'], catalog, () => '/x')
+    // 没传平台安装记录（读不到）：判断不了是否已待确认，显示“等待发布或同步”，不引导去下方确认。
     expect(rows.map((r) => [r.pluginID, r.state, r.path])).toEqual([
-      ['io.cdnca.autodefense', 'enabled', '/x'], ['bob.theme', 'pendingConfirm', null], ['old.y', 'revoked', null]])
+      ['io.cdnca.autodefense', 'enabled', '/x'], ['bob.theme', 'awaitingSync', null], ['old.y', 'revoked', null]])
   })
 
   it('lists official modules this controller owns under 我的插件 with their names and a configure link', async () => {

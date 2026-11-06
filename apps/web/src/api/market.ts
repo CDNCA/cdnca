@@ -439,8 +439,13 @@ export interface MarketUIPage {
   pages: Array<{ id: string; path: string; mount: 'menu' | 'site_tab'; menu_parent?: string; role: 'admin' | 'user';
     title: { 'zh-CN': string; 'en-US'?: string }; required_permission?: string; required_module?: string }>
 }
-// This controller's local state of a market plugin (GET /v1/admin/market/plugin-library).
-export interface MarketLibraryItem { plugin_id: string; installed: boolean; enabled: boolean; withdrawn: boolean }
+// This controller's local state of a market plugin (GET /v1/admin/market/plugin-library). locally_disabled: the platform
+// administrator stopped it on this controller (absent from older controllers, read as false).
+export interface MarketLibraryItem { plugin_id: string; installed: boolean; enabled: boolean; withdrawn: boolean; locally_disabled?: boolean }
+// A plugin's stop on this controller (POST …/plugin-library/{plugin_id}/disable|enable).
+export interface MarketLocalDisable {
+  plugin_id: string; feature_code: string; locally_disabled: boolean; disabled_by?: string; disabled_at?: string
+}
 export interface MarketDownload { plugin_id: string; publisher_kind: string; source: 'licensed' | 'free'; license: MarketLicense }
 export interface MarketPluginVersion {
   id: string
@@ -853,6 +858,11 @@ export const marketApi = {
   withdrawDispute: (token: string, disputeID: string, key: string) =>
     call<MarketDispute>(token, `/v1/admin/market/disputes/${id(disputeID)}/withdraw`, json('POST', {}), key),
   library: (token: string) => call<unknown>(token, '/v1/admin/market/plugin-library').then((v) => list<MarketLibraryItem>(v)),
+  // stop / enable a plugin on this controller (its feature code for every tenant; the licence is untouched).
+  disableLocally: (token: string, pluginID: string, input: { feature_code: string }, key: string) =>
+    call<MarketLocalDisable>(token, `/v1/admin/market/plugin-library/${id(pluginID)}/disable`, json('POST', input), key),
+  enableLocally: (token: string, pluginID: string, key: string) =>
+    call<MarketLocalDisable>(token, `/v1/admin/market/plugin-library/${id(pluginID)}/enable`, json('POST', {}), key),
   download: (token: string, pluginID: string) =>
     call<MarketDownload>(token, '/v1/admin/market/plugin-downloads', json('POST', { plugin_id: pluginID })),
   purchaseFromPrepaid: (token: string, input: { price_plan_id: string; plan_revision: number; trial?: boolean }, key: string) =>

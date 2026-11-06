@@ -68,3 +68,48 @@ func TestProbeDNSPupOpenAPIMatchesPatterns(t *testing.T) {
 		t.Fatalf("documented routes\n%s\nserved routes\n%s", strings.Join(documented, "\n"), strings.Join(served, "\n"))
 	}
 }
+
+// the purposes PUT item and view document edge_health's probe
+// type with exactly EdgeProbeTypes.
+func TestProbeDNSPupOpenAPIEdgeProbeTypes(t *testing.T) {
+	_, filename, _, _ := runtime.Caller(0)
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "../../../../api/control-probe-dnspup.openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type property struct {
+		Enum []string `yaml:"enum"`
+	}
+	type object struct {
+		Properties map[string]property `yaml:"properties"`
+	}
+	var document struct {
+		Paths map[string]map[string]struct {
+			RequestBody struct {
+				Content map[string]struct {
+					Schema struct {
+						Properties map[string]struct {
+							Items object `yaml:"items"`
+						} `yaml:"properties"`
+					} `yaml:"schema"`
+				} `yaml:"content"`
+			} `yaml:"requestBody"`
+		} `yaml:"paths"`
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]struct {
+					Items object `yaml:"items"`
+				} `yaml:"properties"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	input := document.Paths["/v1/admin/probe-dnspup/purposes"]["put"].RequestBody.Content["application/json"].Schema.
+		Properties["purposes"].Items.Properties["probe_type"].Enum
+	view := document.Components.Schemas["PurposesView"].Properties["purposes"].Items.Properties["probe_type"].Enum
+	if !slices.Equal(input, EdgeProbeTypes) || !slices.Equal(view, EdgeProbeTypes) {
+		t.Fatalf("probe_type enum input=%v view=%v, want %v", input, view, EdgeProbeTypes)
+	}
+}

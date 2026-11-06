@@ -151,6 +151,9 @@ describe('supplier subscribers (§18.1–18.3)', () => {
     const table = (await screen.findByText('Alice', { selector: 'span' })).closest('table')!
     expect(within(table).getByText('d-0123456789abcdef')).toBeInTheDocument()
     expect(within(table).getByText('经由 Alice')).toBeInTheDocument()
+    // a direct buyer's short code is the one its restricted user's name ends with on the site list.
+    expect(within(table).getByText(subID.slice(0, 8))).toBeInTheDocument()
+    expect(within(table).getByText('同订阅方编号')).toBeInTheDocument()
     expect(within(table).getByText('平台处置 · 暂停调度')).toBeInTheDocument()
     // C10：订阅状态用中文，不露 active/cancelled 原值。
     expect(within(table).queryByText('active')).toBeNull()

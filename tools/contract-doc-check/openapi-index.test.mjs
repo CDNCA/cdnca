@@ -513,8 +513,9 @@ test("current YAML and external refs include all required operations", async () 
 	// 在线查看证书 GET /v1/certificate-assets/{asset_id}/pem（control.yaml 与 dns-acme.yaml 各 1 条，同一 wire tuple）。
 	// 主控数据库连接池 GET /v1/admin/system-db-pool 1 条。
 	// 封禁名单 /v1[/admin]/security-bans 6 条；拨测插件用途、矩阵、覆盖、排障与插件拨测接口 12 条。
-	assert.equal(result.operations.length, 907);
-	assert.equal(result.distinctTupleCount, 881);
+	// 插件本机停用 / 重新启用 2 条（POST /v1/admin/market/plugin-library/{plugin_id}/disable|enable）。
+	assert.equal(result.operations.length, 909);
+	assert.equal(result.distinctTupleCount, 883);
 	assert.equal(result.overlaps.length, 26);
 	assert.equal(result.overlaps.length, 26);
   const operationIDs = new Set(result.operations.map(({operationId}) => operationId));

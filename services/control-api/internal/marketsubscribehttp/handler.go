@@ -81,6 +81,10 @@ const (
 	// tenant confirming an installation looks its plugin up (q=plugin_id)
 	// and reads the signed ui_page menus/origin before consenting.
 	accessPluginRead
+	// accessPluginSwitch stops / enables a plugin on this controller for every
+	// tenant: the platform administrator who manages platform
+	// plugin installations.
+	accessPluginSwitch
 )
 
 func (a access) allows(c Caller) bool {
@@ -98,6 +102,8 @@ func (a access) allows(c Caller) bool {
 		return accessBrowse.allows(c) || c.ScopeKind == "tenant" && c.has("plugin_installations.read", "plugin_installations.manage")
 	case accessAdvisoryAck:
 		return accessPurchase.allows(c) || c.ScopeKind == "tenant" && c.has("plugin_installations.manage")
+	case accessPluginSwitch:
+		return c.ScopeKind == "platform" && c.has("plugin_installations.platform.manage", "platform.admin")
 	}
 	return false
 }

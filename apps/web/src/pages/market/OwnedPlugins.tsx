@@ -1,18 +1,18 @@
-import { Button, Empty, Space, Table, Tag, Typography } from 'antd'
+import { Button, Empty, Space, Table, Tag, Tooltip, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import type { MarketLibraryItem, MarketLicense } from '../../api/market'
 import { useSessionStore } from '../../auth/session'
-import { usePluginUIPages } from '../../pluginui/usePluginUIPages'
-import { isImplementedPath } from '../../routes/navigation'
 import { PlatformPluginsPanel } from '../plugin-market/PluginMarketPage'
 import { pluginName, usePluginCatalog } from '../plugin-market/usePluginCatalog'
-import { configPath, ownedRows, type OwnedRow, type OwnedState } from './marketModel'
+import { dependentsOf, localSwitchable, ownedRows, type OwnedRow, type OwnedState } from './marketModel'
+import { useConfigPath, usePlatformInstallations } from './marketHooks'
+import { FeatureSwitch, InstallationSwitch } from './PluginSwitch'
 
 const stateColor: Record<OwnedState, string> = {
   enabled: 'success', installed: 'success', activating: 'processing', enable: 'warning', distributing: 'processing',
-  pendingConfirm: 'gold', revoked: 'error',
+  pendingConfirm: 'gold', revoked: 'error', disabled: 'default', noVersion: 'default', awaitingSync: 'processing',
 }
 
 /**
@@ -25,13 +25,25 @@ export function OwnedPlugins({ licenses, library, modules, loading, platformPlug
   const { t, i18n } = useTranslation('marketStore')
   const { t: storeT } = useTranslation('pluginStore')
   const token = useSessionStore((s) => s.accessToken)
-  const permissions = useSessionStore((s) => s.principal?.permissions)
   const catalog = usePluginCatalog(token, [...licenses.map((l) => l.plugin_id), ...library.map((item) => item.plugin_id)])
-  const uiPages = usePluginUIPages(token)
   // 去配置只给本账号进得去的页面：插件页面已由服务端按角色/权限/功能码筛过，其余按菜单同一规则判断。
-  const reachable = (path: string | null) => path && (path.startsWith('/plugin-ui/')
-    || isImplementedPath('admin', path.split('?')[0], permissions, modules)) ? path : null
-  const rows = ownedRows(licenses, library, [...modules], catalog, (plugin) => reachable(configPath(plugin, uiPages)))
+  const reachable = useConfigPath(modules)
+  // 平台安装记录（有读权限才有）：区分已停用与待确认，并给停用/重新启用。
+  const installations = usePlatformInstallations()
+  const rows = ownedRows(licenses, library, [...modules], catalog, reachable, installations)
+  const stopped = new Set(library.filter((item) => item.locally_disabled).map((item) => item.plugin_id))
+  const name = (pluginID: string) => pluginName(catalog, pluginID, i18n.resolvedLanguage)
+  // 停用 / 重新启用：功能类插件走本机停用名单，可安装类走它的平台安装记录。
+  const toggleOf = (row: OwnedRow) => {
+    const plugin = row.plugin
+    if (plugin && localSwitchable(plugin) && (row.state === 'enabled' || row.state === 'disabled' && stopped.has(row.pluginID))) {
+      const dependents = row.state === 'enabled' && plugin.feature_code
+        ? dependentsOf(plugin.feature_code, [...catalog.values()], modules).map((p) => name(p.plugin_id)) : []
+      return <FeatureSwitch plugin={plugin} name={name(row.pluginID)} stopped={row.state === 'disabled'} dependents={dependents} />
+    }
+    return row.installation && (row.state === 'installed' || row.state === 'enabled' || row.state === 'disabled')
+      ? <InstallationSwitch installation={row.installation} name={name(row.pluginID)} /> : null
+  }
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <section aria-labelledby="owned-plugins-title">
@@ -46,12 +58,17 @@ export function OwnedPlugins({ licenses, library, modules, loading, platformPlug
             </Space> },
             { title: t('owned.kind'), key: 'kind', width: 140, render: (_: unknown, row) => row.plugin
               ? storeT(`kinds.${row.plugin.kind}`, { defaultValue: row.plugin.kind }) : '—' },
-            { title: t('owned.status'), key: 'status', width: 180, render: (_: unknown, row) =>
-              <Tag color={stateColor[row.state]}>{t(`owned.states.${row.state}`)}</Tag> },
-            { title: t('owned.actions'), key: 'actions', width: 160, render: (_: unknown, row) => row.path
-              ? <Link to={row.path}><Button size="small">{t('owned.configure')}</Button></Link>
-              : <Typography.Text type="secondary">{row.state === 'revoked' || row.state === 'activating' || row.state === 'distributing' ? '—'
-                : row.state === 'pendingConfirm' ? (platformPlugins ? t('owned.confirmBelow') : t('owned.confirmByAdmin')) : t('owned.noPage')}</Typography.Text> },
+            { title: t('owned.status'), key: 'status', width: 180, render: (_: unknown, row) => row.state === 'noVersion'
+              ? <Tooltip title={t('owned.noVersionHint')}><Tag color={stateColor.noVersion}>{t('owned.states.noVersion')}</Tag></Tooltip>
+              : <Tag color={stateColor[row.state]}>{t(`owned.states.${row.state}`)}</Tag> },
+            { title: t('owned.actions'), key: 'actions', width: 220, render: (_: unknown, row) => {
+              const toggle = toggleOf(row)
+              if (row.path) return <Space size={4} wrap><Link to={row.path}><Button size="small">{t('owned.configure')}</Button></Link>{toggle}</Space>
+              if (toggle) return toggle
+              return <Typography.Text type="secondary">{row.state === 'revoked' || row.state === 'activating' || row.state === 'distributing' ||
+                row.state === 'noVersion' || row.state === 'awaitingSync' ? '—'
+                : row.state === 'pendingConfirm' ? (platformPlugins ? t('owned.confirmBelow') : t('owned.confirmByAdmin')) : t('owned.noPage')}</Typography.Text>
+            } },
           ]} />
       </section>
       {platformPlugins ? <section aria-labelledby="platform-plugins-title">

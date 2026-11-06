@@ -137,6 +137,18 @@ var targets = []target{{
 		ORDER BY COALESCE(entry.released_at, entry.banned_until), entry.id
 		LIMIT $1)
 	DELETE FROM security_ban_entries WHERE id IN (SELECT id FROM expired)`,
+}, {
+	// 插件拨测请求（迁移 639）：每行建立时带 24 小时 expires_at，读取时已按它判过期；
+	// 这里删掉过期行（没有平台设置项，期限就是行自己的 expires_at；迁移 643 守卫逐行复核）。
+	// 按小时一轮，每轮最多 MaxBatches×BatchSize（默认 100×1000）行，剩下的下一轮继续。
+	table: "probe_dnspup_plugin_requests", setting: "expires_at",
+	cutoffSQL: `SELECT CASE WHEN $1::text = 'expires_at' THEN transaction_timestamp() END`,
+	deleteSQL: `WITH expired AS (
+		SELECT request.id FROM probe_dnspup_plugin_requests request
+		WHERE request.expires_at < transaction_timestamp()
+		ORDER BY request.expires_at
+		LIMIT $1)
+	DELETE FROM probe_dnspup_plugin_requests WHERE id IN (SELECT id FROM expired)`,
 }}
 
 type Config struct {

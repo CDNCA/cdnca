@@ -52,6 +52,13 @@ paths:
                       enabled: {type: boolean}
                       monthly_cap: {type: integer, minimum: 0, maximum: 1000000000}
                       interval_seconds: {type: integer, minimum: 0, maximum: 86400}
+                      probe_type:
+                        type: string
+                        enum: [tcping, https]
+                        description: >-
+                          edge_health only (400 on another purpose); omitted keeps the stored type. https:
+                          dnspup's http type on https://<access point>/ (Host and SNI are the access point name);
+                          access points that are IPs stay on tcping.
       responses:
         '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/PurposesView'}}}}
         '400': {$ref: '#/components/responses/Error'}
@@ -359,6 +366,7 @@ components:
               enabled: {type: boolean}
               monthly_cap: {type: integer}
               interval_seconds: {type: integer}
+              probe_type: {type: string, enum: [tcping, https], description: "edge_health only (default tcping)"}
               used_this_month: {type: integer}
               gate: {$ref: '#/components/schemas/Gate'}
     Override:

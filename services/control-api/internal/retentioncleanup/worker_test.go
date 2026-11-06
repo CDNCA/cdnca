@@ -115,3 +115,23 @@ func TestSecurityBanTargetKeepsReleaseWindow(t *testing.T) {
 	}
 	t.Fatal("security_ban_entries target missing")
 }
+
+// 插件拨测请求表只在读取时按 expires_at 判过期，由 worker 按小时分批删除过期行。
+func TestProbePluginRequestsTargetDeletesByExpiry(t *testing.T) {
+	for _, item := range targets {
+		if item.table != "probe_dnspup_plugin_requests" {
+			continue
+		}
+		if item.selectSQL != "" || !strings.Contains(item.deleteSQL, "request.expires_at < transaction_timestamp()") ||
+			!strings.Contains(item.deleteSQL, "ORDER BY request.expires_at") || !strings.Contains(item.deleteSQL, "LIMIT $1") ||
+			!strings.Contains(item.cutoffSQL, "transaction_timestamp()") {
+			t.Fatalf("probe plugin request target = %+v", item)
+		}
+		tx := &recordingTx{affected: map[string]int64{item.deleteSQL: 7}}
+		if deleted, err := deleteExpired(context.Background(), tx, item, 10); err != nil || deleted != 7 {
+			t.Fatalf("deleted=%d err=%v", deleted, err)
+		}
+		return
+	}
+	t.Fatal("probe_dnspup_plugin_requests target missing")
+}

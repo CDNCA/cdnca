@@ -1,15 +1,16 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useSessionStore } from '../../auth/session'
 import { changeLocale } from '../../i18n'
 import { probeDNSPupMessages } from '../../i18n/probeDNSPup'
-import { authResponse, principal } from '../../test/fixtures'
+import { authResponse, nodeManagementSettingsFixture, principal } from '../../test/fixtures'
 import { renderWithProviders } from '../../test/render'
 import ProbeDNSPupPage from './ProbeDNSPupPage'
 
 function json(body: unknown, status = 200): Response {
-  return { ok: status >= 200 && status < 300, status, text: vi.fn().mockResolvedValue(JSON.stringify(body)) } as unknown as Response
+  return { ok: status >= 200 && status < 300, status, text: vi.fn().mockResolvedValue(JSON.stringify(body)),
+    json: vi.fn().mockResolvedValue(body) } as unknown as Response
 }
 
 // Obviously fake credentials.
@@ -173,6 +174,80 @@ describe('ProbeDNSPupPage', () => {
     expect(screen.getByRole('columnheader', { name: '教育网' })).toBeInTheDocument()
     expect(screen.getByText('16.7% · 40 ms')).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([path]) => path === '/v1/admin/probe-dnspup/matrix?subject=node&id=node-1&window=24h')).toBe(true)
+  })
+
+  it('keeps the hidden aggregated edge candidates probe type as stored', async () => {
+    // The community edition has no aggregated edge: no probe type column, and saving sends edge_health's stored type back.
+    const gate = { stopped: false, factor: 1, daily_average: 0, projected_monthly: 0 }
+    const purposes = { monthly_limit: 0, monthly_used: 0, projected_monthly: 0, purposes: [
+      { purpose: 'node_availability', class: 1, enabled: true, monthly_cap: 0, interval_seconds: 0, used_this_month: 0, gate },
+      { purpose: 'edge_health', class: 2, enabled: true, monthly_cap: 0, interval_seconds: 0, probe_type: 'https', used_this_month: 0, gate },
+    ] }
+    const fetchMock = vi.fn<Fetch>(async (path) => {
+      if (path === '/v1/admin/probe-dnspup') return json(status)
+      if (path === '/v1/admin/probe-dnspup/purposes') return json(purposes)
+      if (path.endsWith('/overrides')) return json({ items: [] })
+      return json({ error: { code: 'not_found', message: 'x', request_id: 'r' } }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<ProbeDNSPupPage />)
+    const save = await screen.findByRole('button', { name: '保存用途设置' })
+    await waitFor(() => expect(save).toBeEnabled())
+    expect(screen.queryByRole('combobox', { name: /拨测类型/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('聚合边缘候选改用 HTTPS 拨测')).not.toBeInTheDocument()
+    fireEvent.click(save)
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path, call]) => path.endsWith('/purposes') && call?.method === 'PUT')).toBe(true))
+    const [, put] = fetchMock.mock.calls.find(([path, call]) => path.endsWith('/purposes') && call?.method === 'PUT')!
+    expect(JSON.parse(String(put?.body)).purposes).toEqual([
+      { purpose: 'node_availability', enabled: true, monthly_cap: 0, interval_seconds: 0 },
+      { purpose: 'edge_health', enabled: true, monthly_cap: 0, interval_seconds: 0, probe_type: 'https' },
+    ])
+  })
+
+  it('picks override subjects from the node and line group lists and shows names', async () => {
+    const nodeID = '018f0000-0000-7000-8000-000000000001'
+    const groupID = '018f0000-0000-7000-8000-0000000000a1'
+    const tenantScopeID = '018f0000-0000-7000-8000-0000000000b1'
+    const node = { id: nodeID, display_id: '17', name: '上海一号', description: '', region: 'CN-East', ipv4: '192.0.2.10',
+      admin_state: 'active', management_settings: nodeManagementSettingsFixture(), revision: 1,
+      created_at: '2026-08-01T08:00:00Z', updated_at: '2026-08-01T09:00:00Z',
+      presence: { status: 'online', last_heartbeat_at: '2026-08-01T08:59:55Z', agent_version: '2.4.1', session_epoch: 1, heartbeat_sequence: 1,
+        projection_freshness: 'fresh', lease_signal: 'present', projected_at: '2026-08-01T08:59:56Z' } }
+    const overrides = { items: [{ id: 'o1', subject_kind: 'line_group', tenant_scope_id: tenantScopeID, line_group_id: groupID,
+      subject_name: '电信组', probe_type: 'ping', selection: null, revision: 1 }] }
+    const fetchMock = vi.fn<Fetch>(async (path, init) => {
+      if (path === '/v1/admin/probe-dnspup') return json(status)
+      if (path.endsWith('/overrides') && !init?.method) return json(overrides)
+      if (path.endsWith('/overrides')) return json(overrides.items[0])
+      if (path.startsWith('/v1/nodes?')) return json({ items: [node] })
+      if (path.startsWith('/v1/node-line-groups?')) return json({ items: [{ id: groupID, display_id: '5', tenant_scope_id: tenantScopeID, name: '电信组' }] })
+      return json({ error: { code: 'not_found', message: 'x', request_id: 'r' } }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<ProbeDNSPupPage />)
+    expect(await screen.findByText(groupID)).toBeInTheDocument()
+    expect(screen.getAllByText('电信组').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: '添加覆盖' }))
+    const nodeSelect = await screen.findByRole('combobox', { name: '节点' })
+    fireEvent.change(nodeSelect, { target: { value: '上海' } })
+    fireEvent.click(await screen.findByText('上海一号 (ID 17)', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path === '/v1/nodes?limit=50&search=%E4%B8%8A%E6%B5%B7')).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: '保存覆盖' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path, call]) => path.endsWith('/overrides') && call?.method === 'PUT')).toBe(true))
+    const [, put] = fetchMock.mock.calls.find(([path, call]) => path.endsWith('/overrides') && call?.method === 'PUT')!
+    expect(JSON.parse(String(put?.body))).toEqual({ node_id: nodeID })
+
+    fireEvent.click(screen.getByRole('button', { name: '添加覆盖' }))
+    fireEvent.mouseDown(within((await screen.findByRole('button', { name: '保存覆盖' })).closest('form')!).getByRole('combobox', { name: '对象' }))
+    fireEvent.click(await screen.findByText('线路组', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+    const groupSelect = await screen.findByRole('combobox', { name: '线路组' })
+    fireEvent.mouseDown(groupSelect)
+    fireEvent.click(await screen.findByText('电信组 (ID 5)', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存覆盖' }))
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([path, call]) => path.endsWith('/overrides') && call?.method === 'PUT')).toHaveLength(2))
+    const [, second] = fetchMock.mock.calls.filter(([path, call]) => path.endsWith('/overrides') && call?.method === 'PUT')[1]
+    expect(JSON.parse(String(second?.body))).toEqual({ tenant_scope_id: tenantScopeID, line_group_id: groupID })
+    expect(fetchMock.mock.calls.some(([path]) => path.startsWith('/v1/node-line-groups?target_scope_id='))).toBe(true)
   })
 
   it('shows a 403 page without the permission', async () => {

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/google/uuid"
 )
 
@@ -56,6 +57,8 @@ var buyerPatterns = []string{
 	"GET /v1/admin/market/advisories",
 	"POST /v1/admin/market/advisories/{id}/acknowledge",
 	libraryPattern,
+	disablePattern,
+	enablePattern,
 }
 
 // PA-27: what this controller already holds of each market plugin, so the
@@ -66,11 +69,30 @@ const libraryPattern = "GET /v1/admin/market/plugin-library"
 // exists (any tenant); Enabled: one is enabled. Withdrawn: a materialized
 // artifact (data pack, ui_page, provider) was withdrawn by the platform, i.e.
 // the licence moved to another controller or ended (ADR 0007 §9).
+// LocallyDisabled: the platform administrator stopped the plugin on this
+// controller (plugin_local_disables): its feature code does not
+// apply here for any tenant until it is enabled again.
 type LibraryItem struct {
-	PluginID  string `json:"plugin_id"`
-	Installed bool   `json:"installed"`
-	Enabled   bool   `json:"enabled"`
-	Withdrawn bool   `json:"withdrawn"`
+	PluginID        string `json:"plugin_id"`
+	Installed       bool   `json:"installed"`
+	Enabled         bool   `json:"enabled"`
+	Withdrawn       bool   `json:"withdrawn"`
+	LocallyDisabled bool   `json:"locally_disabled"`
+}
+
+// stop / enable a plugin on this controller (its feature code, for
+// every tenant; the licence is untouched). Platform administrators only, with
+// an Idempotency-Key.
+const (
+	disablePattern = "POST /v1/admin/market/plugin-library/{plugin_id}/disable"
+	enablePattern  = "POST /v1/admin/market/plugin-library/{plugin_id}/enable"
+)
+
+// PluginSwitch is optional: a BuyerStore that also implements it serves the
+// stop and enable routes.
+type PluginSwitch interface {
+	DisablePlugin(ctx context.Context, c Caller, key string, input entitlementguard.LocalDisableInput) (entitlementguard.LocalDisable, error)
+	EnablePlugin(ctx context.Context, c Caller, key, pluginID string) (entitlementguard.LocalDisable, error)
 }
 
 // LibraryStore is optional: a BuyerStore that also implements it serves the
@@ -143,7 +165,63 @@ func (h *Handler) WithBuyer(store BuyerStore, reporter AdvisoryReporter) *Handle
 			writeJSON(w, http.StatusOK, map[string]any{"items": items})
 		})
 	}
+	if switches, ok := store.(PluginSwitch); ok {
+		h.handle(disablePattern, accessPluginSwitch, func(w http.ResponseWriter, r *http.Request, c Caller) {
+			key, id, ok := switchRequest(w, r)
+			if !ok {
+				return
+			}
+			var body struct {
+				FeatureCode string `json:"feature_code"`
+			}
+			if !decode(w, r, &body) {
+				return
+			}
+			item, err := switches.DisablePlugin(r.Context(), c, key,
+				entitlementguard.LocalDisableInput{PluginID: id, FeatureCode: body.FeatureCode})
+			writeSwitch(w, item, err)
+		})
+		h.handle(enablePattern, accessPluginSwitch, func(w http.ResponseWriter, r *http.Request, c Caller) {
+			key, id, ok := switchRequest(w, r)
+			if !ok {
+				return
+			}
+			var body struct{}
+			if !decode(w, r, &body) {
+				return
+			}
+			item, err := switches.EnablePlugin(r.Context(), c, key, id)
+			writeSwitch(w, item, err)
+		})
+	}
 	return h
+}
+
+func switchRequest(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	key := r.Header.Get("Idempotency-Key")
+	if key == "" || len(key) > 128 {
+		writeError(w, http.StatusBadRequest, "idempotency_key_required")
+		return "", "", false
+	}
+	id := r.PathValue("plugin_id")
+	if len(id) > 128 || !pluginIDPattern.MatchString(id) {
+		writeError(w, http.StatusBadRequest, "invalid_plugin_id")
+		return "", "", false
+	}
+	return key, id, true
+}
+
+func writeSwitch(w http.ResponseWriter, item entitlementguard.LocalDisable, err error) {
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, item)
+	case errors.Is(err, entitlementguard.ErrLocalDisableInvalid):
+		writeError(w, http.StatusBadRequest, "invalid")
+	case errors.Is(err, entitlementguard.ErrLocalDisableIdempotency):
+		writeError(w, http.StatusConflict, "idempotency_conflict")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal")
+	}
 }
 
 func storeFail(w http.ResponseWriter, err error) {

@@ -37,6 +37,8 @@ type Runtime struct {
 	// (probe_dnspup_purposes); RoundFor / Stopped read them.
 	Gates     map[string]Gate
 	Intervals map[string]time.Duration
+	// ProbeTypes is the purposes' probe type (edge_health: tcping / https).
+	ProbeTypes map[string]string
 }
 
 // Uses reports whether sources contains source and the dnspup source is
@@ -94,7 +96,7 @@ func (service *Service) Runtime(ctx context.Context) Runtime {
 		service.config.Logger.Warn("dnspup probe client unavailable", "error", err)
 		return runtime
 	}
-	runtime.Gates, runtime.Intervals = gates(purposes)
+	runtime.Gates, runtime.Intervals, runtime.ProbeTypes = gates(purposes)
 	runtime.Probe = func(ctx context.Context, consumer, site, target string, round int64, request ProbeRequest) ([]Result, error) {
 		if runtime.Stopped(consumer) {
 			return nil, ErrBudgetStopped

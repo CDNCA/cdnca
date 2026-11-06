@@ -124,7 +124,8 @@ func communityPurchasedCodes(ctx context.Context, tx pgx.Tx, now time.Time) ([]s
 var CommunityCatalogRejections = []string{"unknown_signing_key", "invalid_signature", "catalog_digest_mismatch",
 	"target_mismatch", "expired", "revision_out_of_order", "supersedes_mismatch", "invalid_envelope"}
 
-// communityFeaturesWithPurchases is communityFeatures plus the market purchases.
+// communityFeaturesWithPurchases is communityFeatures plus the market
+// purchases, less the plugin codes this controller stopped (local_disables.go).
 func communityFeaturesWithPurchases(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]bool, error) {
 	features := communityFeatures()
 	purchased, err := communityPurchasedCodes(ctx, tx, now)
@@ -133,6 +134,13 @@ func communityFeaturesWithPurchases(ctx context.Context, tx pgx.Tx, now time.Tim
 	}
 	for _, code := range purchased {
 		features[code] = true
+	}
+	stopped, err := LocallyDisabledCodes(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	for code := range stopped {
+		delete(features, code)
 	}
 	return features, nil
 }
@@ -164,6 +172,16 @@ func (g *Guard) communityFeatureDecision(ctx context.Context, tx pgx.Tx, check F
 	}
 	if !granted {
 		return FeatureDecision{}, g.denyFeature(ctx, tx, decision, ErrFeatureDenied, StatusCommunity, "feature_missing")
+	}
+	// A plugin code this controller stopped is denied as if it were not granted.
+	if _, _, plugin := entitlement.ParseModuleFeatureCode(check.Feature); plugin {
+		stopped, err := LocallyDisabledCodes(ctx, tx)
+		if err != nil {
+			return FeatureDecision{}, err
+		}
+		if stopped[check.Feature] {
+			return FeatureDecision{}, g.denyFeature(ctx, tx, decision, ErrFeatureDenied, StatusCommunity, ReasonLocallyDisabled)
+		}
 	}
 	if check.Quota != "" {
 		decision.Limit = entitlement.MaxQuotaLimit

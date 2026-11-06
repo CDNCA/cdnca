@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 907 个 operation，并包含
-881 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 909 个 operation，并包含
+883 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -43,7 +43,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，632 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，634 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -198,6 +198,8 @@
 | `control.yaml` | `GET` | `/v1/admin/maintenance-upgrade-status` | `readMaintenanceUpgradeStatus` |
 | `control.yaml` | `POST` | `/v1/admin/market/plugin-downloads` | `downloadMarketPlugin` |
 | `control.yaml` | `GET` | `/v1/admin/market/plugin-library` | `getMarketPluginLibrary` |
+| `control.yaml` | `POST` | `/v1/admin/market/plugin-library/{plugin_id}/disable` | `disableMarketPluginLocally` |
+| `control.yaml` | `POST` | `/v1/admin/market/plugin-library/{plugin_id}/enable` | `enableMarketPluginLocally` |
 | `control.yaml` | `GET` | `/v1/admin/node-isolations` | `listNodeIsolationStates` |
 | `control.yaml` | `GET` | `/v1/admin/notifications/channels` | `getNotificationChannels` |
 | `control.yaml` | `PUT` | `/v1/admin/notifications/channels` | `updateNotificationChannels` |

@@ -18,7 +18,8 @@ paths:
       description: >-
         Installed means an installation head exists in any tenant; enabled that one is enabled; withdrawn that a
         materialized artifact (data pack, ui_page, provider) was withdrawn by the platform because the licence moved
-        to another controller or ended. No query parameters are accepted.
+        to another controller or ended; locally_disabled that the platform administrator stopped the plugin on this
+        controller (POST .../disable). No query parameters are accepted.
       x-required-any-permission: [marketplace.browse, marketplace.purchase, marketplace.sell]
       responses:
         '200':
@@ -29,6 +30,66 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/Internal'}
+  /v1/admin/market/plugin-library/{plugin_id}/disable:
+    post:
+      operationId: disableMarketPluginLocally
+      x-summary-zh: "在本主控停用插件：本机所有租户不再可用其功能，授权与计费不变"
+      summary: Stop a plugin on this controller for every tenant
+      description: >-
+        Takes the plugin's feature code (module.*, pack.*, theme.*) out of the lease's grant on this controller: the
+        module API, its workers, menus and publication treat it as not licensed (entitlement_feature_denied), and
+        sites mounting a rule pack that needs it are republished without that pack. The licence, the lease, billing
+        and the plugin's configuration are untouched. A plugin already stopped keeps its first stop (same answer).
+        Installable plugins (themes, market rule packs, page plugins) are paused through their platform
+        installation record instead.
+      x-required-any-permission: [plugin_installations.platform.manage, platform.admin]
+      parameters:
+        - {$ref: '#/components/parameters/PluginIDPath'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LocalDisableInput'}
+      responses:
+        '200':
+          description: The plugin's local state (stopped)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LocalDisable'}
+        '400': {$ref: '#/components/responses/SwitchBadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/SwitchForbidden'}
+        '409': {$ref: '#/components/responses/IdempotencyConflict'}
+        '500': {$ref: '#/components/responses/Internal'}
+  /v1/admin/market/plugin-library/{plugin_id}/enable:
+    post:
+      operationId: enableMarketPluginLocally
+      x-summary-zh: "在本主控重新启用已停用的插件"
+      summary: Enable a plugin stopped on this controller again
+      description: >-
+        Lifts the local stop: the lease's grant applies again and sites mounting its rule packs are republished. A
+        plugin that is not stopped answers its state (locally_disabled false) and nothing changes.
+      x-required-any-permission: [plugin_installations.platform.manage, platform.admin]
+      parameters:
+        - {$ref: '#/components/parameters/PluginIDPath'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '200':
+          description: The plugin's local state (not stopped)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LocalDisable'}
+        '400': {$ref: '#/components/responses/SwitchBadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/SwitchForbidden'}
+        '409': {$ref: '#/components/responses/IdempotencyConflict'}
         '500': {$ref: '#/components/responses/Internal'}
   /v1/admin/market/plugin-downloads:
     post:
@@ -61,17 +122,49 @@ paths:
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    PluginIDPath:
+      name: plugin_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/PluginID'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Per-user key: a retry with the same key and body returns the first answer; another body under the same key
+        answers 409 idempotency_conflict.
+      schema: {type: string, minLength: 1, maxLength: 128}
   schemas:
     PluginID: {type: string, maxLength: 128, pattern: '^[a-z0-9]+([.-][a-z0-9]+)+$'}
     LibraryItem:
       type: object
       additionalProperties: false
-      required: [plugin_id, installed, enabled, withdrawn]
+      required: [plugin_id, installed, enabled, withdrawn, locally_disabled]
       properties:
         plugin_id: {$ref: '#/components/schemas/PluginID'}
         installed: {type: boolean}
         enabled: {type: boolean}
         withdrawn: {type: boolean}
+        locally_disabled: {type: boolean, description: Stopped on this controller by its platform administrator.}
+    FeatureCode: {type: string, maxLength: 96, pattern: '^(module|pack|theme)\.[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$'}
+    LocalDisableInput:
+      type: object
+      additionalProperties: false
+      required: [feature_code]
+      properties:
+        feature_code: {$ref: '#/components/schemas/FeatureCode'}
+    LocalDisable:
+      type: object
+      additionalProperties: false
+      required: [plugin_id, feature_code, locally_disabled]
+      properties:
+        plugin_id: {$ref: '#/components/schemas/PluginID'}
+        feature_code: {type: string, description: The stopped feature code; empty when the plugin was not stopped.}
+        locally_disabled: {type: boolean}
+        disabled_by: {type: string, format: uuid}
+        disabled_at: {type: string, format: date-time}
     PluginLibrary:
       type: object
       additionalProperties: false
@@ -113,6 +206,15 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
     Internal:
       description: 'Local store failure (internal)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    SwitchBadRequest:
+      description: 'Invalid request (idempotency_key_required, invalid_plugin_id, invalid_body; invalid: not a plugin feature code, or the code is stopped under another plugin)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    SwitchForbidden:
+      description: 'Not a platform session with plugin_installations.platform.manage or platform.admin (forbidden)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    IdempotencyConflict:
+      description: 'The Idempotency-Key was used with another request (idempotency_conflict)'
       content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
     MarketError:
       description: 'Market error passed through (e.g. purchase_required, not_found)'

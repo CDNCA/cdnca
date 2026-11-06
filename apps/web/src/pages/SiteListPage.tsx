@@ -92,6 +92,10 @@ import SiteHttpsQuickModal from './SiteHttpsQuickModal'
 import { AdvancedFilters, FeedbackWhen, IdOrNameInput, OutcomeUnknown, useLiveApply, type AdvancedFilterItem } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from './filterUrl'
 import { siteSearch, userSearch } from './idNameSources'
+import '../i18n/marketNames'
+
+// the seller-side name of a node-market subscriber's restricted user (marketsupply tenantDisplayName).
+const marketTenantName = (name: string) => name.startsWith('市场订阅 ')
 
 type SiteFilters = Omit<SiteListParams, 'page' | 'limit'>
 
@@ -1645,6 +1649,7 @@ function SiteListPageSession({
   role: 'admin' | 'user'
 }) {
   const { t, i18n } = useTranslation('sites')
+  const { t: tn } = useTranslation('marketNames')
   const { t: tCreate } = useTranslation('siteCreate')
   const { t: tCname, i18n: i18nInstance } = useTranslation('siteCnameRegeneration')
   const { t: tExport } = useTranslation('siteDomainExport')
@@ -2515,7 +2520,8 @@ function SiteListPageSession({
               <span className="site-domain-owner">
                 <span className="site-cell-label">{t('columns.owner')}</span>
                 {item.owner ? (
-                  <Button type="link" size="small" onClick={() => navigate(`/sys/user?display_id=${encodeURIComponent(item.owner!.display_id || '')}`)} disabled={!item.owner.display_id}>
+                  <Button type="link" size="small" onClick={() => navigate(`/sys/user?display_id=${encodeURIComponent(item.owner!.display_id || '')}`)} disabled={!item.owner.display_id}
+                    title={marketTenantName(item.owner.display_name) ? tn('sellerTenant') : undefined}>
                     {item.owner.display_name} ({item.owner.display_id || item.owner.id})
                   </Button>
                 ) : (
@@ -2777,7 +2783,7 @@ function SiteListPageSession({
           )
         },
       },
-    ], [batchLocked, canManageLock, canManageSites, canReadDNSReconcile, canRegenerateCname, i18nInstance, language, loadLockDetail, managementLocked, modal, navigate, openBatchAction, openSiteRegenerate, role, t, tCname, tQuick])
+    ], [batchLocked, canManageLock, canManageSites, canReadDNSReconcile, canRegenerateCname, i18nInstance, language, loadLockDetail, managementLocked, modal, navigate, openBatchAction, openSiteRegenerate, role, t, tCname, tn, tQuick])
 
   const updateDraft = (key: keyof SiteFilters, value: string) => {
     setAdvancedDraft((current) => ({ ...current, [key]: value }))

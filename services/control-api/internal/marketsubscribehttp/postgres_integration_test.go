@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -197,4 +198,53 @@ func TestPostgresPluginLibrary(t *testing.T) {
 		}
 	}
 	t.Fatalf("plugin %s missing from %+v", plugin, items)
+}
+
+// a plugin stopped on this controller is listed with
+// locally_disabled (also when nothing else of it is local, an official
+// module) until it is enabled again.
+func TestPostgresPluginLocalSwitch(t *testing.T) {
+	pool := buyerTestPool(t)
+	var ok bool
+	if err := pool.QueryRow(t.Context(), `SELECT to_regclass('plugin_local_disables') IS NOT NULL`).Scan(&ok); err != nil || !ok {
+		t.Skip("database is not migrated through 644")
+	}
+	scope := platformScope(t, pool)
+	plugin := "io.localstop.m" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	code := "module.localstop_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	store := NewPostgresStore(pool)
+	c := Caller{UserID: uuid.New(), ScopeID: scope, ScopeKind: "platform"}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO users(id,username,display_name,password_hash) VALUES($1,$2,'localstop','unused')`,
+		c.UserID, "su2-"+strings.ReplaceAll(c.UserID.String(), "-", "")[:20]); err != nil {
+		t.Fatal(err)
+	}
+	listed := func() (LibraryItem, bool) {
+		t.Helper()
+		items, err := store.Library(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range items {
+			if item.PluginID == plugin {
+				return item, true
+			}
+		}
+		return LibraryItem{}, false
+	}
+	if _, found := listed(); found {
+		t.Fatalf("%s listed before it was stopped", plugin)
+	}
+	if item, err := store.DisablePlugin(t.Context(), c, "su2-"+plugin, entitlementguard.LocalDisableInput{
+		PluginID: plugin, FeatureCode: code}); err != nil || !item.Disabled {
+		t.Fatalf("DisablePlugin() = %+v, %v", item, err)
+	}
+	if item, found := listed(); !found || !item.LocallyDisabled || item.Installed || item.Enabled {
+		t.Fatalf("stopped item = %+v (found %v)", item, found)
+	}
+	if item, err := store.EnablePlugin(t.Context(), c, "su2-enable-"+plugin, plugin); err != nil || item.Disabled || item.FeatureCode != code {
+		t.Fatalf("EnablePlugin() = %+v, %v", item, err)
+	}
+	if _, found := listed(); found {
+		t.Fatalf("%s still listed after it was enabled again", plugin)
+	}
 }

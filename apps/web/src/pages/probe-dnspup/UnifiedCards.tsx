@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +10,9 @@ import {
   type ProbeMatrixCell, type ProbeOverrideInput, type ProbePurposeInput, type ProbePurposeStatus, type ProbeSelection,
   type ProbeWindow,
 } from '../../api/probeDNSPup'
+import { nodesApi } from '../../api/nodes'
+import { nodeSchedulingApi } from '../../api/nodeScheduling'
+import { useSessionStore } from '../../auth/session'
 import { MetricTrendChart } from '../../components/MetricTrendChart'
 import '../../i18n/probeDNSPup'
 import { FeedbackWhen, useFeedback } from '@cdnca/ui'
@@ -33,7 +36,8 @@ export function PurposesCard({ token }: { token: string }) {
   const [draft, setDraft] = useState<Record<string, ProbePurposeInput>>({})
   useEffect(() => {
     if (query.data) setDraft(Object.fromEntries(query.data.purposes.map((item) => [item.purpose, { purpose: item.purpose,
-      enabled: item.enabled, monthly_cap: item.monthly_cap, interval_seconds: item.interval_seconds }])))
+      enabled: item.enabled, monthly_cap: item.monthly_cap, interval_seconds: item.interval_seconds,
+      ...(item.probe_type ? { probe_type: item.probe_type } : {}) }])))
   }, [query.data])
   const save = useMutation({
     mutationFn: () => probeDNSPupUnifiedApi.savePurposes(token, Object.values(draft), newIdempotencyKey('probe-dnspup-purposes')),
@@ -72,6 +76,7 @@ export function PurposesCard({ token }: { token: string }) {
             aria-label={`${t(`unified.purposes.names.${item.purpose}`)} ${t('unified.purposes.columns.interval')}`}
             value={draft[item.purpose]?.interval_seconds ?? item.interval_seconds}
             onChange={(value) => set(item.purpose, { interval_seconds: value ?? 0 })} /> },
+          // The probe type applies to aggregated edge candidates only (edge_health, hidden here): no column.
           { title: t('unified.purposes.columns.used'), render: (_, item) => number(item.used_this_month) },
           { title: t('unified.purposes.columns.projected'), render: (_, item) => number(item.gate.projected_monthly) },
           { title: t('unified.purposes.columns.state'), render: (_, item) => state(item) },
@@ -169,9 +174,40 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
 interface OverrideForm extends SelectionValues {
   kind: 'node' | 'line_group'
   node_id?: string
-  tenant_scope_id?: string
   line_group_id?: string
   probe_type?: NodeProbeType | 'inherit'
+}
+
+interface SubjectOption { value: string; label: string; tenantScopeID?: string }
+
+// Searchable node picker: the inventory search matches name, IP, display ID and UUID.
+function NodePicker({ token, value, onChange }: { token: string; value?: string; onChange?: (value: string) => void }) {
+  const { t } = useTranslation('probeDNSPup')
+  const [search, setSearch] = useState('')
+  const [picked, setPicked] = useState<SubjectOption>()
+  const term = useDeferredValue(search.trim())
+  const query = useQuery({
+    queryKey: ['probe-dnspup-override-nodes', term],
+    queryFn: () => nodesApi.list(token, { limit: 50, ...(term ? { search: term } : {}) }),
+    enabled: Boolean(token), retry: false, staleTime: 60_000,
+  })
+  const options = (query.data?.items ?? []).map((node): SubjectOption => ({ value: node.id, label: `${node.name} (ID ${node.display_id})` }))
+  if (picked && picked.value === value && !options.some((option) => option.value === picked.value)) options.unshift(picked)
+  return <Select aria-label={t('unified.overrides.node')} showSearch filterOption={false} onSearch={setSearch} style={{ width: 360 }}
+    placeholder={t('unified.overrides.nodePlaceholder')} loading={query.isFetching} options={options} value={value}
+    notFoundContent={query.isError ? t('unified.overrides.listFailed') : t('unified.overrides.noMatch')}
+    onChange={(next: string) => { setPicked(options.find((option) => option.value === next)); onChange?.(next) }} />
+}
+
+// Line groups of the platform scope (the list carries each group's tenant scope).
+function useLineGroupOptions(token: string, enabled: boolean) {
+  const scopeID = useSessionStore((state) => state.principal?.scope_id ?? '')
+  return useQuery({
+    queryKey: ['probe-dnspup-override-line-groups', scopeID],
+    queryFn: async () => (await nodeSchedulingApi.list(token, { kind: 'platform', targetScopeId: scopeID })).items
+      .map((group): SubjectOption => ({ value: group.id, label: `${group.name} (ID ${group.display_id})`, tenantScopeID: group.tenant_scope_id })),
+    enabled: enabled && Boolean(token && scopeID), retry: false, staleTime: 60_000,
+  })
 }
 
 // Per node / line group overrides of the probe type and the selection.
@@ -184,13 +220,15 @@ export function OverridesCard({ token }: { token: string }) {
   const [form] = Form.useForm<OverrideForm>()
   const [adding, setAdding] = useState(false)
   const kind = Form.useWatch('kind', form)
+  const lineGroups = useLineGroupOptions(token, adding && kind === 'line_group')
   const query = useQuery({ queryKey: ['probe-dnspup-overrides'], queryFn: () => probeDNSPupUnifiedApi.overrides(token), enabled: Boolean(token) })
   const refresh = () => client.invalidateQueries({ queryKey: ['probe-dnspup-overrides'] })
   const save = useMutation({
     mutationFn: async () => {
       const values = await form.validateFields()
-      const input: ProbeOverrideInput = values.kind === 'node' ? { node_id: values.node_id?.trim() }
-        : { tenant_scope_id: values.tenant_scope_id?.trim(), line_group_id: values.line_group_id?.trim() }
+      const group = lineGroups.data?.find((option) => option.value === values.line_group_id)
+      const input: ProbeOverrideInput = values.kind === 'node' ? { node_id: values.node_id }
+        : { tenant_scope_id: group?.tenantScopeID, line_group_id: values.line_group_id }
       if (values.probe_type && values.probe_type !== 'inherit') input.probe_type = values.probe_type
       const selection: ProbeSelection | null = selectionOf(values)
       if (selection) input.selection = selection
@@ -213,7 +251,8 @@ export function OverridesCard({ token }: { token: string }) {
         locale={{ emptyText: t('unified.overrides.empty') }} scroll={{ x: true }}
         columns={[
           { title: t('unified.overrides.subject'), render: (_, item) => <Space size={4}>
-            <Tag>{t(`unified.overrides.kinds.${item.subject_kind}`)}</Tag>{item.subject_name || item.node_id || item.line_group_id}</Space> },
+            <Tag>{t(`unified.overrides.kinds.${item.subject_kind}`)}</Tag>{item.subject_name || t('unified.overrides.unnamed')}
+            <Typography.Text type="secondary" copyable={{ text: item.node_id ?? item.line_group_id }}>{item.node_id ?? item.line_group_id}</Typography.Text></Space> },
           { title: t('unified.node.probeType'), render: (_, item) => item.probe_type ? t(`unified.node.probeTypes.${item.probe_type}`) : t('unified.overrides.inherit') },
           { title: t('unified.selection.title'), render: (_, item) => item.selection
             ? [...(item.selection.areas ?? []).map((value) => t(`unified.areas.${value}`)),
@@ -226,10 +265,15 @@ export function OverridesCard({ token }: { token: string }) {
         <Form.Item name="kind" label={t('unified.overrides.subject')}>
           <Select aria-label={t('unified.overrides.subject')} options={(['node', 'line_group'] as const).map((value) => ({ value, label: t(`unified.overrides.kinds.${value}`) }))} />
         </Form.Item>
-        {kind === 'line_group' ? <Space wrap>
-          <Form.Item name="tenant_scope_id" label={t('unified.overrides.tenantScopeID')} rules={[{ required: true }]}><Input style={{ width: 320 }} /></Form.Item>
-          <Form.Item name="line_group_id" label={t('unified.overrides.lineGroupID')} rules={[{ required: true }]}><Input style={{ width: 320 }} /></Form.Item>
-        </Space> : <Form.Item name="node_id" label={t('unified.overrides.nodeID')} rules={[{ required: true }]}><Input style={{ width: 320 }} /></Form.Item>}
+        {kind === 'line_group'
+          ? <Form.Item name="line_group_id" label={t('unified.overrides.lineGroup')} rules={[{ required: true, message: t('unified.overrides.required') }]}>
+            <Select aria-label={t('unified.overrides.lineGroup')} showSearch optionFilterProp="label" style={{ width: 360 }}
+              placeholder={t('unified.overrides.lineGroupPlaceholder')} loading={lineGroups.isFetching} options={lineGroups.data ?? []}
+              notFoundContent={lineGroups.isError ? t('unified.overrides.listFailed') : t('unified.overrides.noMatch')} />
+          </Form.Item>
+          : <Form.Item name="node_id" label={t('unified.overrides.node')} rules={[{ required: true, message: t('unified.overrides.required') }]}>
+            <NodePicker token={token} />
+          </Form.Item>}
         <Form.Item name="probe_type" label={t('unified.node.probeType')}>
           <Select aria-label={t('unified.node.probeType')} options={[{ value: 'inherit', label: t('unified.overrides.inherit') },
             ...nodeProbeTypes.map((value) => ({ value, label: t(`unified.node.probeTypes.${value}`) }))]} />

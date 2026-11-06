@@ -1,4 +1,5 @@
 import type { MarketLibraryItem, MarketLicense, MarketPlugin, MarketPricePlan } from '../../api/market'
+import type { PluginInstallation } from '../../api/pluginInstallations'
 import type { PluginUIPage } from '../../api/pluginUI'
 import { pluginPagePath } from '../../pluginui/usePluginUIPages'
 import { moduleRoutePath } from '../../routes/navigation'
@@ -37,7 +38,10 @@ export function headlinePlan(plans: MarketPricePlan[] | undefined): MarketPriceP
 //   enabled      the lease grants the official feature code (the function itself is on);
 //   activating   official entry licensed, the lease has not picked the feature code up yet;
 //   revoked      held here before but the licence ended or moved to another controller (授权失效).
-export type StoreState = 'purchase' | 'distributing' | 'enable' | 'installed' | 'enabled' | 'activating' | 'revoked'
+//   disabled     stopped on this controller (停用, can be enabled again): an official feature plugin through the local stop
+//                list (library locally_disabled), an installable one through its platform installation
+//                record (paused here or by the platform; only known to a session that reads those records).
+export type StoreState = 'purchase' | 'distributing' | 'enable' | 'installed' | 'enabled' | 'activating' | 'revoked' | 'disabled'
 
 // Kinds that only work once the controller's platform administrator confirmed an installation (user
 // 11-05): themes and rule packs for the controller, page plugins and external services for the tenants chosen.
@@ -52,10 +56,13 @@ export function needsInstallConfirm(plugin: Pick<MarketPlugin, 'kind'>): boolean
 }
 
 export function storeState(plugin: MarketPlugin, licenses: MarketLicense[], library: MarketLibraryItem[],
-  modules: string[]): StoreState {
+  modules: string[], installation?: Pick<PluginInstallation, 'status'>): StoreState {
   const licensed = !!liveLicense(licenses, plugin.plugin_id)
   const local = library.find((item) => item.plugin_id === plugin.plugin_id)
   if (!licensed) return local && (local.installed || local.withdrawn) ? 'revoked' : 'purchase'
+  if (local?.locally_disabled) return 'disabled'
+  // The library only says installed and not enabled, which a pending confirmation is too; the record tells them apart.
+  if (installation?.status === 'disabled') return 'disabled'
   if (plugin.feature_code && !installFirstKinds.has(plugin.kind)) return modules.includes(plugin.feature_code) ? 'enabled' : 'activating'
   if (local?.enabled) return 'installed'
   if (local?.installed) return 'enable'
@@ -103,15 +110,79 @@ export function configPath(plugin: Pick<MarketPlugin, 'plugin_id' | 'kind' | 'ap
   return (code ? moduleRoutePath('admin', code) ?? featurePages[code] : undefined) ?? enablePath(plugin)
 }
 
-export type OwnedState = Exclude<StoreState, 'purchase'> | 'pendingConfirm'
+// The platform installation record a card or row acts on: the installed (enabled/disabled) one first, otherwise any
+// record not uninstalled. Platform records only (/v1/platform/plugin-installations), which this controller's
+// administrator disables and resumes.
+export function installationOf(items: readonly PluginInstallation[], pluginID: string): PluginInstallation | undefined {
+  const current = items.filter((item) => item.plugin_id === pluginID && item.status !== 'uninstalled')
+  return current.find((item) => item.status === 'enabled' || item.status === 'disabled') ?? current[0]
+}
 
-export interface OwnedRow { pluginID: string; plugin?: MarketPlugin; state: OwnedState; path: string | null }
+// Paused by this controller (停用): the same record can be resumed here. A platform pause cannot (resume answers 409).
+export function resumable(installation: Pick<PluginInstallation, 'status' | 'authorization_status' | 'paused_by'>): boolean {
+  return installation.status === 'disabled' && installation.authorization_status === 'disabled' &&
+    installation.paused_by === 'installation'
+}
+
+// A feature plugin the lease switches on is stopped on this controller through the local stop list (停用 / 重新启用):
+// every plugin with an official feature code except the install-first kinds, which pause their installation
+// record instead.
+export function localSwitchable(plugin: Pick<MarketPlugin, 'kind' | 'feature_code'>): boolean {
+  return Boolean(plugin.feature_code) && !installFirstKinds.has(plugin.kind)
+}
+
+// Codes that only work while another one does (control-api): automatic mitigation and attack auto-escalation act on
+// 智能自动防御's verdicts (autodefense_runtime.go grants: no module.autodefense sends the empty snapshot;
+// escalate/worker.go reads autodefense_site_node_states).
+const featureNeeds: Record<string, string> = {
+  'module.autodefense.auto': 'module.autodefense',
+  'module.escalate': 'module.autodefense',
+}
+
+// The plugins still on here that stop working with featureCode (the stop confirmation lists them; their own state is
+// left as it is).
+export function dependentsOf<T extends Pick<MarketPlugin, 'feature_code'>>(featureCode: string, plugins: readonly T[],
+  modules: readonly string[]): T[] {
+  return plugins.filter((p) => p.feature_code && featureNeeds[p.feature_code] === featureCode && modules.includes(p.feature_code))
+}
+
+// Setup a feature still needs, only where this console already reads it: dnspup 拨测 is active once enabled with a
+// key pair (control-api dnspupprobe: Active = licensed && enabled && secret_configured && not paused), so no secret
+// is 未配置 and enabled=false is 已关闭. Every other feature: unknown here, null (the card links without a mark).
+export function moduleSetup(featureCode: string, dnspup: { enabled: boolean; secret_configured: boolean } | undefined):
+  'unconfigured' | 'off' | null {
+  if (featureCode !== 'module.probe.dnspup' || !dnspup) return null
+  if (!dnspup.secret_configured) return 'unconfigured'
+  return dnspup.enabled ? null : 'off'
+}
+
+// What an installable plugin that is licensed here but has no local installation yet waits for. Only from data the
+// console already reads:
+//   noVersion      the market entry has no latest_version: the market lists only published versions there
+//                  (market-service plugin.go, status = 'published'), so there is nothing to install yet;
+//   pendingConfirm a platform installation record of it exists: the controller administrator confirms it below;
+//   awaitingSync   anything else: a version exists but no record arrived yet (license catalog still syncing, or the
+//                  license catalog lacks it; the console cannot tell these apart), or the records cannot be read here.
+export type InstallWait = 'noVersion' | 'pendingConfirm' | 'awaitingSync'
+export function installWait(pluginID: string, plugin: Pick<MarketPlugin, 'latest_version'> | undefined,
+  installations: readonly PluginInstallation[] | undefined): InstallWait {
+  if (plugin && !plugin.latest_version) return 'noVersion'
+  return installations && installationOf(installations, pluginID) ? 'pendingConfirm' : 'awaitingSync'
+}
+
+export type OwnedState = Exclude<StoreState, 'purchase'> | InstallWait
+
+export interface OwnedRow {
+  pluginID: string; plugin?: MarketPlugin; state: OwnedState; path: string | null; installation?: PluginInstallation
+}
 
 // ownedRows: every plugin this controller holds (a live licence) or held (a local installation whose licence
 // ended), in licence order. The state is the same server-derived one the Browse cards show; an installable plugin
-// still on its way waits for the controller administrator (the installation records below).
+// still on its way says what it waits for (installWait). installations: the platform records, undefined when this
+// session cannot read them.
 export function ownedRows(licenses: MarketLicense[], library: MarketLibraryItem[], modules: string[],
-  catalog: Map<string, MarketPlugin>, path: (plugin: MarketPlugin) => string | null): OwnedRow[] {
+  catalog: Map<string, MarketPlugin>, path: (plugin: MarketPlugin) => string | null,
+  installations?: readonly PluginInstallation[]): OwnedRow[] {
   const ids = [...new Set([
     ...licenses.filter((l) => liveLicense([l], l.plugin_id)).map((l) => l.plugin_id),
     ...library.filter((item) => item.installed || item.withdrawn).map((item) => item.plugin_id),
@@ -119,11 +190,14 @@ export function ownedRows(licenses: MarketLicense[], library: MarketLibraryItem[
   return ids.map((pluginID) => {
     const plugin = catalog.get(pluginID)
     const subject = plugin ?? { plugin_id: pluginID, kind: 'module', feature_code: null } as unknown as MarketPlugin
-    const state = storeState(subject, licenses, library, modules)
+    const installation = installationOf(installations ?? [], pluginID)
+    const state = storeState(subject, licenses, library, modules, installation)
     return {
-      pluginID, plugin, state: state === 'distributing' && needsInstallConfirm(subject) ? 'pendingConfirm' : state as OwnedState,
-      // 去配置只给已在本机可用的：授权生效中、同步中、待确认安装时对应页面还进不去。
+      pluginID, plugin,
+      state: state === 'distributing' && needsInstallConfirm(subject) ? installWait(pluginID, plugin, installations) : state as OwnedState,
+      // 去配置只给已在本机可用的：授权生效中、同步中、待确认安装、已停用时对应页面还进不去。
       path: plugin && (state === 'enabled' || state === 'installed' || state === 'enable') ? path(plugin) : null,
+      installation,
     }
   })
 }

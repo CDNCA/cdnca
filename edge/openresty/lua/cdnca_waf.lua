@@ -3309,11 +3309,13 @@ function _M.gate(raw)
     if ngx.var.uri == WAF_VERIFY_PATH then return verify(dict, spec, address) end
     if dict:get(ban_key(spec, address)) then return send_ban(dict, spec, address) end
     -- A ban of the ban list library (another node's
-    -- automatic ban of the client on this site, or a manual one).
+    -- automatic ban of the client on this site, or a manual one). Only a
+    -- site the list has a ban of is looked up; listed(site, true)
+    -- reads the list's generation every request, so a ban applies at once.
     local site = spec.scope:match("^site:(.+)$")
     if site then
         local ok, banlist = pcall(require, "cdnca_banlist")
-        if ok and banlist then
+        if ok and banlist and banlist.listed(site, true) then
             local remaining = banlist.banned(site, address)
             if remaining then return banlist.deny(remaining, telemetry_vars.block_page) end
         end

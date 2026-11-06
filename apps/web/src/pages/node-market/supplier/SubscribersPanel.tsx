@@ -10,6 +10,7 @@ import { marketApi } from '../../../api/market'
 import { complaintCategories, marketSupplierApi, supplierPageSize, type ComplaintCategory, type SupplierSubscriber } from '../../../api/marketSupplier'
 import { CursorPager, LoadFailure, Short, SupplyStateTag, useCursorPages } from './shared'
 import { formatBytes, useErrorText, useTime, useToken, useWrite } from './hooks'
+import { SubscriberCode, SubscriberCodeTitle } from '../MarketLabel'
 
 const targetOf = (row: SupplierSubscriber) => (row.relation === 'direct' ? row.subscription_id : row.downstream_ref ?? '')
 const rowKey = (row: SupplierSubscriber) => `${row.subscription_id}/${row.downstream_ref ?? ''}`
@@ -115,6 +116,7 @@ export function SubscribersPanel() {
             ? <Space size={4}><span>{r.buyer_name ?? '—'}</span><Short value={r.buyer_id} /></Space>
             : <Space direction="vertical" size={0}><Typography.Text code>{r.downstream_ref}</Typography.Text>
               {r.via_name ? <Typography.Text type="secondary">{t('common.via', { name: r.via_name })}</Typography.Text> : null}</Space> },
+          { title: <SubscriberCodeTitle />, key: 'code', render: (_: unknown, r) => <SubscriberCode row={r} /> },
           { title: t('subscribers.status'), dataIndex: 'status', render: (v: string) => t(`common.subscriptionStates.${v}`, { defaultValue: v }) },
           { title: t('subscribers.state'), dataIndex: 'supply_state', render: (v: string) => <SupplyStateTag value={v} /> },
           { title: t('subscribers.paidThrough'), dataIndex: 'paid_through', render: time },

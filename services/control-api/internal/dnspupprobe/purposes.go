@@ -27,8 +27,10 @@ type PurposeStatus struct {
 	Enabled         bool   `json:"enabled"`
 	MonthlyCap      int64  `json:"monthly_cap"`
 	IntervalSeconds int    `json:"interval_seconds"`
-	UsedThisMonth   int64  `json:"used_this_month"`
-	Gate            Gate   `json:"gate"`
+	// ProbeType is set for edge_health only (tcping / https).
+	ProbeType     string `json:"probe_type,omitempty"`
+	UsedThisMonth int64  `json:"used_this_month"`
+	Gate          Gate   `json:"gate"`
 }
 
 // PurposesView is GET /v1/admin/probe-dnspup/purposes.
@@ -46,7 +48,12 @@ type PurposeInput struct {
 	Enabled         *bool  `json:"enabled"`
 	MonthlyCap      *int64 `json:"monthly_cap"`
 	IntervalSeconds *int   `json:"interval_seconds"`
+	// ProbeType: edge_health only, tcping / https; omitted keeps the stored type.
+	ProbeType *string `json:"probe_type,omitempty"`
 }
+
+// EdgeProbeTypes are the probe types the edge_health purpose may use.
+var EdgeProbeTypes = []string{"tcping", "https"}
 
 func monthOf(now time.Time) time.Time {
 	now = now.UTC()
@@ -64,7 +71,7 @@ func readPurposes(ctx context.Context, db queryRower, now time.Time) (PurposesVi
 		return view, errors.New("dnspup purposes: querier required")
 	}
 	rows, err := querier.Query(ctx, `SELECT purpose.purpose,purpose.enabled,purpose.monthly_cap,purpose.interval_seconds,
-		COALESCE(usage.requests,0) FROM probe_dnspup_purposes purpose
+		COALESCE(purpose.probe_type,''),COALESCE(usage.requests,0) FROM probe_dnspup_purposes purpose
 		LEFT JOIN probe_dnspup_usage usage ON usage.purpose=purpose.purpose AND usage.month=$1`, monthOf(now))
 	if err != nil {
 		return view, err
@@ -72,7 +79,8 @@ func readPurposes(ctx context.Context, db queryRower, now time.Time) (PurposesVi
 	byName := map[string]PurposeStatus{}
 	for rows.Next() {
 		var item PurposeStatus
-		if err := rows.Scan(&item.Purpose, &item.Enabled, &item.MonthlyCap, &item.IntervalSeconds, &item.UsedThisMonth); err != nil {
+		if err := rows.Scan(&item.Purpose, &item.Enabled, &item.MonthlyCap, &item.IntervalSeconds, &item.ProbeType,
+			&item.UsedThisMonth); err != nil {
 			rows.Close()
 			return view, err
 		}
@@ -107,14 +115,25 @@ func readPurposes(ctx context.Context, db queryRower, now time.Time) (PurposesVi
 	return view, nil
 }
 
-// gates are the runtime's per-purpose gate and minimum interval.
-func gates(view PurposesView) (map[string]Gate, map[string]time.Duration) {
-	out, intervals := map[string]Gate{}, map[string]time.Duration{}
+// gates are the runtime's per-purpose gate, minimum interval and probe type.
+func gates(view PurposesView) (map[string]Gate, map[string]time.Duration, map[string]string) {
+	out, intervals, types := map[string]Gate{}, map[string]time.Duration{}, map[string]string{}
 	for _, item := range view.Purposes {
 		out[item.Purpose] = item.Gate
 		intervals[item.Purpose] = time.Duration(item.IntervalSeconds) * time.Second
+		if item.ProbeType != "" {
+			types[item.Purpose] = item.ProbeType
+		}
 	}
-	return out, intervals
+	return out, intervals, types
+}
+
+// ProbeTypeFor is consumer's configured probe type, fallback when unset.
+func (runtime Runtime) ProbeTypeFor(consumer, fallback string) string {
+	if value := runtime.ProbeTypes[ConsumerPurposes[consumer]]; value != "" {
+		return value
+	}
+	return fallback
 }
 
 // RoundFor is consumer's dnspup round: the runner's interval, raised to the
@@ -189,7 +208,8 @@ func (service *Service) updatePurposes(ctx context.Context, actor Actor, key str
 		if !slices.Contains(purposeOrder, input.Purpose) || seen[input.Purpose] || input.Enabled == nil ||
 			input.MonthlyCap == nil || input.IntervalSeconds == nil || *input.MonthlyCap < 0 || *input.MonthlyCap > 1_000_000_000 ||
 			*input.IntervalSeconds < 0 || *input.IntervalSeconds > 86400 ||
-			!*input.Enabled && PurposeClasses[input.Purpose] == ClassAvailability {
+			!*input.Enabled && PurposeClasses[input.Purpose] == ClassAvailability ||
+			input.ProbeType != nil && (input.Purpose != PurposeEdgeHealth || !slices.Contains(EdgeProbeTypes, *input.ProbeType)) {
 			return PurposesView{}, ErrInvalidInput
 		}
 		seen[input.Purpose] = true
@@ -213,20 +233,27 @@ func (service *Service) updatePurposes(ctx context.Context, actor Actor, key str
 		changes := map[string]any{}
 		for _, input := range inputs {
 			if _, err := tx.Exec(ctx, `UPDATE probe_dnspup_purposes SET enabled=$2,monthly_cap=$3,interval_seconds=$4,
-				updated_by_user_id=$5,updated_at=$6 WHERE purpose=$1`, input.Purpose, *input.Enabled, *input.MonthlyCap,
-				*input.IntervalSeconds, actor.UserID, now); err != nil {
+				probe_type=COALESCE($7,probe_type),updated_by_user_id=$5,updated_at=$6 WHERE purpose=$1`, input.Purpose,
+				*input.Enabled, *input.MonthlyCap, *input.IntervalSeconds, actor.UserID, now, input.ProbeType); err != nil {
 				return err
 			}
 			for _, item := range before.Purposes {
 				if item.Purpose != input.Purpose {
 					continue
 				}
-				left, _ := json.Marshal([]any{item.Enabled, item.MonthlyCap, item.IntervalSeconds})
-				right, _ := json.Marshal([]any{*input.Enabled, *input.MonthlyCap, *input.IntervalSeconds})
+				probeType := item.ProbeType
+				if input.ProbeType != nil {
+					probeType = *input.ProbeType
+				}
+				left, _ := json.Marshal([]any{item.Enabled, item.MonthlyCap, item.IntervalSeconds, item.ProbeType})
+				right, _ := json.Marshal([]any{*input.Enabled, *input.MonthlyCap, *input.IntervalSeconds, probeType})
 				if !bytes.Equal(left, right) {
-					changes[input.Purpose] = map[string]any{
-						"before": map[string]any{"enabled": item.Enabled, "monthly_cap": item.MonthlyCap, "interval_seconds": item.IntervalSeconds},
-						"after":  map[string]any{"enabled": *input.Enabled, "monthly_cap": *input.MonthlyCap, "interval_seconds": *input.IntervalSeconds}}
+					before := map[string]any{"enabled": item.Enabled, "monthly_cap": item.MonthlyCap, "interval_seconds": item.IntervalSeconds}
+					after := map[string]any{"enabled": *input.Enabled, "monthly_cap": *input.MonthlyCap, "interval_seconds": *input.IntervalSeconds}
+					if input.Purpose == PurposeEdgeHealth {
+						before["probe_type"], after["probe_type"] = item.ProbeType, probeType
+					}
+					changes[input.Purpose] = map[string]any{"before": before, "after": after}
 				}
 			}
 		}

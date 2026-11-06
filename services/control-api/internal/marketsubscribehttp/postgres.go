@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/artifactsync"
+	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
+	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -16,10 +19,33 @@ import (
 type PostgresStore struct {
 	pool *pgxpool.Pool
 	now  func() time.Time
+	// switches is the local stop list; a change republishes the
+	// scopes whose sites mount a pack needing the code.
+	switches *entitlementguard.LocalDisableStore
 }
 
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
-	return &PostgresStore{pool: pool, now: func() time.Time { return time.Now().UTC() }}
+	now := func() time.Time { return time.Now().UTC() }
+	return &PostgresStore{pool: pool, now: now, switches: entitlementguard.NewLocalDisableStore(pool, now,
+		func(ctx context.Context, tx pgx.Tx, codes []string) error {
+			_, err := edgeautopublish.RepublishLocalPluginChangeTx(ctx, tx, codes)
+			return err
+		})}
+}
+
+// DisablePlugin stops a plugin on this controller (entitlementguard.LocalDisableStore).
+func (s *PostgresStore) DisablePlugin(ctx context.Context, c Caller, key string,
+	input entitlementguard.LocalDisableInput) (entitlementguard.LocalDisable, error) {
+	return s.switches.Disable(ctx, switchActor(ctx, c), key, input)
+}
+
+// EnablePlugin lifts a local stop.
+func (s *PostgresStore) EnablePlugin(ctx context.Context, c Caller, key, pluginID string) (entitlementguard.LocalDisable, error) {
+	return s.switches.Enable(ctx, switchActor(ctx, c), key, pluginID)
+}
+
+func switchActor(ctx context.Context, c Caller) entitlementguard.LocalDisableActor {
+	return entitlementguard.LocalDisableActor{UserID: c.UserID, ScopeID: c.ScopeID, IP: audit.SourceIPFrom(ctx)}
 }
 
 // Advisories lists published advisories, newest first, with this scope's
@@ -137,7 +163,8 @@ func mapPG(err error) error {
 // 386, 397): installation heads, and artifacts the platform withdrew. Only heads
 // of the installation the current verified catalog was signed for count: a head
 // kept from an earlier installation (migration/restore) is neither installed nor
-// enabled here; with no applied catalog no head counts.
+// enabled here; with no applied catalog no head counts. A plugin stopped on this
+// controller (644 plugin_local_disables) is listed with locally_disabled.
 func (s *PostgresStore) Library(ctx context.Context) ([]LibraryItem, error) {
 	target, err := artifactsync.VerifiedCatalogInstallation(ctx, s.pool)
 	if err != nil {
@@ -151,8 +178,10 @@ func (s *PostgresStore) Library(ctx context.Context) ([]LibraryItem, error) {
 			WHERE status <> 'uninstalled' AND installation_id = $1::uuid GROUP BY plugin_id)
 		SELECT p.plugin_id, h.plugin_id IS NOT NULL, COALESCE(h.enabled, false),
 			COALESCE((SELECT bool_or(a.status = 'withdrawn') AND NOT bool_or(a.status = 'active') FROM artifacts a
-				WHERE a.plugin_id = p.plugin_id), false)
-		FROM (SELECT plugin_id FROM heads UNION SELECT plugin_id FROM artifacts) p
+				WHERE a.plugin_id = p.plugin_id), false),
+			EXISTS (SELECT 1 FROM plugin_local_disables d WHERE d.plugin_id = p.plugin_id)
+		FROM (SELECT plugin_id FROM heads UNION SELECT plugin_id FROM artifacts
+			UNION SELECT plugin_id FROM plugin_local_disables) p
 		LEFT JOIN heads h ON h.plugin_id = p.plugin_id
 		ORDER BY p.plugin_id LIMIT 1000`, target)
 	if err != nil {
@@ -162,7 +191,7 @@ func (s *PostgresStore) Library(ctx context.Context) ([]LibraryItem, error) {
 	items := []LibraryItem{}
 	for rows.Next() {
 		var item LibraryItem
-		if err := rows.Scan(&item.PluginID, &item.Installed, &item.Enabled, &item.Withdrawn); err != nil {
+		if err := rows.Scan(&item.PluginID, &item.Installed, &item.Enabled, &item.Withdrawn, &item.LocallyDisabled); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

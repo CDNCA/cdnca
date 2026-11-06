@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, List, Result, Row, Select, Space, Spin, Tabs, Tag, Typography } from 'antd'
+import { Alert, App, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, List, Result, Row, Select, Space, Spin, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ShieldOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -16,11 +16,17 @@ import { LicensesTab } from '../plugin-market/PluginStorePage'
 import { activePlans, highRiskPermission } from '../plugin-market/pluginStoreModel'
 import { useAdvisories } from '../plugin-market/useAdvisories'
 import { pluginDescription, pluginSummary, pluginTitle } from '../plugin-market/usePluginCatalog'
-import { acquiredPendingInstall, enablePath, needsInstallConfirm, planPrice, publisherOf, storeState, type StoreState } from './marketModel'
+import type { PluginInstallation } from '../../api/pluginInstallations'
+import {
+  acquiredPendingInstall, dependentsOf, enablePath, installationOf, installWait, localSwitchable, moduleSetup, needsInstallConfirm, planPrice,
+  publisherOf, storeState, type InstallWait, type StoreState,
+} from './marketModel'
 import { PriceTag, PublisherBadge } from './PriceTag'
 import { PurchaseModal } from './PurchaseModal'
 import { MarketNotJoined } from './MarketNotJoined'
 import { OwnedPlugins } from './OwnedPlugins'
+import { useConfigPath, useDNSPupStatus, usePlatformInstallations } from './marketHooks'
+import { FeatureSwitch, InstallationSwitch } from './PluginSwitch'
 import { useMarketConnection } from './useMarketConnection'
 import { CursorPager, LoadFailure, useCursorPages } from '../node-market/supplier/shared'
 import './messages'
@@ -42,12 +48,14 @@ function LoadError({ error }: { error: unknown }) {
 
 interface Holdings { licenses: MarketLicense[]; library: MarketLibraryItem[]; modules: readonly string[]; loading: boolean }
 
-function StateHint({ plugin, state }: { plugin: MarketPlugin; state: StoreState }) {
+function StateHint({ plugin, state, wait }: { plugin: MarketPlugin; state: StoreState; wait?: InstallWait }) {
   const { t } = useTranslation('marketStore')
   if (state === 'revoked') return <Alert type="error" showIcon message={t('state.revoked')} description={t('state.revokedHint')} />
   if (state === 'activating') return <Alert type="info" showIcon message={t('state.activatingHint')} />
   if (state === 'distributing') {
     // Installable plugins wait for the controller administrator under 我的插件 (tenant plugins with chosen tenants).
+    if (wait === 'noVersion') return <Alert type="info" showIcon message={t('owned.states.noVersion')} description={t('state.noVersionHint')} />
+    if (wait === 'awaitingSync') return <Alert type="info" showIcon message={t('owned.states.awaitingSync')} description={t('state.awaitingSyncHint')} />
     if (needsInstallConfirm(plugin)) {
       return <Alert type="info" showIcon message={t('state.platformConfirm')}
         description={<>{t('state.platformConfirmHint')} <Link to="/sys/plugin-store?tab=mine">{t('state.goMine')}</Link></>} />
@@ -60,9 +68,37 @@ function StateHint({ plugin, state }: { plugin: MarketPlugin; state: StoreState 
     : <Alert type="success" showIcon message={t('state.enableTenant')} />
 }
 
-// StoreAction is the one button of the 获取/购买 → 同步 → 启用 flow.
-function StoreAction({ plugin, state, canBuy, onBuy, onDownload, downloading }: {
-  plugin: MarketPlugin; state: StoreState; canBuy: boolean; onBuy: () => void; onDownload: () => void; downloading: boolean
+// The card's way to the plugin once it is usable here: its configuration page, and what it still needs.
+// wait: what an installable plugin still on its way waits for (installWait); undefined when it is not one.
+// local: stopped on this controller through the local stop list; dependents: names of the plugins still on
+// that stop working when it is stopped.
+interface Usable {
+  path: string | null; setup: 'unconfigured' | 'off' | null; installation?: PluginInstallation; name: string; wait?: InstallWait
+  local: boolean; dependents: string[]
+}
+
+// StoreAction is the 获取/购买 → 同步 → 启用 flow: its state (once usable, a link to the configuration page) and the
+// 停用 / 重新启用 switch, as two pieces so the card footer can put them on its two ends.
+function StoreAction(props: {
+  plugin: MarketPlugin; state: StoreState; canBuy: boolean; onBuy: () => void; onDownload: () => void; downloading: boolean; usable: Usable
+}) {
+  const { plugin, state, usable } = props
+  let toggle: ReactNode = null
+  if (state === 'disabled' && usable.local) {
+    toggle = <FeatureSwitch plugin={plugin} name={usable.name} stopped dependents={[]} />
+  } else if (state === 'enabled' && localSwitchable(plugin)) {
+    toggle = <FeatureSwitch plugin={plugin} name={usable.name} stopped={false} dependents={usable.dependents} />
+  } else if ((state === 'installed' || state === 'disabled') && usable.installation) {
+    toggle = <InstallationSwitch installation={usable.installation} name={usable.name} />
+  }
+  return <>
+    <span className="market-store-status"><StoreStatus {...props} /></span>
+    {toggle ? <span className="market-store-toggle">{toggle}</span> : null}
+  </>
+}
+
+function StoreStatus({ plugin, state, canBuy, onBuy, onDownload, downloading, usable }: {
+  plugin: MarketPlugin; state: StoreState; canBuy: boolean; onBuy: () => void; onDownload: () => void; downloading: boolean; usable: Usable
 }) {
   const { t } = useTranslation('marketStore')
   const free = activePlans(plugin.price_plans ?? []).some((p) => p.kind === 'free')
@@ -71,6 +107,13 @@ function StoreAction({ plugin, state, canBuy, onBuy, onDownload, downloading }: 
       return free ? <Button type="primary" disabled={!canBuy} loading={downloading} onClick={onDownload}>{t('state.get')}</Button>
         : <Button type="primary" disabled={!canBuy || !activePlans(plugin.price_plans ?? []).length} onClick={onBuy}>{t('state.purchase')}</Button>
     case 'distributing':
+      // Nothing to confirm yet: no published version, or (read from the records) none has arrived here.
+      if (usable.wait === 'noVersion') {
+        return <Tooltip title={t('state.noVersionHint')}><Tag>{t('owned.states.noVersion')}</Tag></Tooltip>
+      }
+      if (usable.wait === 'awaitingSync') {
+        return <Tooltip title={t('state.awaitingSyncHint')}><Tag color="processing">{t('owned.states.awaitingSync')}</Tag></Tooltip>
+      }
       // Installable plugins wait for a person (the controller administrator), not for a sync.
       return needsInstallConfirm(plugin)
         ? <Link to="/sys/plugin-store?tab=mine"><Button size="small">{t('state.goMine')}</Button></Link>
@@ -81,11 +124,18 @@ function StoreAction({ plugin, state, canBuy, onBuy, onDownload, downloading }: 
     }
     case 'installed': {
       // Installed and usable; whether a site actually uses it is decided on its own page.
-      const path = enablePath(plugin)
+      const path = usable.path ?? enablePath(plugin)
       return <Space size={4} wrap><Tag color="success">{t('state.installed')}</Tag>
         {path ? <Link to={path}>{t('state.goManage')}</Link> : null}</Space>
     }
-    case 'enabled': return <Tag color="success">{t('state.enabled')}</Tag>
+    case 'enabled': {
+      // No page: a plain state, nothing to click.
+      if (!usable.path) return <Tag color="success">{t('state.enabled')}</Tag>
+      return <Link to={usable.path} className={`market-store-goto market-store-goto--${usable.setup ?? 'ready'}`}>
+        {t(usable.setup ? `state.${usable.setup}` : 'state.configure')}</Link>
+    }
+    case 'disabled':
+      return <Tag color="default">{t('state.disabled')}</Tag>
     case 'activating': return <Tag color="processing">{t('state.activating')}</Tag>
     case 'revoked': return <Tag color="error">{t('state.revoked')}</Tag>
   }
@@ -125,8 +175,8 @@ function acquiredMessage(plugin: MarketPlugin, how: 'claimed' | 'paid'): string 
   return `acquired.${how}${acquiredPendingInstall(plugin) ? 'Pending' : 'Active'}`
 }
 
-function PluginDetail({ plugin, state, actions }: {
-  plugin: MarketPlugin; state: StoreState; actions: ReactNode
+function PluginDetail({ plugin, state, wait, actions }: {
+  plugin: MarketPlugin; state: StoreState; wait?: InstallWait; actions: ReactNode
 }) {
   const { t, i18n } = useTranslation('marketStore')
   const token = useSessionStore((s) => s.accessToken) ?? ''
@@ -140,7 +190,7 @@ function PluginDetail({ plugin, state, actions }: {
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       {query.error ? <LoadError error={query.error} /> : null}
       <Space wrap><PublisherBadge plugin={info} /><PriceTag plugin={{ ...info, price_plans: plans }} />{actions}</Space>
-      <StateHint plugin={info} state={state} />
+      <StateHint plugin={info} state={state} wait={wait} />
       <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{pluginDescription(info, i18n.resolvedLanguage) || pluginSummary(info, i18n.resolvedLanguage) || info.plugin_id}</Typography.Paragraph>
       <Descriptions bordered size="small" column={1}>
         <Descriptions.Item label={t('detail.publisher')}>{t(`publisher.${publisherOf(info)}`)} · {info.namespace}</Descriptions.Item>
@@ -222,9 +272,30 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
     },
   })
   const items = (query.data?.items ?? []).filter((plugin) => !feature || plugin.feature_code === feature)
-  const stateOf = (plugin: MarketPlugin) => storeState(plugin, holdings.licenses, holdings.library, [...holdings.modules])
+  const installations = usePlatformInstallations()
+  const reachablePath = useConfigPath(holdings.modules)
+  const dnspup = useDNSPupStatus(holdings.modules)
+  const stateOf = (plugin: MarketPlugin) => storeState(plugin, holdings.licenses, holdings.library, [...holdings.modules],
+    installationOf(installations ?? [], plugin.plugin_id))
+  // Without the records (no platform read permission) only 暂无可安装版本 can be told; the rest keeps 去我的插件确认.
+  const waitOf = (plugin: MarketPlugin, state: StoreState): InstallWait | undefined => {
+    if (state !== 'distributing' || !needsInstallConfirm(plugin)) return undefined
+    const wait = installWait(plugin.plugin_id, plugin, installations)
+    return wait === 'awaitingSync' && !installations ? undefined : wait
+  }
+  // Usable here (启用/已安装): the configuration page this account can open, and the setup the console can tell.
+  const usableOf = (plugin: MarketPlugin, state: StoreState): Usable => ({
+    path: state === 'enabled' || state === 'installed' ? reachablePath(plugin) : null,
+    setup: state === 'enabled' && plugin.feature_code ? moduleSetup(plugin.feature_code, dnspup) : null,
+    installation: installationOf(installations ?? [], plugin.plugin_id), name: pluginTitle(plugin, i18n.resolvedLanguage),
+    wait: waitOf(plugin, state),
+    local: Boolean(holdings.library.find((item) => item.plugin_id === plugin.plugin_id)?.locally_disabled),
+    dependents: plugin.feature_code && state === 'enabled' ? dependentsOf(plugin.feature_code, query.data?.items ?? [], holdings.modules)
+      .map((p) => pluginTitle(p, i18n.resolvedLanguage)) : [],
+  })
   const action = (plugin: MarketPlugin) => <StoreAction plugin={plugin} state={stateOf(plugin)} canBuy={canBuy} onBuy={() => setBuying(plugin)}
-    onDownload={() => download.mutate({ plugin, how: 'claimed' })} downloading={download.isPending && download.variables?.plugin.id === plugin.id} />
+    onDownload={() => download.mutate({ plugin, how: 'claimed' })} downloading={download.isPending && download.variables?.plugin.id === plugin.id}
+    usable={usableOf(plugin, stateOf(plugin))} />
   // A paid order closes the dialog and says it here; a 0-yuan order (free plan, trial) shows its result in the dialog.
   const bought = useCallback((how: 'claimed' | 'paid') => {
     const plugin = buying
@@ -252,18 +323,24 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
       <Row gutter={[16, 16]}>
         {items.map((plugin) => {
           const state = stateOf(plugin)
+          const { path } = usableOf(plugin, state)
+          const title = pluginTitle(plugin, i18n.resolvedLanguage)
           return <Col key={plugin.id} xs={24} sm={12} lg={8}>
             <Badge dot={pendingAdvisories.has(plugin.plugin_id)} offset={[-6, 6]} className="market-store-badge">
               <Card size="small" className={`market-store-card market-store-card--${state}`} data-testid={`market-card-${plugin.plugin_id}`}
-                title={<Button type="link" className="market-store-title" onClick={() => setSelected(plugin)}>{pluginTitle(plugin, i18n.resolvedLanguage)}</Button>}
-                extra={<PublisherBadge plugin={plugin} />}
-                actions={[<div key="action" className="market-store-action">{action(plugin)}</div>]}>
+                // With a configuration page the title goes there and 详情 opens the drawer; otherwise the title does.
+                title={path ? <Link to={path} className="market-store-title">{title}</Link>
+                  : <Button type="link" className="market-store-title" onClick={() => setSelected(plugin)}>{title}</Button>}
+                extra={<PublisherBadge plugin={plugin} />}>
                 <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }}>{pluginSummary(plugin, i18n.resolvedLanguage) || plugin.plugin_id}</Typography.Paragraph>
                 <Space size={4} wrap>
                   <PriceTag plugin={plugin} />
                   {plugin.latest_version ? <Tag>{t('card.latest', { version: plugin.latest_version })}</Tag> : null}
+                  {path ? <Button type="link" size="small" className="market-store-details" onClick={() => setSelected(plugin)}>{t('card.details')}</Button> : null}
                 </Space>
                 {state === 'revoked' ? <Typography.Paragraph type="danger" className="market-store-revoked">{t('state.revokedHint')}</Typography.Paragraph> : null}
+                {/* 操作条固定在卡片底部（卡片体是 flex 列、它 margin-top:auto），说明小字只在它上方，不改变它的高度。 */}
+                <div className="market-store-footer">{action(plugin)}</div>
               </Card>
             </Badge>
           </Col>
@@ -273,7 +350,7 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
         ? <CursorPager pages={pages} pageSize={50} count={query.data.items.length} next={query.data.next_cursor} busy={query.isFetching} /> : null}
       <Drawer className="plugin-market-drawer" width="min(760px, 100vw)" open={!!selected} onClose={() => setSelected(null)}
         title={selected ? `${pluginTitle(selected, i18n.resolvedLanguage)} · ${selected.plugin_id}` : ''} destroyOnHidden>
-        {selected ? <PluginDetail plugin={selected} state={stateOf(selected)} actions={action(selected)} /> : null}
+        {selected ? <PluginDetail plugin={selected} state={stateOf(selected)} wait={waitOf(selected, stateOf(selected))} actions={action(selected)} /> : null}
       </Drawer>
       {buying ? <PurchaseModal plugin={buying} plans={buying.price_plans ?? []} token={token} onClose={() => setBuying(null)} onDone={bought}
         acquired={(how) => t(acquiredMessage(buying, how))} pending={acquiredPendingInstall(buying)} /> : null}

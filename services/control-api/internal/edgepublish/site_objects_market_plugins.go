@@ -10,6 +10,7 @@ import (
 	"github.com/cdnca/cdnca/libs/edgeconfig/edgesite"
 	"github.com/cdnca/cdnca/libs/entitlement/artifactcatalog"
 	"github.com/cdnca/cdnca/libs/rulepack"
+	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -27,14 +28,26 @@ import (
 // (official paid packs: pack.cc.advanced, pack.crs, pack.selfwaf, ...) or
 // when it came from the plugin market ("rule_pack:<pack id>"). Free official
 // packs and the tenant's own packs are base protection and always stay.
+//
+// The same holds on every scope, market tenant or not, for a pack whose
+// feature code this controller stopped (plugin_local_disables): the
+// pack returns when the plugin is enabled again (the stop and the enable
+// republish the scopes that mount it).
 func withholdMarketPluginMounts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, facts map[string]siteObjectV2Facts) error {
-	var plugins []string
-	err := tx.QueryRow(ctx, `SELECT plugins FROM market_supply_tenant_plugins WHERE tenant_scope_id=$1`, scopeID).Scan(&plugins)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
+	stopped, err := entitlementguard.LocallyDisabledCodes(ctx, tx)
 	if err != nil {
+		return fmt.Errorf("%w: load plugin local disables", ErrPersistence)
+	}
+	var plugins []string
+	market := true
+	err = tx.QueryRow(ctx, `SELECT plugins FROM market_supply_tenant_plugins WHERE tenant_scope_id=$1`, scopeID).Scan(&plugins)
+	if errors.Is(err, pgx.ErrNoRows) {
+		market = false
+	} else if err != nil {
 		return fmt.Errorf("%w: load market tenant plugins", ErrPersistence)
+	}
+	if !market && len(stopped) == 0 {
+		return nil
 	}
 	needs := map[string]string{} // pack@version -> plugin it needs ("" = none)
 	for _, value := range facts {
@@ -66,7 +79,7 @@ func withholdMarketPluginMounts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUI
 	}
 	withheld := func(mount rulepack.Mount) bool {
 		plugin := needs[mount.PackID+"@"+mount.Version]
-		return plugin != "" && !slices.Contains(plugins, plugin)
+		return plugin != "" && (stopped[plugin] || market && !slices.Contains(plugins, plugin))
 	}
 	for siteID, value := range facts {
 		if value.Mounts == nil || len(value.Mounts.Mounts) == 0 {

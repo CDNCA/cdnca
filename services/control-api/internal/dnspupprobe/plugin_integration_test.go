@@ -3,6 +3,7 @@ package dnspupprobe
 import (
 	"crypto/sha256"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -220,6 +221,43 @@ func TestPurposeGatesMeteringObservationsAndDiagnose(t *testing.T) {
 	if _, err := runtime.Probe(ctx, ConsumerEdge, "site", "other|443", 9, ProbeRequest{Type: "tcping", Target: "other.example.net",
 		Port: 443}); !errors.Is(err, ErrBudgetStopped) {
 		t.Fatalf("capped edge probe: %v", err)
+	}
+	// edge_health's probe type (default tcping) saves https, is
+	// kept when omitted, and is refused on another purpose or as another type.
+	edgeType := func(view PurposesView) string {
+		for _, item := range view.Purposes {
+			if item.Purpose == PurposeEdgeHealth {
+				return item.ProbeType
+			}
+		}
+		return "missing"
+	}
+	if got := edgeType(view); got != "tcping" {
+		t.Fatalf("default edge probe type = %q", got)
+	}
+	https, uncapped := "https", int64(0)
+	if view, err = f.service.UpdatePurposes(ctx, f.admin, "t1", []PurposeInput{{Purpose: PurposeEdgeHealth, Enabled: &enabled,
+		MonthlyCap: &uncapped, IntervalSeconds: &zero, ProbeType: &https}}); err != nil || edgeType(view) != "https" {
+		t.Fatalf("edge https: %q %v", edgeType(view), err)
+	}
+	if view, err = f.service.UpdatePurposes(ctx, f.admin, "t2", []PurposeInput{{Purpose: PurposeEdgeHealth, Enabled: &enabled,
+		MonthlyCap: &uncapped, IntervalSeconds: &zero}}); err != nil || edgeType(view) != "https" {
+		t.Fatalf("omitted probe type keeps https: %q %v", edgeType(view), err)
+	}
+	if got := f.service.Runtime(ctx).ProbeTypeFor(ConsumerEdge, "tcping"); got != "https" {
+		t.Fatalf("runtime edge probe type = %q", got)
+	}
+	ping := "ping"
+	for index, input := range []PurposeInput{
+		{Purpose: PurposeEdgeHealth, Enabled: &enabled, MonthlyCap: &uncapped, IntervalSeconds: &zero, ProbeType: &ping},
+		{Purpose: PurposeOriginFailover, Enabled: &enabled, MonthlyCap: &uncapped, IntervalSeconds: &zero, ProbeType: &https},
+	} {
+		if _, err := f.service.UpdatePurposes(ctx, f.admin, "t-bad-"+strconv.Itoa(index), []PurposeInput{input}); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("bad probe type %d: %v", index, err)
+		}
+	}
+	if got := f.count(t, `SELECT count(*) FROM probe_dnspup_purposes WHERE probe_type IS NOT NULL AND purpose<>'edge_health'`); got != 0 {
+		t.Fatalf("probe type on other purposes = %d", got)
 	}
 	// A slowed purpose stretches its round.
 	interval := 600

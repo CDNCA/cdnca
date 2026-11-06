@@ -9,7 +9,9 @@
 #       A site with no listed ban (with or without CC) does not look the
 #       client up (banned() not called); a network ban counts as a listed
 #       ban of its site; a site added to a non-empty list applies within the
-#       per-worker refresh (1 s).
+#       per-worker refresh (1 s). A site with a WAF action segment (its
+#       gate checks the list too) looks the client up only when the site has
+#       a listed ban, and a ban added to it applies at once.
 #   D4  a temporary ban of a rule counting by something other than the
 #       client (count_by uri, or target count_key) is marked on its security
 #       line (detector "count_key") and never queued for the kernel; a ban of
@@ -190,6 +192,14 @@ switch_rules="[$(rule 71 / '' "${roomy}" '{"kind":"reject_429"}')]"
 site switch 7 "$(policy 7 "${switch_rules}" "${switch_json}")"
 site plain2 8
 site plainnet 9
+# waf <name> <n>: a site whose WAF policy has a ban rule (a segment action, so
+# its rule plan runs cdnca_waf.gate) that never matches.
+waf() {
+  printf '{"site_id":"%s","tenant_id":"%s","security":{"rules":{"header_overflow":"none","policies":[{"kind":"waf","policy_id":"%s","policy_version":1,"binding_revision":1,"runtime_sha256":"%064d","enabled":true,"default_action":"allow","rules":[{"rule_id":"%s","action":"ban","flow":"stop","action_config":{"ban_seconds":60},"match":{"path":{"kind":"prefix","value":"/never"}}}]}]}}}' \
+    "$(uuid "$2")" "${tenant}" "$(uuid "$(( $2 + 100 ))")" 0 "$(uuid "$(( $2 + 200 ))")" >"${work}/sites/$1.json"
+}
+waf wafsite 10
+waf waf2 11
 
 export DYLD_LIBRARY_PATH="$(dirname "${lualib}")/luajit/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
 "${openresty}" -p "${work}/" -c nginx.conf || { cat "${work}/logs/error.log" >&2; exit 1; }
@@ -215,8 +225,8 @@ json() { python3 -I -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 # --- D5: the ban list without a CC binding / WAF action segment ----------
 now="$(date +%s)"
 check "D5 plain site serves before the ban" 200 "$(code plain 198.51.100.7 /)"
-s1="$(uuid 1)" s2="$(uuid 2)" s8="$(uuid 8)" s9="$(uuid 9)"
-snapshot="{\"revision\":1,\"bans\":[{\"site_id\":\"${s1}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s2}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s9}\",\"client\":\"192.0.2.0/24\",\"until\":$((now + 300))}],\"releases\":[]}"
+s1="$(uuid 1)" s2="$(uuid 2)" s8="$(uuid 8)" s9="$(uuid 9)" s10="$(uuid 10)" s11="$(uuid 11)"
+snapshot="{\"revision\":1,\"bans\":[{\"site_id\":\"${s10}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s1}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s2}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s9}\",\"client\":\"192.0.2.0/24\",\"until\":$((now + 300))}],\"releases\":[]}"
 check "D5 snapshot applied" 200 "$(post_bans "${snapshot}")"
 sleep 1.2 # the per-worker set of sites with bans refreshes once a second
 check "D5 plain site refuses the listed client" 403 "$(code plain 198.51.100.7 /)"
@@ -230,16 +240,26 @@ check "D5 plain site outside the network" 200 "$(code plainnet 192.0.3.1 /)"
 lookups >/dev/null
 for _ in 1 2 3 4; do code plain2 198.51.100.7 / >/dev/null; code byclient 198.51.100.7 / >/dev/null; done
 check "D5 sites without listed bans skip the lookup" 0 "$(lookups)"
+check "D5 WAF site serves before its rules" 200 "$(code waf2 198.51.100.7 /)"
+for _ in 1 2 3; do code waf2 198.51.100.7 / >/dev/null; done
+check "D5 WAF site without listed bans skips the lookup" 0 "$(lookups)"
+check "D5 WAF site refuses the listed client" 403 "$(code wafsite 198.51.100.7 /)"
+check "D5 WAF site X-Cdnca-Ban" listed "$(header wafsite 198.51.100.7 / X-Cdnca-Ban)"
+check "D5 WAF site other client" 200 "$(code wafsite 198.51.100.8 /)"
+lookups >/dev/null
 check "D5 listed site still looks up" 403 "$(code plain 198.51.100.7 /)"
 check "D5 listed site lookups counted" 1 "$(lookups)"
-snapshot="{\"revision\":2,\"bans\":[{\"site_id\":\"${s1}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s8}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))}],\"releases\":[]}"
+snapshot="{\"revision\":2,\"bans\":[{\"site_id\":\"${s1}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s8}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))},{\"site_id\":\"${s11}\",\"client\":\"198.51.100.7\",\"until\":$((now + 300))}],\"releases\":[]}"
 check "D5 site added to a non-empty list" 200 "$(post_bans "${snapshot}")"
+# a WAF site's gate reads the list's generation on every request: no refresh wait
+for n in 1 2 3 4 5 6; do check "D5 added WAF site refuses the listed client at once ${n}" 403 "$(code waf2 198.51.100.7 /)"; done
 sleep 1.2 # the per-worker set of sites with bans refreshes once a second
 for n in 1 2 3 4; do check "D5 added site refuses the listed client ${n}" 403 "$(code plain2 198.51.100.7 /)"; done
 for n in 1 2; do check "D5 site dropped from the list serves ${n}" 200 "$(code plainnet 192.0.2.77 /)"; done
 snapshot="{\"revision\":3,\"bans\":[],\"releases\":[{\"site_id\":\"${s1}\",\"client\":\"198.51.100.7\",\"released_at\":$((now + 1))}]}"
 check "D5 release applied" 200 "$(post_bans "${snapshot}")"
 check "D5 plain site serves after the release" 200 "$(code plain 198.51.100.7 /)"
+check "D5 WAF site dropped from the list serves" 200 "$(code waf2 198.51.100.7 /)"
 
 # --- D4: what a CC temporary ban applies to ------------------------------
 # ban_line <site>: "<client>|<detector>" of the site's last temporary_ban line

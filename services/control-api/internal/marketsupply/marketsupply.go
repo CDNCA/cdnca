@@ -260,6 +260,9 @@ func (s *Service) apply(ctx context.Context, actor serviceActor, key string, g g
 		return err
 	}
 	outcome.TenantScopeID = tenant.scopeID
+	if err := s.nameTenant(ctx, tenant, poolID, g); err != nil {
+		return err
+	}
 	if err := s.ensureDelivery(ctx, actor, tenant, poolID); err != nil {
 		return err
 	}

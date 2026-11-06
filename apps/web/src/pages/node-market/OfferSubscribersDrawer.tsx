@@ -8,6 +8,7 @@ import { useSessionStore } from '../../auth/session'
 import { formatDateTime } from '../../i18n/formatters'
 import { formatCap } from './limitsModel'
 import { CursorPager, SupplyStateTag, useCursorPages } from './supplier/shared'
+import { SubscriberCode, SubscriberCodeTitle } from './MarketLabel'
 
 const subscriberPageSize = 100
 
@@ -57,6 +58,7 @@ export function OfferSubscribersDrawer({ offer, onClose }: { offer: MarketOfferL
               : <Space size={4}><Tag color="blue">{t('subscribers.direct')}</Tag>{s.buyer_name || <Typography.Text code>{s.buyer_id?.slice(0, 8)}</Typography.Text>}</Space> },
             // MC08: the contract and the supply behind it are two facts in adjacent columns, worded and coloured as in the
             // seller list (SupplyStateTag); an active contract does not imply the offer can serve it now.
+            { title: <SubscriberCodeTitle />, key: 'code', render: (_: unknown, s) => <SubscriberCode row={s} /> },
             { title: t('subscribers.contract'), key: 'status', render: (_: unknown, s) => <Tag>{t(`states.${s.status}`, { defaultValue: s.status })}</Tag> },
             { title: t('subscribers.supply'), key: 'supply', render: (_: unknown, s) => s.state === 'no_supply'
               ? <Space direction="vertical" size={0}><SupplyStateTag value={s.state} />

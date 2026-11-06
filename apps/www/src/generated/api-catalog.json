@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 665,
+ "total": 667,
  "api_key_count": 144,
  "groups": [
   {
@@ -2024,7 +2024,7 @@
   {
    "id": "admin-market",
    "prefix": "/v1/admin/market",
-   "count": 2,
+   "count": 4,
    "api_key_count": 0,
    "operations": [
     {
@@ -2050,6 +2050,30 @@
      "api_key": false,
      "source": "api/control-market-plugins.openapi.yaml",
      "operation_id": "getMarketPluginLibrary"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/market/plugin-library/{plugin_id}/disable",
+     "summary": "Stop a plugin on this controller for every tenant",
+     "summary_zh": "在本主控停用插件：本机所有租户不再可用其功能，授权与计费不变",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-market-plugins.openapi.yaml",
+     "operation_id": "disableMarketPluginLocally"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/market/plugin-library/{plugin_id}/enable",
+     "summary": "Enable a plugin stopped on this controller again",
+     "summary_zh": "在本主控重新启用已停用的插件",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-market-plugins.openapi.yaml",
+     "operation_id": "enableMarketPluginLocally"
     }
    ]
   },

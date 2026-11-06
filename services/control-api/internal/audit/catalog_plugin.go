@@ -9,6 +9,9 @@ func init() {
 		e("plugin_installation.resume", CategoryPlugin, "恢复使用插件 {resource}", "resumed plugin {resource}"),
 		e("plugin_installation.uninstall", CategoryPlugin, "卸载插件 {resource}", "uninstalled plugin {resource}"),
 		e("plugin_installation.targets", CategoryPlugin, "修改插件 {resource} 的安装租户", "changed the tenants of plugin {resource}"),
+		// the platform administrator stops a plugin on this controller (its feature code no longer applies here) or enables it again.
+		e("plugin.local.disable", CategoryPlugin, "在本主控停用插件 {resource}（功能码 {feature_code}），本机所有租户不再可用", "stopped plugin {resource} (feature code {feature_code}) on this controller for every tenant").f("feature_code"),
+		e("plugin.local.enable", CategoryPlugin, "在本主控重新启用插件 {resource}（功能码 {feature_code}）", "enabled plugin {resource} (feature code {feature_code}) on this controller again").f("feature_code"),
 		// plugapi-S2: writes of a plugin identity (API key bound to an installation) over the per-installation limit.
 		e("plugin.api.rate_limited", CategoryPlugin, "插件安装 {resource} 的写请求超过每 {window_seconds} 秒 {limit} 次的频率限制，已拒绝（{method} {path}）", "write requests of plugin installation {resource} exceeded {limit} per {window_seconds} seconds and were refused ({method} {path})").f("method", "path", "limit", "window_seconds"),
 		e("plugin.artifact.download_request", CategoryPlugin, "请求下载制品 {resource}", "requested downloading artifact {resource}").f("version", "kind"),
