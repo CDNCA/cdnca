@@ -56,7 +56,7 @@ func (repository *PostgresRepository) List(ctx context.Context, actor Actor, req
 		sensitive_scopes,status,revision,identity_generation,lkg_verification_id,lkg_version,
 		stable_reason_code,created_at,updated_at,resource_scope,entrypoint_type
 		FROM plugin_installation_heads
-		WHERE tenant_scope_id=$1 AND ($2='' OR status=$2) AND ($3='' OR plugin_id=$3) AND
+		WHERE `+visibleHeads(actor, "$1")+` AND ($2='' OR status=$2) AND ($3='' OR plugin_id=$3) AND
 		($4::timestamptz IS NULL OR (updated_at,authorization_id)<($4,$5))
 		ORDER BY updated_at DESC,authorization_id DESC LIMIT $6`, request.TenantID, request.Status,
 		request.PluginID, cursorTime, cursorID, request.Limit+1)
@@ -70,10 +70,13 @@ func (repository *PostgresRepository) List(ctx context.Context, actor Actor, req
 		if err != nil {
 			return Page{}, postgresError(ctx, err)
 		}
-		items = append(items, installationView(item))
+		items = append(items, installationViewFor(actor, item))
 	}
 	if err := rows.Err(); err != nil {
 		return Page{}, postgresError(ctx, err)
+	}
+	if err := attachTargets(ctx, tx, actor, items); err != nil {
+		return Page{}, err
 	}
 	page := Page{Items: items}
 	if len(items) > request.Limit {
@@ -104,14 +107,79 @@ func (repository *PostgresRepository) Get(ctx context.Context, actor Actor,
 	if err := authorizePluginInstallationActor(ctx, tx, actor, PermissionRead); err != nil {
 		return InstallationView{}, err
 	}
-	value, err := loadPluginInstallation(ctx, tx, actor.TenantID, authorizationID, false)
+	value, err := loadVisiblePluginInstallation(ctx, tx, actor, authorizationID)
 	if err != nil {
+		return InstallationView{}, err
+	}
+	views := []InstallationView{installationViewFor(actor, value)}
+	if err := attachTargets(ctx, tx, actor, views); err != nil {
 		return InstallationView{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return InstallationView{}, postgresError(ctx, err)
 	}
-	return installationView(value), nil
+	return views[0], nil
+}
+
+// visibleHeads is the head filter of a list: a tenant reads its own heads and the tenant plugins the platform
+// administrator installed for it (migration 636); the platform scope reads the heads it holds.
+func visibleHeads(actor Actor, scope string) string {
+	if actor.resourceScope() == ResourceScopeTenant {
+		return "(tenant_scope_id=" + scope + " OR (resource_scope='tenant' AND tenant_scope_id<>" + scope +
+			" AND plugin_installation_covers_tenant_636(authorization_id," + scope + ")))"
+	}
+	return "tenant_scope_id=" + scope
+}
+
+// loadVisiblePluginInstallation reads one head the actor may see (visibleHeads). Writes keep using the exact scope
+// (loadPluginInstallation): a tenant never writes a head the platform holds.
+func loadVisiblePluginInstallation(ctx context.Context, tx pgx.Tx, actor Actor,
+	authorizationID uuid.UUID) (Installation, error) {
+	value, err := scanPluginInstallation(tx.QueryRow(ctx, `SELECT tenant_scope_id,authorization_id,installation_id,
+		verification_id,plugin_id,plugin_version,manifest_sha256,configuration_schema_sha256,manifest_scopes,
+		approved_scopes,sensitive_scopes,status,revision,identity_generation,lkg_verification_id,lkg_version,
+		stable_reason_code,created_at,updated_at,resource_scope,entrypoint_type
+		FROM plugin_installation_heads WHERE authorization_id=$2 AND `+visibleHeads(actor, "$1"), actor.TenantID,
+		authorizationID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Installation{}, ErrNotFound
+	}
+	if err != nil {
+		return Installation{}, postgresError(ctx, err)
+	}
+	return value, nil
+}
+
+// installationViewFor marks who manages a stored head: a tenant manages only the heads its own scope holds.
+func installationViewFor(actor Actor, value Installation) InstallationView {
+	view := installationView(value)
+	view.ManagedBy = ManagedByPlatform
+	if actor.resourceScope() == ResourceScopeTenant && value.TenantID == actor.TenantID {
+		view.ManagedBy = ManagedByTenant
+	}
+	return view
+}
+
+// attachTargets adds the target sets to the platform administrator's view of its tenant plugins. Tenants never read
+// which other tenants a plugin is installed for.
+func attachTargets(ctx context.Context, tx pgx.Tx, actor Actor, views []InstallationView) error {
+	if actor.resourceScope() != ResourceScopePlatform {
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(views))
+	for _, view := range views {
+		if view.Installation.ResourceScope == ResourceScopeTenant {
+			ids = append(ids, view.Installation.AuthorizationID)
+		}
+	}
+	targets, err := loadTargetsFor(ctx, tx, ids)
+	if err != nil {
+		return err
+	}
+	for index := range views {
+		views[index].Targets = targets[views[index].Installation.AuthorizationID]
+	}
+	return nil
 }
 
 func (repository *PostgresRepository) HasReceipt(ctx context.Context, actor Actor, authorizationID uuid.UUID,

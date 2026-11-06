@@ -96,8 +96,10 @@ func (source *ClickHouseSource) Read(ctx context.Context, scope Scope, filter Fi
 	return Page{Snapshot: filter.Snapshot, Rows: rows, HasMore: len(rows) >= int(filter.Limit)}, nil
 }
 
+// Range and cursor parameters are UTC strings typed DateTime64(3, 'UTC'): a
+// bare {from:DateTime64(3)} would be read in the server's time zone.
 func (source *ClickHouseSource) readSnapshot(ctx context.Context, scope Scope, filter Filter) (Snapshot, error) {
-	conditions := []string{"finalized_at >= {from:DateTime64(3)}", "finalized_at < {to:DateTime64(3)}"}
+	conditions := []string{"finalized_at >= {from:DateTime64(3, 'UTC')}", "finalized_at < {to:DateTime64(3, 'UTC')}"}
 	params := url.Values{"from": {filter.From.UTC().Format("2006-01-02 15:04:05.000")}, "to": {filter.To.UTC().Format("2006-01-02 15:04:05.000")}}
 	if scope.TenantID != "" {
 		conditions = append([]string{"tenant_id = {tenant_id:UUID}"}, conditions...)
@@ -125,7 +127,7 @@ FORMAT JSONEachRow`
 }
 
 func (source *ClickHouseSource) readAggregates(ctx context.Context, scope Scope, filter Filter) ([]Row, error) {
-	conditions := []string{"finalized_at >= {from:DateTime64(3)}", "finalized_at < {to:DateTime64(3)}", "source_watermark <= {watermark:UInt64}"}
+	conditions := []string{"finalized_at >= {from:DateTime64(3, 'UTC')}", "finalized_at < {to:DateTime64(3, 'UTC')}", "source_watermark <= {watermark:UInt64}"}
 	params := url.Values{"from": {filter.From.UTC().Format("2006-01-02 15:04:05.000")}, "to": {filter.To.UTC().Format("2006-01-02 15:04:05.000")}, "watermark": {strconv.FormatUint(filter.Snapshot.SourceWatermark, 10)}}
 	if scope.TenantID != "" {
 		conditions = append([]string{"tenant_id = {tenant_id:UUID}"}, conditions...)
@@ -152,7 +154,7 @@ func (source *ClickHouseSource) readAggregates(ctx context.Context, scope Scope,
 		params.Set("listen_port", strconv.Itoa(int(filter.ListenPort)))
 	}
 	if filter.After != nil {
-		conditions = append(conditions, `(toStartOfMinute(finalized_at), node_id, site_id, stream_id, listener_id) > ({after_bucket:DateTime64(3)}, {after_node:UUID}, {after_site:UUID}, {after_stream:UUID}, {after_listener:UUID})`)
+		conditions = append(conditions, `(toStartOfMinute(finalized_at), node_id, site_id, stream_id, listener_id) > ({after_bucket:DateTime64(3, 'UTC')}, {after_node:UUID}, {after_site:UUID}, {after_stream:UUID}, {after_listener:UUID})`)
 		params.Set("after_bucket", filter.After.Bucket.UTC().Format("2006-01-02 15:04:05.000"))
 		params.Set("after_node", filter.After.NodeID)
 		params.Set("after_site", filter.After.SiteID)

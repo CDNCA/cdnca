@@ -713,6 +713,7 @@
     "apiKey",
     "bearer"
    ],
+   "description": "The Idempotency-Key is bound to the whole items list (compared after re-encoding each item, so formatting does not matter): another list under the same key is 409 idempotency_conflict before any item runs. The same list runs again item by item and items already done replay their stored result. The caller must hold dns.manage or dns.records.manage (403 otherwise); each item is then authorized on its own account.",
    "any_permissions": [
     "dns.manage",
     "dns.records.manage"
@@ -765,6 +766,10 @@
     },
     {
      "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
      "description": "Error envelope"
     }
    ]

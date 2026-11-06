@@ -547,8 +547,9 @@ func (s *Service) AuthenticateWithPluginBinding(
 		JOIN tenants tenant ON tenant.id=scope.tenant_id
 		JOIN users u ON u.id=k.user_id
 		JOIN memberships m ON m.scope_id=k.scope_id AND m.user_id=k.user_id
-		LEFT JOIN plugin_installation_heads head ON head.tenant_scope_id=k.scope_id AND
-		     head.authorization_id=k.plugin_installation_authorization_id
+		-- Migration 636: the head may be held by the platform for this tenant; it counts while it covers the key's tenant.
+		LEFT JOIN plugin_installation_heads head ON head.authorization_id=k.plugin_installation_authorization_id AND
+		     plugin_installation_covers_tenant_636(head.authorization_id, k.scope_id)
 		LEFT JOIN role_assignments ra ON ra.scope_id=k.scope_id AND ra.user_id=k.user_id
 		LEFT JOIN roles ON roles.id=ra.role_id
 		LEFT JOIN role_permissions rp ON rp.role_id=roles.id
@@ -642,7 +643,8 @@ func lockedPluginBinding(
 	binding := PluginBinding{AuthorizationID: *authorizationID}
 	var status string
 	err := tx.QueryRow(ctx, `SELECT installation_id, plugin_id, status FROM plugin_installation_heads
-		WHERE tenant_scope_id=$1 AND authorization_id=$2 FOR SHARE`, scopeID, *authorizationID).Scan(
+		WHERE authorization_id=$2 AND plugin_installation_covers_tenant_636(authorization_id, $1) FOR SHARE`,
+		scopeID, *authorizationID).Scan(
 		&binding.InstallationID, &binding.PluginID, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrPluginInstallationUnavailable

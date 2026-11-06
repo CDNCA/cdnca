@@ -187,7 +187,7 @@ components:
       in: header
       required: true
       x-cdnca-single-value: true
-      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$', minLength: 1, maxLength: 128}
     StepUpToken:
       name: X-Step-Up-Token
       in: header
@@ -336,9 +336,10 @@ components:
     ErrorEnvelope:
       type: object
       additionalProperties: false
-      required: [code]
+      required: [code, request_id]
       properties:
         code:
           type: string
           enum: [validation_error, unauthenticated, permission_denied, identity_verification_required, recharge_method_unavailable, mfa_step_up_required, not_found, recharge_payment_response_mismatch, recharge_payment_revision_conflict, recharge_payment_binding_mismatch, recharge_payment_event_conflict, recharge_payment_state_conflict, recharge_payment_insufficient_balance, recharge_payment_compensation_not_sent, recharge_payment_approval_required, recharge_payment_approval_expired, recharge_payment_approval_conflict, signature_invalid, recharge_payment_result_unknown, recharge_payment_unavailable]
         params: {type: object, additionalProperties: true}
+        request_id: {type: string, description: 'Same value as the X-Request-ID response header.'}

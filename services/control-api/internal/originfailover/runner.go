@@ -157,7 +157,9 @@ func (runner *Runner) RunOnce(ctx context.Context) error {
 	if runner.sources != nil {
 		plan = runner.sources(ctx)
 	}
-	round := dnspupprobe.Round(runner.now(), RoundInterval)
+	// The dnspup round follows the origin_failover purpose's interval and
+	// budget factor (probe_dnspup_purposes); the verdict logic is unchanged.
+	round := plan.RoundFor(dnspupprobe.ConsumerOrigin, runner.now(), RoundInterval)
 	slots := make(chan struct{}, concurrency)
 	var group sync.WaitGroup
 	for _, pool := range pools {

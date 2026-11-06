@@ -50,8 +50,9 @@ func TestProductionOffersAndConfirmsPendingMarketAuthorizations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, RequestID: "list-1",
-		Username: "ctl-admin"}
+	// the controller's platform administrator confirms tenant plugins (tenantID is the platform scope).
+	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopePlatform,
+		RequestID: "list-1", Username: "ctl-admin"}
 	page, err := domain.List(context.Background(), actor, ListRequest{TenantID: tenantID, Limit: 20})
 	if err != nil || len(page.Items) != 2 || page.Items[0].Installation.AuthorizationID != waiting.Installation.AuthorizationID ||
 		page.Items[0].AuthorizationStatus != StatusPendingConfirmation {
@@ -66,13 +67,32 @@ func TestProductionOffersAndConfirmsPendingMarketAuthorizations(t *testing.T) {
 		t.Fatalf("get pending=%+v err=%v", got, err)
 	}
 
-	mutate := func(revision uint64, verification uuid.UUID) error {
+	all := &Targets{AllTenants: true}
+	mutateWith := func(targets *Targets, revision uint64, verification uuid.UUID) error {
 		actor.RequestID = "confirm-1"
 		_, err := domain.Mutate(context.Background(), actor, MutationRequest{TenantID: tenantID,
 			AuthorizationID: waiting.Installation.AuthorizationID, VerificationID: verification, Action: ActionConfirm,
 			ExpectedRevision: revision, IdempotencyKey: "confirm-1", RequestID: "confirm-1",
-			ApprovedScopes: []string{"plugin.read"}, SensitivePermissionsConfirmed: true})
+			ApprovedScopes: []string{"plugin.read"}, SensitivePermissionsConfirmed: true, Targets: targets})
 		return err
+	}
+	mutate := func(revision uint64, verification uuid.UUID) error { return mutateWith(all, revision, verification) }
+	// A tenant plugin confirmed without naming its tenants never reaches the license service.
+	if err := mutateWith(nil, 1, waiting.Installation.VerificationID); !errors.Is(err, ErrTargetsInvalid) || len(resolver.confirmed) != 0 {
+		t.Fatalf("no targets err=%v confirms=%d", err, len(resolver.confirmed))
+	}
+	// A tenant console cannot confirm at all.
+	tenant := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopeTenant,
+		RequestID: "confirm-1", Username: "tenant-admin"}
+	if _, err := domain.Mutate(context.Background(), tenant, MutationRequest{TenantID: tenantID,
+		AuthorizationID: waiting.Installation.AuthorizationID, VerificationID: waiting.Installation.VerificationID,
+		Action: ActionConfirm, ExpectedRevision: 1, IdempotencyKey: "confirm-1", RequestID: "confirm-1",
+		ApprovedScopes: []string{"plugin.read"}}); !errors.Is(err, ErrPlatformManaged) || len(resolver.confirmed) != 0 {
+		t.Fatalf("tenant confirm err=%v confirms=%d", err, len(resolver.confirmed))
+	}
+	if tenantPage, err := domain.List(context.Background(), tenant, ListRequest{TenantID: tenantID, Limit: 20}); err != nil ||
+		len(tenantPage.Items) != 1 || tenantPage.Items[0].Installation.AuthorizationID != installed.Installation.AuthorizationID {
+		t.Fatalf("tenant list must not offer the pending authorization: %+v err=%v", tenantPage.Items, err)
 	}
 	if err := mutate(5, waiting.Installation.VerificationID); !errors.Is(err, ErrRevisionConflict) || len(resolver.confirmed) != 0 {
 		t.Fatalf("stale revision err=%v confirms=%d", err, len(resolver.confirmed))
@@ -108,7 +128,8 @@ func TestProductionWithoutPendingSupportBehavesAsBefore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, RequestID: "list-2", Username: "a"}
+	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopePlatform,
+		RequestID: "list-2", Username: "a"}
 	page, err := domain.List(context.Background(), actor, ListRequest{TenantID: tenantID, Limit: 20})
 	if err != nil || len(page.Items) != 1 {
 		t.Fatalf("list=%+v err=%v", page.Items, err)
@@ -119,7 +140,7 @@ func TestProductionWithoutPendingSupportBehavesAsBefore(t *testing.T) {
 	_, err = domain.Mutate(context.Background(), actor, MutationRequest{TenantID: tenantID,
 		AuthorizationID: authorized.Installation.AuthorizationID, VerificationID: authorized.Installation.VerificationID,
 		Action: ActionConfirm, ExpectedRevision: 3, IdempotencyKey: "confirm-2", RequestID: "confirm-2",
-		ApprovedScopes: []string{"plugin.read"}})
+		ApprovedScopes: []string{"plugin.read"}, Targets: &Targets{AllTenants: true}})
 	// One replay probe is refused (not a market confirmation); the install uses the revision the tenant saw.
 	if !errors.Is(err, ErrFactDenied) || len(resolver.confirmed) != 1 || resolver.resolve.KnownLifecycleRevision != 3 {
 		t.Fatalf("operator-confirmed install err=%v confirms=%d resolve=%+v", err, len(resolver.confirmed), resolver.resolve)
@@ -138,11 +159,12 @@ func TestProductionRetryAfterLicenseConfirmationReplays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, RequestID: "confirm-3", Username: "a"}
+	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopePlatform,
+		RequestID: "confirm-3", Username: "a"}
 	_, err = domain.Mutate(context.Background(), actor, MutationRequest{TenantID: tenantID,
 		AuthorizationID: confirmed.Installation.AuthorizationID, VerificationID: confirmed.Installation.VerificationID,
 		Action: ActionConfirm, ExpectedRevision: 1, IdempotencyKey: "confirm-3", RequestID: "confirm-3",
-		ApprovedScopes: []string{"plugin.read"}})
+		ApprovedScopes: []string{"plugin.read"}, Targets: &Targets{AllTenants: true}})
 	if !errors.Is(err, ErrFactDenied) || len(resolver.confirmed) != 1 || resolver.resolve.KnownLifecycleRevision != 2 {
 		t.Fatalf("retry err=%v confirms=%d resolve=%+v", err, len(resolver.confirmed), resolver.resolve)
 	}

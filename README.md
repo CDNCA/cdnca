@@ -94,24 +94,35 @@ Node status is shown in the admin console under the node list and real-time moni
 - Unified DNS management across multiple DNS providers
 - WAF, CC protection, ACL, JS challenge, rule pack engine (your own rule packs), quick block
 - Automatic site defense: CC auto-switching, automatic bans on WAF attacks and on WAF hits
+- Ban list: manual and automatic bans per site; for a site served by subscribed market nodes the list goes through the market to the supplier's nodes, and each ban shows its delivery
 - Tenant and user management, tickets, notifications
 - Access logs, security logs, CC statistics and analytics (ClickHouse)
 - Platform node security events (DDoS / layer-4 guard triggers) in the notification center
 - Default theme
 - Built-in free modules: SMS (Alibaba Cloud, SUBMAIL), email (Alibaba Cloud, SendGrid), ICP filing lookup, IP intelligence updates, dnspup probing
-- Connects to the node and plugin marketplaces to buy rule packs, themes and plugins: register a free installation identity, and purchases are delivered and activated through the officially signed per-installation artifact catalog (**marketplace features roll out by version**)
+- Connects to the node and plugin marketplaces to buy rule packs, themes and plugins: register a free installation identity, and purchases are delivered and activated through the officially signed per-installation artifact catalog, and themes, rule packs and UI page plugins are confirmed by the control plane administrator, who chooses the tenants of a tenant plugin (**marketplace features roll out by version**)
+
+What each capability does, how to turn it on and what you can set: [docs/capabilities.md](docs/capabilities.md). The website's [plugins and capabilities](https://www.cdnca.com/en/docs/capabilities/) section covers both editions.
 
 ## Community Edition and commercial edition
 
-| | Community Edition | Commercial edition / paid modules |
+| Capability | Community Edition | Commercial edition |
 |--|--------|-------------------|
-| Open-source control plane / self-run nodes | ✅ | ✅ |
+| Control plane and nodes, sites and L4 forwarding, caching, HTTP/3, ACME certificates | ✅ | ✅ |
+| Multiple DNS providers in one place, per-line probing and smart scheduling | ✅ | ✅ |
+| WAF and CC protection, L4 protection rules, kernel blocking (XDP / nftables) | ✅ | ✅ |
 | No activation · no built-in billing | ✅ | — |
-| Node marketplace (supplier subscriptions) | Rolling out by version | See product details |
-| Plugin marketplace | Rolling out by version | See product details |
-| Commercial modules / contract support | ❌ | ✅ |
+| Node marketplace (subscribe to suppliers, list your own nodes) | After registering a free installation identity (marketplace features roll out by version) | ✅ |
+| Plugin marketplace | After registering a free installation identity; official items are not free | ✅ |
+| Official rule packs (OWASP CRS levels, advanced CC, in-house detection rules) | Bought on the plugin marketplace | Bought on the plugin marketplace (paid) |
+| Automatic defense | CC auto-switching and WAF auto-ban only | Learning, observing and alerts free; automatic mitigation paid |
+| Multi-CDN aggregated edge, cross-CDN scheduling, automatic fallback chain | ❌ | ✅ |
+| Attack auto-escalation, Cloudflare preferred IPs | ❌ | ✅ |
+| Multi-tenant plans and billing, online payments, billing bridge, migration import | ❌ | ✅ |
 
-The code for commercial modules is not in this repository. They include: intelligent automatic defense and adaptive WAF, automatic attack escalation, aggregated edge (third-party CDN integration), migration import; plans, balances, top-ups, orders, traffic packages, reselling, online payments and accounting integrations; the public website frontend, extra themes and white-labeling; the license service, the marketplace seller side, and online upgrades. Official rule sets (advanced CC rule groups, OWASP CRS profiles, in-house detection rule sets) can be bought on the plugin marketplace by Community Edition users.
+The full comparison is on the website: [Community and Plus compared](https://www.cdnca.com/en/docs/capabilities/#editions).
+
+The code for commercial capabilities is not in this repository. They include: intelligent automatic defense and adaptive WAF, automatic attack escalation, aggregated edge (third-party CDN integration) and the fallback chain, Cloudflare preferred IPs, migration import; plans, balances, top-ups, orders, traffic packages, reselling, online payments and accounting integrations; the public website frontend, extra themes and white-labeling; the license service, the marketplace seller side, and online upgrades. Official rule sets (advanced CC rule groups, OWASP CRS profiles, in-house detection rule sets) can be bought on the plugin marketplace by Community Edition users.
 
 The Community Edition suits individuals, small teams and CDN providers who want to get running and self-host first. For contract support or commercial modules, see the website (terms are subject to the official documentation).
 
@@ -268,7 +279,7 @@ pnpm -C apps/web test
 
 Some integration tests need a local PostgreSQL and are skipped without one.
 
-Docs: [Developer guide](docs/developer/README.md) · [Protocol contracts](docs/protocol-contracts.md) · [OpenAPI](api/openapi/v1) · [Architecture decision records](docs/adr)
+Docs: [Plugins and capabilities](docs/capabilities.md) · [Developer guide](docs/developer/README.md) · [Protocol contracts](docs/protocol-contracts.md) · [OpenAPI](api/openapi/v1) · [Architecture decision records](docs/adr)
 
 ---
 

@@ -36,6 +36,9 @@ type dnspupHarness struct {
 	clock   time.Time
 	mu      sync.Mutex
 	failing map[string]bool // target IP → every checkpoint fails
+	// failingISP: checkpoints of this carrier fail on every target.
+	failingISP string
+	service    *dnspupprobe.Service
 }
 
 func newDNSPupHarness(t *testing.T) *dnspupHarness {
@@ -57,11 +60,15 @@ func newDNSPupHarness(t *testing.T) *dnspupHarness {
 		h.mu.Unlock()
 		var out []dnspuptest.Result
 		for _, id := range request.NodeIDs {
-			status := "ok"
-			if failing {
-				status = "timeout"
+			status, code := "ok", ""
+			h.mu.Lock()
+			carrierDown := h.failingISP != "" && isp[id] == h.failingISP
+			h.mu.Unlock()
+			if failing || carrierDown {
+				status, code = "timeout", "tcp_connect_timeout"
 			}
-			out = append(out, dnspuptest.Result{NodeID: id, Region: "广东", ISP: isp[id], Status: status, LatencyMS: 12})
+			out = append(out, dnspuptest.Result{NodeID: id, Region: "广东", ISP: isp[id], Status: status, LatencyMS: 12,
+				ErrorCode: code})
 		}
 		return out
 	}
@@ -86,8 +93,13 @@ func newDNSPupHarness(t *testing.T) *dnspupHarness {
 		"enable-1", dnspupprobe.SettingsInput{Enabled: true, BaseURL: server.URL, APIKey: h.fake.APIKey, APISecret: &secret}); err != nil {
 		t.Fatal(err)
 	}
+	h.service = service
+	h.fake.AllowedTools = append(h.fake.AllowedTools, "mtr")
+	h.fake.AnswerTraces = func(dnspuptest.ProbeRequest) []map[string]any {
+		return []map[string]any{{"nodeId": "m1", "status": "ok", "trace": map[string]any{"hops": []any{}}}}
+	}
 	h.runner, err = nodednspupprobe.NewRunner(nodednspupprobe.Config{Pool: h.pool, Sources: service.Runtime,
-		Alerts: alerts, Now: now})
+		Alerts: alerts, Diagnose: service.Diagnose, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,4 +323,69 @@ func (h *dnspupHarness) member() dnspupprobe.Actor {
 		fmt.Sprintf("member-%s", strings.ReplaceAll(user.String(), "-", "")[:12]))
 	h.exec(`INSERT INTO memberships(scope_id,user_id) VALUES($1,$2)`, h.scopeID, user)
 	return dnspupprobe.Actor{UserID: user, ScopeID: h.scopeID, SessionID: h.session(user)}
+}
+
+// 按运营商、地区出告警（例如「移动 · 广东 N 个点连续失败」）并进通知中心，
+// 首次告警自动发起一次 mtr 排障；节点覆盖可单独改拨测类型；诊断告警不改变节点调度。
+func TestDNSPupLineAlertsDiagnoseAndNodeOverride(t *testing.T) {
+	h := newDNSPupHarness(t)
+	plain, pinged := h.addNode(), h.addNode()
+	h.lineGroup(map[uuid.UUID]string{plain: "198.51.100.11", pinged: "198.51.100.12"})
+	h.activate("pause")
+	h.exec(`UPDATE node_dnspup_probe_settings SET line_alert_min_points=1,line_alert_rounds=2`)
+	h.exec(`INSERT INTO node_dnspup_probe_overrides(id,subject_kind,node_id,probe_type,updated_at)
+		VALUES($1,'node',$2,'ping',now())`, uuid.New(), pinged)
+	h.mu.Lock()
+	h.failingISP = "移动"
+	h.mu.Unlock()
+	h.tick(t)
+	if got := h.count(t, `SELECT count(*) FROM notification_events WHERE event_type='node.dnspup.line_unreachable'`); got != 0 {
+		t.Fatalf("line alert after one round = %d", got)
+	}
+	h.tick(t)
+	if got := h.count(t, `SELECT count(*) FROM node_dnspup_line_alert_states WHERE carrier='mobile' AND area='广东'
+		AND failing AND failed_points=1 AND total_points=1 AND top_failure='timeout'`); got != 2 {
+		t.Fatalf("failing mobile·广东 cells = %d", got)
+	}
+	if got := h.count(t, `SELECT count(*) FROM node_dnspup_line_alert_states WHERE carrier='telecom' AND failing`); got != 0 {
+		t.Fatalf("telecom cells failing = %d", got)
+	}
+	if got := h.count(t, `SELECT count(*) FROM notification_events WHERE event_type='node.dnspup.line_unreachable'`); got != 2 {
+		t.Fatalf("line alerts = %d", got)
+	}
+	// One of four checkpoints failing does not fail the node verdict (no serving change).
+	if got := h.count(t, `SELECT count(*) FROM node_dnspup_probe_states WHERE failing`); got != 0 {
+		t.Fatalf("node verdicts failing = %d", got)
+	}
+	if got := h.count(t, `SELECT count(*) FROM node_dnspup_probe_results WHERE checkpoints @> '[{"line":"mobile","failure":"timeout","area":"mainland"}]'`); got != 4 {
+		t.Fatalf("result rows with failure category = %d", got)
+	}
+	// Auto diagnosis: one mtr per newly failing node, from the failed checkpoint only.
+	if got := h.count(t, `SELECT count(*) FROM probe_dnspup_plugin_requests WHERE origin='alert' AND node_id IS NOT NULL`); got != 2 {
+		t.Fatalf("alert diagnoses = %d", got)
+	}
+	var mtr, ping int
+	for _, body := range h.fake.Bodies {
+		switch {
+		case body.Type == "mtr" && len(body.NodeIDs) == 1 && body.NodeIDs[0] == "m1":
+			mtr++
+		case body.Type == "ping" && body.Target == "198.51.100.12" && body.Port == 0:
+			ping++
+		case body.Type == "ping" || body.Type == "tcping" && body.Target == "198.51.100.12":
+			t.Fatalf("override not applied: %+v", body)
+		}
+	}
+	if mtr != 2 || ping != 2 {
+		t.Fatalf("mtr jobs = %d, ping jobs of the overridden node = %d", mtr, ping)
+	}
+	if got := h.count(t, `SELECT requests FROM probe_dnspup_usage WHERE purpose='diagnose'`); got != 2 {
+		t.Fatalf("diagnose usage = %d", got)
+	}
+	h.mu.Lock()
+	h.failingISP = ""
+	h.mu.Unlock()
+	h.tick(t)
+	if got := h.count(t, `SELECT count(*) FROM notification_events WHERE event_type='node.dnspup.line_recovered'`); got != 2 {
+		t.Fatalf("line recovered alerts = %d", got)
+	}
 }

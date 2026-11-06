@@ -119,8 +119,8 @@ func TestOpenAnalyticsConnectionsRetentionRuntimeBuildsScopedBoundedStoreAndRevo
 		}
 		query := string(body)
 		for _, required := range []string{
-			"tenant_id={tenant:UUID}", "package_subscription_id={subscription:UUID}",
-			"period_start>={from:DateTime64(3)}", "period_end<={to:DateTime64(3)}", "LIMIT {limit:UInt64}",
+			"facts.tenant_id={tenant:UUID}", "facts.package_subscription_id={subscription:UUID}",
+			"facts.period_start>={from:DateTime64(3, 'UTC')}", "facts.period_end<={to:DateTime64(3, 'UTC')}", "LIMIT {limit:UInt64}",
 		} {
 			if !strings.Contains(query, required) {
 				t.Errorf("ClickHouse query omitted %q", required)

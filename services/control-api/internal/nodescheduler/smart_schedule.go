@@ -2,8 +2,11 @@ package nodescheduler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/google/uuid"
@@ -107,10 +110,14 @@ func (s *Service) LatencyMatrix(ctx context.Context, actor Actor, groupID uuid.U
 
 // PutSmartSchedule replaces the configuration (node_scheduling.manage) and
 // audits the change. Turning it off drops the selections at once so the DNS
-// writer returns to the static lines on its next tick.
+// writer returns to the static lines on its next tick. idempotencyKey is bound
+// to (group, settings): other settings under the same key are
+// ErrIdempotencyConflict, and a replay writes nothing and returns the current
+// settings.
 func (s *Service) PutSmartSchedule(ctx context.Context, actor Actor, groupID uuid.UUID, settings SmartScheduleSettings,
-	requestID string) (SmartScheduleSettings, int64, error) {
-	if ctx == nil || actor.UserID == uuid.Nil || groupID == uuid.Nil || !writeMetadataPattern.MatchString(requestID) {
+	idempotencyKey, requestID string) (SmartScheduleSettings, int64, error) {
+	if ctx == nil || actor.UserID == uuid.Nil || groupID == uuid.Nil || !writeMetadataPattern.MatchString(idempotencyKey) ||
+		!writeMetadataPattern.MatchString(requestID) {
 		return SmartScheduleSettings{}, 0, ErrInvalidInput
 	}
 	settings.Fallback = "carrier_then_default"
@@ -120,12 +127,21 @@ func (s *Service) PutSmartSchedule(ctx context.Context, actor Actor, groupID uui
 	if actor.ScopeKind == "platform" && actor.ResourceScopeID() != actor.ScopeID {
 		return SmartScheduleSettings{}, 0, ErrPlatformWriteDenied
 	}
+	digest, err := smartScheduleRequestDigest(groupID, settings)
+	if err != nil {
+		return SmartScheduleSettings{}, 0, err
+	}
+	now := s.now().UTC().Truncate(time.Microsecond)
 	var revision int64
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := s.authorizeTx(ctx, tx, actor, permissionManage, true); err != nil {
 			return err
 		}
 		scopeID := actor.ResourceScopeID()
+		_, replayed, err := claimWrite(ctx, tx, actor, operationGroupSmartSchedule, idempotencyKey, digest, groupID, now)
+		if err != nil {
+			return err
+		}
 		if _, err := smartGroupRevision(ctx, tx, scopeID, groupID, true); err != nil {
 			return err
 		}
@@ -134,8 +150,16 @@ func (s *Service) PutSmartSchedule(ctx context.Context, actor Actor, groupID uui
 			return err
 		}
 		revision = current
-		if before == settings && current > 0 {
+		if replayed {
+			settings = before
 			return nil
+		}
+		complete := func() error {
+			return completeWrite(ctx, tx, actor, operationGroupSmartSchedule, idempotencyKey,
+				map[string]any{"group_id": groupID, "revision": revision}, now)
+		}
+		if before == settings && current > 0 {
+			return complete()
 		}
 		revision = current + 1
 		if _, err := tx.Exec(ctx, `INSERT INTO node_line_group_smart_schedules(tenant_scope_id,line_group_id,enabled,top_n,
@@ -155,13 +179,24 @@ func (s *Service) PutSmartSchedule(ctx context.Context, actor Actor, groupID uui
 				return fmt.Errorf("clear smart selections: %w", err)
 			}
 		}
-		return s.auditor.Append(ctx, tx, audit.Event{
+		if err := s.auditor.Append(ctx, tx, audit.Event{
 			ScopeID: scopeID, ActorUserID: &actor.UserID, Action: "node_scheduling.group.smart_schedule",
 			ResourceType: "node_line_group", ResourceID: groupID.String(), RequestID: requestID, Result: "success",
 			Payload: map[string]any{"changes": map[string]any{"before": before, "after": settings}, "revision": revision},
-		})
+		}); err != nil {
+			return err
+		}
+		return complete()
 	})
 	return settings, revision, err
+}
+
+func smartScheduleRequestDigest(groupID uuid.UUID, settings SmartScheduleSettings) ([32]byte, error) {
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return sha256.Sum256(append(append([]byte("cdnca.node-scheduling.group-smart-schedule-request/v1\x00"), groupID[:]...), encoded...)), nil
 }
 
 // readTx is not READ ONLY: authorizeTx (iamlock) takes FOR SHARE / FOR KEY

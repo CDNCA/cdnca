@@ -60,18 +60,41 @@ type Settings struct {
 	FailureRounds   int      `json:"failure_rounds"`
 	RecoveryRounds  int      `json:"recovery_rounds"`
 	LowBalance      int64    `json:"low_balance"`
+	// ProbeType is tcping (default), ping or http (any HTTP answer is
+	// reachable; https cannot be expressed against a node IP, see
+	// docs/architecture/probe-dnspup-unified.md §2).
+	ProbeType string `json:"probe_type"`
+	// Selection, when set, replaces Groups / PointsPerGroup (migration 638).
+	Selection *dnspupprobe.Selection `json:"selection"`
+	// Line alerts: a carrier × area cell with at least LineAlertMinPoints
+	// failed checkpoints (and more than FailurePercent) for LineAlertRounds
+	// rounds alerts; AutoDiagnose then runs one mtr.
+	LineAlertMinPoints int  `json:"line_alert_min_points"`
+	LineAlertRounds    int  `json:"line_alert_rounds"`
+	AutoDiagnose       bool `json:"auto_diagnose"`
 }
+
+// Probe types of node availability.
+const (
+	ProbeTCPing = "tcping"
+	ProbePing   = "ping"
+	ProbeHTTP   = "http"
+)
 
 func DefaultSettings() Settings {
 	return Settings{IntervalSeconds: 300, Groups: []string{GroupTelecom, GroupUnicom, GroupMobile}, PointsPerGroup: 3,
-		FailurePercent: 50, FailureRounds: 3, RecoveryRounds: 1, LowBalance: 1000}
+		FailurePercent: 50, FailureRounds: 3, RecoveryRounds: 1, LowBalance: 1000, ProbeType: ProbeTCPing,
+		LineAlertMinPoints: 3, LineAlertRounds: 2, AutoDiagnose: true}
 }
 
 func Validate(value Settings) error {
 	if !slices.Contains([]int{0, 60, 300, 900}, value.IntervalSeconds) || len(value.Groups) == 0 ||
 		len(value.Groups) > len(allGroups) || value.PointsPerGroup < 1 || value.PointsPerGroup > 20 ||
 		value.FailurePercent < 1 || value.FailurePercent > 99 || value.FailureRounds < 1 || value.FailureRounds > 10 ||
-		value.RecoveryRounds < 1 || value.RecoveryRounds > 10 || value.LowBalance < 0 || value.LowBalance > 1_000_000_000 {
+		value.RecoveryRounds < 1 || value.RecoveryRounds > 10 || value.LowBalance < 0 || value.LowBalance > 1_000_000_000 ||
+		!slices.Contains([]string{ProbeTCPing, ProbePing, ProbeHTTP}, value.ProbeType) ||
+		value.LineAlertMinPoints < 1 || value.LineAlertMinPoints > 20 || value.LineAlertRounds < 1 || value.LineAlertRounds > 10 ||
+		value.Selection != nil && value.Selection.Validate() != nil {
 		return ErrInvalidSettings
 	}
 	seen := map[string]bool{}
@@ -96,6 +119,11 @@ type Checkpoint struct {
 	Location string `json:"location,omitempty"`
 	OK       bool   `json:"ok"`
 	Latency  int    `json:"latency_ms,omitempty"`
+	// Area / Line / Failure (migration 638): mainland / hkmotw / overseas,
+	// the finer carrier (edu, bgp, other) and the failure category.
+	Area    string `json:"area,omitempty"`
+	Line    string `json:"line,omitempty"`
+	Failure string `json:"failure,omitempty"`
 }
 
 // RoundResult is one probed address in one round.
@@ -125,35 +153,51 @@ func CheckpointGroup(vote dnspupprobe.Vote) string {
 	return ""
 }
 
-// Round tallies the answering checkpoints of the selected groups (domestic
-// takes every mainland checkpoint).
+// judge is one checkpoint's node availability verdict: for http any HTTP
+// answer shows the node reachable (the status code is only shown).
+func judge(kind string, result dnspupprobe.Result) (voted, ok bool, failure string) {
+	if kind == ProbeHTTP && result.HTTPStatus > 0 && result.Status != "unavailable" && result.Status != "unknown" {
+		return true, true, dnspupprobe.FailureOK
+	}
+	if kind == "" {
+		kind = ProbeTCPing
+	}
+	return dnspupprobe.Judge(kind, result, nil)
+}
+
+// Round tallies the answering checkpoints: with a Selection every answering
+// checkpoint (they were picked by it), otherwise those of the selected groups
+// (domestic takes every mainland checkpoint).
 func Round(results []dnspupprobe.Result, settings Settings) RoundResult {
 	round := RoundResult{FailurePercent: settings.FailurePercent}
 	if round.FailurePercent <= 0 {
 		round.FailurePercent = 50
 	}
-	votes := dnspupprobe.TCPVotes(results)
-	for index, vote := range votes {
-		if !vote.Voted {
+	for _, result := range results {
+		voted, ok, failure := judge(settings.ProbeType, result)
+		if !voted {
 			continue
 		}
+		vote := dnspupprobe.TCPVotes([]dnspupprobe.Result{result})[0]
 		group := CheckpointGroup(vote)
-		selected := slices.Contains(settings.Groups, group) ||
+		selected := settings.Selection != nil || slices.Contains(settings.Groups, group) ||
 			slices.Contains(settings.Groups, GroupDomestic) && (group == GroupTelecom || group == GroupUnicom || group == GroupMobile)
-		if group == "" || !selected {
+		if settings.Selection == nil && group == "" || !selected {
 			continue
 		}
 		round.Total++
-		if !vote.OK {
+		if !ok {
 			round.Failed++
 		}
-		region, _ := marketprobe.Region(results[index].Region)
-		province, ok := marketprobe.Province(results[index].Region)
-		if !ok {
-			province, _ = marketprobe.Province(results[index].Location)
+		region, _ := marketprobe.Region(result.Region)
+		province, found := marketprobe.Province(result.Region)
+		if !found {
+			province, _ = marketprobe.Province(result.Location)
 		}
-		round.Checkpoints = append(round.Checkpoints, Checkpoint{ID: vote.NodeID, Group: group, Carrier: vote.Carrier,
-			Region: region, Province: province, Location: results[index].Location, OK: vote.OK, Latency: vote.LatencyMS})
+		place := dnspupprobe.PlaceOf(result.Region, result.Location, result.ISP)
+		round.Checkpoints = append(round.Checkpoints, Checkpoint{ID: result.NodeID, Group: group, Carrier: vote.Carrier,
+			Region: region, Province: province, Location: result.Location, OK: ok, Latency: dnspupprobe.Latency(result),
+			Area: place.Area, Line: place.Carrier, Failure: failure})
 	}
 	return round
 }

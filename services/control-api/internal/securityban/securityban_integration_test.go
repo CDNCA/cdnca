@@ -344,6 +344,40 @@ func TestSecurityBanSyncFoldsAutomaticBans(t *testing.T) {
 	}
 }
 
+// TestSecurityBanSyncSkipsCountKeyBans: a CC ban of what a
+// rule counts by (detector count_key: count_by uri / header / cookie, or
+// target count_key) names the client whose request crossed the limit; it
+// stays the node's rule ban and never lists the client on the whole site. A
+// ban of the client itself still folds.
+func TestSecurityBanSyncSkipsCountKeyBans(t *testing.T) {
+	pool := newPool(t)
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	a := seedTenant(t, pool, "sbk-"+uuid.NewString()[:6])
+	event := func(id, client, detector string, ingested time.Time) analyticslog.TemporaryBanEvent {
+		return analyticslog.TemporaryBanEvent{EventID: id, TenantID: a.tenant.String(), SiteID: a.site.String(), EventType: "cc",
+			ClientIP: client, RuleID: uuid.NewString(), Detector: detector, OccurredAt: now.Add(-time.Minute), IngestedAt: ingested}
+	}
+	source := &events{items: []analyticslog.TemporaryBanEvent{
+		event("k1", "198.51.100.30", "count_key", now.Add(-time.Minute)),
+		event("k2", "198.51.100.31", "", now.Add(-time.Minute+time.Millisecond)),
+	}}
+	syncer, err := securityban.NewSyncer(pool, source, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := syncer.RunOnce(ctx)
+	if err != nil || result.Read != 2 || result.Added != 1 || result.Skipped != 1 {
+		t.Fatalf("sync = %+v, %v (want the client ban added, the count_key ban skipped)", result, err)
+	}
+	service := securityban.NewService(securityban.NewStore(pool, func() time.Time { return now }))
+	listed, err := service.List(ctx, securityban.Actor{UserID: a.owner, ScopeID: a.scope, ScopeKind: "tenant"},
+		securityban.ListFilter{SiteID: &a.site, Page: 1, Limit: 20})
+	if err != nil || listed.Total != 1 || listed.Items[0].ClientIP != "198.51.100.31" {
+		t.Fatalf("list = %+v, %v (want only 198.51.100.31)", listed, err)
+	}
+}
+
 type captured struct {
 	nodeID   string
 	revision uint64

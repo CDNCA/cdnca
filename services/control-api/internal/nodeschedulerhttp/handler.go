@@ -65,7 +65,7 @@ type lineGroupStatisticsService interface {
 // platformDefaultService is optional so test doubles of Service need not
 // implement it (migration 533).
 type platformDefaultService interface {
-	SetPlatformDefault(context.Context, nodescheduler.Actor, uuid.UUID, bool, string) (nodescheduler.LineGroupRevision, error)
+	SetPlatformDefault(context.Context, nodescheduler.Actor, uuid.UUID, bool, string, string) (nodescheduler.LineGroupRevision, error)
 }
 
 type Authenticator interface {
@@ -516,7 +516,7 @@ func (handler *Handler) platformDefault(response http.ResponseWriter, request *h
 	if !ok {
 		return
 	}
-	_, requestID, ok := handler.metadataWithoutRevision(response, request)
+	key, requestID, ok := handler.metadataWithoutRevision(response, request)
 	if !ok {
 		return
 	}
@@ -528,7 +528,7 @@ func (handler *Handler) platformDefault(response http.ResponseWriter, request *h
 		handler.writeError(response, request, ErrInvalidRequest)
 		return
 	}
-	group, err := service.SetPlatformDefault(request.Context(), actor, groupID, *body.IsPlatformDefault, requestID)
+	group, err := service.SetPlatformDefault(request.Context(), actor, groupID, *body.IsPlatformDefault, key, requestID)
 	if err != nil {
 		handler.writeError(response, request, err)
 		return

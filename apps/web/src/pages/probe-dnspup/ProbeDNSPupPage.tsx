@@ -13,6 +13,7 @@ import { useSessionStore } from '../../auth/session'
 import { PurchaseModuleLink } from '../../components/PurchaseModuleLink'
 import '../../i18n/probeDNSPup'
 import { NodeProbeCard } from './NodeProbeCard'
+import { MatrixCard, OverridesCard, PurposesCard } from './UnifiedCards'
 import { useFeedback, FeedbackWhen, PageSection, useFormSubmitError } from '@cdnca/ui'
 
 interface FormValues {
@@ -142,6 +143,9 @@ export default function ProbeDNSPupPage() {
         </Descriptions.Item> : null}
       </Descriptions>
     </Card> : null}
+    {data ? <PurposesCard token={token} /> : null}
     {data ? <NodeProbeCard token={token} /> : null}
+    {data ? <OverridesCard token={token} /> : null}
+    {data ? <MatrixCard token={token} initialNode={new URLSearchParams(window.location.search).get('node') ?? undefined} /> : null}
   </Space></PageSection>
 }

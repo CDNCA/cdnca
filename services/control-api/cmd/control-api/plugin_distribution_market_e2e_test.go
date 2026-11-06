@@ -9,14 +9,21 @@ import (
 )
 
 // runMarketPluginFlow drives example plugin two (bought on the plugin market when PLUGIN_E2E_MARKET=1, otherwise
-// published by the license operator) through the production installation path: the controller administrator
-// confirms the authorization, the platform approves 1.1.0, the tenant upgrades and finally uninstalls it. Every
-// step must be reflected in the license-side authorization receipts. It writes <dir>/finished so the market
-// process stops serving its catalog origin.
-func runMarketPluginFlow(t *testing.T, directory string, fixture licenseFixture, client controlClient) {
+// published by the license operator) through the production installation path: the controller's platform
+// administrator confirms the authorization for all tenants, the license operator
+// approves 1.1.0, the platform administrator upgrades and finally uninstalls it; tenants only read it. Every step
+// must be reflected in the license-side authorization receipts. covered reports whether every tenant can use the
+// plugin. It writes <dir>/finished so the market process stops serving its catalog origin.
+func runMarketPluginFlow(t *testing.T, directory string, fixture licenseFixture, client controlClient,
+	tenants []controlClient, covered func(string) bool) {
 	t.Helper()
 	defer func() { _ = os.WriteFile(filepath.Join(directory, "finished"), nil, 0o600) }()
 	market := fixture.Plugins[marketPluginID]
+	for _, tenant := range tenants {
+		if tenant.list().find(market.AuthorizationID) != nil {
+			t.Fatalf("%s offered the market plugin for confirmation", tenant.name())
+		}
+	}
 	item := client.list().find(market.AuthorizationID)
 	if item == nil || item.Status != "pending_confirmation" {
 		t.Fatalf("market plugin not offered: %+v", item)
@@ -29,11 +36,29 @@ func runMarketPluginFlow(t *testing.T, directory string, fixture licenseFixture,
 		t.Logf("market plugin %s awaits the controller administrator (license revision %d)",
 			item.AuthorizationID, item.Revision)
 	}
-	installed := client.mutate(item.AuthorizationID, "confirm", item.Revision, map[string]any{
-		"verification_id": item.VerificationID, "approved_scopes": item.ApprovedScopes,
-		"sensitive_permissions_confirmed": true, "new_permissions_confirmed": true}, http.StatusOK)
-	if installed.Status != "enabled" || installed.Version != "1.0.0" {
-		t.Fatalf("market plugin install=%+v", installed)
+	body := map[string]any{"verification_id": item.VerificationID, "approved_scopes": item.ApprovedScopes,
+		"sensitive_permissions_confirmed": true, "new_permissions_confirmed": true}
+	tenants[0].refused(item.AuthorizationID, "confirm", item.Revision, body, http.StatusForbidden,
+		"plugin_installation_platform_managed")
+	// A pending market authorization: the targets check runs before the license service records the confirmation.
+	client.refused(item.AuthorizationID, "confirm", item.Revision, body, http.StatusUnprocessableEntity,
+		"plugin_installation_targets_invalid")
+	if covered("market plugin before confirmation") {
+		t.Fatal("market plugin usable before the platform administrator confirmed it")
+	}
+	body["targets"] = allTenantTargets()
+	installed := client.mutate(item.AuthorizationID, "confirm", item.Revision, body, http.StatusOK)
+	if installed.Status != "enabled" || installed.Version != "1.0.0" || installed.ManagedBy != "platform" ||
+		installed.Targets == nil || !installed.Targets.AllTenants || len(installed.Targets.Tenants) != 0 {
+		t.Fatalf("market plugin install=%+v targets=%+v", installed, installed.Targets)
+	}
+	for _, tenant := range tenants {
+		if view := tenant.get(market.AuthorizationID); view.Status != "enabled" || view.ManagedBy != "platform" {
+			t.Fatalf("%s view of the market plugin=%+v", tenant.name(), view)
+		}
+	}
+	if !covered("market plugin for all tenants") {
+		t.Fatal("market plugin confirmed for all tenants is not usable by every tenant")
 	}
 	if market.ControllerConfirm {
 		state := licenseState(t, fixture, marketPluginID)
@@ -60,6 +85,8 @@ func runMarketPluginFlow(t *testing.T, directory string, fixture licenseFixture,
 	if upgraded.Version != "1.1.0" || upgraded.Status != "enabled" {
 		t.Fatalf("market plugin upgrade=%+v", upgraded)
 	}
+	tenants[0].refused(upgraded.AuthorizationID, "uninstall", upgraded.Revision, map[string]any{"reason": "租户试图卸载"},
+		http.StatusForbidden, "plugin_installation_platform_managed")
 	removed := client.mutate(upgraded.AuthorizationID, "uninstall", upgraded.Revision,
 		map[string]any{"reason": "联调结束卸载"}, http.StatusOK)
 	if removed.Status != "uninstalled" {

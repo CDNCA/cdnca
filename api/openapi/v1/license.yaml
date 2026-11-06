@@ -1142,6 +1142,8 @@ paths:
         their BanNotice. Only active installations with an eligible license receive a
         ServiceTicket (valid for the node offline tolerance, default 7 days, reissued daily).
         Documents are base64url of canonical signed bytes; an empty string means absent.
+      security:
+        - InstallationStateFetchProof: []
       parameters:
         - {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
         - {name: X-Cdnca-Installation-ID, in: header, required: true, schema: {type: string, format: uuid}}
@@ -4548,6 +4550,7 @@ paths:
         master IP or an unexpired migration IP of an active license of an active
         customer. No body is returned in either case.
       security: []
+      x-auth-request-target: true
       responses:
         '204':
           description: Source authorized
@@ -5422,6 +5425,10 @@ paths:
         exact request-id replay is idempotent. The licensing service stores the
         complete user-authored snapshot, while platform-provided protected rules
         are not included in this response path.
+        There is no session, header proof or client certificate: the body
+        `signature` (Ed25519 by the installation's registered key) is the only
+        authentication, so the operation declares no security scheme.
+      security: []
       requestBody:
         required: true
         content:
@@ -6817,6 +6824,15 @@ components:
         The signature binds every request identity, freshness and chain header as
         specified by getCurrentSignerRevocationManifest. Installation identity and
         key material are looked up server-side; downloaded data cannot establish trust.
+    InstallationProof: {$ref: '../../license-upgrade-candidates.openapi.yaml#/components/securitySchemes/InstallationProof'}
+    InstallationStateFetchProof:
+      type: apiKey
+      in: header
+      name: X-Cdnca-Proof
+      description: |
+        Unpadded base64url Ed25519 signature by the installation's registered key over
+        cdnca-installation-state-fetch-proof/v1, binding X-Request-ID,
+        X-Cdnca-Installation-ID and X-Cdnca-Requested-At (libs/entitlement/installationban).
   parameters:
     Page:
       name: page

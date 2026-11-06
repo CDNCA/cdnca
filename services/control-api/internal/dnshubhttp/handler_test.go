@@ -21,6 +21,19 @@ type fakeHub struct {
 	mutations []dnsproviderremotesource.HubMutation
 	err       error
 	result    dnsproviderremotesource.HubMutationResult
+	batches   map[string]string // batch Idempotency-Key -> request digest (tenant_dns_record_batch_requests)
+}
+
+func (hub *fakeHub) ClaimBatch(_ context.Context, actor dnsproviderremotesource.HubActor, key, digest string) error {
+	hub.actors = append(hub.actors, actor)
+	if hub.batches == nil {
+		hub.batches = map[string]string{}
+	}
+	if stored, ok := hub.batches[key]; ok && stored != digest {
+		return dnsproviderremotesource.ErrHubIdempotency
+	}
+	hub.batches[key] = digest
+	return nil
 }
 
 func (hub *fakeHub) ListDomains(_ context.Context, actor dnsproviderremotesource.HubActor, _ dnsproviderremotesource.HubDomainQuery) (dnsproviderremotesource.HubDomainPage, error) {
@@ -290,5 +303,32 @@ func TestBatchRunsItemsWithDerivedKeys(t *testing.T) {
 	empty := serve(t, hub, http.MethodPost, "/v1/dns/hub/records/batch", "tenant", `{"items":[]}`, map[string]string{"Idempotency-Key": "batch-2"})
 	if empty.Code != http.StatusBadRequest {
 		t.Fatalf("empty batch status %d", empty.Code)
+	}
+}
+
+// The batch key is bound to the whole items list: the same key with other items is 409 before any item runs;
+// the same items (whitespace aside) replay item by item.
+func TestBatchSameKeyOtherItemsConflicts(t *testing.T) {
+	hub := &fakeHub{result: dnsproviderremotesource.HubMutationResult{OpID: uuid.New(), State: "applied", Status: 201}}
+	provider := uuid.NewString()
+	item := func(value string) string {
+		return `{"provider_id":"` + provider + `","apex":"a.com","action":"create","name":"www","type":"A","value":"` + value + `","ttl":600}`
+	}
+	headers := map[string]string{"Idempotency-Key": "batch-same"}
+	first := serve(t, hub, http.MethodPost, "/v1/dns/hub/records/batch", "tenant", `{"items":[`+item("192.0.2.1")+`]}`, headers)
+	if first.Code != http.StatusOK || len(hub.mutations) != 1 {
+		t.Fatalf("first batch = %d %s, mutations %d", first.Code, first.Body.String(), len(hub.mutations))
+	}
+	replay := serve(t, hub, http.MethodPost, "/v1/dns/hub/records/batch", "tenant", "{ \"items\" : [ "+item("192.0.2.1")+" ] }", headers)
+	if replay.Code != http.StatusOK || len(hub.mutations) != 2 || hub.mutations[1].IdempotencyKey != "batch-same.0" {
+		t.Fatalf("replay = %d %s, mutations %+v", replay.Code, replay.Body.String(), hub.mutations)
+	}
+	other := serve(t, hub, http.MethodPost, "/v1/dns/hub/records/batch", "tenant", `{"items":[`+item("192.0.2.9")+`]}`, headers)
+	if other.Code != http.StatusConflict || !strings.Contains(other.Body.String(), `"idempotency_conflict"`) ||
+		!strings.Contains(other.Body.String(), `"request_id"`) {
+		t.Fatalf("same key, other items = %d %s; want 409 idempotency_conflict", other.Code, other.Body.String())
+	}
+	if len(hub.mutations) != 2 {
+		t.Fatalf("conflicting batch ran %d items", len(hub.mutations)-2)
 	}
 }

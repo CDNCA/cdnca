@@ -164,9 +164,10 @@ func (verifier *Verifier) VerifyTx(
 	// 插件身份（迁移 604）：绑定的安装停用/卸载后即拒绝，与 internal/apikey 鉴权一致。
 	if pluginAuthorizationID != nil {
 		var installationStatus string
+		// Migration 636: a platform-held head counts while it still covers this tenant.
 		if err := tx.QueryRow(ctx, `SELECT status FROM plugin_installation_heads
-			WHERE tenant_scope_id=$1 AND authorization_id=$2 FOR SHARE`, scopeID, *pluginAuthorizationID).Scan(
-			&installationStatus); err != nil {
+			WHERE authorization_id=$2 AND plugin_installation_covers_tenant_636(authorization_id, $1) FOR SHARE`,
+			scopeID, *pluginAuthorizationID).Scan(&installationStatus); err != nil {
 			return Credential{}, credentialFactError(err)
 		}
 		if installationStatus != "enabled" {

@@ -176,11 +176,17 @@ func validDDoSProtection(status *DDoSProtectionMetrics) bool {
 // SiteDropMetrics are the level D site drops (攻击自动升级: XDP site counters
 // and the nftables site_drop counter) since the previous sample. The node's
 // counters are not per site: Packets / Bytes are the node total, shared by
-// SiteIDs (the sites dropped for in the interval).
+// SiteIDs (the sites dropped for in the interval). SNIMissedPackets /
+// SNIMissedBytes are not drops: the ClientHellos on shared TLS ports XDP
+// passed in the interval because their server_name was not in the first
+// segment (xdp.SiteDropCounters.SNIMissed). They are not sent yet: the
+// NodeSiteDropV1 fields need proto numbers.
 type SiteDropMetrics struct {
-	SiteIDs []string `json:"site_ids"`
-	Packets uint64   `json:"packets"`
-	Bytes   uint64   `json:"bytes"`
+	SiteIDs          []string `json:"site_ids"`
+	Packets          uint64   `json:"packets"`
+	Bytes            uint64   `json:"bytes"`
+	SNIMissedPackets uint64   `json:"sni_missed_packets,omitempty"`
+	SNIMissedBytes   uint64   `json:"sni_missed_bytes,omitempty"`
 }
 
 // MaxSiteDropSites bounds SiteDropMetrics.SiteIDs.
@@ -192,7 +198,8 @@ func validSiteDrop(drop *SiteDropMetrics) bool {
 	if drop == nil {
 		return true
 	}
-	if len(drop.SiteIDs) == 0 || len(drop.SiteIDs) > MaxSiteDropSites || drop.Packets > math.MaxInt64 || drop.Bytes > math.MaxInt64 {
+	if len(drop.SiteIDs) == 0 || len(drop.SiteIDs) > MaxSiteDropSites || drop.Packets > math.MaxInt64 || drop.Bytes > math.MaxInt64 ||
+		drop.SNIMissedPackets > math.MaxInt64 || drop.SNIMissedBytes > math.MaxInt64 {
 		return false
 	}
 	previous := ""

@@ -41,6 +41,19 @@ func ModSecurityRules(mount Mount, pack *CompiledPack) ([]NodeRule, error) {
 	return program([]Mount{mount}, map[string]*CompiledPack{mount.SHA256: pack}, false)
 }
 
+// MountRules instantiates one published mount of any engine (its params applied), as the node runs it: the
+// control plane reads a pack rule's own values by node rule ID (the ban seconds of a rule a node banned with,
+// D3). A sealed pack has no readable rules here.
+func MountRules(mount Mount, pack *CompiledPack) ([]NodeRule, error) {
+	if pack == nil || pack.SHA256 != mount.SHA256 || pack.Pack.PackID != mount.PackID || pack.Pack.Engine != mount.Engine {
+		return nil, fmt.Errorf("%w: mount %s does not match its pack", ErrInvalidPack, mount.PackID)
+	}
+	if pack.Sealed {
+		return nil, fmt.Errorf("%w: sealed pack %s has no readable rules", ErrInvalidPack, mount.PackID)
+	}
+	return program([]Mount{mount}, map[string]*CompiledPack{mount.SHA256: pack}, false)
+}
+
 // SiteCRSExclusions applies a site's modsecurity mount (Resolve allows at
 // most one) to its managed WAF: ok is false without one (exclusions are then
 // siteExclusions unchanged). profile is the site's CRS profile, nil when the

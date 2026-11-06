@@ -1,0 +1,648 @@
+{
+ "id": "admin-probe-dnspup",
+ "prefix": "/v1/admin/probe-dnspup",
+ "operations": [
+  {
+   "operation_id": "createProbeDNSPupDiagnosis",
+   "method": "POST",
+   "path": "/v1/admin/probe-dnspup/diagnoses",
+   "summary": "Run one mtr diagnosis (at most 2 checkpoints, metered as diagnose)",
+   "summary_zh": "按需 MTR 排障（最多 2 个检测点，计入「排障」用途额度）",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target",
+      "type": "string",
+      "required": true,
+      "description": "public IP or domain"
+     },
+     {
+      "name": "node_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "checkpoints",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Started",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / completed / failed",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "traces",
+       "type": "any",
+       "description": "mtr hop sets as dnspup returns them"
+      },
+      {
+       "name": "results",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    },
+    {
+     "status": "429",
+     "description": "Error envelope"
+    },
+    {
+     "status": "503",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "getProbeDNSPupDiagnosis",
+   "method": "GET",
+   "path": "/v1/admin/probe-dnspup/diagnoses/{id}",
+   "summary": "Read a diagnosis (Retry-After while pending)",
+   "summary_zh": "读取排障结果（运行中带 Retry-After）",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Diagnosis",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / completed / failed",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "traces",
+       "type": "any",
+       "description": "mtr hop sets as dnspup returns them"
+      },
+      {
+       "name": "results",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "listProbeDNSPupEdgeSubjects",
+   "method": "GET",
+   "path": "/v1/admin/probe-dnspup/edge-subjects",
+   "summary": "CDN candidate hosts probed in the last day",
+   "summary_zh": "最近一天有拨测结果的第三方 CDN 候选主机",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Hosts",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<string>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "getProbeDNSPupMatrix",
+   "method": "GET",
+   "path": "/v1/admin/probe-dnspup/matrix",
+   "summary": "Area × carrier matrix and history of a node or a CDN candidate host",
+   "summary_zh": "节点或第三方 CDN 候选的「地区 × 运营商」矩阵与历史曲线",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "params": [
+    {
+     "name": "subject",
+     "in": "query",
+     "type": "string: node / edge",
+     "required": true
+    },
+    {
+     "name": "id",
+     "in": "query",
+     "type": "string",
+     "required": true,
+     "description": "node id, or the candidate host"
+    },
+    {
+     "name": "window",
+     "in": "query",
+     "type": "string: 1h / 6h / 24h / 7d"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Matrix",
+     "fields": [
+      {
+       "name": "subject",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "window",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "cells",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "series",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "listProbeDNSPupNodeOverrides",
+   "method": "GET",
+   "path": "/v1/admin/probe-dnspup/node-monitoring/overrides",
+   "summary": "Per node / line group overrides",
+   "summary_zh": "按节点或线路组覆盖的拨测类型与选点",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Overrides",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Override>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "503",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "putProbeDNSPupNodeOverride",
+   "method": "PUT",
+   "path": "/v1/admin/probe-dnspup/node-monitoring/overrides",
+   "summary": "Create or replace the override of a node or a line group",
+   "summary_zh": "新建或替换一个节点（node_id）或线路组（tenant_scope_id + line_group_id）的覆盖",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "node_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "tenant_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "line_group_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "probe_type",
+      "type": "string: tcping / ping / http"
+     },
+     {
+      "name": "selection",
+      "type": "Selection"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "subject_kind",
+       "type": "string: node / line_group",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "line_group_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "subject_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "probe_type",
+       "type": "string: tcping / ping / http / null | null: tcping / ping / http / null"
+      },
+      {
+       "name": "selection",
+       "type": "Selection | null"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteProbeDNSPupNodeOverride",
+   "method": "DELETE",
+   "path": "/v1/admin/probe-dnspup/node-monitoring/overrides/{id}",
+   "summary": "Delete an override",
+   "summary_zh": "删除覆盖（恢复继承）",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "getProbeDNSPupPurposes",
+   "method": "GET",
+   "path": "/v1/admin/probe-dnspup/purposes",
+   "summary": "Probe purposes with usage, projection and budget gate",
+   "summary_zh": "按用途的拨测开关、月上限、频率、本月用量、预计月用量与降频状态",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Purposes",
+     "fields": [
+      {
+       "name": "monthly_limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "monthly_used",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "projected_monthly",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "purposes",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "putProbeDNSPupPurposes",
+   "method": "PUT",
+   "path": "/v1/admin/probe-dnspup/purposes",
+   "summary": "Change purposes (availability purposes cannot be disabled)",
+   "summary_zh": "修改用途的开关、月上限与最小间隔（可用性类用途不能关闭）",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system.probe_dnspup.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "purposes",
+      "type": "array<object>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved",
+     "fields": [
+      {
+       "name": "monthly_limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "monthly_used",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "projected_monthly",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "purposes",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    }
+   ]
+  }
+ ]
+}

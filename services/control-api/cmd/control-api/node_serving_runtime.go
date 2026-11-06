@@ -79,12 +79,13 @@ func openNodeExternalProbe(pool *pgxpool.Pool, edgeConnection natsRuntimeConnect
 // openNodeDNSPupProbe probes published node addresses from dnspup
 // checkpoints (module.probe.dnspup with a key pair; internal/nodednspupprobe):
 // the availability log and, with the local probe, the serving hold.
-func openNodeDNSPupProbe(pool *pgxpool.Pool, sources func(context.Context) dnspupprobe.Runtime) (*nodednspupprobe.Runner, error) {
+func openNodeDNSPupProbe(pool *pgxpool.Pool, sources func(context.Context) dnspupprobe.Runtime,
+	diagnose nodednspupprobe.Diagnoser) (*nodednspupprobe.Runner, error) {
 	alerts, err := notification.NewStore(pool)
 	if err != nil {
 		return nil, err
 	}
-	return nodednspupprobe.NewRunner(nodednspupprobe.Config{Pool: pool, Sources: sources, Alerts: alerts,
+	return nodednspupprobe.NewRunner(nodednspupprobe.Config{Pool: pool, Sources: sources, Alerts: alerts, Diagnose: diagnose,
 		Logger: slog.Default().With("component", "node_dnspup_probe")})
 }
 

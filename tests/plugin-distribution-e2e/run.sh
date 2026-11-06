@@ -15,13 +15,19 @@
 # Process 2 (control-api, cmd/control-api): production plugin installation + authorized webhook wiring against
 #   process 1 over mTLS; installs, pauses/resumes, upgrades and uninstalls the plugin and checks receipts on both
 #   sides; then confirms, upgrades and uninstalls example plugin two and checks its license-side receipts.
+#   Control migration 636: every confirmation, upgrade and uninstall is done by the controller's
+#   platform administrator; a tenant plugin is confirmed for chosen tenants (one tenant, then widened to all
+#   tenants; example plugin two straight to all tenants) and each tenant's use is checked through the production
+#   plugin identity gate. Tenant confirm/disable/upgrade/uninstall must be refused (403
+#   plugin_installation_platform_managed).
 # Process 3 (market-service, internal/httpapi; PLUGIN_E2E_MARKET=1, the default): the plugin market publishes
 #   example plugin two instead of the operator: publisher key with possession proof (re-checked by process 1 over
 #   the /service/v1 mTLS listener), signed upload, scan conclusion, first-version review, signed catalog served over
 #   HTTPS and verified by process 1, paid plan bought from the prepaid balance, licence projection that makes process
 #   1 create the pending_confirmation authorization (confirmed by the controller administrator in process 2), and
 #   1.1.0 for the upgrade.
-#   PA-18: it also sells a developer rule pack (entrypoint rule_pack, free plan): uploaded with its content file,
+#   PA-18: it also sells a developer rule pack (entrypoint rule_pack, free plan bought as a 0 元 order that must be
+#   fulfilled at once with an active licence, plus a 限免 plan bought the same way): uploaded with its content file,
 #   compiled by the production review worker (developer layer, cost budget), reviewed (plugin.listing.review.*
 #   audit), listed and fetched/re-checked by process 1 (plugin_data_packs); process 2 confirms the installation,
 #   runs the production artifact catalog consumer against process 1 (rule_pack/<plugin> entry), gets a developer

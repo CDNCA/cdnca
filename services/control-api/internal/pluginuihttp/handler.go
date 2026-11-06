@@ -117,12 +117,33 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request) (session, bool
 	return session{principal: authenticated.Principal, role: role, modules: modules}, true
 }
 
+// activePlugins are the enabled ui_page plugins this session may use: a tenant only those installed for it (all
+// tenants or a list chosen by the platform administrator, migration 636); the platform scope all of them.
+func (h *Handler) activePlugins(r *http.Request, current session) ([]ActivePlugin, error) {
+	plugins, err := h.config.Store.ActivePlugins(r.Context())
+	coverage, scoped := h.config.Store.(TenantCoverage)
+	if err != nil || !scoped || current.principal.ScopeKind == "platform" {
+		return plugins, err
+	}
+	visible := make([]ActivePlugin, 0, len(plugins))
+	for _, plugin := range plugins {
+		covered, err := coverage.CoversTenant(r.Context(), plugin.AuthorizationID, current.principal.ScopeID)
+		if err != nil {
+			return nil, err
+		}
+		if covered {
+			visible = append(visible, plugin)
+		}
+	}
+	return visible, nil
+}
+
 func (h *Handler) pages(w http.ResponseWriter, r *http.Request) {
 	current, ok := h.session(w, r)
 	if !ok {
 		return
 	}
-	plugins, err := h.config.Store.ActivePlugins(r.Context())
+	plugins, err := h.activePlugins(r, current)
 	if err != nil {
 		h.error(w, r, http.StatusServiceUnavailable, "plugin_ui_unavailable")
 		return
@@ -188,7 +209,7 @@ func (h *Handler) proxy(w http.ResponseWriter, r *http.Request) {
 		h.error(w, r, http.StatusBadRequest, "plugin_ui_request_invalid")
 		return
 	}
-	plugins, err := h.config.Store.ActivePlugins(r.Context())
+	plugins, err := h.activePlugins(r, current)
 	if err != nil {
 		h.error(w, r, http.StatusServiceUnavailable, "plugin_ui_unavailable")
 		return

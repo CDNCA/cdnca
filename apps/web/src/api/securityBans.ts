@@ -3,11 +3,27 @@ import { ApiError, networkApiError } from './auth'
 // The security ban list (封禁名单): manual bans and the
 // nodes' automatic WAF / CC bans, per site; a release lifts a ban on every
 // node serving the site. Tenants use /v1/security-bans, the platform
-// /v1/admin/security-bans.
+// /v1/admin/security-bans. A site served by market leaves sends its list to
+// them; its active bans carry their delivery, and a leaf lists its
+// subscribers' bans as source market (api/control-security-bans).
 
-export type SecurityBanSource = 'waf' | 'cc' | 'manual'
+export type SecurityBanSource = 'waf' | 'cc' | 'manual' | 'autodefense' | 'market'
 export type SecurityBanState = 'active' | 'released' | 'expired'
 export type SecurityBanAudience = 'tenant' | 'admin'
+export type SecurityBanDeliveryState = 'effective' | 'delivering' | 'pending' | 'no_nodes' | 'unsupported' | 'failed' | 'refused'
+
+export interface SecurityBanMarketOrigin {
+  subscription: string
+  buyer_source: string
+}
+
+export interface SecurityBanDelivery {
+  state: SecurityBanDeliveryState
+  reason: string
+  leaves: number
+  effective: number
+  own_nodes: number
+}
 
 export interface SecurityBan {
   id: string
@@ -24,6 +40,8 @@ export interface SecurityBan {
   released_at: string | null
   released_by: string | null
   state: SecurityBanState
+  market: SecurityBanMarketOrigin | null
+  delivery: SecurityBanDelivery | null
 }
 
 export interface SecurityBanPage {
@@ -51,10 +69,11 @@ export interface SecurityBanCreateInput {
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const codePattern = /^[a-z][a-z0-9_]{0,63}$/
-const sources = new Set<SecurityBanSource>(['waf', 'cc', 'manual'])
+const sources = new Set<SecurityBanSource>(['waf', 'cc', 'manual', 'autodefense', 'market'])
 const states = new Set<SecurityBanState>(['active', 'released', 'expired'])
+const deliveryStates = new Set<SecurityBanDeliveryState>(['effective', 'delivering', 'pending', 'no_nodes', 'unsupported', 'failed', 'refused'])
 const fields = ['id', 'tenant_scope_id', 'site_id', 'site_domain', 'client_ip', 'source', 'rule_id', 'reason', 'banned_at',
-  'banned_until', 'created_by', 'released_at', 'released_by', 'state'] as const
+  'banned_until', 'created_by', 'released_at', 'released_by', 'state', 'market', 'delivery'] as const
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -72,6 +91,21 @@ function optionalUUID(value: unknown): boolean {
   return value === null || (typeof value === 'string' && uuidPattern.test(value))
 }
 
+function count(value: unknown): boolean {
+  return Number.isSafeInteger(value) && Number(value) >= 0
+}
+
+function marketOrigin(value: unknown): boolean {
+  return value === null || (record(value) && typeof value.subscription === 'string' && value.subscription.length <= 64 &&
+    typeof value.buyer_source === 'string' && value.buyer_source.length <= 32)
+}
+
+function delivery(value: unknown): boolean {
+  return value === null || (record(value) && deliveryStates.has(value.state as SecurityBanDeliveryState) &&
+    typeof value.reason === 'string' && (value.reason === '' || codePattern.test(value.reason)) &&
+    count(value.leaves) && count(value.effective) && count(value.own_nodes))
+}
+
 function parseBan(value: unknown): SecurityBan {
   if (!record(value) || Object.keys(value).length !== fields.length || !fields.every((key) => key in value) ||
     !uuidPattern.test(String(value.id)) || !uuidPattern.test(String(value.tenant_scope_id)) || !uuidPattern.test(String(value.site_id)) ||
@@ -79,7 +113,7 @@ function parseBan(value: unknown): SecurityBan {
     !sources.has(value.source as SecurityBanSource) || typeof value.rule_id !== 'string' || typeof value.reason !== 'string' ||
     !time(value.banned_at) || !time(value.banned_until) || !optionalUUID(value.created_by) ||
     !(value.released_at === null || time(value.released_at)) || !optionalUUID(value.released_by) ||
-    !states.has(value.state as SecurityBanState)) throw invalidResponse()
+    !states.has(value.state as SecurityBanState) || !marketOrigin(value.market) || !delivery(value.delivery)) throw invalidResponse()
   return value as unknown as SecurityBan
 }
 

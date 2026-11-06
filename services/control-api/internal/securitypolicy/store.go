@@ -980,6 +980,61 @@ func (s *Store) completeWrite(ctx context.Context, tx pgx.Tx, actorUserID uuid.U
 	return nil
 }
 
+// claimBatch reserves a batch idempotency key (migration 637). A completed
+// batch with the same digest replays; an open one (an earlier attempt stopped
+// on a store error) continues; another digest is ErrIdempotencyConflict.
+func (s *Store) claimBatch(ctx context.Context, actor Actor, key string, digest [32]byte) ([]BatchItemResult, bool, error) {
+	var results []BatchItemResult
+	replayed := false
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		command, err := tx.Exec(ctx, `INSERT INTO security_policy_batch_write_requests
+			(actor_user_id,actor_scope_id,idempotency_key,request_digest,created_at) VALUES($1,$2,$3,$4,$5)
+			ON CONFLICT(actor_user_id,idempotency_key) DO NOTHING`,
+			actor.UserID, actor.ScopeID, key, digest[:], s.now().UTC())
+		if err != nil || command.RowsAffected() == 1 {
+			return err
+		}
+		var existingDigest, body []byte
+		if err := tx.QueryRow(ctx, `SELECT request_digest,response_body FROM security_policy_batch_write_requests
+			WHERE actor_user_id=$1 AND idempotency_key=$2 FOR UPDATE`, actor.UserID, key).Scan(&existingDigest, &body); err != nil {
+			return err
+		}
+		if !bytes.Equal(existingDigest, digest[:]) {
+			return ErrIdempotencyConflict
+		}
+		if body == nil {
+			return nil
+		}
+		var stored struct {
+			Items []BatchItemResult `json:"items"`
+		}
+		if err := json.Unmarshal(body, &stored); err != nil {
+			return fmt.Errorf("decode stored security policy batch: %w", err)
+		}
+		results, replayed = stored.Items, true
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return results, replayed, nil
+}
+
+// completeBatch stores the batch results; a concurrent identical batch that
+// completed first leaves its results in place.
+func (s *Store) completeBatch(ctx context.Context, actor Actor, key string, digest [32]byte, results []BatchItemResult) error {
+	encoded, err := json.Marshal(struct {
+		Items []BatchItemResult `json:"items"`
+	}{results})
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE security_policy_batch_write_requests SET response_body=$4,completed_at=$5
+		WHERE actor_user_id=$1 AND idempotency_key=$2 AND request_digest=$3 AND completed_at IS NULL`,
+		actor.UserID, key, digest[:], encoded, s.now().UTC())
+	return err
+}
+
 func isUniqueViolation(err error) bool {
 	var databaseError *pgconn.PgError
 	return errors.As(err, &databaseError) && databaseError.Code == "23505"

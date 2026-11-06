@@ -321,8 +321,8 @@
     "apiKey",
     "bearer"
    ],
-   "description": "Requires security_policies.manage. Each item is written on its own with a version check (CAS) under an item key derived from Idempotency-Key, so retrying the same batch replays written items. Results come back in request order, one per item; refusals (version conflict, system library, not found, in use, ...) are item results and do not stop the batch. A store failure marks that item error and the rest not_attempted. System (platform) libraries are never modified.",
-   "description_zh": "需要 security_policies.manage 权限。每一项单独按版本号校验后写入，幂等键按 Idempotency-Key 逐项派生，重试同一批次会重放已写入的项。 结果按请求顺序逐项返回；版本冲突、系统规则库、不存在、使用中等拒绝都作为该项结果，不中断整批。存储失败时该项为 error，其余为 not_attempted。 平台（系统）规则库永远不会被修改。",
+   "description": "Requires security_policies.manage. Each item is written on its own with a version check (CAS) under an item key derived from Idempotency-Key, so retrying the same batch replays written items. The Idempotency-Key is bound to the whole request (action and the items in order): the same key and body returns the stored results of a completed batch, and the same key with another body is a 409 idempotency_conflict before any item is written. Results come back in request order, one per item; refusals (version conflict, system library, not found, in use, ...) are item results and do not stop the batch. A store failure marks that item error and the rest not_attempted. System (platform) libraries are never modified.",
+   "description_zh": "需要 security_policies.manage 权限。每一项单独按版本号校验后写入，幂等键按 Idempotency-Key 逐项派生，重试同一批次会重放已写入的项。 Idempotency-Key 绑定整个请求（action 与按序 items）：同键同体时已完成的批次原样返回原结果，同键异体在写入任何一项之前返回 409 idempotency_conflict。 结果按请求顺序逐项返回；版本冲突、系统规则库、不存在、使用中等拒绝都作为该项结果，不中断整批。存储失败时该项为 error，其余为 not_attempted。 平台（系统）规则库永远不会被修改。",
    "permissions": [
     "security_policies.manage"
    ],
@@ -379,6 +379,11 @@
      "status": "403",
      "description": "The authenticated principal is not allowed to perform the action.",
      "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
     },
     {
      "status": "500",

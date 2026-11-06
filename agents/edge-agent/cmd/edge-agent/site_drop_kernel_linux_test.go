@@ -25,7 +25,9 @@ import (
 // scripts/edge-site-drop-smoke.sh, privileged disposable debian:12 container
 // only): the Agent's siteDropRuntime with the real executor, XDP filter
 // (generic, on a veth) and inet cdnca_ddos. scapy in a namespace on the
-// other end sends SYNs and TLS ClientHellos (one segment, SNI).
+// other end sends SYNs and TLS ClientHellos (one segment, SNI; mode split:
+// 1500 bytes of padding before server_name, sent as 1000 bytes and the rest,
+// as Chrome's server_name after its key share).
 //
 //	CDNCA_XDP_KERNEL_TEST=1 go test -run KernelSiteDrop ./cmd/edge-agent/
 //
@@ -50,11 +52,13 @@ logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 mode, src, dst, port, name = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), sys.argv[5]
 ip = IPv6(src=src, dst=dst) if ":" in dst else IP(src=src, dst=dst)
 
-def hello(server):
+def hello(server, pad=0):
     sni = server.encode()
     entry = b"\x00" + len(sni).to_bytes(2, "big") + sni
     sni_list = len(entry).to_bytes(2, "big") + entry
     ext = b"\x00\x0a\x00\x04\x00\x02\x00\x1d"  # supported_groups first
+    if pad:
+        ext += b"\x00\x15" + pad.to_bytes(2, "big") + b"\x00" * pad
     ext += b"\x00\x00" + len(sni_list).to_bytes(2, "big") + sni_list
     body = b"\x03\x03" + b"\x11" * 32 + b"\x20" + b"\x22" * 32
     body += b"\x00\x04\x13\x01\x13\x02" + b"\x01\x00"
@@ -73,8 +77,11 @@ if mode == "syn":
     sys.exit(0)
 ack = syn[TCP].seq + 1
 send(ip/TCP(sport=sport, dport=port, flags="A", seq=1001, ack=ack))
-payload = hello(name)
-reply = sr1(ip/TCP(sport=sport, dport=port, flags="PA", seq=1001, ack=ack)/Raw(payload), timeout=1)
+payload = hello(name, 1500 if mode == "split" else 0)
+first = payload[:1000] if mode == "split" else payload
+reply = sr1(ip/TCP(sport=sport, dport=port, flags="PA", seq=1001, ack=ack)/Raw(first), timeout=1)
+if mode == "split" and reply is not None:
+    send(ip/TCP(sport=sport, dport=port, flags="PA", seq=1001 + len(first), ack=ack)/Raw(payload[len(first):]))
 # In window either way (hello acknowledged or not): the server closes.
 send(ip/TCP(sport=sport, dport=port, flags="R", seq=1001))
 send(ip/TCP(sport=sport, dport=port, flags="R", seq=1001 + len(payload)))
@@ -188,8 +195,11 @@ func TestKernelSiteDropXDPAndNFTables(t *testing.T) {
 			check(t, "hello", siteDropClient, siteDropServer, shared, "deep.x.wild.example", "hello_dropped")
 			// The wildcard does not cover its own apex.
 			check(t, "hello", siteDropClient, siteDropServer, shared, "wild.example", "answered")
+			// server_name in the 2nd segment: XDP passes the 1st (counted as an
+			// SNI miss; on a node OpenResty closes the handshake), not a drop.
+			check(t, "split", siteDropClient, siteDropServer, shared, "a.example", "answered")
 			counters, err := filter.SiteDropCounters()
-			if err != nil || counters.Port.Packets == 0 || counters.SNI.Packets < 4 {
+			if err != nil || counters.Port.Packets == 0 || counters.SNI.Packets < 4 || counters.SNIMissed.Packets == 0 {
 				t.Errorf("counters = %+v, %v", counters, err)
 			}
 			t.Logf("xdp counters: %+v", counters)

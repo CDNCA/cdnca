@@ -1030,8 +1030,8 @@ function CertificateListPageContent({
 
   // CERT-03：打开申请弹窗后，用户还没选 DNS 账号时带入目标用户的默认 DNS 账号；默认账号已
   // 删除或停用就不带入（仍需用户选择）。每个目标只带入一次，用户改选后不再覆盖；换目标重新带入。
-  // 带入默认 DNS API 时，用户还没
-  // 手动改过验证方式就切到 DNS 验证；没有设置默认 DNS API 仍按 HTTP 验证。
+  // 默认验证方式始终是 HTTP 验证：默认 DNS API 只预填账号，用户选 DNS 验证、
+  // 或域名含通配符自动切到 DNS 验证时才用到，不因设了默认 DNS API 而改成 DNS 验证。
   const defaultProviderAppliedRef = useRef<string | null>(null)
   useEffect(() => {
     const applied = isTenant ? 'self' : addTargetKey
@@ -1042,7 +1042,6 @@ function CertificateListPageContent({
     if (!providerID || form.getFieldValue('dns_provider_id')) return
     if (providersQuery.data.items.some((item) => item.id === providerID && item.status !== 'disabled' && item.managed_by !== 'platform')) {
       form.setFieldValue('dns_provider_id', providerID)
-      if (!form.isFieldTouched('challenge_type')) form.setFieldValue('challenge_type', 'dns-01')
     }
   }, [editorOpen, isTenant, addDefaults, addTarget?.scopeID, addTargetKey, providersQuery.data, form])
 

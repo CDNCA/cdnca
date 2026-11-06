@@ -29,7 +29,8 @@ func TestCounterDeltaTreatsResetAsNew(t *testing.T) {
 }
 
 func TestSiteDropTelemetrySamplesDeltasOfXDPAndNFT(t *testing.T) {
-	xdpCounters := xdp.SiteDropCounters{Port: xdp.Counter{Packets: 100, Bytes: 6000}, SNI: xdp.Counter{Packets: 7, Bytes: 700}}
+	xdpCounters := xdp.SiteDropCounters{Port: xdp.Counter{Packets: 100, Bytes: 6000}, SNI: xdp.Counter{Packets: 7, Bytes: 700},
+		SNIMissed: xdp.Counter{Packets: 50, Bytes: 75000}}
 	var xdpErr error
 	nftCounter, nftOK := ddos.AutoCounter{Packets: 40, Bytes: 2400}, true
 	var sites []string
@@ -47,23 +48,26 @@ func TestSiteDropTelemetrySamplesDeltasOfXDPAndNFT(t *testing.T) {
 	}
 	xdpCounters.Port.Packets, xdpCounters.Port.Bytes = 130, 7800
 	xdpCounters.SNI.Packets, xdpCounters.SNI.Bytes = 9, 900
+	xdpCounters.SNIMissed.Packets, xdpCounters.SNIMissed.Bytes = 53, 79500
 	nftCounter = ddos.AutoCounter{Packets: 45, Bytes: 2700}
 	sites = []string{telemetrySiteB, telemetrySiteA, telemetrySiteB}
 	got := telemetry.Sample(t.Context())
-	if got == nil || !slices.Equal(got.SiteIDs, []string{telemetrySiteA, telemetrySiteB}) || got.Packets != 30+2+5 || got.Bytes != 1800+200+300 {
+	// SNI misses are passed hellos: apart, not in the drop total.
+	if got == nil || !slices.Equal(got.SiteIDs, []string{telemetrySiteA, telemetrySiteB}) || got.Packets != 30+2+5 || got.Bytes != 1800+200+300 ||
+		got.SNIMissedPackets != 3 || got.SNIMissedBytes != 4500 {
 		t.Fatalf("sample = %#v", got)
 	}
 	// XDP fell back (counters gone), nft counter re-created: only nft, all of it.
 	xdpErr, nftCounter = xdp.ErrNotRunning, ddos.AutoCounter{Packets: 4, Bytes: 240}
 	sites = []string{telemetrySiteA}
-	if got := telemetry.Sample(t.Context()); got == nil || got.Packets != 4 || got.Bytes != 240 {
+	if got := telemetry.Sample(t.Context()); got == nil || got.Packets != 4 || got.Bytes != 240 || got.SNIMissedPackets != 0 {
 		t.Fatalf("sample after fallback = %#v", got)
 	}
 	// XDP back: its counters count from zero (no previous reading).
 	xdpErr = nil
-	xdpCounters = xdp.SiteDropCounters{Port: xdp.Counter{Packets: 2, Bytes: 120}}
+	xdpCounters = xdp.SiteDropCounters{Port: xdp.Counter{Packets: 2, Bytes: 120}, SNIMissed: xdp.Counter{Packets: 1, Bytes: 1500}}
 	sites = []string{telemetrySiteA}
-	if got := telemetry.Sample(t.Context()); got == nil || got.Packets != 2 || got.Bytes != 120 {
+	if got := telemetry.Sample(t.Context()); got == nil || got.Packets != 2 || got.Bytes != 120 || got.SNIMissedPackets != 1 || got.SNIMissedBytes != 1500 {
 		t.Fatalf("sample after XDP returns = %#v", got)
 	}
 	// No site dropped for in the interval: nothing reported.

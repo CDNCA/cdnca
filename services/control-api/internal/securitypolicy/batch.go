@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
+	"strings"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/packageaddon"
 	"github.com/google/uuid"
@@ -14,6 +16,9 @@ import (
 // actor can manage. Each item is its own CAS write (id + version) under an
 // item idempotency key derived from the batch key, so retrying the same batch
 // replays items already written. System (licensed) libraries are refused.
+// The batch key itself is bound to the request digest (action + items in
+// order, migration 637): the same key with another body is ErrIdempotencyConflict
+// before any item is written, and a completed batch replays its stored results.
 
 const (
 	BatchEnable  = "enable"
@@ -71,6 +76,14 @@ func (s *Service) Batch(ctx context.Context, actor Actor, request BatchRequest) 
 	if !validBatch(actor, request) {
 		return nil, ErrInvalidInput
 	}
+	digest := batchDigest(request)
+	stored, replayed, err := s.store.claimBatch(ctx, actor, request.IdempotencyKey, digest)
+	if err != nil {
+		return nil, err
+	}
+	if replayed {
+		return stored, nil
+	}
 	results := make([]BatchItemResult, len(request.Items))
 	stopped := false
 	for index, item := range request.Items {
@@ -86,7 +99,22 @@ func (s *Service) Batch(ctx context.Context, actor Actor, request BatchRequest) 
 		}
 		results[index] = result
 	}
+	// A batch stopped by a store error stays open so the same request can finish it.
+	if !stopped {
+		if err := s.store.completeBatch(ctx, actor, request.IdempotencyKey, digest, results); err != nil {
+			return nil, err
+		}
+	}
 	return results, nil
+}
+
+func batchDigest(request BatchRequest) [32]byte {
+	var canonical strings.Builder
+	canonical.WriteString("security_policy.batch\n" + request.Action)
+	for _, item := range request.Items {
+		canonical.WriteString("\n" + item.ID.String() + ":" + strconv.FormatInt(item.Version, 10))
+	}
+	return sha256.Sum256([]byte(canonical.String()))
 }
 
 // batchItem returns an error only for failures that stop the batch (store or

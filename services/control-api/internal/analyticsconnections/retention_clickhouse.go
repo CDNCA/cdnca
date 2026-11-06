@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// The SELECT aliases (tenant_id, period_start, ... as strings) shadow the columns of the same name, so the WHERE
+// clause names the table columns (facts.*); unqualified it compared String with UUID and failed (NO_COMMON_TYPE).
 const retentionClickHouseSQL = `SELECT
 metric,
 toString(tenant_id) AS tenant_id,
@@ -19,15 +21,17 @@ formatDateTime(finalized_through,'%Y-%m-%dT%H:%i:%SZ','UTC') AS finalized_throug
 toUInt64(toUnixTimestamp64Milli(observed_at)) AS source_watermark,
 lower(source_evidence_digest) AS evidence_digest,
 formatDateTime(period_end+INTERVAL 400 DAY,'%Y-%m-%dT%H:%i:%SZ','UTC') AS retention_until
-FROM package_metric_finalized_v1
-WHERE tenant_id={tenant:UUID}
-AND package_subscription_id={subscription:UUID}
-AND metric='connections'
-AND period_start>={from:DateTime64(3)}
-AND period_end<={to:DateTime64(3)}
+FROM package_metric_finalized_v1 AS facts
+WHERE facts.tenant_id={tenant:UUID}
+AND facts.package_subscription_id={subscription:UUID}
+AND facts.metric='connections'
+AND facts.period_start>={from:DateTime64(3, 'UTC')}
+AND facts.period_end<={to:DateTime64(3, 'UTC')}
 ORDER BY period_start ASC,period_end ASC,metric ASC
 LIMIT {limit:UInt64}
 FORMAT JSONEachRow`
+
+const retentionClickHouseTime = "2006-01-02 15:04:05.000"
 
 type ClickHouseRetentionReader struct {
 	writer *ClickHouseWriter
@@ -68,8 +72,10 @@ func (reader *ClickHouseRetentionReader) Read(ctx context.Context, query Retenti
 	values.Set("database", reader.writer.database)
 	values.Set("param_tenant", query.TenantID)
 	values.Set("param_subscription", query.SubscriptionID)
-	values.Set("param_from", query.From.Format(time.RFC3339Nano))
-	values.Set("param_to", query.To.Format(time.RFC3339Nano))
+	// ClickHouse refuses RFC3339 "...Z" as a DateTime64 parameter, and a bare DateTime64(3) is read in the server's
+	// time zone: send UTC "YYYY-MM-DD hh:mm:ss.sss" typed DateTime64(3, 'UTC').
+	values.Set("param_from", query.From.UTC().Format(retentionClickHouseTime))
+	values.Set("param_to", query.To.UTC().Format(retentionClickHouseTime))
 	values.Set("param_limit", strconv.Itoa(limit))
 	values.Set("max_execution_time", strconv.FormatFloat(operationTimeout.Seconds(), 'f', 3, 64))
 	values.Set("max_result_rows", strconv.Itoa(limit))

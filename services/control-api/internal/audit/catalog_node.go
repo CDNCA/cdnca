@@ -91,6 +91,9 @@ func init() {
 		e("system.probe_dnspup.test", CategorySystem, "测试 dnspup 拨测连接", "tested the dnspup probe connection").f("base_url", "http_status", "error_code"),
 		e("system.probe_dnspup.degrade", CategorySystem, "dnspup 拨测来源暂停：{reason}", "paused the dnspup probe source: {reason}").f("reason", "code", "paused_until"),
 		e("system.probe_dnspup.node_settings", CategorySystem, "修改 dnspup 节点拨测设置{changes}", "updated dnspup node probe settings{changes}"),
+		e("system.probe_dnspup.purposes", CategorySystem, "修改 dnspup 拨测按用途额度与频率{changes}", "updated dnspup probe per-purpose caps and intervals{changes}"),
+		e("system.probe_dnspup.diagnose", CategorySystem, "发起 dnspup MTR 排障：{target}", "ran a dnspup MTR diagnosis: {target}").f("target", "request_id", "checkpoints"),
+		e("system.probe_dnspup.node_override", CategorySystem, "修改 dnspup 节点拨测覆盖{changes}", "updated a dnspup node probe override{changes}").f("override_id", "deleted"),
 		e("system.probe_dnspup.node_budget", CategorySystem, "dnspup 节点拨测额度状态变化{changes}（剩余 {remaining} 次）", "dnspup node probe budget changed{changes} ({remaining} requests left)").f("remaining", "monthly_limit", "low_balance"),
 		// market-service pulled the license IP intelligence library for node admission (market_audit_events).
 		e("system.geo_db.update", CategorySystem, "节点市场 IP 库同步：{result}，第 {revision} 版（原第 {previous_revision} 版）{reason}{changes}", "node market IP database sync: {result}, revision {revision} (was {previous_revision}) {reason}{changes}").f("result", "revision", "previous_revision", "sha256", "path"),

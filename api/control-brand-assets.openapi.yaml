@@ -12,8 +12,8 @@ paths:
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Asset metadata, content: {application/json: {schema: {$ref: '#/components/schemas/ListDocument'}}}}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/brand-assets/{slot}:
     parameters: [{name: slot, in: path, required: true, schema: {$ref: '#/components/schemas/Slot'}}]
     get:
@@ -22,8 +22,8 @@ paths:
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Asset metadata, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
     put:
       operationId: uploadPlatformBrandAsset
       x-summary-zh: "上传平台品牌素材"
@@ -41,10 +41,10 @@ paths:
           image/vnd.microsoft.icon: {schema: {type: string, format: binary}}
       responses:
         '200': {description: Uploaded asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
-        '400': {description: Invalid media or request}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
-        '409': {description: Revision or idempotency conflict}
+        '400': {description: Invalid media or request, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: Revision or idempotency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/brand-assets/{slot}:
     parameters: [{name: slot, in: path, required: true, schema: {$ref: '#/components/schemas/Slot'}}]
     get:
@@ -57,7 +57,7 @@ paths:
       responses:
         '200': {description: Immutable image bytes}
         '304': {description: Not modified}
-        '404': {description: Asset not found}
+        '404': {description: Asset not found, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -81,3 +81,4 @@ components:
       properties:
         schema: {const: cdnca.platform-brand-asset/v1}
         assets: {type: array, items: {$ref: '#/components/schemas/Asset'}}
+    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}

@@ -779,7 +779,7 @@ paths:
         '405': {$ref: '#/components/responses/MethodNotAllowed'}
         '409': {$ref: '#/components/responses/Conflict'}
         '500': {$ref: '#/components/responses/InternalError'}
-        '503': {description: Private key envelope unavailable (certificate_asset_envelope_unavailable).}
+        '503': {description: Private key envelope unavailable (certificate_asset_envelope_unavailable)., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /v1/certificate-assets/{asset_id}/pem:
     parameters:
       - $ref: '#/components/parameters/CertificateAssetID'
@@ -809,7 +809,7 @@ paths:
         '405': {$ref: '#/components/responses/MethodNotAllowed'}
         '409': {$ref: '#/components/responses/Conflict'}
         '500': {$ref: '#/components/responses/InternalError'}
-        '503': {description: Private key envelope unavailable (certificate_asset_envelope_unavailable).}
+        '503': {description: Private key envelope unavailable (certificate_asset_envelope_unavailable)., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /v1/certificate-assets/{asset_id}/versions/{version_id}/activate:
     parameters:
       - $ref: '#/components/parameters/CertificateAssetID'

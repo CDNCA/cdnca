@@ -120,6 +120,16 @@ func controlE2EDatabase(t *testing.T, databaseURL string) (*pgxpool.Pool, uuid.U
 	if err := database.Migrate(ctx, pool, "up"); err != nil {
 		t.Fatal(err)
 	}
+	scopeID, token := seedE2ETenant(t, pool, "插件联调租户", "plugin-e2e-admin")
+	return pool, scopeID, token
+}
+
+// seedE2ETenant adds a tenant with one administrator whose role grants the production plugin installation (read
+// only since migration 636) and API key permissions, and returns its scope and a session token minter.
+func seedE2ETenant(t *testing.T, pool *pgxpool.Pool, name, username string) (uuid.UUID,
+	func(*identity.TokenManager) string) {
+	t.Helper()
+	ctx := t.Context()
 	// A tenant's access scope shares the tenant UUID; the plugin installation routes require that identity.
 	tenantID, userID, roleID, sessionID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	scopeID := tenantID
@@ -129,15 +139,15 @@ func controlE2EDatabase(t *testing.T, databaseURL string) (*pgxpool.Pool, uuid.U
 		query string
 		args  []any
 	}{
-		{`INSERT INTO tenants(id,display_name) VALUES($1,'插件联调租户')`, []any{tenantID}},
+		{`INSERT INTO tenants(id,display_name) VALUES($1,$2)`, []any{tenantID, name}},
 		{`INSERT INTO access_scopes(id,kind,tenant_id) VALUES($1,'tenant',$2)`, []any{scopeID, tenantID}},
-		{`INSERT INTO users(id,username,display_name,password_hash) VALUES($1,'plugin-e2e-admin','插件管理员','unused')`,
-			[]any{userID}},
+		{`INSERT INTO users(id,username,display_name,password_hash) VALUES($1,$2,'插件管理员','unused')`,
+			[]any{userID, username}},
 		{`INSERT INTO memberships(scope_id,user_id) VALUES($1,$2)`, []any{scopeID, userID}},
 		{`INSERT INTO roles(id,scope_id,name,description,system_role) VALUES($1,$2,'tenant_owner','owner',true)`,
 			[]any{roleID, scopeID}},
 		{`INSERT INTO role_permissions(role_id,permission_name) VALUES($1,'plugin_installations.read'),
-			($1,'plugin_installations.manage')`, []any{roleID}},
+			($1,'plugin_installations.manage'),($1,'api_keys.self.manage')`, []any{roleID}},
 		{`INSERT INTO role_assignments(scope_id,user_id,role_id) VALUES($1,$2,$3)`, []any{scopeID, userID, roleID}},
 		{`INSERT INTO auth_sessions(id,family_id,user_id,scope_id,refresh_token_hash,created_at,expires_at)
 			VALUES($1,$2,$3,$4,$5,$6,$7)`, []any{sessionID, uuid.New(), userID, scopeID, refresh[:],
@@ -147,7 +157,7 @@ func controlE2EDatabase(t *testing.T, databaseURL string) (*pgxpool.Pool, uuid.U
 			t.Fatal(err)
 		}
 	}
-	return pool, scopeID, func(tokens *identity.TokenManager) string {
+	return scopeID, func(tokens *identity.TokenManager) string {
 		raw, _, err := tokens.Mint(userID, scopeID, sessionID)
 		if err != nil {
 			t.Fatal(err)
@@ -172,6 +182,27 @@ type installationView struct {
 	LKGVersion          *string      `json:"lkg_version"`
 	AuthorizationStatus string       `json:"authorization_status"`
 	AvailableUpgrade    *upgradeView `json:"available_upgrade"`
+	// ManagedBy / Targets: who manages the head; the platform view of a tenant plugin
+	// lists the tenants it is installed for.
+	ManagedBy string       `json:"managed_by"`
+	Targets   *targetsView `json:"targets"`
+}
+
+type targetsView struct {
+	AllTenants bool   `json:"all_tenants"`
+	Revision   uint64 `json:"revision"`
+	Tenants    []struct {
+		ScopeID uuid.UUID `json:"scope_id"`
+	} `json:"tenants"`
+}
+
+// tenantTargets is the confirm/targets body naming tenant scopes; allTenantTargets covers every tenant.
+func tenantTargets(ids ...uuid.UUID) map[string]any {
+	return map[string]any{"all_tenants": false, "tenant_scope_ids": ids}
+}
+
+func allTenantTargets() map[string]any {
+	return map[string]any{"all_tenants": true, "tenant_scope_ids": []string{}}
 }
 
 type installationPage struct {
@@ -260,6 +291,60 @@ func (client controlClient) mutate(id uuid.UUID, action string, revision uint64,
 		client.t.Fatalf("%s status=%d body=%s", action, response.Code, response.Body.String())
 	}
 	return wrapper.Installation
+}
+
+// mutateRaw sends one mutation and returns the raw answer (refusals are asserted by the caller).
+func (client controlClient) mutateRaw(id uuid.UUID, action string, revision uint64, body any) (int, string) {
+	headers := map[string]string{"If-Match": `"` + jsonNumber(revision) + `"`,
+		"Idempotency-Key": action + "-" + uuid.NewString()[:8]}
+	response := client.do(http.MethodPost, "/"+id.String()+"/"+action, headers, body)
+	return response.Code, errorCode(response.Body.Bytes())
+}
+
+// refused asserts a mutation is refused with status and error.code.
+func (client controlClient) refused(id uuid.UUID, action string, revision uint64, body any, status int, code string) {
+	client.t.Helper()
+	if gotStatus, gotCode := client.mutateRaw(id, action, revision, body); gotStatus != status || gotCode != code {
+		client.t.Fatalf("%s by %s: status=%d code=%q, want %d %q", action, client.name(), gotStatus, gotCode, status, code)
+	}
+}
+
+func (client controlClient) name() string {
+	if client.platform {
+		return "platform"
+	}
+	return "tenant " + client.tenantID.String()
+}
+
+// getStatus reads one installation and returns only the status and error code.
+func (client controlClient) getStatus(id uuid.UUID) (int, string) {
+	response := client.do(http.MethodGet, "/"+id.String(), nil, nil)
+	return response.Code, errorCode(response.Body.Bytes())
+}
+
+// putTargets is the platform administrator changing a tenant plugin's tenants (If-Match: targets revision).
+func (client controlClient) putTargets(id uuid.UUID, revision uint64, body any) installationView {
+	client.t.Helper()
+	headers := map[string]string{"If-Match": `"` + jsonNumber(revision) + `"`,
+		"Idempotency-Key": "targets-" + uuid.NewString()[:8]}
+	response := client.do(http.MethodPut, "/"+id.String()+"/targets", headers, body)
+	var wrapper struct {
+		Installation installationView `json:"installation"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &wrapper) != nil {
+		client.t.Fatalf("targets status=%d body=%s", response.Code, response.Body.String())
+	}
+	return wrapper.Installation
+}
+
+func errorCode(body []byte) string {
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(body, &envelope)
+	return envelope.Error.Code
 }
 
 func jsonNumber(value uint64) string {

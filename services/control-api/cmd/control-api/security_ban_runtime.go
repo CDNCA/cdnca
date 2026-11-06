@@ -20,6 +20,20 @@ type securityBanRuntime struct {
 	store       *securityban.Store
 	syncer      *securityban.Syncer
 	distributor *securityban.Distributor
+	// listeners run after every list change (the distributor, the market
+	// ban list push of subscribed sites); register before workers start.
+	listeners []func()
+}
+
+// onChange adds a callback run after every committed list change.
+func (runtime *securityBanRuntime) onChange(callback func()) {
+	runtime.listeners = append(runtime.listeners, callback)
+}
+
+func (runtime *securityBanRuntime) changed() {
+	for _, callback := range runtime.listeners {
+		callback()
+	}
 }
 
 type securityBanSyncWorker struct{ syncer *securityban.Syncer }
@@ -44,6 +58,7 @@ func buildSecurityBanRuntime(pool *pgxpool.Pool, analytics *analyticslog.Client,
 	connection natsRuntimeConnection,
 ) (*securityBanRuntime, error) {
 	runtime := &securityBanRuntime{store: securityban.NewStore(pool, time.Now)}
+	runtime.store.OnChange(runtime.changed)
 	// Node security alerts (folded WAF bans, cut lists) go to the notification
 	// center even when the notification runtime is off.
 	alerts, err := notification.NewStore(pool)
@@ -56,6 +71,7 @@ func buildSecurityBanRuntime(pool *pgxpool.Pool, analytics *analyticslog.Client,
 			return nil, err
 		}
 		syncer.EnableWAFBanAlerts(alerts)
+		syncer.OnChange(runtime.changed)
 		runtime.syncer = syncer
 	} else {
 		slog.Warn("security ban list does not fold node automatic bans: the analytics log ClickHouse client is not configured")
@@ -74,9 +90,6 @@ func buildSecurityBanRuntime(pool *pgxpool.Pool, analytics *analyticslog.Client,
 		Logger: slog.Default(), Alerts: alerts}); err != nil {
 		return nil, err
 	}
-	runtime.store.OnChange(runtime.distributor.Wake)
-	if runtime.syncer != nil {
-		runtime.syncer.OnChange(runtime.distributor.Wake)
-	}
+	runtime.onChange(runtime.distributor.Wake)
 	return runtime, nil
 }

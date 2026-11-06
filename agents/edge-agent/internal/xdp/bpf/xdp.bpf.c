@@ -205,10 +205,13 @@ struct vlan_hdr {
 };
 
 /* Site drop counters (xdp.go SiteDropCounters), apart from cdnca_xdp_stats:
- * the node telemetry drop kinds stay as they are. */
+ * the node telemetry drop kinds stay as they are. SITE_STAT_SNI_MISSED is
+ * not a drop: ClientHellos on a shared TLS port whose server_name is not in
+ * their first segment (or first record), passed for OpenResty to judge. */
 enum cdnca_xdp_site_stat {
 	SITE_STAT_PORT = 0,
 	SITE_STAT_SNI,
+	SITE_STAT_SNI_MISSED,
 	SITE_STAT_COUNT,
 };
 
@@ -219,13 +222,18 @@ struct {
 	__type(value, struct cdnca_xdp_counter);
 } cdnca_xdp_site_stats SEC(".maps");
 
-static __always_inline int site_drop(__u32 stat, __u64 bytes)
+static __always_inline void site_count(__u32 stat, __u64 bytes)
 {
 	struct cdnca_xdp_counter *counter = bpf_map_lookup_elem(&cdnca_xdp_site_stats, &stat);
 	if (counter) {
 		counter->packets++;
 		counter->bytes += bytes;
 	}
+}
+
+static __always_inline int site_drop(__u32 stat, __u64 bytes)
+{
+	site_count(stat, bytes);
 	return XDP_DROP;
 }
 
@@ -279,8 +287,12 @@ struct {
  * extension walk times the name walk. */
 
 /* cdnca_sni_locate returns (name offset << 8) | name length of the
- * server_name of the TLS ClientHello at frame offset off, 0 when there is
- * none in this segment. */
+ * server_name of the TLS ClientHello at frame offset off; 0 when there is
+ * none (not a ClientHello, a malformed one, or one without server_name);
+ * -1 when the ClientHello starts here but its server_name is not in this
+ * segment or not in its first record (a hello split over segments or
+ * records: Chrome's server_name follows its 1.2 KB X25519MLKEM768 key share
+ * in about half of its hellos). The walk stays inside the first record. */
 __attribute__((noinline)) int cdnca_sni_locate(struct xdp_md *ctx, __u32 off)
 {
 	void *data = (void *)(long)ctx->data;
@@ -290,41 +302,63 @@ __attribute__((noinline)) int cdnca_sni_locate(struct xdp_md *ctx, __u32 off)
 	/* record header 5, handshake header 4, version 2, random 32, session id length 1 */
 	if (byte_at(data, end, off) != 0x16 || byte_at(data, end, off + 5) != 0x01)
 		return 0;
+	int record = u16_at(data, end, off + 3);
+	if (record < 0)
+		return 0;
+	__u32 record_end = off + 5 + record;
 	int sid = byte_at(data, end, off + 43);
-	if (sid < 0 || sid > 32)
+	if (sid < 0)
+		return -1;
+	if (sid > 32)
 		return 0;
 	off += 44 + sid;
 	int length = u16_at(data, end, off); /* cipher suites */
 	if (length < 0)
-		return 0;
+		return -1;
 	off += 2 + length;
 	if (off > SNI_MAX_OFFSET)
-		return 0;
+		return -1;
 	length = byte_at(data, end, off); /* compression methods */
 	if (length < 0)
-		return 0;
-	off += 1 + length + 2; /* and the extensions length */
+		return -1;
+	off += 1 + length;
+	length = u16_at(data, end, off); /* extensions */
+	if (length < 0)
+		return -1;
+	off += 2;
+	__u32 ext_end = off + length;
 	for (int i = 0; i < SNI_MAX_EXTENSIONS; i++) {
-		if (off > SNI_MAX_OFFSET)
+		if (off >= ext_end)
 			return 0;
+		if (off + 4 > record_end || off > SNI_MAX_OFFSET)
+			return -1;
 		int type = u16_at(data, end, off);
 		length = u16_at(data, end, off + 2);
 		if (type < 0 || length < 0)
-			return 0;
+			return -1;
 		off += 4;
 		if (type != 0) {
 			off += length;
 			continue;
 		}
 		/* server_name_list length 2, name type 1 (host_name 0), name length 2 */
-		if (off > SNI_MAX_OFFSET || byte_at(data, end, off + 2) != 0)
+		if (off + 5 > record_end || off > SNI_MAX_OFFSET)
+			return -1;
+		int kind = byte_at(data, end, off + 2);
+		if (kind < 0)
+			return -1;
+		if (kind != 0)
 			return 0;
 		length = u16_at(data, end, off + 3);
-		if (length <= 0 || length > SNI_MAX_NAME)
+		if (length < 0)
+			return -1;
+		if (length == 0 || length > SNI_MAX_NAME)
 			return 0;
+		if (off + 5 + length > record_end || byte_at(data, end, off + 5 + length - 1) < 0)
+			return -1;
 		return (int)((off + 5) << 8) | length;
 	}
-	return 0;
+	return -1;
 }
 
 /* cdnca_sni_verdict is 1 when the name at frame offset start (length
@@ -371,9 +405,11 @@ __attribute__((noinline)) int cdnca_sni_verdict(struct xdp_md *ctx, __u32 start,
 	return (found & SNI_DROP_WILDCARD) && !(found & SNI_KEEP_WILDCARD);
 }
 
-/* sni_dropped: the ClientHello at off names a dropped server. Anything else
- * (no handshake, a hello split before its server_name, no SNI) passes:
- * OpenResty still closes such handshakes (esc-node §4). */
+/* sni_dropped: 1 when the ClientHello at off names a dropped server, -1
+ * when its server_name is not in this segment (cdnca_sni_locate), else 0.
+ * Anything but 1 passes (no handshake, a hello split before its
+ * server_name, no SNI): OpenResty still closes such handshakes (esc-node
+ * §4). */
 static __always_inline int sni_dropped(struct xdp_md *ctx, __u32 off)
 {
 	__u32 key = SLOT_NAME;
@@ -384,7 +420,9 @@ static __always_inline int sni_dropped(struct xdp_md *ctx, __u32 off)
 	 * header path (VLAN, IPv4 options, IPv6). */
 	*(volatile __u32 *)slot = off;
 	int located = cdnca_sni_locate(ctx, *(volatile __u32 *)slot);
-	if (located <= 0)
+	if (located < 0)
+		return -1;
+	if (located == 0)
 		return 0;
 	*(volatile __u32 *)slot = (__u32)located;
 	__u32 name = *(volatile __u32 *)slot;
@@ -396,6 +434,7 @@ static __always_inline int sni_dropped(struct xdp_md *ctx, __u32 off)
 #define SITE_PASS 1 /* a truncated TCP header: XDP_PASS, as before */
 #define SITE_PORT 2
 #define SITE_SNI 3
+#define SITE_SNI_MISSED 4 /* passes; counted (SITE_STAT_SNI_MISSED) */
 
 /* cdnca_site_check: the level D site drop of the frame (it parses the
  * headers itself). Only ctx goes in and only the outcome comes out, so a
@@ -443,9 +482,12 @@ __attribute__((noinline)) int cdnca_site_check(struct xdp_md *ctx)
 	__u16 dport = bpf_ntohs(seg->dest);
 	if (port_listed(&cdnca_xdp_site_ports, dport))
 		return SITE_PORT;
-	if (port_listed(&cdnca_xdp_sni_ports, dport) && sni_dropped(ctx, l4off + seg->doff * 4))
+	if (!port_listed(&cdnca_xdp_sni_ports, dport))
+		return SITE_NONE;
+	int sni = sni_dropped(ctx, l4off + seg->doff * 4);
+	if (sni > 0)
 		return SITE_SNI;
-	return SITE_NONE;
+	return sni < 0 ? SITE_SNI_MISSED : SITE_NONE;
 }
 
 static __always_inline int drop(__u32 stat, __u64 bytes)
@@ -478,6 +520,9 @@ int cdnca_xdp_filter(struct xdp_md *ctx)
 		return site_drop(SITE_STAT_PORT, bytes);
 	case SITE_SNI:
 		return site_drop(SITE_STAT_SNI, bytes);
+	case SITE_SNI_MISSED:
+		site_count(SITE_STAT_SNI_MISSED, bytes);
+		break;
 	}
 
 	struct ethhdr *eth = data;

@@ -130,6 +130,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '412': {$ref: '#/components/responses/PreconditionFailed'}
   /v1/openresty-security/targets:
     get:
@@ -241,7 +242,7 @@ components:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
   parameters:
     IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
-    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$', minLength: 1, maxLength: 128}}
     RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
     Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
     PageSize: {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}

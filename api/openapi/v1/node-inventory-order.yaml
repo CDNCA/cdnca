@@ -1,3 +1,9 @@
+openapi: 3.1.0
+info:
+  title: CDNCA node inventory order fragment
+  version: 0.1.0
+  description: Components referenced by control.yaml GET /v1/nodes; no operations of its own.
+paths: {}
 components:
   parameters:
     NodeInventoryOrder:

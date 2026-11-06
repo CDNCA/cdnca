@@ -75,18 +75,25 @@ paths:
               schema: {$ref: '#/components/schemas/SoldPackagePage'}
         '400':
           description: Invalid parameters (package_commerce_validation_error).
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '401':
           description: Authentication required.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '403':
           description: Platform scope and billing.adjustments.manage required.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '408':
           description: Request cancelled.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '502':
           description: Invalid stored facts or oversized response.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '503':
           description: Read store unavailable.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '504':
           description: Query deadline exceeded.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
   /v1/admin/package-commerce/sold/{subscription_id}:
     get:
       operationId: getAdminSoldPackage
@@ -101,8 +108,8 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SoldDetailResponse'}
-        '403': {description: Platform read permission required.}
-        '404': {description: Subscription not found.}
+        '403': {description: Platform read permission required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '404': {description: Subscription not found., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/package-commerce/sold/commands:
     post:
       operationId: administerSoldPackages
@@ -134,15 +141,16 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SoldCommandResult'}
-        '400': {description: Invalid or duplicate fields/items; edit requires one item and a full config.}
-        '401': {description: A live platform session is required.}
-        '403': {description: Required package/resource/DNS/publication permission denied.}
+        '400': {description: Invalid or duplicate fields/items; edit requires one item and a full config., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: A live platform session is required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Required package/resource/DNS/publication permission denied., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
         '409':
           description: >-
             package_sold_dependencies, package_sold_financial_dependencies,
             package_sold_setting_unsupported, package_sold_invalid_state or idempotency_conflict.
-        '412': {description: revision_conflict; no item was modified.}
-        '503': {description: package_sold_runtime_unavailable; no item was modified.}
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
+        '412': {description: revision_conflict; no item was modified., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '503': {description: package_sold_runtime_unavailable; no item was modified., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/package-commerce/sold/{subscription_id}/sync:
     get:
       operationId: getAdminSoldPackageSync
@@ -176,8 +184,8 @@ paths:
                               type: integer
                               minimum: 0
                               description: Nodes that ignored the publication as an old release (they already run a newer revision); not failed.
-        '403': {description: Platform read permission required.}
-        '404': {description: Subscription not found.}
+        '403': {description: Platform read permission required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '404': {description: Subscription not found., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
 components:
   securitySchemes:
     bearerAuth:
@@ -350,3 +358,4 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/SoldDetail'}}
         publications: {type: array, items: {$ref: '#/components/schemas/SoldPublication'}}
         replayed: {type: boolean}
+    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}

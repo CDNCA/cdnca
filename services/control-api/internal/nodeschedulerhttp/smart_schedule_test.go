@@ -32,7 +32,7 @@ func (service *smartFakeService) GetSmartSchedule(_ context.Context, _ nodesched
 }
 
 func (service *smartFakeService) PutSmartSchedule(_ context.Context, _ nodescheduler.Actor, _ uuid.UUID,
-	settings nodescheduler.SmartScheduleSettings, requestID string) (nodescheduler.SmartScheduleSettings, int64, error) {
+	settings nodescheduler.SmartScheduleSettings, _, requestID string) (nodescheduler.SmartScheduleSettings, int64, error) {
 	if settings.TopN > 20 {
 		return nodescheduler.SmartScheduleSettings{}, 0, nodescheduler.ErrInvalidInput
 	}

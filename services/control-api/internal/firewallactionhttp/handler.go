@@ -160,7 +160,7 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		}
 		writeJSON(response, http.StatusOK, result.Policy)
 	default:
-		writeJSON(response, http.StatusNotFound, map[string]string{"code": "not_found"})
+		writeErrorCode(response, http.StatusNotFound, "not_found")
 	}
 }
 
@@ -209,7 +209,7 @@ func (handler *Handler) serveDefault(response http.ResponseWriter, request *http
 		}
 		writeJSON(response, http.StatusOK, result.Policy)
 	default:
-		writeJSON(response, http.StatusNotFound, map[string]string{"code": "not_found"})
+		writeErrorCode(response, http.StatusNotFound, "not_found")
 	}
 }
 
@@ -308,7 +308,11 @@ func writeError(response http.ResponseWriter, err error) {
 	case errors.Is(err, firewallactioncontrol.ErrIdempotencyConflict):
 		status, code = http.StatusConflict, "idempotency_conflict"
 	}
-	writeJSON(response, status, map[string]string{"code": code})
+	writeErrorCode(response, status, code)
+}
+
+func writeErrorCode(response http.ResponseWriter, status int, code string) {
+	writeJSON(response, status, map[string]string{"code": code, "request_id": response.Header().Get("X-Request-ID")})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {

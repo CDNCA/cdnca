@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cdnca/cdnca/libs/marketproto/bansync"
 	"github.com/cdnca/cdnca/libs/marketproto/envelope"
 	"github.com/cdnca/cdnca/libs/marketproto/grant"
 	"github.com/cdnca/cdnca/libs/marketproto/secdigest"
@@ -404,7 +405,7 @@ func (r *Runtime) answer(ctx context.Context, self marketclient.Identity, m mark
 		}
 		return r.digestReceiver.ReceiveDigest(ctx, m.Header, m.Payload)
 	}
-	if m.Header.Operation == siteconf.OpReply {
+	if m.Header.Operation == siteconf.OpReply || m.Header.Operation == bansync.OpReply {
 		// A leaf answering one of our own requests: hand it to the waiter.
 		var reply siteconf.Reply
 		if json.Unmarshal(m.Payload, &reply) == nil {
@@ -422,6 +423,18 @@ func (r *Runtime) answer(ctx context.Context, self marketclient.Identity, m mark
 	if err != nil {
 		return err
 	}
+	op := siteconf.OpReply
+	if m.Header.Operation == bansync.OpSync {
+		// Short-lived like the snapshot (market 082 prunes both).
+		op = bansync.OpReply
+	}
+	return r.sendReply(ctx, self, m, op, reply)
+}
+
+// sendReply answers request m with reply under op.
+func (r *Runtime) sendReply(ctx context.Context, self marketclient.Identity, m marketclient.Inbound, op string,
+	reply siteconf.Reply,
+) error {
 	body, err := json.Marshal(reply)
 	if err != nil {
 		return err
@@ -434,7 +447,7 @@ func (r *Runtime) answer(ctx context.Context, self marketclient.Identity, m mark
 	// handler).
 	key := "reply-" + m.Header.MessageID.String()
 	_, err = r.market.Send(ctx, self, marketclient.Outbound{To: m.Header.SenderMemberID,
-		GrantID: m.Header.GrantID, MessageID: replyMessageID(key), Operation: siteconf.OpReply,
+		GrantID: m.Header.GrantID, MessageID: replyMessageID(key), Operation: op,
 		Domains: m.Header.Domains, IdempotencyKey: key, Payload: body})
 	if status, code, ok := marketclient.Rejected(err); ok && status == http.StatusConflict {
 		// A reply under this key already went out (with a random id, before

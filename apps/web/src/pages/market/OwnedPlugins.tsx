@@ -17,7 +17,7 @@ const stateColor: Record<OwnedState, string> = {
 
 /**
  * 我的插件：本主控已拥有的全部插件（官方功能模块、规则包、主题、页面插件…），名称取市场目录，状态与浏览页一致，
- * 可用的给“去配置”入口；主控管理员另在下方处理主题与规则包的安装确认（PlatformPluginsPanel）。
+ * 可用的给“去配置”入口；主控管理员另在下方确认主题、规则包、页面插件和外部服务的安装（PlatformPluginsPanel，租户插件同时选租户）。
  */
 export function OwnedPlugins({ licenses, library, modules, loading, platformPlugins }: {
   licenses: MarketLicense[]; library: MarketLibraryItem[]; modules: readonly string[]; loading: boolean; platformPlugins: boolean

@@ -154,7 +154,7 @@ func TestDNSCredentialRewrapOpenAPIContract(t *testing.T) {
 	errorSchema := rewrapMap(t, schemas, "Error")
 	rewrapAssertClosedObject(t, "error", errorSchema, []string{"error"})
 	errorObject := rewrapMap(t, rewrapMap(t, errorSchema, "properties"), "error")
-	rewrapAssertClosedObject(t, "error body", errorObject, []string{"code"})
+	rewrapAssertClosedObject(t, "error body", errorObject, []string{"code", "request_id"})
 	wantCodes := []string{
 		"dns_credential_rewrap_authentication_required",
 		"dns_credential_rewrap_idempotency_conflict",

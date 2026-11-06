@@ -51,6 +51,14 @@ const (
 	EntrypointRulePack      = "rule_pack"
 	EntrypointExternalHTTPS = "external_https"
 	EntrypointUIPage        = "ui_page"
+
+	// Who manages an installation: the controller's platform administrator, or a tenant
+	// for an installation its own console confirmed before 1.0.35 (kept, still managed there).
+	ManagedByPlatform = "platform"
+	ManagedByTenant   = "tenant"
+
+	// MaxTargetTenants bounds the tenants a platform administrator lists for one tenant plugin.
+	MaxTargetTenants = 1000
 )
 
 var (
@@ -64,7 +72,44 @@ var (
 	ErrFactUnavailable     = errors.New("plugin installation signed fact unavailable")
 	ErrTransitionInvalid   = errors.New("plugin installation transition invalid")
 	ErrPlatformPaused      = errors.New("plugin installation paused by the platform")
+	// ErrPlatformManaged: a tenant tried to confirm or change an installation the platform administrator manages.
+	ErrPlatformManaged = errors.New("plugin installation managed by the platform administrator")
+	// ErrTargetsInvalid: tenant plugin targets missing, malformed, or naming a scope that is not a tenant.
+	ErrTargetsInvalid = errors.New("plugin installation targets invalid")
 )
+
+// Targets is the tenants a platform-confirmed tenant plugin is installed for (control migration 636): every
+// tenant (including tenants created later), or the listed tenant scopes.
+type Targets struct {
+	AllTenants     bool        `json:"all_tenants"`
+	TenantScopeIDs []uuid.UUID `json:"tenant_scope_ids"`
+}
+
+// validTargets: all tenants with no list, or 1..MaxTargetTenants distinct tenant scopes in canonical order.
+func validTargets(targets Targets) bool {
+	if targets.AllTenants {
+		return len(targets.TenantScopeIDs) == 0
+	}
+	if len(targets.TenantScopeIDs) < 1 || len(targets.TenantScopeIDs) > MaxTargetTenants {
+		return false
+	}
+	for index, id := range targets.TenantScopeIDs {
+		if id == uuid.Nil || (index > 0 && targets.TenantScopeIDs[index-1].String() >= id.String()) {
+			return false
+		}
+	}
+	return true
+}
+
+// CanonicalTargets sorts and de-duplicates the listed tenant scopes; nil IDs are kept so validTargets refuses them.
+func CanonicalTargets(targets Targets) Targets {
+	if targets.AllTenants {
+		return Targets{AllTenants: true, TenantScopeIDs: []uuid.UUID{}}
+	}
+	ids := append([]uuid.UUID{}, targets.TenantScopeIDs...)
+	slices.SortFunc(ids, func(left, right uuid.UUID) int { return strings.Compare(left.String(), right.String()) })
+	return Targets{TenantScopeIDs: slices.Compact(ids)}
+}
 
 var (
 	pluginPattern      = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)+$`)
@@ -112,6 +157,8 @@ type Command struct {
 	Applied                       bool
 	StableReasonCode              string
 	Reason                        string
+	// Targets: the tenants of a tenant plugin the platform administrator confirms (confirm only, platform scope).
+	Targets *Targets
 }
 
 type Installation struct {
@@ -174,6 +221,10 @@ func ErrorCode(err error) string {
 		return "plugin_installation_scope_approval_required"
 	case errors.Is(err, ErrPlatformPaused):
 		return "plugin_installation_platform_paused"
+	case errors.Is(err, ErrPlatformManaged):
+		return "plugin_installation_platform_managed"
+	case errors.Is(err, ErrTargetsInvalid):
+		return "plugin_installation_targets_invalid"
 	case errors.Is(err, ErrFactUnavailable):
 		return "plugin_installation_license_unavailable"
 	default:

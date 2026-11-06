@@ -62,11 +62,11 @@ paths:
                         type: array
                         maxItems: 100
                         items: {$ref: '#/components/schemas/NodeStatus'}
-        '400': {description: Invalid query or node IDs.}
-        '401': {description: Authentication required.}
-        '403': {description: Platform scope or current permissions denied.}
-        '404': {description: A requested node is not visible in this scope.}
-        '503': {description: Required local runtime is unavailable.}
+        '400': {description: Invalid query or node IDs., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Authentication required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Platform scope or current permissions denied., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '404': {description: A requested node is not visible in this scope., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '503': {description: Required local runtime is unavailable., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
@@ -145,3 +145,4 @@ components:
         version/session, fresh online heartbeat, active node, valid upgrade capabilities,
         an authorized upgrade candidate and ready node upgrade runtime. Starting a
         plan must independently reauthorize through the existing grant workflow.
+    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}

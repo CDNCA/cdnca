@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
+	"github.com/cdnca/cdnca/libs/edgeconfig"
+	"github.com/cdnca/cdnca/libs/rulepack"
 	"github.com/cdnca/cdnca/services/control-api/internal/analyticslog"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/google/uuid"
@@ -151,8 +154,10 @@ const (
 
 // fold records one automatic ban: a new row, or the extension of the
 // client's active row on the site. Skipped: already folded, the site is not
-// the reported tenant's (or is gone), the client is not a single address,
-// a release of the client happened after the ban started, or the ban is over.
+// the reported tenant's (or is gone), the client is not a single address or
+// the ban is not of the client (detector count_key: a CC rule's ban of what
+// it counts by), a release of the client happened after the
+// ban started, or the ban is over.
 // seconds is the folded ban's duration.
 func fold(ctx context.Context, tx pgx.Tx, event analyticslog.TemporaryBanEvent, now time.Time) (foldOutcome, int, error) {
 	siteID, err := uuid.Parse(event.SiteID)
@@ -160,7 +165,7 @@ func fold(ctx context.Context, tx pgx.Tx, event analyticslog.TemporaryBanEvent, 
 		return foldSkipped, 0, nil
 	}
 	client, ok := canonicalClient(event.ClientIP)
-	if !ok || !client.IsSingleIP() {
+	if !ok || !client.IsSingleIP() || event.Detector == "count_key" {
 		return foldSkipped, 0, nil
 	}
 	var exists bool
@@ -221,10 +226,10 @@ func fold(ctx context.Context, tx pgx.Tx, event analyticslog.TemporaryBanEvent, 
 	return foldAdded, seconds, err
 }
 
-// banSeconds is the ban's duration from the policy version the site's
-// binding publishes: the WAF ban rule's ban_seconds
-// or the policy's auto block block_seconds; the CC rule's rate limit or
-// challenge ban_seconds. DefaultBanSeconds when the version says nothing.
+// banSeconds is the ban's duration the node banned with: the rule's own in the policy version the site's
+// binding publishes (the CC auto switch rules included), else in the site's published
+// rule pack mounts; a WAF block / challenge rule bans through auto block (the policy's, else the auto defense
+// overlay's built-in OverlayAutoBlockSeconds). DefaultBanSeconds when neither names the rule.
 func banSeconds(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID, event analyticslog.TemporaryBanEvent) (int, error) {
 	var document []byte
 	err := tx.QueryRow(ctx, `SELECT version.document FROM security_policy_site_bindings binding
@@ -232,37 +237,115 @@ func banSeconds(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID, event
 		 AND version.revision=binding.active_policy_version
 		WHERE binding.tenant_scope_id=$1 AND binding.site_id=$2 AND binding.policy_kind=$3`,
 		scopeID, siteID, event.EventType).Scan(&document)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return DefaultBanSeconds, nil
-	} else if err != nil {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return 0, err
 	}
 	var policy securitypolicy.Policy
-	if json.Unmarshal(document, &policy) != nil {
-		return DefaultBanSeconds, nil
+	if err == nil && json.Unmarshal(document, &policy) == nil {
+		if seconds, ok := policyBanSeconds(policy, event.EventType, event.RuleID); ok {
+			return clampSeconds(seconds), nil
+		}
 	}
-	return clampSeconds(policyBanSeconds(policy, event.RuleID)), nil
+	seconds, err := mountedBanSeconds(ctx, tx, siteID, event)
+	if err != nil {
+		return 0, err
+	}
+	return clampSeconds(seconds), nil
 }
 
-func policyBanSeconds(policy securitypolicy.Policy, ruleID string) int {
-	for _, rule := range policy.Rules {
+// policyBanSeconds: the duration of ruleID's ban in policy; ok false when the policy does not name the rule (a
+// WAF policy with its own auto block always answers: an unnamed rule's ban is its auto block).
+func policyBanSeconds(policy securitypolicy.Policy, kind, ruleID string) (int, bool) {
+	rules := policy.Rules
+	if settings := policy.CCSettings; settings != nil && settings.AutoSwitch != nil {
+		rules = append(slices.Clone(rules), settings.AutoSwitch.Rules...)
+		for _, set := range settings.AutoSwitch.RuleSets {
+			rules = append(rules, set.Rules...)
+		}
+	}
+	autoBlock := 0
+	if settings := policy.WAFSettings; settings != nil && settings.AutoBlock != nil {
+		autoBlock = settings.AutoBlock.BlockSeconds
+	}
+	for _, rule := range rules {
 		if rule.ID.String() != ruleID {
 			continue
 		}
 		config := rule.ActionConfig
 		switch {
 		case config.WAFBan != nil && rule.Action == securitypolicy.ActionBan:
-			return config.WAFBan.BanSeconds
+			return config.WAFBan.BanSeconds, true
 		case config.RateLimit != nil && config.RateLimit.ResponseAction == "temporary_ban":
-			return config.RateLimit.BanSeconds
+			return config.RateLimit.BanSeconds, true
 		case config.Challenge != nil && config.Challenge.BanSeconds > 0:
-			return config.Challenge.BanSeconds
+			return config.Challenge.BanSeconds, true
+		case kind == "waf" && autoBlock > 0:
+			return autoBlock, true
+		case kind == "waf":
+			return OverlayAutoBlockSeconds, true
+		}
+		return 0, false
+	}
+	if kind == "waf" && autoBlock > 0 {
+		return autoBlock, true
+	}
+	return 0, false
+}
+
+// mountedBanSeconds: the ban seconds of the site's published rule pack rule the event names (0 = none: no
+// mounts, sealed or missing pack, another engine).
+func mountedBanSeconds(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, event analyticslog.TemporaryBanEvent) (int, error) {
+	var document []byte
+	err := tx.QueryRow(ctx, `SELECT security FROM site_security_mounts WHERE site_id=$1`, siteID).Scan(&document)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	var security rulepack.Security
+	if json.Unmarshal(document, &security) != nil {
+		return 0, nil
+	}
+	for _, mount := range security.Mounts {
+		if (event.EventType == "cc") != (mount.Engine == rulepack.EngineCCV2) ||
+			(event.EventType == "waf" && mount.Engine != rulepack.EngineWAFV2) {
+			continue
+		}
+		var content []byte
+		err := tx.QueryRow(ctx, `SELECT content FROM rule_pack_artifacts WHERE pack_id=$1 AND version=$2 AND sha256=$3`,
+			mount.PackID, mount.Version, mount.SHA256).Scan(&content)
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && (content == nil || rulepack.IsSealed(content)) {
+			continue
+		} else if err != nil {
+			return 0, err
+		}
+		pack, err := rulepack.Load(content, mount.SHA256)
+		if err != nil {
+			continue
+		}
+		rules, err := rulepack.MountRules(mount, pack)
+		if err != nil {
+			continue
+		}
+		for _, rule := range rules {
+			if rule.NodeID == event.RuleID {
+				return packRuleBanSeconds(rule), nil
+			}
 		}
 	}
-	// A WAF automatic ban names the block / challenge rule that crossed the
-	// threshold; its duration is the policy's.
-	if settings := policy.WAFSettings; settings != nil && settings.AutoBlock != nil {
-		return settings.AutoBlock.BlockSeconds
+	return 0, nil
+}
+
+// packRuleBanSeconds: a pack CC rule's ban, a pack WAF ban rule's; a pack WAF block / challenge rule bans only
+// through the overlay auto block (a pack segment has no auto block of its own).
+func packRuleBanSeconds(rule rulepack.NodeRule) int {
+	switch {
+	case rule.CC != nil:
+		return int(rule.CC.Action.BanSeconds)
+	case rule.WAF != nil && rule.WAF.Action == edgeconfig.WAFBan && rule.WAF.ActionConfig != nil:
+		return rule.WAF.ActionConfig.BanSeconds
+	case rule.WAF != nil:
+		return OverlayAutoBlockSeconds
 	}
 	return 0
 }

@@ -710,6 +710,10 @@
      "description": "Target absent or hidden across tenant boundary"
     },
     {
+     "status": "409",
+     "description": "Duplicate target or idempotency conflict"
+    },
+    {
      "status": "412",
      "description": "If-Match revision conflict"
     }

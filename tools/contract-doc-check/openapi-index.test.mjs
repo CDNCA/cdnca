@@ -512,8 +512,9 @@ test("current YAML and external refs include all required operations", async () 
 	// 用户端域名解析（ADR 0020 §3，/v1/dns/hub/*）7 条；智能调度、节点 SSH、防火墙动作默认设置与主控绑定域名 7 条。
 	// 在线查看证书 GET /v1/certificate-assets/{asset_id}/pem（control.yaml 与 dns-acme.yaml 各 1 条，同一 wire tuple）。
 	// 主控数据库连接池 GET /v1/admin/system-db-pool 1 条。
-	assert.equal(result.operations.length, 889);
-	assert.equal(result.distinctTupleCount, 863);
+	// 封禁名单 /v1[/admin]/security-bans 6 条；拨测插件用途、矩阵、覆盖、排障与插件拨测接口 12 条。
+	assert.equal(result.operations.length, 907);
+	assert.equal(result.distinctTupleCount, 881);
 	assert.equal(result.overlaps.length, 26);
 	assert.equal(result.overlaps.length, 26);
   const operationIDs = new Set(result.operations.map(({operationId}) => operationId));

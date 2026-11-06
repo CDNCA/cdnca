@@ -50,6 +50,22 @@ type Store interface {
 	ActivePlugins(context.Context) ([]ActivePlugin, error)
 }
 
+// TenantCoverage is a Store that knows which tenants an installation serves (control migration 636: the platform
+// administrator installs a tenant plugin for all or chosen tenants). Without it every tenant sees every page.
+type TenantCoverage interface {
+	CoversTenant(ctx context.Context, authorizationID, tenantScopeID uuid.UUID) (bool, error)
+}
+
+func (store PostgresStore) CoversTenant(ctx context.Context, authorizationID, tenantScopeID uuid.UUID) (bool, error) {
+	if store.Pool == nil {
+		return false, errors.New("plugin ui store is not configured")
+	}
+	var covered bool
+	err := store.Pool.QueryRow(ctx, `SELECT plugin_installation_covers_tenant_636($1,$2)`, authorizationID, tenantScopeID).
+		Scan(&covered)
+	return covered, err
+}
+
 // PostgresStore is the production Store.
 type PostgresStore struct{ Pool *pgxpool.Pool }
 

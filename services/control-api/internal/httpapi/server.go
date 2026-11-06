@@ -1388,6 +1388,19 @@ func (s *Server) Handler() http.Handler {
 			"POST /v1/admin/probe-dnspup/tests",
 			"GET /v1/admin/probe-dnspup/node-monitoring",
 			"PUT /v1/admin/probe-dnspup/node-monitoring",
+			"GET /v1/admin/probe-dnspup/purposes",
+			"PUT /v1/admin/probe-dnspup/purposes",
+			"GET /v1/admin/probe-dnspup/matrix",
+			"GET /v1/admin/probe-dnspup/edge-subjects",
+			"GET /v1/admin/probe-dnspup/node-monitoring/overrides",
+			"PUT /v1/admin/probe-dnspup/node-monitoring/overrides",
+			"DELETE /v1/admin/probe-dnspup/node-monitoring/overrides/{id}",
+			"POST /v1/admin/probe-dnspup/diagnoses",
+			"GET /v1/admin/probe-dnspup/diagnoses/{id}",
+			// Plugin probe API (CdncaKey bound to a plugin installation, probes.dnspup.request).
+			"GET /v1/probe-dnspup/plugin/status",
+			"POST /v1/probe-dnspup/plugin/requests",
+			"GET /v1/probe-dnspup/plugin/requests/{id}",
 		}},
 		// Agent Gateway registry (internal/gatewayregistry.Patterns); the
 		// binding route is public, its body token is the credential.

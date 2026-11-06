@@ -22,7 +22,8 @@ import (
 // pushed the package past 600s. The first request for N migrates one snapshot
 // database (schema "migrated"); every request then gets its own file_copy
 // clone of it, which takes about a second. Snapshots belong to this test
-// process and are dropped by TestMain.
+// process and are dropped by TestMain (so are migrationPoolAt's stepped
+// snapshots).
 
 const snapshotSchema = "migrated"
 
@@ -40,6 +41,7 @@ var migrationSnapshots = struct {
 func TestMain(m *testing.M) {
 	code := m.Run()
 	dropMigrationSnapshots()
+	dropSteppedSnapshots()
 	os.Exit(code)
 }
 

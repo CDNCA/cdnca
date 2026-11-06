@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// 报告 A：平台主题（resource_scope=platform）只在主控平台作用域里出现并由平台管理员确认；
-// 租户作用域既看不到、也确认不了它；平台作用域也看不到、确认不了租户扩展。
+// 主控平台管理员确认全部可安装插件——平台主题、规则包装在平台作用域；
+// 租户扩展（页面插件、外部服务）也在平台作用域确认并选择装给哪些租户。租户控制台不再看到候选、也不能确认。
 func scopedView(scopeID uuid.UUID, pluginID, resourceScope, status, remoteStatus string) InstallationView {
 	view := mergeView(scopeID, pluginID, "1.0.0", status, remoteStatus)
 	view.Installation.ResourceScope = resourceScope
@@ -19,7 +19,7 @@ func scopedView(scopeID uuid.UUID, pluginID, resourceScope, status, remoteStatus
 	return view
 }
 
-func TestProductionSeparatesPlatformAndTenantResourceScopes(t *testing.T) {
+func TestProductionPlatformAdministratorConfirmsAllResourceScopes(t *testing.T) {
 	platformScope, tenantScope := uuid.New(), uuid.New()
 	theme := scopedView(uuid.Nil, "acme.theme", ResourceScopePlatform, StatusPendingConfirmation, StatusPendingConfirmation)
 	theme.Installation.Revision = 1
@@ -35,47 +35,68 @@ func TestProductionSeparatesPlatformAndTenantResourceScopes(t *testing.T) {
 	tenantActor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantScope,
 		ScopeKind: ResourceScopeTenant, RequestID: "tenant-list", Username: "tenant-admin"}
 
-	// Discovery projects remote candidates onto the caller's local scope, then keeps only its resource scope.
+	// The platform administrator sees both waiting plugins: the theme and the tenant extension.
 	resolver.pending = Page{Items: []InstallationView{relabel(theme, platformScope), relabel(extension, platformScope)}}
 	page, err := domain.List(context.Background(), platformActor, ListRequest{TenantID: platformScope, Limit: 20})
-	if err != nil || len(page.Items) != 1 || page.Items[0].Installation.PluginID != "acme.theme" {
+	if err != nil || len(page.Items) != 2 {
 		t.Fatalf("platform list=%+v err=%v", page.Items, err)
 	}
+	// A tenant is offered nothing to confirm and cannot read a candidate.
 	resolver.pending = Page{Items: []InstallationView{relabel(theme, tenantScope), relabel(extension, tenantScope)}}
 	page, err = domain.List(context.Background(), tenantActor, ListRequest{TenantID: tenantScope, Limit: 20})
-	if err != nil || len(page.Items) != 1 || page.Items[0].Installation.PluginID != "acme.extension" {
+	if err != nil || len(page.Items) != 0 {
 		t.Fatalf("tenant list=%+v err=%v", page.Items, err)
 	}
-	if _, err := domain.Get(context.Background(), tenantActor, theme.Installation.AuthorizationID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("tenant get of platform theme err=%v", err)
+	for _, view := range []InstallationView{theme, extension} {
+		if _, err := domain.Get(context.Background(), tenantActor, view.Installation.AuthorizationID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("tenant get of candidate %s err=%v", view.Installation.PluginID, err)
+		}
 	}
 
-	// A tenant cannot confirm the platform theme: no license confirmation is sent.
+	// A tenant cannot confirm either plugin: no license confirmation is sent.
 	tenantActor.RequestID = "tenant-confirm"
-	_, err = domain.Mutate(context.Background(), tenantActor, MutationRequest{TenantID: tenantScope,
-		AuthorizationID: theme.Installation.AuthorizationID, VerificationID: theme.Installation.VerificationID,
-		Action: ActionConfirm, ExpectedRevision: 1, IdempotencyKey: "tenant-confirm", RequestID: "tenant-confirm",
-		ApprovedScopes: []string{"plugin.read"}, SensitivePermissionsConfirmed: true})
-	if !errors.Is(err, ErrFactDenied) || len(resolver.confirmed) != 0 {
-		t.Fatalf("tenant confirm of platform theme err=%v confirms=%d", err, len(resolver.confirmed))
+	for _, view := range []InstallationView{theme, extension} {
+		_, err = domain.Mutate(context.Background(), tenantActor, MutationRequest{TenantID: tenantScope,
+			AuthorizationID: view.Installation.AuthorizationID, VerificationID: view.Installation.VerificationID,
+			Action: ActionConfirm, ExpectedRevision: 1, IdempotencyKey: "tenant-confirm", RequestID: "tenant-confirm",
+			ApprovedScopes: []string{"plugin.read"}, SensitivePermissionsConfirmed: true})
+		if !errors.Is(err, ErrPlatformManaged) || len(resolver.confirmed) != 0 {
+			t.Fatalf("tenant confirm of %s err=%v confirms=%d", view.Installation.PluginID, err, len(resolver.confirmed))
+		}
 	}
 
-	// The platform administrator confirms; the signed activation must also say platform.
-	resolver.pending = Page{Items: []InstallationView{relabel(theme, platformScope)}}
+	// Targets belong to tenant plugins only: a theme confirmed with targets is refused before the license service.
+	resolver.pending = Page{Items: []InstallationView{relabel(theme, platformScope), relabel(extension, platformScope)}}
 	platformActor.RequestID = "platform-confirm"
-	_, err = domain.Mutate(context.Background(), platformActor, MutationRequest{TenantID: platformScope,
-		AuthorizationID: theme.Installation.AuthorizationID, VerificationID: theme.Installation.VerificationID,
-		Action: ActionConfirm, ExpectedRevision: 1, IdempotencyKey: "platform-confirm", RequestID: "platform-confirm",
-		ApprovedScopes: []string{"plugin.read"}, SensitivePermissionsConfirmed: true})
+	confirm := func(view InstallationView, key string, targets *Targets) error {
+		platformActor.RequestID = key
+		_, err := domain.Mutate(context.Background(), platformActor, MutationRequest{TenantID: platformScope,
+			AuthorizationID: view.Installation.AuthorizationID, VerificationID: view.Installation.VerificationID,
+			Action: ActionConfirm, ExpectedRevision: 1, IdempotencyKey: key, RequestID: key,
+			ApprovedScopes: []string{"plugin.read"}, SensitivePermissionsConfirmed: true, Targets: targets})
+		return err
+	}
+	if err := confirm(theme, "theme-targets", &Targets{AllTenants: true}); !errors.Is(err, ErrTargetsInvalid) || len(resolver.confirmed) != 0 {
+		t.Fatalf("theme with targets err=%v confirms=%d", err, len(resolver.confirmed))
+	}
+	if err := confirm(extension, "extension-no-targets", nil); !errors.Is(err, ErrTargetsInvalid) || len(resolver.confirmed) != 0 {
+		t.Fatalf("extension without targets err=%v confirms=%d", err, len(resolver.confirmed))
+	}
+	_ = confirm(theme, "platform-confirm", nil)
 	if len(resolver.confirmed) != 1 || resolver.confirmed[0].Username != "platform-admin" ||
 		resolver.resolve.Action != ActivationInstall {
-		t.Fatalf("platform confirm err=%v confirmed=%+v resolve=%+v", err, resolver.confirmed, resolver.resolve)
+		t.Fatalf("platform theme confirm confirmed=%+v resolve=%+v", resolver.confirmed, resolver.resolve)
+	}
+	_ = confirm(extension, "extension-confirm", &Targets{TenantScopeIDs: []uuid.UUID{tenantScope}})
+	if len(resolver.confirmed) != 2 || resolver.confirmed[1].AuthorizationID != extension.Installation.AuthorizationID {
+		t.Fatalf("platform extension confirm confirmed=%+v", resolver.confirmed)
 	}
 }
 
-// The activation fact decides the scope: a candidate signed for another resource scope is refused before
-// any local head is written.
-func TestProductionRefusesActivationForAnotherResourceScope(t *testing.T) {
+// The activation fact still decides the plugin: a tenant plugin the platform administrator confirms without
+// naming its tenants is refused before any local head is written, and so is one confirmed with targets that
+// turns out (signed) to be a platform resource.
+func TestProductionRefusesActivationWithoutMatchingTargets(t *testing.T) {
 	platformScope := uuid.New()
 	extension := scopedView(platformScope, "acme.extension", ResourceScopeTenant, StatusPendingConfirmation, "authorized")
 	candidate := candidateFromInstallation(extension.Installation)
@@ -88,12 +109,19 @@ func TestProductionRefusesActivationForAnotherResourceScope(t *testing.T) {
 	}
 	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: platformScope, ScopeKind: ResourceScopePlatform,
 		RequestID: "platform-confirm-2", Username: "platform-admin"}
-	_, err = domain.Mutate(context.Background(), actor, MutationRequest{TenantID: platformScope,
+	request := MutationRequest{TenantID: platformScope,
 		AuthorizationID: candidate.AuthorizationID, VerificationID: candidate.VerificationID, Action: ActionConfirm,
 		ExpectedRevision: 3, IdempotencyKey: "platform-confirm-2", RequestID: "platform-confirm-2",
-		ApprovedScopes: []string{"plugin.read"}})
-	if !errors.Is(err, ErrFactDenied) || repository.applied {
-		t.Fatalf("cross-scope activation err=%v applied=%v", err, repository.applied)
+		ApprovedScopes: []string{"plugin.read"}}
+	if _, err = domain.Mutate(context.Background(), actor, request); !errors.Is(err, ErrTargetsInvalid) || repository.applied {
+		t.Fatalf("no targets err=%v applied=%v", err, repository.applied)
+	}
+	theme := candidate
+	theme.ResourceScope, theme.EntrypointType = ResourceScopePlatform, EntrypointTheme
+	resolver.candidate = theme
+	request.Targets = &Targets{AllTenants: true}
+	if _, err = domain.Mutate(context.Background(), actor, request); !errors.Is(err, ErrTargetsInvalid) || repository.applied {
+		t.Fatalf("platform resource with targets err=%v applied=%v", err, repository.applied)
 	}
 }
 

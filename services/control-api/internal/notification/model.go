@@ -104,6 +104,8 @@ const (
 	// system.probe_dnspup.manage holders.
 	EventTypeNodeDNSPupUnreachable       = "node.dnspup.unreachable"
 	EventTypeNodeDNSPupRecovered         = "node.dnspup.recovered"
+	EventTypeNodeDNSPupLineUnreachable   = "node.dnspup.line_unreachable"
+	EventTypeNodeDNSPupLineRecovered     = "node.dnspup.line_recovered"
 	EventTypeProbeDNSPupBalanceLow       = "probe.dnspup.balance_low"
 	EventTypeProbeDNSPupBalanceExhausted = "probe.dnspup.balance_exhausted"
 	// Expired node certificate recovered with the node's own key (ADR 0013
@@ -203,6 +205,7 @@ func PlatformEventType(eventType string) bool {
 		eventType == EventTypeInstallationBanRejected || eventType == EventTypeNodeInstallTrustFailed ||
 		eventType == EventTypeProbeDNSPupDegraded || eventType == EventTypeNodeCertificateRecovered ||
 		eventType == EventTypeNodeDNSPupUnreachable || eventType == EventTypeNodeDNSPupRecovered ||
+		eventType == EventTypeNodeDNSPupLineUnreachable || eventType == EventTypeNodeDNSPupLineRecovered ||
 		eventType == EventTypeProbeDNSPupBalanceLow || eventType == EventTypeProbeDNSPupBalanceExhausted ||
 		eventType == EventTypeControlDBPoolSaturated || eventType == EventTypeControlDBPoolRecovered ||
 		eventType == "ticket.staff.created" || eventType == "ticket.staff.replied" ||

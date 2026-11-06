@@ -53,8 +53,10 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/confirm:
     post:
       operationId: confirmPluginInstallation
-      x-summary-zh: "安装前确认插件声明的权限与敏感权限"
-      summary: Confirm declared and sensitive plugin scopes before installation
+      x-summary-zh: "租户不再确认安装：一律 403 plugin_installation_platform_managed，由主控平台管理员在平台路由确认"
+      summary: >-
+        Tenants no longer confirm installations: always 403 plugin_installation_platform_managed. The
+        controller's platform administrator confirms tenant plugins under /v1/platform and chooses their tenants.
       parameters:
         - $ref: '#/components/parameters/TenantScopeID'
         - $ref: '#/components/parameters/AuthorizationID'
@@ -208,7 +210,13 @@ paths:
   /v1/platform/plugin-installations/{authorization_id}/confirm:
     post:
       operationId: confirmPlatformPluginInstallation
-      summary: Confirm declared and sensitive plugin scopes before installation in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      x-summary-zh: "主控平台管理员确认安装：主题、规则包装在平台；页面插件、外部服务须带 targets（全部租户/指定租户），确认后这些租户直接可用"
+      summary: >-
+        Confirm declared and sensitive plugin scopes before installation in the platform scope of the session (exact
+        plugin_installations.platform permissions). Themes and rule data packs install for the controller; tenant
+        plugins (ui_page, external_https) require targets (all tenants or listed tenant scopes) and are then usable by
+        those tenants without any tenant step. Targets on a platform resource, or a tenant plugin without them, is 422
+        plugin_installation_targets_invalid.
       parameters:
         - $ref: '#/components/parameters/AuthorizationID'
         - $ref: '#/components/parameters/IfMatch'
@@ -283,6 +291,35 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
         '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations/{authorization_id}/targets:
+    put:
+      operationId: updatePlatformPluginInstallationTargets
+      x-summary-zh: "改租户插件装给哪些租户（全部租户/指定租户）；If-Match 是 targets.revision"
+      summary: >-
+        Replace the tenants a platform-held tenant plugin is installed for (exact plugin_installations.platform.manage).
+        If-Match is targets.revision; the same Idempotency-Key with the same body while it is the last change answers
+        the current state again. Tenants removed from the targets lose the plugin's pages, identity keys, webhook
+        subscriptions and events at once.
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PluginInstallationTargets'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
     bearerAuth:
@@ -313,7 +350,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', minLength: 1, maxLength: 128}
   requestBodies:
     Approval:
       required: true
@@ -462,6 +499,44 @@ components:
           maxLength: 500
         available_upgrade:
           $ref: '#/components/schemas/PluginInstallationAvailableUpgrade'
+        managed_by:
+          description: >-
+            Who confirms and changes an installed plugin. platform: the controller's platform administrator (every
+            installation from 1.0.35; a tenant reads it but cannot change it, writes are 403
+            plugin_installation_platform_managed). tenant: a tenant's own installation confirmed before 1.0.35, still
+            managed in that tenant console. Omitted on candidates not installed yet.
+          type: string
+          enum: [platform, tenant]
+        targets:
+          description: Tenants a platform-held tenant plugin is installed for. Platform view only; tenants never read it.
+          type: object
+          additionalProperties: false
+          required: [all_tenants, revision, tenants]
+          properties:
+            all_tenants: {type: boolean}
+            revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+            tenants:
+              type: array
+              maxItems: 1000
+              items:
+                type: object
+                additionalProperties: false
+                required: [scope_id, display_name, display_id]
+                properties:
+                  scope_id: {$ref: '#/components/schemas/UUID'}
+                  display_name: {type: string}
+                  display_id: {type: string}
+    PluginInstallationTargets:
+      description: All tenants (including tenants created later) with an empty list, or 1..1000 listed tenant scopes.
+      type: object
+      additionalProperties: false
+      required: [all_tenants, tenant_scope_ids]
+      properties:
+        all_tenants: {type: boolean}
+        tenant_scope_ids:
+          type: array
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/UUID'}
     PluginInstallationAvailableUpgrade:
       description: A newer version the platform already authorized for this installation; submit it to upgrade.
       type: object
@@ -493,6 +568,9 @@ components:
         approved_scopes: {$ref: '#/components/schemas/Scopes'}
         sensitive_permissions_confirmed: {type: boolean}
         new_permissions_confirmed: {type: boolean}
+        targets:
+          description: Platform confirmation of a tenant plugin only (required there, refused elsewhere).
+          $ref: '#/components/schemas/PluginInstallationTargets'
     PluginInstallationReason:
       type: object
       additionalProperties: false
@@ -524,6 +602,8 @@ components:
                 - plugin_installation_idempotency_conflict
                 - plugin_installation_scope_approval_required
                 - plugin_installation_platform_paused
+                - plugin_installation_platform_managed
+                - plugin_installation_targets_invalid
                 - plugin_installation_license_unavailable
                 - plugin_installation_state_conflict
                 - plugin_installation_result_unknown

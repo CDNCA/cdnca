@@ -30,6 +30,10 @@ const delisting = { ...base, id: '22222222-2222-4222-8222-222222222222', name: '
   lifecycle: { state: 'delisting', active_subscriptions: 3, renewing_subscriptions: 0, completes_at: later, operator_delisted: false, deletable: false } }
 const done = { ...base, id: '33333333-3333-4333-8333-333333333333', name: 'SG Edge', status: 'delisted',
   lifecycle: { state: 'delisted', active_subscriptions: 0, renewing_subscriptions: 0, operator_delisted: false, deletable: true } }
+const resold = { ...base, id: '66666666-6666-4666-8666-666666666666', name: 'HK resale', status: 'listed',
+  components: [{ kind: 'upstream', subscription_id: '77777777-7777-4777-8777-777777777777' }],
+  tags: { cc_protection: 'none', ddos_protection_gbps: 0, complaint_resistant: false, tenancy: 'shared', mobile_reachable: false, region_block: false },
+  lifecycle: { state: 'listed', active_subscriptions: 0, renewing_subscriptions: 0, operator_delisted: false, deletable: false } }
 const quiet = { ...base, id: '44444444-4444-4444-8444-444444444444', name: 'US West', status: 'listed',
   lifecycle: { state: 'listed', active_subscriptions: 0, renewing_subscriptions: 0, operator_delisted: false, deletable: false } }
 
@@ -51,6 +55,10 @@ function stub(offers: unknown[]) {
       if ((body.plugins ?? []).includes('ipintel')) return json({ error: 'plugin_unavailable', plugins: ['ipintel'] }, 400)
       // the market refuses L2 until every node reports it.
       if (body.allocation?.l2) return json({ error: 'l2_unavailable' }, 400)
+      // a resale may not declare more than its upstream.
+      if ((body as { tags?: { tenancy?: string } }).tags?.tenancy === 'dedicated' && path.includes(resold.id)) {
+        return json({ error: 'upstream_terms_exceeded', field: 'tags.tenancy', upstream: 'shared' }, 400)
+      }
       return json({ ...listed, revision: 5 })
     }
     if (path === '/v1/admin/market/supply-l2-configs') return json({ items: [
@@ -234,6 +242,52 @@ describe('修改报价 能力与防御', () => {
     const dialog = await open()
     expect(await within(dialog).findByText(/转售或组合报价只能保留或去掉上游已包含的插件/)).toBeInTheDocument()
     expect(within(dialog).getAllByRole('checkbox').map((c) => c.getAttribute('value')).filter(Boolean)).toEqual(['module.autodefense'])
+  })
+})
+
+// the card tags are offer.tags —
+// 共享/独立节点 = tenancy, 插件 N 个 = plugins (能力与防御), the others are the seller's declarations. 修改报价 › 特性标签
+// edits the declarations through PUT …/limits with tags (current limits as they are; plugins stay on 能力与防御).
+describe('修改报价 特性标签', () => {
+  const own = { ...listed, limits: [{ metric: 'qps', cap: 100, action: 'throttle' }],
+    tags: { cc_protection: 'basic', ddos_protection_gbps: 0, complaint_resistant: false, tenancy: 'shared', mobile_reachable: false,
+      region_block: false, line_class: 'BGP', plugins: ['module.autodefense'], custom: ['原生 IP'] } }
+  const open = async (name: string) => {
+    fireEvent.click(within(await rowOf(name)).getByRole('button', { name: '修改报价' }))
+    const dialog = await screen.findByRole('dialog', { name: `修改报价「${name}」` })
+    fireEvent.click(within(dialog).getByRole('tab', { name: '特性标签' }))
+    return dialog
+  }
+  const pick = async (dialog: HTMLElement, label: string, option: string) => {
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: label }))
+    fireEvent.click(await screen.findByText(option, { selector: '.ant-select-item-option-content' }))
+  }
+
+  it('changes tenancy and the declared features in one save and keeps the plugins out of it', async () => {
+    const calls = stub([own])
+    const dialog = await open('HK BGP')
+    expect(within(dialog).getByText(/节点插件在「能力与防御」里改/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('textbox', { name: '线路类型（如 BGP、CN2 GIA）' })).toHaveValue('BGP')
+    await pick(dialog, '节点使用方式', '独立')
+    await pick(dialog, 'CC 防护', '高级')
+    fireEvent.change(within(dialog).getByRole('spinbutton', { name: 'DDoS 防护（Gbps，0 = 无）' }), { target: { value: '300' } })
+    fireEvent.click(within(dialog).getByRole('switch', { name: '抗投诉' }))
+    fireEvent.click(within(dialog).getAllByRole('button', { name: '保存' }).at(-1)!)
+    const puts = () => calls.filter((c) => c.method === 'PUT')
+    await waitFor(() => expect(puts()).toHaveLength(1))
+    expect(puts()[0].path).toBe(`/v1/admin/market/offers/${listed.id}/limits`)
+    expect(JSON.parse(puts()[0].body!)).toEqual({ limits: [{ metric: 'qps', cap: 100, action: 'throttle' }], prepaid_exhausted_action: 'pause',
+      tags: { cc_protection: 'advanced', ddos_protection_gbps: 300, complaint_resistant: true, tenancy: 'dedicated', mobile_reachable: false,
+        region_block: false, line_class: 'BGP', custom: ['原生 IP'] }, expected_revision: 4 })
+    expect(puts()[0].key).toBeTruthy()
+  })
+
+  it('names the declaration a resale cannot raise above its upstream', async () => {
+    stub([resold])
+    const dialog = await open('HK resale')
+    await pick(dialog, '节点使用方式', '独立')
+    fireEvent.click(within(dialog).getAllByRole('button', { name: '保存' }).at(-1)!)
+    expect(await within(dialog).findByText('超过上游订阅购买时的能力（节点使用方式），转售只能收紧')).toBeInTheDocument()
   })
 })
 

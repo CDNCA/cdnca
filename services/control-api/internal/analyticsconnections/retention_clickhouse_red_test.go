@@ -51,8 +51,8 @@ func TestClickHouseRetentionReaderUsesScopedBoundedParameterizedQuery(t *testing
 		"database":             "analytics",
 		"param_tenant":         query.TenantID,
 		"param_subscription":   query.SubscriptionID,
-		"param_from":           query.From.Format(time.RFC3339Nano),
-		"param_to":             query.To.Format(time.RFC3339Nano),
+		"param_from":           "2026-08-07 00:00:00.000",
+		"param_to":             "2026-08-07 02:00:00.000",
 		"param_limit":          "2",
 		"max_execution_time":   "1.000",
 		"max_result_rows":      "2",
@@ -64,16 +64,16 @@ func TestClickHouseRetentionReaderUsesScopedBoundedParameterizedQuery(t *testing
 		}
 	}
 	for _, required := range []string{
-		"FROM package_metric_finalized_v1", "tenant_id={tenant:UUID}",
-		"package_subscription_id={subscription:UUID}", "period_start>={from:DateTime64(3)}",
-		"period_end<={to:DateTime64(3)}", "LIMIT {limit:UInt64}", "FORMAT JSONEachRow",
+		"FROM package_metric_finalized_v1 AS facts", "facts.tenant_id={tenant:UUID}",
+		"facts.package_subscription_id={subscription:UUID}", "facts.period_start>={from:DateTime64(3, 'UTC')}",
+		"facts.period_end<={to:DateTime64(3, 'UTC')}", "LIMIT {limit:UInt64}", "FORMAT JSONEachRow",
 		"source_watermark", "evidence_digest", "retention_until",
 	} {
 		if !strings.Contains(statement, required) {
 			t.Errorf("query missing %q: %s", required, statement)
 		}
 	}
-	for _, secret := range []string{query.TenantID, query.SubscriptionID, query.From.Format(time.RFC3339Nano), query.To.Format(time.RFC3339Nano)} {
+	for _, secret := range []string{query.TenantID, query.SubscriptionID, "2026-08-07 00:00:00.000", "2026-08-07 02:00:00.000"} {
 		if strings.Contains(statement, secret) {
 			t.Fatalf("scope value was interpolated into query: %q", secret)
 		}

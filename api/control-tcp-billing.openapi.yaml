@@ -52,6 +52,8 @@ paths:
                 $ref: '#/components/schemas/PolicyMutation'
         '400': { $ref: '#/components/responses/ValidationError' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/PermissionDenied'}
   /v1/admin/tcp-billing/settlements:
     post:
       operationId: settleTCPBillingCycle
@@ -76,6 +78,8 @@ paths:
                 $ref: '#/components/schemas/SettlementMutation'
         '400': { $ref: '#/components/responses/ValidationError' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/PermissionDenied'}
   /v1/admin/tcp-billing/settlements/{settlement_id}/adjustments:
     post:
       operationId: adjustTCPBillingSettlement
@@ -105,6 +109,8 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/PermissionDenied'}
 components:
   securitySchemes:
     bearerAuth:
@@ -122,7 +128,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', minLength: 1, maxLength: 128 }
     RequestID:
       name: X-Request-ID
       in: header

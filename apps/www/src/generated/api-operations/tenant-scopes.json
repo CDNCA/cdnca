@@ -7714,6 +7714,16 @@
        "name": "available_upgrade",
        "type": "PluginInstallationAvailableUpgrade",
        "description": "A newer version the platform already authorized for this installation; submit it to upgrade."
+      },
+      {
+       "name": "managed_by",
+       "type": "string: platform / tenant",
+       "description": "Who confirms and changes an installed plugin. platform: the controller's platform administrator (every installation from 1.0.35; a tenant reads it but cannot change it, writes are 403 plugin_installation_platform_managed). tenant: a tenant's own installation confirmed before 1.0.35, still managed in that tenant console. Omitted on candidates not installed yet."
+      },
+      {
+       "name": "targets",
+       "type": "object",
+       "description": "Tenants a platform-held tenant plugin is installed for. Platform view only; tenants never read it."
       }
      ]
     },
@@ -7739,8 +7749,8 @@
    "operation_id": "confirmPluginInstallation",
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/confirm",
-   "summary": "Confirm declared and sensitive plugin scopes before installation",
-   "summary_zh": "安装前确认插件声明的权限与敏感权限",
+   "summary": "Tenants no longer confirm installations: always 403 plugin_installation_platform_managed. The controller's platform administrator confirms tenant plugins under /v1/platform and chooses their tenants.",
+   "summary_zh": "租户不再确认安装：一律 403 plugin_installation_platform_managed，由主控平台管理员在平台路由确认",
    "auth": [
     "bearer"
    ],
@@ -7801,6 +7811,11 @@
       "name": "new_permissions_confirmed",
       "type": "boolean",
       "required": true
+     },
+     {
+      "name": "targets",
+      "type": "PluginInstallationTargets",
+      "description": "Platform confirmation of a tenant plugin only (required there, refused elsewhere)."
      }
     ]
    },
@@ -8108,6 +8123,11 @@
       "name": "new_permissions_confirmed",
       "type": "boolean",
       "required": true
+     },
+     {
+      "name": "targets",
+      "type": "PluginInstallationTargets",
+      "description": "Platform confirmation of a tenant plugin only (required there, refused elsewhere)."
      }
     ]
    },

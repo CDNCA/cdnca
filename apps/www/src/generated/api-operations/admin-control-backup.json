@@ -43,6 +43,14 @@
     {
      "status": "409",
      "description": "Another backup or migration is queued or running"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -71,6 +79,14 @@
     {
      "status": "400",
      "description": "Confirmation mismatch"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -95,6 +111,14 @@
     {
      "status": "200",
      "description": "Commands"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -115,6 +139,14 @@
     {
      "status": "502",
      "description": "Host unreachable"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -139,6 +171,14 @@
     {
      "status": "409",
      "description": "Busy"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -159,6 +199,14 @@
     {
      "status": "400",
      "description": "Passphrase given but not 12 to 1024 characters"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -187,6 +235,14 @@
     {
      "status": "404",
      "description": "Unknown run"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -212,6 +268,14 @@
     {
      "status": "409",
      "description": "The settings changed since expected_revision"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -237,6 +301,14 @@
     {
      "status": "409",
      "description": "The settings changed since expected_revision"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   }

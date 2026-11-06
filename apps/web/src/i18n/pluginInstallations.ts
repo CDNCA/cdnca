@@ -4,7 +4,7 @@ export type PluginInstallationsMessageTree = { [key: string]: string | PluginIns
 type MessageShape<T> = { [K in keyof T]: T[K] extends string ? string : MessageShape<T[K]> }
 
 const zhCN = {
-  title: '插件市场', subtitle: '平台授权给本主控的插件都在这里。插件运行在你自己的服务里，主控只负责授权和推送事件。',
+  title: '插件市场', subtitle: '主控管理员给本租户装好的插件都在这里，直接可用，不需要你确认安装。插件运行在开发者自己的服务里，主控只负责授权和推送事件。',
   actions: {
     search: '查询', reset: '重置', refresh: '刷新', retry: '重试', view: '查看详情',
     confirm: '安装', upgrade: '升级', disable: '暂停', resume: '恢复使用', uninstall: '卸载',
@@ -20,7 +20,7 @@ const zhCN = {
     platformPaused: '平台已暂停', upgradeAvailable: '可升级到 {{version}}',
     awaitingController: '已购买，待你确认',
   },
-  empty: { title: '还没有可用的插件', description: '平台给本主控授权插件后，会显示在这里。',
+  empty: { title: '还没有可用的插件', description: '主控管理员把插件装给本租户后，会显示在这里。',
     noMatch: '没有匹配的插件', status: '没有“{{status}}”的插件',
     group: { all: '尚未获取插件', pending: '暂无待确认插件', installed: '暂无已安装插件', failed: '暂无失败插件' } },
   forbidden: { title: '无权访问', description: '当前账号没有查看插件的权限。' },
@@ -33,6 +33,8 @@ const zhCN = {
     resultUnknown: '不确定操作是否成功', invalidResponse: '服务器返回的数据格式不对',
     platformPaused: '平台已暂停这个插件，不能在这里恢复，请联系平台',
     activationResponseInvalid: '授权响应校验未通过，尚未完成，请重试；持续失败请提供请求编号联系平台',
+    platformManaged: '这个插件由主控管理员统一管理，租户这里不能安装或修改',
+    targetsInvalid: '请选择装给哪些租户：全部租户，或至少选一个租户',
   },
   pause: {
     title: '当前状态',
@@ -74,6 +76,7 @@ const zhCN = {
   scopePurpose: {
     platform_themes_provide: '提供主题', security_rule_packs_provide: '提供 WAF 规则包',
     dns_records_manage: '改你自己 DNS 账号下的解析记录（增改删、分线路）。插件拿不到 DNS 账号密钥，每次修改都记入操作日志，暂停或卸载插件即停止',
+    probes_dnspup_request: '发起拨测：用平台「拨测（dnspup）」插件的凭据与额度测你指定的公网目标（tcping/ping/http/https/dns），按插件与租户限速计量，结果只回给本插件；插件拿不到 dnspup Key',
   },
   protective: { disableTitle: '暂停插件', uninstallTitle: '卸载插件', reason: '原因', reasonPlaceholder: '写一下为什么要这样操作，会记入操作日志', reasonRequired: '请填写 1 到 500 个字的原因' },
   lkg: { preserved: '升级没有成功，仍在使用版本 {{version}}', none: '无' },
@@ -83,12 +86,21 @@ const zhCN = {
   pagination: { label: '插件分页', previous: '上一页', next: '下一页', page: '第 {{page}} 页' },
   accessibility: { loading: '正在加载插件列表' },
   platform: {
-    subtitle: '本主控用到的用户控制台主题和规则数据包在这里确认安装。确认后到对应页面启用，普通用户不需要也不能处理这些插件。',
-    emptyTitle: '暂无主题或规则包安装记录', emptyDescription: '功能类插件不需要在这里确认；在“浏览”里获取主题或规则包后，等待确认的会显示在这里。',
+    subtitle: '在插件商店获取或购买的插件都在这里由你确认安装：主题和规则包装到本主控，页面插件和外部服务选择装给哪些租户。租户不需要也不能确认。',
+    emptyTitle: '暂无需要安装的插件', emptyDescription: '功能类插件获取后自动生效，不在这里；主题、规则包、页面插件、外部服务获取后，等待确认的会显示在这里。',
     forbiddenTitle: '当前账号不能管理平台插件', forbiddenDescription: '需要主控管理员的“平台插件安装”权限。',
     pendingHint: '已获取使用权，等你核对权限并确认安装到本主控。',
+    pendingTenantHint: '已获取使用权，核对权限并选择装给哪些租户，确认后这些租户直接可用。',
     installed: '已安装到本主控。到对应页面启用后才会生效。', goRulePacks: '去规则包',
+    installedTenant: '已安装，下列租户可以直接使用。', managedByPlatform: '由主控管理员管理',
     groups: { label: '按处理阶段筛选', all: '全部', pending: '待确认', installed: '已安装', failed: '失败' },
+  },
+  targets: {
+    title: '装给哪些租户', all: '全部租户（包括以后新建的租户）', selected: '指定租户',
+    searchPlaceholder: '输入用户名或用户 ID 搜索租户', searching: '正在搜索租户', none: '没有匹配的租户',
+    required: '至少选择一个租户', summaryAll: '全部租户', summaryCount: '{{count}} 个租户',
+    edit: '修改租户', save: '保存', saved: '已更新装给的租户', removedHint: '被移出的租户会立即看不到这个插件，已为插件签发的身份同时失效。',
+    unnamed: '已删除的租户', noUserPermission: '当前账号没有查看用户的权限，无法按名称搜索租户，只能选择全部租户。',
   },
   uiPage: {
     title: '插件将添加的页面', loading: '正在从插件市场核对页面声明',
@@ -122,7 +134,7 @@ const zhCN = {
 } as const
 
 const enUS = {
-  title: 'Plugin marketplace', subtitle: 'Review and manage out-of-process plugin authorization for this customer installation.',
+  title: 'Plugin marketplace', subtitle: 'Plugins the controller administrator installed for this tenant are here and ready to use; you do not confirm them. Plugins run on their developers\' services; the controller only grants access and pushes events.',
   actions: {
     search: 'Search', reset: 'Reset', refresh: 'Refresh', retry: 'Retry', view: 'View details',
     confirm: 'Confirm installation', upgrade: 'Revalidate upgrade', disable: 'Pause', resume: 'Resume', uninstall: 'Uninstall',
@@ -138,7 +150,7 @@ const enUS = {
     platformPaused: 'Paused by platform', upgradeAvailable: 'Upgrade to {{version}} available',
     awaitingController: 'Purchased, awaiting your confirmation',
   },
-  empty: { title: 'No plugin installations', description: 'This customer installation has no manageable plugin authorization.',
+  empty: { title: 'No plugin installations', description: 'Plugins the controller administrator installs for this tenant appear here.',
     noMatch: 'No matching plugins', status: 'No plugins in "{{status}}"',
     group: { all: 'No plugins obtained yet', pending: 'No plugins awaiting confirmation', installed: 'No installed plugins', failed: 'No failed plugins' } },
   forbidden: { title: 'Forbidden', description: 'This customer identity cannot read plugin installations.' },
@@ -151,6 +163,8 @@ const enUS = {
     resultUnknown: 'The write result is unknown', invalidResponse: 'The server response violates the versioned contract',
     platformPaused: 'The platform paused this plugin; it cannot be resumed here. Contact the platform.',
     activationResponseInvalid: 'The license response failed verification, so nothing changed. Try again; if it keeps failing, contact the platform with the request ID.',
+    platformManaged: 'The controller administrator manages this plugin; it cannot be installed or changed from a tenant',
+    targetsInvalid: 'Choose the tenants: all tenants, or at least one tenant',
   },
   pause: {
     title: 'Current state',
@@ -192,6 +206,7 @@ const enUS = {
   scopePurpose: {
     platform_themes_provide: 'Provide themes', security_rule_packs_provide: 'Provide WAF rule packs',
     dns_records_manage: 'Change records in your own DNS accounts (create, update, delete, per-line). The plugin never sees the DNS account credentials; every change is logged, and pausing or uninstalling the plugin stops it',
+    probes_dnspup_request: 'Run probes: probe the public targets you choose (tcping / ping / http / https / dns) with the platform 拨测（dnspup）plugin\'s key pair and quota, rate-limited and metered per plugin and tenant; results go back to this plugin only, which never sees the dnspup key',
   },
   protective: { disableTitle: 'Pause plugin', uninstallTitle: 'Uninstall plugin', reason: 'Action reason', reasonPlaceholder: 'Enter an auditable reason', reasonRequired: 'Enter a reason between 1 and 500 characters' },
   lkg: { preserved: 'Last known good version {{version}} is preserved', none: 'None' },
@@ -201,12 +216,21 @@ const enUS = {
   pagination: { label: 'Plugin installation pagination', previous: 'Previous', next: 'Next', page: 'Page {{page}}' },
   accessibility: { loading: 'Loading plugin installations' },
   platform: {
-    subtitle: 'Confirm installation of user console themes and rule data packs for this controller here, then enable them on their pages. Tenant users neither need nor can handle these plugins.',
-    emptyTitle: 'No theme or rule pack installations', emptyDescription: 'Feature plugins need no confirmation here; themes or rule packs you get in Browse appear here while they wait for confirmation.',
+    subtitle: 'Plugins you get or buy in the plugin store are confirmed here: themes and rule packs install on this controller, UI page plugins and external services for the tenants you choose. Tenants neither need nor can confirm them.',
+    emptyTitle: 'No plugins to install', emptyDescription: 'Feature plugins take effect once obtained and are not listed here; themes, rule packs, UI page plugins and external services you get appear here while they wait for confirmation.',
     forbiddenTitle: 'This account cannot manage platform plugins', forbiddenDescription: 'It needs the controller administrator permission for platform plugin installations.',
     pendingHint: 'Licensed. Review the permissions and confirm installation on this controller.',
+    pendingTenantHint: 'Licensed. Review the permissions and choose the tenants; once confirmed those tenants can use it directly.',
     installed: 'Installed on this controller. It takes effect once enabled on its page.', goRulePacks: 'Go to rule packs',
+    installedTenant: 'Installed. The tenants below can use it directly.', managedByPlatform: 'Managed by the controller administrator',
     groups: { label: 'Filter by stage', all: 'All', pending: 'Pending', installed: 'Installed', failed: 'Failed' },
+  },
+  targets: {
+    title: 'Install for which tenants', all: 'All tenants (including tenants created later)', selected: 'Chosen tenants',
+    searchPlaceholder: 'Search tenants by username or user ID', searching: 'Searching tenants', none: 'No matching tenants',
+    required: 'Choose at least one tenant', summaryAll: 'All tenants', summaryCount: '{{count}} tenants',
+    edit: 'Change tenants', save: 'Save', saved: 'Tenants updated', removedHint: 'Tenants you remove stop seeing this plugin at once, and identities issued to the plugin for them stop working.',
+    unnamed: 'Deleted tenant', noUserPermission: 'This account cannot read users, so tenants cannot be searched by name; only all tenants can be chosen.',
   },
   uiPage: {
     title: 'Pages this plugin adds', loading: 'Checking the page declaration with the plugin market',

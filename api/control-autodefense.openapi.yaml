@@ -25,6 +25,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/SiteList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites:
     get:
@@ -38,6 +39,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/SiteList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/mode:
     post:
@@ -52,6 +54,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ModeChange'}
       responses:
         '200': {$ref: '#/components/responses/ModeChanged'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/mode:
     post:
@@ -66,6 +69,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ModeChange'}
       responses:
         '200': {$ref: '#/components/responses/ModeChanged'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}:
     get:
@@ -79,6 +83,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
       responses:
         '200': {$ref: '#/components/responses/SiteDetail'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
     patch:
       operationId: updateAutoDefenseSite
@@ -92,6 +97,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/SiteSettings'}
       responses:
         '200': {$ref: '#/components/responses/Site'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}:
     get:
@@ -105,6 +111,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
       responses:
         '200': {$ref: '#/components/responses/SiteDetail'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
     patch:
       operationId: adminUpdateAutoDefenseSite
@@ -118,6 +125,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/SiteSettings'}
       responses:
         '200': {$ref: '#/components/responses/Site'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/release:
     post:
@@ -132,6 +140,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/SiteRelease'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseResult'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/release:
     post:
@@ -146,6 +155,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/SiteRelease'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseResult'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/drifts/confirm:
     post:
@@ -160,6 +170,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/DriftList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/drifts/confirm:
     post:
@@ -174,6 +185,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/DriftList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/circuit/resume:
     post:
@@ -188,6 +200,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/Site'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/circuit/resume:
     post:
@@ -202,6 +215,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/Site'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/allows:
     get:
@@ -215,6 +229,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
       responses:
         '200': {$ref: '#/components/responses/SiteAllowList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/allows/remove:
     post:
@@ -229,6 +244,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/SiteAllowRemove'}
       responses:
         '200': {$ref: '#/components/responses/SiteAllow'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/allows:
     get:
@@ -242,6 +258,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
       responses:
         '200': {$ref: '#/components/responses/SiteAllowList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/allows/remove:
     post:
@@ -256,6 +273,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/SiteAllowRemove'}
       responses:
         '200': {$ref: '#/components/responses/SiteAllow'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/releases/status:
     get:
@@ -269,6 +287,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/ReleaseKind'}, {$ref: '#/components/parameters/ReleaseTarget'}]
       responses:
         '200': {$ref: '#/components/responses/ReleaseStatus'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/releases/retry:
     post:
@@ -283,6 +302,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ReleaseRetry'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseStatus'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/releases/status:
     get:
@@ -296,6 +316,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}, {$ref: '#/components/parameters/ReleaseKind'}, {$ref: '#/components/parameters/ReleaseTarget'}]
       responses:
         '200': {$ref: '#/components/responses/ReleaseStatus'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/releases/retry:
     post:
@@ -310,6 +331,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ReleaseRetry'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseStatus'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules:
     get:
@@ -323,6 +345,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
       responses:
         '200': {$ref: '#/components/responses/ModuleList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules:
     get:
@@ -336,6 +359,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
       responses:
         '200': {$ref: '#/components/responses/ModuleList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules/{module}/mode:
     put:
@@ -350,6 +374,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ModuleMode'}
       responses:
         '200': {$ref: '#/components/responses/ModuleModeSet'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/mode:
     put:
@@ -364,6 +389,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ModuleMode'}
       responses:
         '200': {$ref: '#/components/responses/ModuleModeSet'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules/{module}/resume:
     post:
@@ -378,6 +404,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/ItemList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/resume:
     post:
@@ -392,6 +419,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/ItemList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}:
     put:
@@ -406,6 +434,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ItemValue'}
       responses:
         '200': {$ref: '#/components/responses/Item'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}:
     put:
@@ -420,6 +449,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ItemValue'}
       responses:
         '200': {$ref: '#/components/responses/Item'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume:
     post:
@@ -434,6 +464,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/ItemList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume:
     post:
@@ -448,6 +479,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/ItemList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range:
     put:
@@ -462,6 +494,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ItemRange'}
       responses:
         '200': {$ref: '#/components/responses/Item'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range:
     put:
@@ -476,6 +509,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ItemRange'}
       responses:
         '200': {$ref: '#/components/responses/Item'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules/{module}/values:
     get:
@@ -489,6 +523,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}]
       responses:
         '200': {$ref: '#/components/responses/NodeValueList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/values:
     get:
@@ -502,6 +537,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/TenantScopeID'}]
       responses:
         '200': {$ref: '#/components/responses/NodeValueList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/modules/{module}/history:
     get:
@@ -515,6 +551,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/HistoryList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/history:
     get:
@@ -528,6 +565,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/TenantScopeID'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/HistoryList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/waf-adapt:
     get:
@@ -541,6 +579,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
       responses:
         '200': {$ref: '#/components/responses/WAFAdapt'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt:
     get:
@@ -554,6 +593,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
       responses:
         '200': {$ref: '#/components/responses/WAFAdapt'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge:
     put:
@@ -568,6 +608,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/GreyChallenge'}
       responses:
         '200': {$ref: '#/components/responses/GreyChallengeChange'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge:
     put:
@@ -582,6 +623,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/GreyChallenge'}
       responses:
         '200': {$ref: '#/components/responses/GreyChallengeChange'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat:
     put:
@@ -597,6 +639,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/GreyRepeat'}
       responses:
         '200': {$ref: '#/components/responses/GreyRepeatChange'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat:
     put:
@@ -612,6 +655,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/GreyRepeat'}
       responses:
         '200': {$ref: '#/components/responses/GreyRepeatChange'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}:
     post:
@@ -626,6 +670,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/WAFDecision'}
       responses:
         '200': {$ref: '#/components/responses/WAFExclusion'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}:
     post:
@@ -640,6 +685,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/WAFDecision'}
       responses:
         '200': {$ref: '#/components/responses/WAFExclusion'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/events:
     get:
@@ -653,6 +699,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/EventList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/events:
     get:
@@ -666,6 +713,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/EventList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/verdicts:
     get:
@@ -679,6 +727,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/VerdictList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/verdicts:
     get:
@@ -692,6 +741,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/VerdictList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/verdicts/{verdict_id}/release:
     post:
@@ -706,6 +756,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Release'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseResult'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/verdicts/{verdict_id}/release:
     post:
@@ -720,6 +771,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Release'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseResult'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/blocks:
     get:
@@ -733,6 +785,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/BlockList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/blocks:
     get:
@@ -746,6 +799,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/BlockList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/blocks/{block_id}/release:
     post:
@@ -760,6 +814,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Release'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseResult'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/blocks/{block_id}/release:
     post:
@@ -774,6 +829,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Release'}
       responses:
         '200': {$ref: '#/components/responses/ReleaseResult'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/signatures:
     get:
@@ -787,6 +843,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/SignatureList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/signatures:
     get:
@@ -800,6 +857,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/SignatureList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/signatures/{signature_id}/solidify:
     post:
@@ -820,6 +878,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Solidify'}
       responses:
         '200': {$ref: '#/components/responses/Signature'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/signatures/{signature_id}/solidify:
     post:
@@ -834,6 +893,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Solidify'}
       responses:
         '200': {$ref: '#/components/responses/Signature'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/signatures/{signature_id}/revoke:
     post:
@@ -848,6 +908,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/Signature'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/signatures/{signature_id}/revoke:
     post:
@@ -862,6 +923,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/Signature'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/false-positives:
     get:
@@ -875,6 +937,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/FalsePositiveList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
     post:
       operationId: reportAutoDefenseFalsePositive
@@ -888,6 +951,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/FalsePositive'}
       responses:
         '201': {$ref: '#/components/responses/FalsePositive'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/false-positives:
     get:
@@ -901,6 +965,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/FalsePositiveList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
     post:
       operationId: adminReportAutoDefenseFalsePositive
@@ -914,6 +979,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/FalsePositive'}
       responses:
         '201': {$ref: '#/components/responses/FalsePositive'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/security/autodefense/metrics:
     get:
@@ -927,6 +993,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}]
       responses:
         '200': {$ref: '#/components/responses/SiteMetricsList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/metrics:
     get:
@@ -940,6 +1007,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}]
       responses:
         '200': {$ref: '#/components/responses/SiteMetricsList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups:
     get:
@@ -953,6 +1021,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}]
       responses:
         '200': {$ref: '#/components/responses/PortGroupList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules:
     get:
@@ -966,6 +1035,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}]
       responses:
         '200': {$ref: '#/components/responses/ModuleList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/mode:
     put:
@@ -980,6 +1050,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ModuleMode'}
       responses:
         '200': {$ref: '#/components/responses/ModuleModeSet'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/resume:
     post:
@@ -994,6 +1065,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/ItemList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}:
     put:
@@ -1008,6 +1080,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ItemValue'}
       responses:
         '200': {$ref: '#/components/responses/Item'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/resume:
     post:
@@ -1022,6 +1095,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
         '200': {$ref: '#/components/responses/ItemList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/range:
     put:
@@ -1036,6 +1110,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/ItemRange'}
       responses:
         '200': {$ref: '#/components/responses/Item'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/values:
     get:
@@ -1049,6 +1124,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}]
       responses:
         '200': {$ref: '#/components/responses/NodeValueList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/history:
     get:
@@ -1062,6 +1138,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200': {$ref: '#/components/responses/HistoryList'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /v1/admin/security/autodefense/platform-settings:
     get:
@@ -1075,6 +1152,7 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}]
       responses:
         '200': {$ref: '#/components/responses/PlatformSettings'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
     put:
       operationId: putAutoDefensePlatformSettings
@@ -1088,6 +1166,7 @@ paths:
       requestBody: {$ref: '#/components/requestBodies/PlatformSettings'}
       responses:
         '200': {$ref: '#/components/responses/PlatformSettings'}
+        '403': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:

@@ -10,7 +10,7 @@ import (
 )
 
 // siteDropCounterSource reads the node's site drop counters: XDP's site
-// stats (port + SNI) and the nftables site_drop counter. A source that is not
+// stats (port + SNI, and the SNI misses) and the nftables site_drop counter. A source that is not
 // there answers ok=false.
 type siteDropCounterSource struct {
 	xdp func() (xdp.SiteDropCounters, error)
@@ -20,6 +20,7 @@ type siteDropCounterSource struct {
 // siteDropCounts are the cumulative counters of one read, by source.
 type siteDropCounts struct {
 	xdpPort, xdpSNI, nft dropCount
+	xdpSNIMissed         dropCount
 	hasXDP, hasNFT       bool
 }
 
@@ -66,6 +67,7 @@ func (telemetry *siteDropTelemetry) read(ctx context.Context) siteDropCounts {
 			counts.hasXDP = true
 			counts.xdpPort = dropCount{counters.Port.Packets, counters.Port.Bytes}
 			counts.xdpSNI = dropCount{counters.SNI.Packets, counters.SNI.Bytes}
+			counts.xdpSNIMissed = dropCount{counters.SNIMissed.Packets, counters.SNIMissed.Bytes}
 		}
 	}
 	if telemetry.source.nft != nil {
@@ -98,6 +100,18 @@ func (counts siteDropCounts) delta(previous siteDropCounts) dropCount {
 	return total
 }
 
+// missed is XDP's SNI miss count since previous (not a drop), counted like
+// delta.
+func (counts siteDropCounts) missed(previous siteDropCounts) dropCount {
+	if !counts.hasXDP {
+		return dropCount{}
+	}
+	if !previous.hasXDP {
+		return counts.xdpSNIMissed
+	}
+	return counterDelta(previous.xdpSNIMissed, counts.xdpSNIMissed)
+}
+
 // Sample is the site drops since the previous sample, nil when the node
 // dropped for no site in the interval. The first sample only primes the
 // counters (what they held before the Agent started is not attributable).
@@ -110,7 +124,7 @@ func (telemetry *siteDropTelemetry) Sample(ctx context.Context) *nodemonitoring.
 		telemetry.previous, telemetry.primed = counts, true
 		return nil
 	}
-	total := counts.delta(telemetry.previous)
+	total, missed := counts.delta(telemetry.previous), counts.missed(telemetry.previous)
 	telemetry.previous = counts
 	if len(sites) == 0 {
 		return nil
@@ -119,5 +133,6 @@ func (telemetry *siteDropTelemetry) Sample(ctx context.Context) *nodemonitoring.
 	if len(sites) > nodemonitoring.MaxSiteDropSites {
 		sites = sites[:nodemonitoring.MaxSiteDropSites]
 	}
-	return &nodemonitoring.SiteDropMetrics{SiteIDs: sites, Packets: total.packets, Bytes: total.bytes}
+	return &nodemonitoring.SiteDropMetrics{SiteIDs: sites, Packets: total.packets, Bytes: total.bytes,
+		SNIMissedPackets: missed.packets, SNIMissedBytes: missed.bytes}
 }

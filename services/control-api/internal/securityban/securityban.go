@@ -36,11 +36,18 @@ const (
 	SourceWAF    = "waf"
 	SourceCC     = "cc"
 	SourceManual = "manual"
+	// SourceMarket: a root subscriber's ban of a market site, written by
+	// this leaf from the subscriber's snapshot (market.go).
+	SourceMarket = "market"
 
 	// DefaultBanSeconds is the duration of a synced automatic ban whose policy
 	// version says nothing (decision: security_events gets no
 	// duration column).
 	DefaultBanSeconds = 3600
+	// OverlayAutoBlockSeconds is the ban of the auto defense WAF overlay's auto block (waf.auto_block = 1 while
+	// the WAF module runs 智能自动, or locked on): built into the node (cdnca_waf.lua overlay.auto_block), it bans
+	// for a block / challenge rule of a policy without its own auto block, and of a rule pack segment.
+	OverlayAutoBlockSeconds = 600
 	// MaxManualSeconds bounds a manual ban (the table allows 30 days).
 	MaxManualSeconds = int(contract.MaxBanDuration / time.Second)
 	// MaxActivePerSite bounds the active bans of one site (snapshots carry at
@@ -86,6 +93,18 @@ type Entry struct {
 	ReleasedBy    *uuid.UUID `json:"released_by"`
 	// State: active (refused on the nodes), released, expired.
 	State string `json:"state"`
+	// Market: where a source market row came from (nil otherwise).
+	Market *MarketOrigin `json:"market"`
+	// Delivery: how an active ban of a site without own nodes, or with
+	// market leaves, is enforced (List only; nil otherwise).
+	Delivery *Delivery `json:"delivery"`
+}
+
+// MarketOrigin names the market subscription a market row came from: its
+// key (the market tenant mkt-<key>) and the subscriber's own source.
+type MarketOrigin struct {
+	Subscription string `json:"subscription"`
+	BuyerSource  string `json:"buyer_source"`
 }
 
 const (

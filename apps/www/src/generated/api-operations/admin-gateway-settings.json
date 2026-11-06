@@ -111,6 +111,16 @@
     {
      "status": "428",
      "description": "precondition_required (If-Match missing or repeated)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
     }
    ]
   }

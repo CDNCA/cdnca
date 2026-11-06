@@ -165,6 +165,14 @@
     {
      "status": "404",
      "description": "Unknown catalog theme"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -263,6 +271,14 @@
     {
      "status": "422",
      "description": "Refused package"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -292,6 +308,14 @@
     {
      "status": "404",
      "description": "Never stored and not in the catalog"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },
@@ -320,6 +344,14 @@
     {
      "status": "409",
      "description": "The active package, or one a tenant uses (theme_package_selected_by_tenant), cannot be removed"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     }
    ]
   },

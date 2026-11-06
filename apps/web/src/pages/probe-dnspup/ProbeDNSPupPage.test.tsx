@@ -114,7 +114,8 @@ describe('ProbeDNSPupPage', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([path, call]) => path.endsWith('/node-monitoring') && call?.method === 'PUT')).toBe(true))
     const [, init] = fetchMock.mock.calls.find(([path, call]) => path.endsWith('/node-monitoring') && call?.method === 'PUT')!
     expect(JSON.parse(String(init?.body))).toEqual({ interval_seconds: 60, groups: ['telecom', 'unicom', 'mobile'], points_per_group: 3,
-      failure_percent: 50, failure_rounds: 3, recovery_rounds: 1, low_balance: 1000 })
+      failure_percent: 50, failure_rounds: 3, recovery_rounds: 1, low_balance: 1000, probe_type: 'tcping', selection: null,
+      line_alert_min_points: 3, line_alert_rounds: 2, auto_diagnose: true })
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy()
   })
 
@@ -125,9 +126,53 @@ describe('ProbeDNSPupPage', () => {
       monthly_limit: 100, monthly_used: 100, account_checked_at: null, paused_until: null, balance_unit: 'request',
       max_addresses_per_round: 50, estimate: { addresses: 0, checkpoints_per_round: 3, rounds_per_day: 288, requests_per_day: 0, requests_per_month: 0 },
     }
-    vi.stubGlobal('fetch', vi.fn<Fetch>(async (path) => json(path.endsWith('/node-monitoring') ? node : status)))
+    vi.stubGlobal('fetch', vi.fn<Fetch>(async (path) => path.endsWith('/node-monitoring') ? json(node)
+      : path === '/v1/admin/probe-dnspup' ? json(status) : json({ error: { code: 'not_found', message: 'x', request_id: 'r' } }, 404)))
     renderWithProviders(<ProbeDNSPupPage />)
     expect(await screen.findByText(/额度已用完：已停止 dnspup 节点拨测/)).toBeInTheDocument()
+  })
+
+  it('shows per purpose usage and degrade state, and the area × carrier matrix with failure categories', async () => {
+    const gate = { stopped: false, factor: 1, daily_average: 10, projected_monthly: 300 }
+    const purposes = { monthly_limit: 10000, monthly_used: 4200, projected_monthly: 9300, purposes: [
+      { purpose: 'node_availability', class: 1, enabled: true, monthly_cap: 0, interval_seconds: 0, used_this_month: 3000,
+        gate: { ...gate, projected_monthly: 9000 } },
+      { purpose: 'origin_failover', class: 2, enabled: true, monthly_cap: 0, interval_seconds: 0, used_this_month: 100,
+        gate: { ...gate, factor: 3, reason: 'account_slowdown' } },
+      // cdncaCE has no aggregated edge: its row is not shown but is saved back as read.
+      { purpose: 'edge_health', class: 2, enabled: true, monthly_cap: 0, interval_seconds: 0, used_this_month: 0, gate },
+      { purpose: 'diagnose', class: 3, enabled: true, monthly_cap: 300, interval_seconds: 0, used_this_month: 300,
+        gate: { ...gate, stopped: true, reason: 'monthly_cap', projected_monthly: 0 } },
+    ] }
+    const matrix = { subject: 'node', id: 'node-1', window: '24h', series: [{ at: '2026-11-05T00:00:00Z', total: 4, availability: 0.5, avg_latency_ms: 30 }],
+      cells: [{ area: '广东', carrier: 'mobile', total: 6, ok: 1, availability: 1 / 6, avg_latency_ms: 40, top_failure: 'timeout' },
+        { area: '北京', carrier: 'edu', total: 2, ok: 2, availability: 1, avg_latency_ms: 12 }] }
+    const fetchMock = vi.fn<Fetch>(async (path, init) => {
+      if (path === '/v1/admin/probe-dnspup') return json(status)
+      if (path === '/v1/admin/probe-dnspup/purposes' && !init?.method) return json(purposes)
+      if (path === '/v1/admin/probe-dnspup/purposes') return json(purposes)
+      if (path.startsWith('/v1/admin/probe-dnspup/matrix?')) return json(matrix)
+      if (path.endsWith('/overrides')) return json({ items: [] })
+      return json({ error: { code: 'not_found', message: 'x', request_id: 'r' } }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<ProbeDNSPupPage />)
+    expect(await screen.findByText('账户本月 4,200 / 10,000 次，各用途预计合计 9,300 次')).toBeInTheDocument()
+    expect(screen.getByText('已降频 ×3')).toBeInTheDocument()
+    expect(screen.getByText(/已停用 · 达到月上限/)).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: '节点可用性 启用' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '保存用途设置' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path, call]) => path.endsWith('/purposes') && call?.method === 'PUT')).toBe(true))
+    const [, put] = fetchMock.mock.calls.find(([path, call]) => path.endsWith('/purposes') && call?.method === 'PUT')!
+    expect(JSON.parse(String(put?.body)).purposes).toContainEqual({ purpose: 'diagnose', enabled: true, monthly_cap: 300, interval_seconds: 0 })
+    expect(JSON.parse(String(put?.body)).purposes).toContainEqual({ purpose: 'edge_health', enabled: true, monthly_cap: 0, interval_seconds: 0 })
+    expect(screen.queryByText('聚合边缘候选')).toBeNull()
+    fireEvent.change(screen.getByRole('textbox', { name: '节点 ID' }), { target: { value: 'node-1' } })
+    fireEvent.click(screen.getByRole('button', { name: '查看' }))
+    expect(await screen.findByText('超时')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '教育网' })).toBeInTheDocument()
+    expect(screen.getByText('16.7% · 40 ms')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([path]) => path === '/v1/admin/probe-dnspup/matrix?subject=node&id=node-1&window=24h')).toBe(true)
   })
 
   it('shows a 403 page without the permission', async () => {

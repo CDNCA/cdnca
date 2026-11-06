@@ -21,7 +21,7 @@ function ban(overrides: Record<string, unknown> = {}) {
   return {
     id: banID, tenant_scope_id: tenantID, site_id: siteID, site_domain: 'shop.example.com', client_ip: '198.51.100.9',
     source: 'waf', rule_id: 'r-1', reason: '', banned_at: '2026-10-19T01:00:00Z', banned_until: '2026-10-19T02:00:00Z',
-    created_by: null, released_at: null, released_by: null, state: 'active', ...overrides,
+    created_by: null, released_at: null, released_by: null, state: 'active', market: null, delivery: null, ...overrides,
   }
 }
 
@@ -262,5 +262,52 @@ describe('security ban list page', () => {
     await user.click(await screen.findByText('shop.example.com（5）'))
     expect(sites).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ domain: 'shop' }))
     await waitFor(() => expect(calls).toContain(`/v1/security-bans?page=1&limit=20&site_id=${siteID}&client_ip=198.51.100.9&state=active`))
+  })
+
+  // a site served by market subscription nodes shows per ban whether it is in effect there.
+  it('shows the market delivery of each active ban instead of a plain "active"', async () => {
+    authenticate('tenant', ['security_policies.read'])
+    const delivery = (state: string, reason = '', leaves = 1, effective = 0) => ({ state, reason, leaves, effective, own_nodes: 0 })
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ items: [
+      ban({ id: '00000000-0000-4000-8000-000000000001', client_ip: '198.51.100.1', delivery: delivery('effective', '', 1, 1) }),
+      ban({ id: '00000000-0000-4000-8000-000000000002', client_ip: '198.51.100.2', delivery: delivery('pending') }),
+      ban({ id: '00000000-0000-4000-8000-000000000003', client_ip: '198.51.100.3', delivery: delivery('refused', 'released_by_supplier') }),
+      ban({ id: '00000000-0000-4000-8000-000000000004', client_ip: '198.51.100.4', delivery: delivery('unsupported', 'peer_unsupported') }),
+      ban({ id: '00000000-0000-4000-8000-000000000005', client_ip: '198.51.100.5', delivery: delivery('refused', 'some_new_code') }),
+      ban({ id: '00000000-0000-4000-8000-000000000006', client_ip: '198.51.100.6', delivery: { state: 'no_nodes', reason: '', leaves: 0, effective: 0, own_nodes: 0 } }),
+      ban({ id: '00000000-0000-4000-8000-000000000007', client_ip: '198.51.100.7', delivery: delivery('delivering', '', 2, 1) }),
+    ], total: 7, page: 1, limit: 20 }))
+    renderWithProviders(<AppRoutes />, ['/site/security-bans'])
+
+    const row = async (ip: string) => (await screen.findByText(ip)).closest('tr') as HTMLElement
+    expect(await screen.findByText(/封禁会经节点市场下发到卖家的订阅节点/)).toBeInTheDocument()
+    expect(within(await row('198.51.100.1')).getByText('已在订阅节点生效')).toBeInTheDocument()
+    expect(within(await row('198.51.100.1')).queryByText('封禁中')).not.toBeInTheDocument()
+    expect(within(await row('198.51.100.2')).getByText('待下发')).toBeInTheDocument()
+    expect(within(await row('198.51.100.3')).getByText('卖家拒收')).toBeInTheDocument()
+    expect(within(await row('198.51.100.3')).getByText('卖家已手工解除，不再重新封禁')).toBeInTheDocument()
+    expect(within(await row('198.51.100.4')).getByText('对方版本不支持')).toBeInTheDocument()
+    expect(within(await row('198.51.100.4')).getByText('卖家主控版本过低，请卖家升级')).toBeInTheDocument()
+    expect(within(await row('198.51.100.5')).getByText('原因：some_new_code')).toBeInTheDocument()
+    expect(within(await row('198.51.100.6')).getByText('无节点执行')).toBeInTheDocument()
+    expect(within(await row('198.51.100.7')).getByText('订阅节点下发中')).toBeInTheDocument()
+    expect(within(await row('198.51.100.7')).getByText('1/2 个卖家已生效')).toBeInTheDocument()
+  })
+
+  it('shows a seller where a market ban came from', async () => {
+    authenticate('platform', ['platform.admin', 'security_policies.read'])
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ items: [
+      ban({ source: 'market', reason: 'scan', market: { subscription: 'abcdef0123456789abcdef01', buyer_source: 'cc' } }),
+      ban({ id: otherSiteID, client_ip: '198.51.100.8', source: 'autodefense' }),
+    ], total: 2, page: 1, limit: 20 }))
+    renderWithProviders(<AppRoutes />, ['/site/security-bans'])
+
+    const row = (await screen.findByText('198.51.100.9')).closest('tr') as HTMLElement
+    expect(within(row).getByText('市场订阅方封禁')).toBeInTheDocument()
+    expect(within(row).getByText('订阅 abcdef01 · CC 自动封禁')).toBeInTheDocument()
+    expect(within(row).getByText('封禁中')).toBeInTheDocument()
+    const auto = (await screen.findByText('198.51.100.8')).closest('tr') as HTMLElement
+    expect(within(auto).getByText('智能自动防御')).toBeInTheDocument()
+    expect(screen.queryByText(/封禁会经节点市场下发到卖家的订阅节点/)).not.toBeInTheDocument()
   })
 })

@@ -81,10 +81,20 @@ func TestProductionListMergesNewAuthorizationsAndAnnotatesInstalledPlugins(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, RequestID: "merge-1"}
+	// the platform administrator holds tenant plugins and is offered new authorizations.
+	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopePlatform,
+		RequestID: "merge-1"}
 	page, err := domain.List(context.Background(), actor, ListRequest{TenantID: tenantID, Limit: 50})
 	if err != nil || len(page.Items) != 2 {
 		t.Fatalf("page=%+v err=%v", page, err)
+	}
+	// A tenant reads the same installed row annotated, and is never offered the new authorization.
+	tenant := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopeTenant,
+		RequestID: "merge-tenant"}
+	if tenantPage, err := domain.List(context.Background(), tenant, ListRequest{TenantID: tenantID, Limit: 50}); err != nil ||
+		len(tenantPage.Items) != 1 || tenantPage.Items[0].Installation.AuthorizationID != installed.Installation.AuthorizationID ||
+		tenantPage.Items[0].AuthorizationStatus != StatusEnabled {
+		t.Fatalf("tenant page=%+v err=%v", tenantPage, err)
 	}
 	first, second := page.Items[0], page.Items[1]
 	if first.Installation.AuthorizationID != installed.Installation.AuthorizationID ||
@@ -123,7 +133,8 @@ func TestProductionListOffersOnlyUninstalledAuthorizationsFromEmptyStore(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, RequestID: "merge-2"}
+	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopePlatform,
+		RequestID: "merge-2"}
 	page, err := domain.List(context.Background(), actor, ListRequest{TenantID: tenantID, Limit: 50})
 	if err != nil || len(page.Items) != 1 || page.Items[0].Installation.PluginID != "acme.node-probe" {
 		t.Fatalf("page=%+v err=%v", page, err)

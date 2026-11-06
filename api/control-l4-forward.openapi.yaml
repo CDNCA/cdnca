@@ -203,12 +203,12 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '415': {$ref: '#/components/responses/UnsupportedMediaType'}
         '422':
-          description: Without ignore_errors a line failed; nothing was written (committed false).
+          description: Without ignore_errors a line failed; nothing was written. The body is the per-line result (not an error envelope); the failed line carries its error code.
           headers:
             X-Request-ID: {$ref: '#/components/headers/RequestID'}
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/BatchCreateStreamsResult'}
+              schema: {$ref: '#/components/schemas/BatchCreateStreamsRejected'}
         '500': {$ref: '#/components/responses/InternalError'}
   /v1/streams/batch-action:
     post:
@@ -1189,6 +1189,16 @@ components:
         created: {type: integer, minimum: 0}
         failed: {type: integer, minimum: 0}
         committed: {type: boolean}
+    BatchCreateStreamsRejected:
+      description: Atomic batch rejection (422). Same per-line items as BatchCreateStreamsResult; created is 0 and committed is false because nothing was written.
+      allOf:
+        - {$ref: '#/components/schemas/BatchCreateStreamsResult'}
+        - type: object
+          required: [created, failed, committed]
+          properties:
+            created: {const: 0}
+            failed: {type: integer, minimum: 1}
+            committed: {const: false}
     BatchStreamActionRequest:
       type: object
       additionalProperties: false
@@ -1259,7 +1269,7 @@ components:
               minLength: 1
               maxLength: 512
               description: prefix_hex - lower-case hex bytes (at most 256 bytes); contains - text (at most 256 bytes); regex - an RE2 / PCRE pattern of at most 256 bytes without \C, \p or \P.
-          description: The first data the client sends (first TCP segment within 2.5 seconds, at most 512 bytes; the first UDP datagram). A client that sends nothing in time does not match and is forwarded (server-first protocols such as SSH or MySQL wait up to 2.5 seconds).
+          description: The first data the client sends (TCP - the first 4096 bytes of what came within 2.5 seconds; once data came the node waits only for bytes known to be on their way, the rest of a TLS ClientHello whose record states its length or of a prefix_hex value the data starts, and judges other data at once; UDP - the first datagram). A client that sends nothing in time does not match and is forwarded (server-first protocols such as SSH or MySQL wait up to 2.5 seconds). Match TLS server names with server_names, not contains / regex on the first packet.
         server_names:
           type: array
           minItems: 1

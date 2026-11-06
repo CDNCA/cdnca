@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../api/auth'
 import { marketApi, type MarketPluginDetail } from '../../api/market'
-import { pluginInstallationsApi, type PluginInstallation } from '../../api/pluginInstallations'
+import { platformPluginInstallationsApi, pluginInstallationsApi, type PluginInstallation } from '../../api/pluginInstallations'
+import { usersApi } from '../../api/users'
 import { useSessionStore } from '../../auth/session'
 import i18n, { changeLocale } from '../../i18n'
 import { authResponse, principal } from '../../test/fixtures'
 import { renderWithProviders } from '../../test/render'
-import PluginMarketPage from './PluginMarketPage'
+import PluginMarketPage, { PlatformPluginsPanel } from './PluginMarketPage'
 
 // antd 测试环境里所有弹窗的 aria-labelledby 都是 test-id，同时开着 feedback 弹窗时按 name 查会串到别的弹窗；按标题文字找所属弹窗。
 const DIALOG_TITLE = { selector: '.ant-modal-title, .ant-drawer-title' }
@@ -38,8 +39,33 @@ function installation(overrides: Partial<PluginInstallation> = {}): PluginInstal
     approved_scopes: ['cache.purge', 'sites.read'], sensitive_scopes: ['cache.purge'], new_scopes: [],
     status: 'enabled', revision: 4, identity_generation: 2, lkg_verification_id: verificationID,
     lkg_version: '1.2.3', stable_reason_code: null, updated_at: '2026-08-08T08:00:00Z',
+    // A tenant's own installation from before 1.0.35: still managed in its console.
+    managed_by: 'tenant',
     ...overrides,
   }
+}
+
+const platformScope = '018cc251-f400-7def-8000-000000000050'
+const tenantB = '018cc251-f400-7def-8000-000000000051'
+
+// 可安装插件的确认在主控平台管理员的“我的插件”，租户不再确认。
+function setPlatformSession(permissions = ['plugin_installations.platform.read', 'plugin_installations.platform.manage',
+  'identity.users.manage']) {
+  const current = principal({ scope_kind: 'platform', scope_id: platformScope, tenant_id: null, permissions })
+  useSessionStore.getState().setSession(authResponse(current), current)
+}
+
+// A candidate the platform administrator confirms: held in the platform scope (not installed yet: no managed_by).
+function candidate(overrides: Partial<PluginInstallation> = {}): PluginInstallation {
+  return installation({ tenant_scope_id: platformScope, managed_by: undefined, status: 'pending_confirmation', revision: 1,
+    lkg_verification_id: null, lkg_version: null, ...overrides })
+}
+
+function mockPlatformApi(item: PluginInstallation) {
+  vi.spyOn(platformPluginInstallationsApi, 'list').mockResolvedValue({ items: [item] })
+  vi.spyOn(platformPluginInstallationsApi, 'get').mockResolvedValue(item)
+  return vi.spyOn(platformPluginInstallationsApi, 'confirm').mockImplementation(async () => ({ installation: { ...item,
+    status: 'enabled', revision: 1, managed_by: 'platform', targets: { all_tenants: true, revision: 1, tenants: [] } } }))
 }
 
 function setSession(permissions = ['plugin_installations.read', 'plugin_installations.manage']) {
@@ -148,11 +174,10 @@ describe('PluginMarketPage', () => {
   })
 
   it('explains in Chinese what dns.records.manage lets a plugin do and names known permissions', async () => {
-    mockApi(installation({
-      status: 'pending_confirmation', manifest_scopes: ['dns.records.manage', 'sites.read'], approved_scopes: [],
-      sensitive_scopes: [], new_scopes: [], revision: 1, lkg_verification_id: null, lkg_version: null,
-    }))
-    renderWithProviders(<PluginMarketPage />)
+    setPlatformSession()
+    mockPlatformApi(candidate({ manifest_scopes: ['dns.records.manage', 'sites.read'], approved_scopes: [],
+      sensitive_scopes: [], new_scopes: [] }))
+    renderWithProviders(<PlatformPluginsPanel />)
     await userEvent.click(await screen.findByRole('button', { name: '安装' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('dns.records.manage')).toBeInTheDocument()
@@ -161,12 +186,9 @@ describe('PluginMarketPage', () => {
   })
 
   it('requires separate sensitive and new-permission consent before installation confirmation', async () => {
-    const pending = installation({
-      status: 'pending_confirmation', approved_scopes: [], new_scopes: ['sites.read'], revision: 1,
-      lkg_verification_id: null, lkg_version: null,
-    })
-    mockApi(pending)
-    renderWithProviders(<PluginMarketPage />)
+    setPlatformSession()
+    const confirm = mockPlatformApi(candidate({ approved_scopes: [], new_scopes: ['sites.read'] }))
+    renderWithProviders(<PlatformPluginsPanel />)
     await userEvent.click(await screen.findByRole('button', { name: '安装' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('cache.purge')).toBeInTheDocument()
@@ -177,11 +199,71 @@ describe('PluginMarketPage', () => {
     await userEvent.click(within(dialog).getByRole('checkbox', { name: '我已确认本次安装所需的权限' }))
     expect(submit).toBeEnabled()
     await userEvent.click(submit)
-    await waitFor(() => expect(pluginInstallationsApi.confirm).toHaveBeenCalledWith(
-      expect.any(String), scopeID, authorizationID, 1,
-      { verification_id: verificationID, approved_scopes: ['cache.purge', 'sites.read'], sensitive_permissions_confirmed: true, new_permissions_confirmed: true },
+    // A tenant plugin confirmed by the platform administrator: for all tenants unless chosen otherwise.
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(
+      expect.any(String), platformScope, authorizationID, 1,
+      { verification_id: verificationID, approved_scopes: ['cache.purge', 'sites.read'], sensitive_permissions_confirmed: true,
+        new_permissions_confirmed: true, targets: { all_tenants: true, tenant_scope_ids: [] } },
       expect.stringMatching(/^plugin-installation-confirm-/),
     ))
+  })
+
+  // 平台管理员确认租户插件时选“指定租户”，按用户名搜到租户后只装给它；没选租户时不能提交。
+  it('installs a tenant plugin for chosen tenants found by name', async () => {
+    setPlatformSession()
+    const confirm = mockPlatformApi(candidate({ sensitive_scopes: [], new_scopes: [] }))
+    vi.spyOn(usersApi, 'list').mockResolvedValue({ items: [{ id: 'u1', display_id: '100001', scope_id: tenantB, tenant_id: tenantB,
+      username: 'beta', display_name: '乙公司' }], page: 1, limit: 20, total: 1 } as never)
+    renderWithProviders(<PlatformPluginsPanel />)
+    await userEvent.click(await screen.findByRole('button', { name: '安装' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('装给哪些租户')).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('radio', { name: '指定租户' }))
+    const submit = within(dialog).getByRole('button', { name: '确认安装' })
+    expect(submit).toBeDisabled()
+    expect(within(dialog).getByText('至少选择一个租户')).toBeInTheDocument()
+    await userEvent.type(within(dialog).getByRole('combobox', { name: '指定租户' }), 'beta')
+    await userEvent.click(await screen.findByText('乙公司 · 100001'))
+    await waitFor(() => expect(submit).toBeEnabled())
+    await userEvent.click(submit)
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.any(String), platformScope, authorizationID, 1,
+      expect.objectContaining({ targets: { all_tenants: false, tenant_scope_ids: [tenantB] } }), expect.any(String)))
+  })
+
+  // 已装好的租户插件详情列出装给的租户，可改为全部租户（PUT targets，If-Match 用 targets.revision）。
+  it('shows and changes the tenants of an installed tenant plugin', async () => {
+    setPlatformSession()
+    const installed = installation({ tenant_scope_id: platformScope, managed_by: 'platform',
+      targets: { all_tenants: false, revision: 3, tenants: [{ scope_id: tenantB, display_name: '乙公司', display_id: '100001' }] } })
+    vi.spyOn(platformPluginInstallationsApi, 'list').mockResolvedValue({ items: [installed] })
+    vi.spyOn(platformPluginInstallationsApi, 'get').mockResolvedValue(installed)
+    const update = vi.spyOn(platformPluginInstallationsApi, 'updateTargets').mockResolvedValue({ installation: { ...installed,
+      targets: { all_tenants: true, revision: 4, tenants: [] } } })
+    renderWithProviders(<PlatformPluginsPanel />)
+    expect(await screen.findByText('1 个租户')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '查看详情' }))
+    const drawer = await findDialogTitled('acme.cache')
+    expect(await within(drawer).findByText('乙公司 · 100001')).toBeInTheDocument()
+    await userEvent.click(within(drawer).getByRole('button', { name: '修改租户' }))
+    const editor = await findDialogTitled('修改租户')
+    await userEvent.click(within(editor).getByRole('radio', { name: '全部租户（包括以后新建的租户）' }))
+    await userEvent.click(within(editor).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.any(String), authorizationID, 3,
+      { all_tenants: true, tenant_scope_ids: [] }, expect.stringMatching(/^plugin-installation-targets-/)))
+  })
+
+  // 租户只读看到主控管理员替它装的插件——没有安装、暂停、卸载，也看不到装给了哪些租户。
+  it('shows a plugin the platform installed for the tenant read-only', async () => {
+    mockApi(installation({ tenant_scope_id: platformScope, managed_by: 'platform' }))
+    renderWithProviders(<PluginMarketPage />)
+    expect(await screen.findByText('由主控管理员管理')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '安装' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '查看详情' }))
+    const drawer = await findDialogTitled('acme.cache')
+    expect(within(drawer).queryByRole('button', { name: '暂停' })).not.toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: '卸载' })).not.toBeInTheDocument()
+    expect(within(drawer).queryByRole('button', { name: '修改租户' })).not.toBeInTheDocument()
+    expect(screen.getByText(/主控管理员把插件装给本租户后|主控管理员给本租户装好的插件都在这里/)).toBeInTheDocument()
   })
 
   it('reconfirms newly added upgrade permissions and displays LKG preservation after failure', async () => {
@@ -232,13 +314,11 @@ describe('PluginMarketPage', () => {
   })
 
   it('marks a purchased market plugin awaiting this controller and confirms it with the consent flags', async () => {
-    mockApi(installation({
-      status: 'pending_confirmation', authorization_status: 'pending_confirmation', revision: 1,
-      identity_generation: 0, lkg_verification_id: null, lkg_version: null,
+    setPlatformSession()
+    const confirm = mockPlatformApi(candidate({ authorization_status: 'pending_confirmation', identity_generation: 0,
       manifest_scopes: ['edge.health_beacon'], approved_scopes: ['edge.health_beacon'],
-      sensitive_scopes: ['edge.health_beacon'], new_scopes: ['edge.health_beacon'],
-    }))
-    renderWithProviders(<PluginMarketPage />)
+      sensitive_scopes: ['edge.health_beacon'], new_scopes: ['edge.health_beacon'] }))
+    renderWithProviders(<PlatformPluginsPanel />)
     expect(await screen.findByText('已购买，待你确认')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '安装' }))
     const dialog = (await screen.findByText('安装插件')).closest('[role="dialog"]')
@@ -248,7 +328,7 @@ describe('PluginMarketPage', () => {
     await userEvent.click(within(dialog).getByRole('checkbox', { name: '我已了解这些权限可以读取或修改重要数据' }))
     await userEvent.click(within(dialog).getByRole('checkbox', { name: '我已确认本次安装所需的权限' }))
     await userEvent.click(ok)
-    await waitFor(() => expect(pluginInstallationsApi.confirm).toHaveBeenCalledWith(expect.any(String), scopeID,
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.any(String), platformScope,
       authorizationID, 1, expect.objectContaining({ verification_id: verificationID, approved_scopes: ['edge.health_beacon'],
         sensitive_permissions_confirmed: true, new_permissions_confirmed: true }), expect.any(String)))
   })
@@ -419,9 +499,8 @@ describe('PluginMarketPage', () => {
     }
   })
   it('shows the signed ui_page menus and origin before confirming, only for the exact manifest', async () => {
-    const pending = installation({ status: 'pending_confirmation', approved_scopes: [], revision: 1,
-      lkg_verification_id: null, lkg_version: null })
-    mockApi(pending)
+    setPlatformSession()
+    mockPlatformApi(candidate({ approved_scopes: [] }))
     const marketRow = '018cc251-f400-7def-8000-000000000040'
     const uiPage = { origin: 'https://ui.acme.example', api_base_url: 'https://api.acme.example/v1', pages: [
       { id: 'report', path: '/report', mount: 'menu' as const, menu_parent: 'monitor', role: 'user' as const, title: { 'zh-CN': '缓存报表' } },
@@ -434,7 +513,7 @@ describe('PluginMarketPage', () => {
     })
     vi.spyOn(marketApi, 'plugins').mockResolvedValue({ items: [{ id: marketRow, plugin_id: 'acme.cache' } as MarketPluginDetail['plugin']], next_cursor: null })
     const pluginSpy = vi.spyOn(marketApi, 'plugin').mockResolvedValue(detail('a'.repeat(64)))
-    const { unmount } = renderWithProviders(<PluginMarketPage />)
+    const { unmount } = renderWithProviders(<PlatformPluginsPanel />)
     await userEvent.click(await screen.findByRole('button', { name: '安装' }))
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByText('缓存报表（菜单）')).toBeInTheDocument()
@@ -447,7 +526,7 @@ describe('PluginMarketPage', () => {
 
     // The market version is not the authorized manifest: no declaration is shown.
     pluginSpy.mockResolvedValue(detail('c'.repeat(64)))
-    renderWithProviders(<PluginMarketPage />)
+    renderWithProviders(<PlatformPluginsPanel />)
     await userEvent.click(await screen.findByRole('button', { name: '安装' }))
     const second = await screen.findByRole('dialog')
     expect(await within(second).findByText(/对不上，无法展示页面声明/)).toBeInTheDocument()

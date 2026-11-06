@@ -639,7 +639,10 @@ end
 -- counters are "hit:<stream>:<rule>:<client>" with the rule's window as TTL.
 local MAX_GUARD_RULES = 64
 local MAX_GUARD_CIDRS = 4096
-local GUARD_FIRST_BYTES = 512
+-- How much of the first data a rule sees (edgeconfig.L4GuardFirstPacketBytes):
+-- a whole ClientHello (Chrome's with X25519MLKEM768 is about 1.8 KB, its
+-- server_name after the 1.2 KB key share in about half of them).
+local GUARD_FIRST_BYTES = 4096
 -- How long guard() waits for a TCP client's first data; the agent renders
 -- preread_timeout 3s for servers with first packet rules, so a client that
 -- never sends (server-first protocols) is passed on, not cut off.
@@ -757,6 +760,20 @@ function _M.compile_guard(rules)
         compiled[index] = item
     end
     if cidrs > MAX_GUARD_CIDRS then return nil, "guard_cidr_limit" end
+    -- For read_first_packet: how much first data the rules look at (a
+    -- prefix its length, contains / regex the whole window), what it may
+    -- complete (data that is the start of a longer prefix; with a contains /
+    -- regex rule a ClientHello).
+    compiled.first_prefixes, compiled.first_window, compiled.first_bytes = {}, false, 0
+    for _, item in ipairs(compiled) do
+        local matcher = item.first_packet
+        if matcher and matcher.kind == "prefix" then
+            compiled.first_prefixes[#compiled.first_prefixes + 1] = matcher.bytes
+            compiled.first_bytes = math.max(compiled.first_bytes, #matcher.bytes)
+        elseif matcher then
+            compiled.first_window, compiled.first_bytes = true, GUARD_FIRST_BYTES
+        end
+    end
     return compiled
 end
 
@@ -776,6 +793,7 @@ local first_packet_problem
 local first_packet_buffer
 local EAGAIN, EINTR = 11, 4
 local MSG_PEEK, MSG_DONTWAIT = 0x2, 0x40
+if ffi_ok and ffi.os == "OSX" then EAGAIN, MSG_DONTWAIT = 35, 0x80 end -- guard_test.lua on macOS
 local SOCK_STREAM, SOCK_DGRAM = 1, 2
 
 local function first_packet_unavailable(reason)
@@ -804,11 +822,65 @@ local function first_packet_ffi()
     return first_packet_state
 end
 
--- read_first_packet returns the client's first data, at most 512 bytes: the
--- UDP datagram, or what a TCP client sent once data arrives within wait
--- seconds; "" when it sent nothing; nil when it cannot be read (logged).
--- Both mean "no match": guard() never refuses for want of data.
-function _M.read_first_packet(wait)
+-- tls_hello_end: when the n bytes at b start like a TLS ClientHello (a
+-- handshake record 16 03 xx, length at most 2^14, handshake type 1), how
+-- many bytes reach the hello's end (record headers included; a hello over
+-- several records is walked), or as far as is known yet (more than n while a
+-- record or handshake header is still missing); nil when they do not. The
+-- record header states the length, so these bytes are on their way (a
+-- client that lies is cut off at preread_timeout, as ssl_preread does).
+local TLS_RECORD_MAX = 16384
+local function tls_hello_end(b, n)
+    if b[0] ~= 0x16 or (n > 1 and b[1] ~= 0x03) then return nil end
+    if n < 5 then return 5 end
+    local length = b[3] * 256 + b[4]
+    if length < 4 or length > TLS_RECORD_MAX or (n > 5 and b[5] ~= 0x01) then return nil end
+    if n < 9 then return 9 end
+    local want = 4 + b[6] * 65536 + b[7] * 256 + b[8]
+    local at, body = 5 + length, length
+    while body < want and at < n do
+        if at + 5 > n then return at + 5 end
+        if b[at] ~= 0x16 then return at end
+        length = b[at + 3] * 256 + b[at + 4]
+        if length > TLS_RECORD_MAX then return at end
+        at, body = at + 5 + length, body + length
+    end
+    return at
+end
+
+-- first_wanted: how many bytes of the n at b the rules still need before
+-- they can judge: up to the ClientHello's end with a contains / regex rule,
+-- a prefix rule's length when b so far is the start of its bytes; at most
+-- first_bytes. n (or less) when nothing more is known to come, so
+-- other data (a non-TLS client, which may well have sent all) is judged at
+-- once.
+local function first_wanted(rules, b, n)
+    local want = n
+    if rules.first_window then
+        local hello = tls_hello_end(b, n)
+        if hello and hello > want then want = hello end
+    end
+    for _, bytes in ipairs(rules.first_prefixes) do
+        if #bytes > want then
+            local start = true
+            for index = 0, n - 1 do
+                if b[index] ~= bytes:byte(index + 1) then start = false; break end
+            end
+            if start then want = #bytes end
+        end
+    end
+    return math.min(want, rules.first_bytes)
+end
+
+-- read_first_packet returns the client's first data, at most
+-- GUARD_FIRST_BYTES: the UDP datagram, or what a TCP client sent once data
+-- arrives within wait seconds; "" when it sent nothing; nil when it cannot
+-- be read (logged). Both mean "no match": guard() never refuses for want of
+-- data. rules (compile_guard's): when what has arrived is known to go on (a
+-- ClientHello's stated length, the start of a prefix) it also returns how
+-- many bytes that is and the connection, for read_first_rest; guard()
+-- judges first on what came and reads the rest only when that cannot.
+function _M.read_first_packet(wait, rules)
     if not first_packet_ffi() then return first_packet_unavailable("ffi") end
     local ok, base = pcall(require, "resty.core.base")
     local request = ok and base.get_request and base.get_request()
@@ -827,18 +899,47 @@ function _M.read_first_packet(wait)
         return ffi.string(b.pos, math.min(tonumber(b.last - b.pos), GUARD_FIRST_BYTES))
     end
     if c.type ~= SOCK_STREAM or c.fd < 0 then return first_packet_unavailable("tcp_socket") end
-    first_packet_buffer = first_packet_buffer or ffi.new("char[?]", GUARD_FIRST_BYTES)
+    first_packet_buffer = first_packet_buffer or ffi.new("uint8_t[?]", GUARD_FIRST_BYTES)
+    local size = rules and rules.first_bytes or GUARD_FIRST_BYTES
     local deadline, pause = ngx.now() + wait, 0.005
     while true do
         -- No yield between recv and the copy: the buffer is shared.
-        local n = tonumber(ffi.C.cdnca_l4_recv(c.fd, first_packet_buffer, GUARD_FIRST_BYTES, MSG_PEEK + MSG_DONTWAIT))
-        if n > 0 then return ffi.string(first_packet_buffer, n) end
+        local n = tonumber(ffi.C.cdnca_l4_recv(c.fd, first_packet_buffer, size, MSG_PEEK + MSG_DONTWAIT))
+        if n > 0 then
+            local want = rules and first_wanted(rules, first_packet_buffer, n) or n
+            if want > n then return ffi.string(first_packet_buffer, n), want, c end
+            return ffi.string(first_packet_buffer, n)
+        end
         local errno = n < 0 and ffi.errno() or 0
         if n == 0 or (errno ~= EAGAIN and errno ~= EINTR) then return "" end -- closed or reset
         if ngx.now() >= deadline then return "" end
         ngx.sleep(pause)
         pause = math.min(pause * 2, 0.1)
     end
+end
+
+-- read_first_rest completes data (read_first_packet's, want bytes known to
+-- come on connection c) through the request socket's peek(): it returns once
+-- want bytes are in nginx's preread buffer (c->buffer: what it peeked, or
+-- read when the kernel cannot peek), woken by the data itself (no polling)
+-- and bounded by preread_timeout; the buffer then holds all that came, and
+-- the read goes on while that shows more on its way (a hello over several
+-- records). A closed connection: data as it was.
+function _M.read_first_rest(rules, data, want, c)
+    local sock = ngx.req.socket()
+    if not sock then return data end
+    local n = #data
+    while want > n do
+        local done, peeked = pcall(sock.peek, sock, want)
+        local b = c.buffer
+        if not done or type(peeked) ~= "string" or b == nil or b.start > b.pos or b.pos > b.last or b.last > b.end_ then
+            return data
+        end
+        n = math.min(tonumber(b.last - b.pos), rules.first_bytes)
+        data = ffi.string(b.pos, n)
+        want = first_wanted(rules, b.pos, n)
+    end
+    return data
 end
 
 local iplib
@@ -865,6 +966,17 @@ local function sni_matches(rule, name)
         if #name > #suffix and name:sub(-#suffix) == suffix then return true end
     end
     return false
+end
+
+-- first_packet_settled: whether matcher's result on data stays the same
+-- when data goes on (more of the same stream): a prefix the data reaches or
+-- departs from, a contains hit. A regex may change ($, lookahead).
+local function first_packet_settled(matcher, data, hit)
+    if matcher.kind == "prefix" then
+        local bytes = matcher.bytes
+        return hit or #data >= #bytes or data ~= bytes:sub(1, #data)
+    end
+    return matcher.kind == "contains" and hit
 end
 
 local function first_packet_matches(matcher, data)
@@ -901,7 +1013,12 @@ function _M.guard(stream_id, client, log, kernel)
     if not rules then return true end
     local ban_key = "ban:" .. stream_id .. ":" .. client
     if dict:get(ban_key) then return guard_closed("guard_banned", stream_id, client, nil, log) end
-    local address, attrs, attrs_ready, data, data_ready, sni
+    -- want: more first data is known to come (read_first_packet). The rules
+    -- are judged on what came while every result so far stays the same with
+    -- the rest (a settled first packet result, or none); the first one that
+    -- may change has the rest read and the rules judged again.
+    local address, attrs, attrs_ready, data, data_ready, sni, want, conn
+    ::judge::
     for _, rule in ipairs(rules) do
         local hit = true
         if rule.cidrs then
@@ -930,9 +1047,13 @@ function _M.guard(stream_id, client, log, kernel)
         if hit and rule.first_packet then
             if not data_ready then
                 data_ready = true
-                data = _M.read_first_packet(GUARD_WAIT)
+                data, want, conn = _M.read_first_packet(GUARD_WAIT, rules)
             end
             hit = first_packet_matches(rule.first_packet, data)
+            if want and not first_packet_settled(rule.first_packet, data, hit) then
+                data, want = _M.read_first_rest(rules, data, want, conn), nil
+                goto judge
+            end
         end
         if hit then
             if rule.action == "allow" then return true end

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, App, Button, Modal, QRCode, Radio, Space, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { ApiError } from '../../api/auth'
 import { checkoutURL, marketApi, type MarketOrder, type MarketPlugin, type MarketPricePlan } from '../../api/market'
@@ -25,9 +26,12 @@ const inProgress = (error: unknown) => error instanceof ApiError && error.status
 
 // PurchaseModal pays for one plan inside the page (ADR 0007 §8.5): the market prepaid balance first; when it
 // is short, a cashier order whose checkout is shown as a QR code (paymentchannel behind the portal) and polled
-// until paid. onDone runs once a licence exists, so the card switches to 下载 without a reload.
-export function PurchaseModal({ plugin, plans, token, onClose, onDone }: {
-  plugin: MarketPlugin; plans: MarketPricePlan[]; token: string; onClose: () => void; onDone: () => void
+// until paid. onDone runs once a licence exists, so the card follows without a reload: 'paid' for a paid order (the
+// page closes the dialog and says so), 'claimed' for a 0-yuan order (free plan, trial), whose result stays here
+// (已领取，已生效 / 待主控管理员确认安装).
+export function PurchaseModal({ plugin, plans, token, onClose, onDone, acquired, pending }: {
+  plugin: MarketPlugin; plans: MarketPricePlan[]; token: string; onClose: () => void; onDone: (how: 'claimed' | 'paid') => void
+  acquired: (how: 'claimed' | 'paid') => string; pending: boolean
 }) {
   const { t, i18n } = useTranslation('marketStore')
   const { message } = App.useApp()
@@ -37,6 +41,7 @@ export function PurchaseModal({ plugin, plans, token, onClose, onDone }: {
   const [method, setMethod] = useState<Method>('balance')
   const [order, setOrder] = useState<{ order: MarketOrder; checkout: string | null } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [claimed, setClaimed] = useState(false)
   const plan = onSale.find((p) => p.id === planID)
   const revision = plan ? saleRevision(plan) ?? plan.revision : 0
   // One key per attempt (market-buy-idem): a retry of the same plan replays on the
@@ -65,7 +70,9 @@ export function PurchaseModal({ plugin, plans, token, onClose, onDone }: {
       const url = checkoutURL(created.checkout_url)
       if (created.checkout_url && !url) return void feedback.error(t('pay.blocked'))
       if (!url) {
-        onDone()
+        // 0 yuan: paid and fulfilled on creation, nothing to pay (market 083).
+        setClaimed(true)
+        onDone('claimed')
         return
       }
       setMethod('qr')
@@ -75,7 +82,7 @@ export function PurchaseModal({ plugin, plans, token, onClose, onDone }: {
   })
   const prepaid = useMutation({
     mutationFn: () => marketApi.purchaseFromPrepaid(token, { price_plan_id: plan!.id, plan_revision: revision }, prepaidKey.keyFor({ plan: plan!.id, revision })),
-    onSuccess: () => { prepaidKey.complete(); setUnknown(null); onDone() },
+    onSuccess: () => { prepaidKey.complete(); setUnknown(null); onDone('paid') },
     onError: (error) => {
       if (!outcomeUnknown(error) && !inProgress(error)) prepaidKey.complete()
       if (error instanceof ApiError && error.status === 402) {
@@ -91,9 +98,18 @@ export function PurchaseModal({ plugin, plans, token, onClose, onDone }: {
   })
   const status = polled.data?.status
   const fulfilled = !!order && status === 'fulfilled'
-  useEffect(() => { if (fulfilled) onDone() }, [fulfilled, onDone])
+  useEffect(() => { if (fulfilled) onDone('paid') }, [fulfilled, onDone])
   const pay = () => (unknown ? (unknown === 'prepaid' ? prepaid.mutate() : createOrder.mutate(unknown === 'trial'))
     : plan?.kind === 'free' ? createOrder.mutate(false) : method === 'balance' ? prepaid.mutate() : createOrder.mutate(false))
+  if (claimed) {
+    return (
+      <Modal open title={t('pay.title', { name: pluginTitle(plugin, i18n.resolvedLanguage) })} onCancel={onClose} destroyOnHidden
+        footer={<Space>{pending ? <Link to="/sys/plugin-store?tab=mine" onClick={onClose}><Button>{t('acquired.goMine')}</Button></Link> : null}
+          <Button type="primary" onClick={onClose}>{t('acquired.done')}</Button></Space>}>
+        <Alert type="success" showIcon message={acquired('claimed')} description={t(pending ? 'acquired.pendingHint' : 'acquired.activeHint')} />
+      </Modal>
+    )
+  }
   return (
     <Modal open title={t('pay.title', { name: pluginTitle(plugin, i18n.resolvedLanguage) })} onCancel={onClose} destroyOnHidden
       okText={unknown ? t('pay.checkResult') : t('pay.confirm')} cancelText={t('actions.cancel')} okButtonProps={{ disabled: !plan || !!order, loading: prepaid.isPending || createOrder.isPending }}

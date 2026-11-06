@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Checkbox, Form, InputNumber, Modal, Select, Space, Table, Tabs, Typography } from 'antd'
+import { Alert, App, Button, Checkbox, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -8,7 +8,8 @@ import { marketApi, newIdempotencyKey, type MarketLimit, type MarketOfferListing
   type MarketSupplyGroup, type MarketSupplyL2Option } from '../../api/market'
 import { useSessionStore } from '../../auth/session'
 import { offerablePlugin, ruleOf, toLimits, type LimitRow, type LoadFloor } from './limitsModel'
-import { allocationOf, type ListingValues } from './listingModel'
+import { allocationOf, customProblem, declaredTagsOf, maxCustomTagLength, maxCustomTags, normalizeCustom, tagValuesOf, type ListingValues,
+  type TagValues } from './listingModel'
 import { CapabilityFields } from './OfferCapabilities'
 import { priceFormOf, pricingOf, rowsOf, withSustain, type PriceForm, type Yuan } from './offerLifecycleModel'
 import { PluginChecks } from './PluginChecks'
@@ -20,7 +21,10 @@ import { pluginLabel } from './resaleModel'
 // Buyers in period keep their snapshot; the new revision applies to new orders and renewals.
 // 能力与防御 sends the capabilities and the included plugins through PUT …/limits too (the
 // current limits unchanged). Capabilities reach new subscriptions only; plugins reach sold ones at once.
-// the seller picks its own L2 configuration per own supply group (saved on the group, at
+// 特性标签 edits the declared features shown on the offer card (共享/独立节点, CC, DDoS…)
+// through PUT …/limits with tags (current limits unchanged); the plugins stay on 能力与防御.
+// The tags form is named so its field ids do not collide with the listing form on the same page.
+// The seller picks its own L2 configuration per own supply group (saved on the group, at
 // once for every site on it) and declares 支持 L2 回源 among the capabilities; buyers never pick L2 nodes.
 
 export function OfferTermsModal({ offer, floor, onClose }: { offer: MarketOfferListing | null; floor: LoadFloor | null; onClose: () => void }) {
@@ -33,7 +37,7 @@ export function OfferTermsModal({ offer, floor, onClose }: { offer: MarketOfferL
 }
 
 function TermsEditor({ offer, floor, onClose }: { offer: MarketOfferListing; floor: LoadFloor | null; onClose: () => void }) {
-  const { t } = useTranslation('nodeMarket')
+  const { t, i18n } = useTranslation('nodeMarket')
   const { message } = App.useApp()
   const token = useSessionStore((state) => state.accessToken) ?? ''
   const client = useQueryClient()
@@ -47,13 +51,17 @@ function TermsEditor({ offer, floor, onClose }: { offer: MarketOfferListing; flo
     void client.invalidateQueries({ queryKey: ['nodeMarket'] })
     onClose()
   }
+  const fieldLabel = (field: string) => {
+    const [group, key] = field.split('.')
+    return group === 'tags' && i18n.exists(`nodeMarket:detail.tags.${key}`) ? t(`detail.tags.${key}`) : field
+  }
   const fail = (e: unknown) => {
     const code = e instanceof ApiError ? e.code : 'request_failed'
     const refusal = (e as { refusal?: { plugins?: unknown; field?: unknown } }).refusal
     if (code === 'offer_changed') void client.invalidateQueries({ queryKey: ['nodeMarket'] })
     setError(code === 'offer_changed' ? t('life.changed')
       : code === 'plugin_unavailable' && Array.isArray(refusal?.plugins) ? t('caps.pluginUnavailable', { plugins: refusal.plugins.join('、') })
-        : code === 'upstream_terms_exceeded' && typeof refusal?.field === 'string' ? t('caps.upstreamExceeded', { field: refusal.field })
+        : code === 'upstream_terms_exceeded' && typeof refusal?.field === 'string' ? t('caps.upstreamExceeded', { field: fieldLabel(refusal.field) })
           : code === 'l2_unavailable' ? t('caps.l2NotReported')
             : t('errors.failed', { code }))
   }
@@ -132,7 +140,8 @@ function TermsEditor({ offer, floor, onClose }: { offer: MarketOfferListing; flo
       <Alert type="info" showIcon message={t('life.editNotice')} />
       {error ? <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} /> : null}
       <Tabs items={[{ key: 'price', label: t('life.tabPrice'), children: price }, { key: 'limits', label: t('life.tabLimits'), children: limits },
-        { key: 'caps', label: t('caps.tab'), children: <CapsEditor offer={offer} expected={expected} onDone={(next) => done(next, t('caps.saved'))} onFail={fail} /> }]} />
+        { key: 'caps', label: t('caps.tab'), children: <CapsEditor offer={offer} expected={expected} onDone={(next) => done(next, t('caps.saved'))} onFail={fail} /> },
+        { key: 'tags', label: t('life.tabTags'), children: <TagsEditor offer={offer} expected={expected} onDone={(next) => done(next, t('caps.saved'))} onFail={fail} /> }]} />
     </Space>
   )
 }
@@ -177,6 +186,44 @@ function CapsEditor({ offer, expected, onDone, onFail }: { offer: MarketOfferLis
       <Form.Item name="plugins" label={t('caps.plugins')}
         extra={resold ? t('caps.pluginsResale') : codes.length === 0 && !groups.some((g) => g.isLoading) ? t('caps.pluginsNone') : t('caps.pluginsHelp')}>
         <PluginChecks options={codes.map((code) => ({ value: code, label: pluginLabel(code, nameMap, english) }))} />
+      </Form.Item>
+      <Button type="primary" htmlType="submit" loading={save.isPending}>{t('life.save')}</Button>
+    </Form>
+  )
+}
+
+// TagsEditor: the declared features as at listing (OfferListingForm 高级选项). A resale's upstream bound is checked by the market.
+function TagsEditor({ offer, expected, onDone, onFail }: { offer: MarketOfferListing; expected: { expected_revision?: number };
+  onDone: (o: MarketOfferListing) => void; onFail: (e: unknown) => void }) {
+  const { t } = useTranslation('nodeMarket')
+  const token = useSessionStore((state) => state.accessToken) ?? ''
+  const resold = (offer.components ?? []).some((c) => c.kind === 'upstream')
+  const save = useMutation({
+    mutationFn: (v: TagValues) => marketApi.updateOfferLimits(token, offer.id, { limits: offer.limits ?? [],
+      prepaid_exhausted_action: offer.prepaid_exhausted_action ?? 'pause', tags: declaredTagsOf(v), ...expected }, newIdempotencyKey('offer-tags')),
+    onSuccess: onDone, onError: onFail,
+  })
+  const toggle = (name: 'complaint' | 'mobile' | 'regionBlock') => (
+    <Form.Item name={name} label={t(`listing.${name}`)} extra={t(`listing.hints.${name}`)} style={{ width: 220 }} valuePropName="checked"><Switch /></Form.Item>
+  )
+  return (
+    <Form<TagValues> name="offer-tags" layout="vertical" initialValues={tagValuesOf(offer.tags)} onFinish={(v) => save.mutate(v)}>
+      <Typography.Paragraph type="secondary">{t('life.tagsNotice')}</Typography.Paragraph>
+      <Space wrap align="start">
+        <Form.Item name="tenancy" label={t('listing.tenancy')} extra={t('listing.hints.tenancy')} style={{ maxWidth: 220 }}>
+          <Select style={{ width: 140 }} options={(['shared', 'dedicated'] as const).map((value) => ({ value, label: t(`tagValues.${value}`) }))} />
+        </Form.Item>
+        <Form.Item name="cc" label={t('listing.cc')}>
+          <Select style={{ width: 140 }} options={(['none', 'basic', 'advanced'] as const).map((value) => ({ value, label: t(`tagValues.${value}`) }))} />
+        </Form.Item>
+        <Form.Item name="ddos" label={t('listing.ddos')}><InputNumber min={0} max={100000} precision={0} /></Form.Item>
+        <Form.Item name="lineClass" label={t('listing.lineClass')}><Input maxLength={32} style={{ width: 200 }} disabled={resold} /></Form.Item>
+      </Space>
+      <Space wrap align="start">{toggle('complaint')}{toggle('mobile')}{toggle('regionBlock')}</Space>
+      <Form.Item name="custom" label={t('listing.custom')} extra={t('listing.customHelp')} normalize={(value: string[]) => normalizeCustom(value)}
+        rules={[{ validator: (_, value: string[]) => { const p = customProblem(value); return p ? Promise.reject(new Error(t(`listing.customInvalid.${p}`))) : Promise.resolve() } }]}>
+        <Select mode="tags" open={false} suffixIcon={null} tokenSeparators={[',', '，']} maxCount={maxCustomTags} style={{ maxWidth: 560 }}
+          placeholder={t('listing.customPlaceholder')} maxTagTextLength={maxCustomTagLength} />
       </Form.Item>
       <Button type="primary" htmlType="submit" loading={save.isPending}>{t('life.save')}</Button>
     </Form>

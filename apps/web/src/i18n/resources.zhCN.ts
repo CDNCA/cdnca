@@ -2776,7 +2776,7 @@ export const zhCN = {
       certificateType: '证书类型', certificateTypeSystem: '系统默认设置', recommended: '(推荐)',
       selectUserFirst: '请先选择用户。', dnsApi: 'DNS API',
       dnsApiPlaceholder: '请选择', dnsApiSelectUser: '选择用户后加载可用 DNS API。',
-      dnsApiHelp: '设置后，一键申请证书将优先使用此 DNS API。',
+      dnsApiHelp: '申请证书时选择 DNS 验证、或申请通配符证书时，默认使用此 DNS API。',
       saved: '已保存', loadFailed: '默认设置加载失败', retry: '重试',
     },
     dnsApi: {

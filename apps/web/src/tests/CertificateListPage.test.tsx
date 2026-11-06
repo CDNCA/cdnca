@@ -885,7 +885,7 @@ describe('CertificateListPage', () => {
 		const types = within(panel).getByRole('radiogroup', { name: '证书类型' })
 		expect(within(types).getAllByRole('radio').map((radio) => radio.closest('label')?.textContent)).toEqual(['系统默认设置', 'ZeroSSL(推荐)', "Let's Encrypt"])
 		expect(within(panel).getByRole('combobox', { name: 'DNS API' })).toBeInTheDocument()
-		expect(within(panel).getByText('设置后，一键申请证书将优先使用此 DNS API。')).toBeInTheDocument()
+		expect(within(panel).getByText('申请证书时选择 DNS 验证、或申请通配符证书时，默认使用此 DNS API。')).toBeInTheDocument()
 		expect(within(panel).queryByRole('button', { name: /保存/ })).not.toBeInTheDocument()
 		expect(screen.queryByRole('heading', { name: 'ACME 签发机构凭据' })).not.toBeInTheDocument()
 	})
@@ -1054,9 +1054,57 @@ describe('CertificateListPage', () => {
 		await user.click(screen.getByRole('button', { name: '申请证书' }))
 		const dialog = getDialog('申请证书')
 		await user.type(within(dialog).getByLabelText('域名'), 'www.example.com')
-		// 设了默认 DNS API 就直接 DNS-01 并带入该账号
+		// 设了默认 DNS API 也仍默认 HTTP-01，不带 DNS 账号提交
+		expect(within(dialog).getByText('HTTP-01（文件验证）')).toBeInTheDocument()
+		expect(within(dialog).queryByText('DNS-01')).not.toBeInTheDocument()
+		await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
+		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+		expect(create.mock.calls[0][1]).toMatchObject({ challenge_type: 'http-01' })
+		expect(create.mock.calls[0][1]).not.toHaveProperty('dns_provider_id')
+	})
+
+	// 用户自己选 DNS 验证、或通配符自动切到 DNS 验证时，才用默认 DNS API
+	it('uses the default DNS provider once the request chooses DNS-01', async () => {
+		authenticate()
+		vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
+		vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
+			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
+			certificate_type: 'acme', dns_provider_id: provider.id, revision: 2, updated_at: '2026-09-30T02:00:00Z',
+		})
+		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
+		const create = vi.spyOn(certificatesApi, 'create').mockResolvedValue({ ...activeOrder, status: 'pending' } as CertificateOrder)
+		const user = userEvent.setup()
+		renderWithProviders(<CertificateListPage />, ['/site/cert'])
+		await openOrderHistory(user)
+		await screen.findByText('暂无证书申请')
+		await user.click(screen.getByRole('button', { name: '申请证书' }))
+		const dialog = getDialog('申请证书')
+		await user.type(within(dialog).getByLabelText('域名'), 'www.example.com')
+		await chooseDNS01(user, dialog)
 		await waitFor(() => expect(within(dialog).getByText(provider.name)).toBeInTheDocument())
-		expect(within(dialog).getByText('DNS-01')).toBeInTheDocument()
+		await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
+		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+		expect(create.mock.calls[0][1]).toMatchObject({ challenge_type: 'dns-01', dns_provider_id: provider.id })
+	})
+
+	it('uses the default DNS provider when a wildcard switches the request to DNS-01', async () => {
+		authenticate()
+		vi.spyOn(certificatesApi, 'list').mockResolvedValue({ items: [] })
+		vi.spyOn(certificatesApi, 'getDefaults').mockResolvedValue({
+			scope_id: asset.tenant_scope_id, user_id: '11111111-1111-4111-8111-111111111111',
+			certificate_type: 'acme', dns_provider_id: provider.id, revision: 2, updated_at: '2026-09-30T02:00:00Z',
+		})
+		vi.spyOn(dnsApi, 'list').mockResolvedValue({ items: [provider] })
+		const create = vi.spyOn(certificatesApi, 'create').mockResolvedValue({ ...activeOrder, status: 'pending' } as CertificateOrder)
+		const user = userEvent.setup()
+		renderWithProviders(<CertificateListPage />, ['/site/cert'])
+		await openOrderHistory(user)
+		await screen.findByText('暂无证书申请')
+		await user.click(screen.getByRole('button', { name: '申请证书' }))
+		const dialog = getDialog('申请证书')
+		await user.type(within(dialog).getByLabelText('域名'), '*.example.com')
+		expect(await within(dialog).findByText('DNS-01')).toBeInTheDocument()
+		await waitFor(() => expect(within(dialog).getByText(provider.name)).toBeInTheDocument())
 		await user.click(within(dialog).getByRole('button', { name: '提交申请' }))
 		await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
 		expect(create.mock.calls[0][1]).toMatchObject({ challenge_type: 'dns-01', dns_provider_id: provider.id })

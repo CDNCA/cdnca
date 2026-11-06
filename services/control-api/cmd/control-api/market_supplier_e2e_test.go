@@ -34,9 +34,11 @@ import (
 	"testing"
 	"time"
 
+	contract "github.com/cdnca/cdnca/libs/edgeconfig/securityban"
 	"github.com/cdnca/cdnca/libs/entitlement"
 	"github.com/cdnca/cdnca/libs/marketproto/secdigest"
 	"github.com/cdnca/cdnca/libs/marketproto/siteconf"
+	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/analyticslog"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketclient"
@@ -46,6 +48,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/packagesubscription"
 	"github.com/cdnca/cdnca/services/control-api/internal/securityanalytics"
+	"github.com/cdnca/cdnca/services/control-api/internal/securityban"
 	"github.com/cdnca/cdnca/services/control-api/internal/site"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -59,7 +62,43 @@ type supplierController struct {
 	runtime   *marketruntime.Runtime
 	supply    *marketsupply.Service
 	subscribe *marketsubscribe.Service
+	// The ban list library: every controller's store; A's distributor
+	// publishes to the stand-in edge bus below.
+	bans        *securityban.Store
+	distributor *securityban.Distributor
+	edge        *supplierEdge
 }
+
+// supplierEdge stands in for A's edge bus: it keeps the published ban lists.
+type supplierEdge struct {
+	mu        sync.Mutex
+	published [][]byte
+}
+
+func (e *supplierEdge) PublishList(_ context.Context, _ string, _ uint64, encoded []byte) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.published = append(e.published, append([]byte(nil), encoded...))
+	return nil
+}
+func (*supplierEdge) NextReceipt(context.Context) (securityban.ReceiptDelivery, error) {
+	return nil, nil
+}
+
+func (e *supplierEdge) last() []byte {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.published) == 0 {
+		return nil
+	}
+	return e.published[len(e.published)-1]
+}
+
+type supplierReceipt struct{ report *agentv1.SecurityBanStatus }
+
+func (r supplierReceipt) Status() *agentv1.SecurityBanStatus { return r.report }
+func (supplierReceipt) Ack(context.Context) error            { return nil }
+func (supplierReceipt) Nak(context.Context) error            { return nil }
 
 type marketSupplierFlow struct {
 	*marketLimitsFlow // member/control/state/target/buy helpers; pool and poolRef are A's
@@ -223,16 +262,34 @@ func startMarketSupplier(t *testing.T, directory, databaseURL string) *marketSup
 			t.Fatal(err)
 		}
 		runtime.WithNotices(notices).WithHolds(client, supply, 2*time.Second)
-		ctl := &supplierController{name: name, pool: pool, runtime: runtime, supply: supply}
+		ctl := &supplierController{name: name, pool: pool, runtime: runtime, supply: supply,
+			bans: securityban.NewStore(pool, time.Now)}
 		switch name {
 		case "supplier_a":
 			runtime.WithSecDigest(supply.WithSecurityReaders(flow.attacks, flow.attacks), nil)
 			base.pool = pool
 			base.leaf = runtime
 			base.poolRef, base.nodeID = marketLimitsLineGroup(t, pool)
+			// A takes C's ban lists; its distributor publishes to the stand-in edge bus.
+			_, signKey, err := ed25519.GenerateKey(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctl.edge = &supplierEdge{}
+			if ctl.distributor, err = securityban.NewDistributor(securityban.DistributorConfig{Pool: pool, Transport: ctl.edge,
+				KeyID: "edge-publish", Sign: func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(signKey, payload), nil },
+				Interval: time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+			supply.WithBanList(ctl.bans, ctl.distributor)
 		case "root_c":
 			ctl.subscribe = marketsubscribe.New(pool, client, runtime).WithDigests(client, flow.digests)
 			runtime.WithSubscriptions(ctl.subscribe).WithSecDigest(nil, ctl.subscribe)
+			// C's ban list goes to its market leaves on every change.
+			ctl.bans.WithMarketDeliveries(ctl.subscribe).OnChange(ctl.subscribe.WakeBans)
+			runtime.WithBackground(func(ctx context.Context) error {
+				return ctl.subscribe.RunBanSync(ctx, slog.Default().With("component", "market-bans"))
+			})
 		}
 		flow.ctl[name] = ctl
 		go func() { _ = runtime.Run(runCtx) }()
@@ -559,7 +616,78 @@ func (flow *marketSupplierFlow) run() {
 	t.Logf("PASS ④ digest of window %d reached C on site %s (supply %s, 3 blocked, 1 log, 1 action); B got only"+
 		" market.downstream.attacked for %s (in its notification center); A none", flow.attacks.served(), siteC, supplyID, s2)
 
+	flow.bans(siteC, leafSite, tenantUser)
+
 	flow.complaint(oa, s1, s2, downstream, domain, localB, localC)
+}
+
+// bans is ④b: C bans a client on its market site; within 60 seconds the ban is on A's leaf site in C's
+// market tenant (source market), A's distributor sends it to the node of A's line group, and once that node answers,
+// C's ban list shows it in effect on the subscription nodes; C's release reaches A the same way.
+func (flow *marketSupplierFlow) bans(siteC, leafSite uuid.UUID, tenantUser string) {
+	t := flow.t
+	cc, aa := flow.ctl["root_c"], flow.ctl["supplier_a"]
+	var scope, owner uuid.UUID
+	if err := cc.pool.QueryRow(t.Context(), `SELECT scope_id, owner_user_id FROM sites WHERE id=$1`, siteC).Scan(&scope, &owner); err != nil {
+		t.Fatal(err)
+	}
+	actor := securityban.Actor{UserID: owner, ScopeID: scope, ScopeKind: "tenant"}
+	service := securityban.NewService(cc.bans)
+	started := time.Now()
+	entry, err := service.Create(t.Context(), actor, securityban.CreateRequest{SiteID: siteC, ClientIP: "203.0.113.77",
+		DurationSecond: 3600, Reason: "e2e market ban", IdempotencyKey: "e2e-market-ban", RequestID: "e2e-market-ban"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := func() (int, int) {
+		var n, released int
+		if err := aa.pool.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE released_at IS NULL AND banned_until > now()),
+				count(*) FILTER (WHERE released_at IS NOT NULL)
+			FROM security_ban_entries WHERE site_id=$1 AND source='market' AND client_ip='203.0.113.77'`, leafSite).Scan(&n, &released); err != nil {
+			t.Fatal(err)
+		}
+		return n, released
+	}
+	flow.waitFor("C's ban on A's leaf site", time.Minute, func() bool { n, _ := active(); return n == 1 })
+	reached := time.Since(started)
+	if reached > time.Minute {
+		t.Fatalf("C's ban reached A after %s", reached)
+	}
+	listed, err := securityban.NewService(aa.bans).List(t.Context(), securityban.Actor{UserID: owner, ScopeID: scope, ScopeKind: "platform"},
+		securityban.ListFilter{SiteID: &leafSite, State: securityban.StateActive, Page: 1, Limit: 10})
+	if err != nil || listed.Total != 1 || listed.Items[0].Market == nil || "mkt-"+listed.Items[0].Market.Subscription != tenantUser ||
+		listed.Items[0].Reason != "e2e market ban" {
+		t.Fatalf("A's market row = %+v, %v", listed, err)
+	}
+	// A's distributor sends it to the node; the node answers.
+	if err := aa.distributor.PublishOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	encoded := aa.edge.last()
+	list, err := contract.Decode(encoded)
+	if err != nil || list.NodeID != flow.nodeID.String() || len(list.Bans) != 1 || list.Bans[0].SiteID != leafSite.String() ||
+		list.Bans[0].Client != "203.0.113.77" || list.Bans[0].Source != securityban.SourceManual {
+		t.Fatalf("A's node list = %+v, %v", list, err)
+	}
+	aa.distributor.HandleReceipt(t.Context(), supplierReceipt{&agentv1.SecurityBanStatus{NodeId: list.NodeID, Revision: list.Revision,
+		ListSha256: contract.Digest(encoded), Applied: true, Bans: 1}})
+	delivery := func() *securityban.Delivery {
+		page, err := service.List(t.Context(), actor, securityban.ListFilter{SiteID: &siteC, State: securityban.StateActive, Page: 1, Limit: 10})
+		if err != nil || page.Total != 1 || page.Items[0].ID != entry.ID {
+			t.Fatalf("C's list = %+v, %v", page, err)
+		}
+		return page.Items[0].Delivery
+	}
+	flow.waitFor("C sees its ban in effect on the subscription nodes", 2*time.Minute, func() bool {
+		d := delivery()
+		return d != nil && d.State == securityban.DeliveryEffective
+	})
+	if _, err := service.Release(t.Context(), actor, securityban.ReleaseRequest{EntryID: entry.ID, RequestID: "e2e-market-ban-release"}); err != nil {
+		t.Fatal(err)
+	}
+	flow.waitFor("C's release on A", time.Minute, func() bool { n, released := active(); return n == 0 && released == 1 })
+	t.Logf("PASS ④b C's ban reached A's leaf site in %s (tenant %s), A's node list, and showed in effect on C; the release followed",
+		reached.Round(time.Millisecond), tenantUser)
 }
 
 // complaint is ⑤–⑦: A files a stop complaint on the downstream number, the operator sees through to C and stops

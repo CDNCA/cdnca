@@ -7,6 +7,9 @@ package main
 // bootstrap, signed activation client, PostgreSQL repository, HTTP handler) and newAuthorizedPluginWebhookDeliverer
 // (runtime projection + workload authorization over mTLS). Only the webhook HTTP sender is replaced by a direct
 // call into the example plugin receiver, because the production sender refuses loopback targets by design.
+//
+// Since control migration 636 the controller's platform administrator confirms, upgrades and
+// uninstalls every plugin; a tenant plugin is confirmed for chosen tenants (or all tenants) and tenants only read it.
 
 import (
 	"bytes"
@@ -111,23 +114,91 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := controlClient{t: t, handler: handler, token: token(tokens), tenantID: tenantID}
+	tenantB, tokenB := seedE2ETenant(t, pool, "插件联调租户乙", "plugin-e2e-admin-b")
+	clientB := controlClient{t: t, handler: handler, token: tokenB(tokens), tenantID: tenantB}
+	platformClient := controlClient{t: t, handler: handler, token: platformE2EToken(t, pool)(tokens), platform: true}
+	// Whether a tenant can use a plugin: an enabled tenant head that covers it (the predicate the production
+	// gates use, plugin_installation_covers_tenant_636).
+	available := func(label string, raw func(*identity.TokenManager) string, pluginID string) bool {
+		t.Helper()
+		principal, err := identityService.Authenticate(ctx, raw(tokens))
+		if err != nil {
+			t.Fatalf("%s: authenticate: %v", label, err)
+		}
+		var ok bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM plugin_installation_heads
+			WHERE plugin_id=$2 AND status='enabled' AND resource_scope='tenant' AND
+			      plugin_installation_covers_tenant_636(authorization_id, $1))`, principal.ScopeID, pluginID).Scan(&ok); err != nil {
+			t.Fatalf("%s: plugin installation for tenant: %v", label, err)
+		}
+		return ok
+	}
 
 	audit := fixture.Plugins[auditPluginID]
-	// 1. The platform authorized the plugin for this installation; the tenant sees it and installs it.
-	page := client.list()
-	item := page.find(audit.AuthorizationID)
-	if item == nil || item.Status != "pending_confirmation" || item.Version != "1.0.0" {
-		t.Fatalf("authorized plugin not offered: %+v", page)
+	// 1. the platform authorized the tenant plugin for
+	// this installation; the controller's platform administrator confirms it and chooses the tenants. Tenants no
+	// longer see candidates and cannot confirm.
+	if client.list().find(audit.AuthorizationID) != nil {
+		t.Fatal("tenant console offered a plugin for confirmation")
 	}
-	installed := client.mutate(item.AuthorizationID, "confirm", item.Revision, map[string]any{
-		"verification_id": item.VerificationID, "approved_scopes": item.ApprovedScopes,
-		"sensitive_permissions_confirmed": true, "new_permissions_confirmed": true}, http.StatusOK)
-	if installed.Status != "enabled" || installed.Version != "1.0.0" {
-		t.Fatalf("installed=%+v", installed)
+	item := platformClient.list().find(audit.AuthorizationID)
+	if item == nil || item.Status != "pending_confirmation" || item.Version != "1.0.0" {
+		t.Fatalf("authorized plugin not offered to the platform administrator: %+v", item)
+	}
+	confirmBody := func(item *installationView, targets map[string]any) map[string]any {
+		body := map[string]any{"verification_id": item.VerificationID, "approved_scopes": item.ApprovedScopes,
+			"sensitive_permissions_confirmed": true, "new_permissions_confirmed": true}
+		if targets != nil {
+			body["targets"] = targets
+		}
+		return body
+	}
+	client.refused(item.AuthorizationID, "confirm", item.Revision, confirmBody(item, nil), http.StatusForbidden,
+		"plugin_installation_platform_managed")
+	// Only the platform route accepts targets: on a tenant route the body itself is malformed (handler.mutate).
+	client.refused(item.AuthorizationID, "confirm", item.Revision, confirmBody(item, tenantTargets(tenantID)),
+		http.StatusBadRequest, "invalid_request")
+	platformClient.refused(item.AuthorizationID, "confirm", item.Revision, confirmBody(item, nil),
+		http.StatusUnprocessableEntity, "plugin_installation_targets_invalid")
+	installed := platformClient.mutate(item.AuthorizationID, "confirm", item.Revision,
+		confirmBody(item, tenantTargets(tenantID)), http.StatusOK)
+	if installed.Status != "enabled" || installed.Version != "1.0.0" || installed.ManagedBy != "platform" ||
+		installed.Targets == nil || installed.Targets.AllTenants || len(installed.Targets.Tenants) != 1 ||
+		installed.Targets.Tenants[0].ScopeID != tenantID {
+		t.Fatalf("installed=%+v targets=%+v", installed, installed.Targets)
 	}
 	license := licenseState(t, fixture, auditPluginID)
 	if license.Status != "enabled" || license.Version != "1.0.0" {
 		t.Fatalf("license after install=%+v", license)
+	}
+	// Chosen tenant: reads it (managed_by=platform) and can use it; the other tenant neither sees nor uses it.
+	if view := client.get(audit.AuthorizationID); view.Status != "enabled" || view.ManagedBy != "platform" ||
+		view.Targets != nil {
+		t.Fatalf("chosen tenant view=%+v", view)
+	}
+	if status, code := clientB.getStatus(audit.AuthorizationID); status != http.StatusNotFound || code != "plugin_installation_not_found" ||
+		clientB.list().find(audit.AuthorizationID) != nil {
+		t.Fatalf("tenant outside the targets reads the plugin: %d %s", status, code)
+	}
+	if !available("chosen tenant", token, auditPluginID) || available("other tenant", tokenB, auditPluginID) {
+		t.Fatal("tenant coverage after confirming for one tenant")
+	}
+	// A tenant cannot change what the platform installed for it.
+	client.refused(audit.AuthorizationID, "disable", installed.Revision, map[string]any{"reason": "租户试图停用"},
+		http.StatusForbidden, "plugin_installation_platform_managed")
+
+	// 1b. The platform administrator widens the targets to every tenant, which also covers tenants created later.
+	widened := platformClient.putTargets(audit.AuthorizationID, installed.Targets.Revision, allTenantTargets())
+	if widened.Targets == nil || !widened.Targets.AllTenants || widened.Targets.Revision != 2 {
+		t.Fatalf("widened targets=%+v", widened.Targets)
+	}
+	_, tokenC := seedE2ETenant(t, pool, "插件联调租户丙", "plugin-e2e-admin-c")
+	if !available("chosen tenant", token, auditPluginID) || !available("tenant B, all tenants", tokenB, auditPluginID) ||
+		!available("tenant created later", tokenC, auditPluginID) {
+		t.Fatal("tenant coverage after widening to all tenants")
+	}
+	if view := clientB.get(audit.AuthorizationID); view.Status != "enabled" || view.ManagedBy != "platform" {
+		t.Fatalf("tenant B view after widening=%+v", view)
 	}
 
 	// 2. The installed plugin's capability runs only while the platform authorizes it.
@@ -152,12 +223,14 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		t.Fatalf("enabled plugin must receive the event: %+v", result)
 	}
 
-	// 3. Platform pause/resume stops and restarts execution without touching the tenant install.
+	// 3. License operator pause/resume stops and restarts execution without touching the local install.
 	if status := postOperator(fixture, "/pause", nil); status != http.StatusOK {
 		t.Fatalf("pause status=%d", status)
 	}
-	if paused := client.get(audit.AuthorizationID); paused.Status != "enabled" || paused.AuthorizationStatus != "disabled" {
-		t.Fatalf("paused view=%+v", paused)
+	for _, viewer := range []controlClient{platformClient, client} {
+		if paused := viewer.get(audit.AuthorizationID); paused.Status != "enabled" || paused.AuthorizationStatus != "disabled" {
+			t.Fatalf("paused view (%s)=%+v", viewer.name(), paused)
+		}
 	}
 	if result := deliver("paused"); result.Code != "runtime_authorization_denied" || receiver.count() != 1 {
 		t.Fatalf("paused plugin must not receive events: %+v", result)
@@ -169,15 +242,20 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		t.Fatalf("resumed plugin must receive events again: %+v", result)
 	}
 
-	// 4. The platform approves 1.1.0; the tenant sees the upgrade and applies it.
+	// 4. The license operator approves 1.1.0; the platform administrator applies it (the tenant may not).
 	if status := postOperator(fixture, "/upgrade", nil); status != http.StatusOK {
 		t.Fatalf("operator upgrade status=%d", status)
 	}
-	current := client.get(audit.AuthorizationID)
+	current := platformClient.get(audit.AuthorizationID)
 	if current.AvailableUpgrade == nil || current.AvailableUpgrade.Version != "1.1.0" {
 		t.Fatalf("upgrade not offered: %+v", current)
 	}
-	upgraded := client.mutate(current.AuthorizationID, "upgrade", current.Revision, map[string]any{
+	upgradeBody := map[string]any{"verification_id": current.AvailableUpgrade.VerificationID,
+		"approved_scopes": current.AvailableUpgrade.ApprovedScopes, "sensitive_permissions_confirmed": true,
+		"new_permissions_confirmed": true}
+	client.refused(current.AuthorizationID, "upgrade", current.Revision, upgradeBody, http.StatusForbidden,
+		"plugin_installation_platform_managed")
+	upgraded := platformClient.mutate(current.AuthorizationID, "upgrade", current.Revision, map[string]any{
 		"verification_id": current.AvailableUpgrade.VerificationID,
 		"approved_scopes": current.AvailableUpgrade.ApprovedScopes, "sensitive_permissions_confirmed": true,
 		"new_permissions_confirmed": true}, http.StatusOK)
@@ -189,8 +267,11 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		t.Fatalf("upgraded plugin must keep receiving events: %+v", result)
 	}
 
-	// 5. Tenant uninstall is reported to the platform and stops execution.
-	removed := client.mutate(upgraded.AuthorizationID, "uninstall", upgraded.Revision,
+	// 5. The platform administrator's uninstall is reported to the license service and stops execution for every
+	// tenant (the tenant's own attempt is refused).
+	client.refused(upgraded.AuthorizationID, "uninstall", upgraded.Revision, map[string]any{"reason": "租户试图卸载"},
+		http.StatusForbidden, "plugin_installation_platform_managed")
+	removed := platformClient.mutate(upgraded.AuthorizationID, "uninstall", upgraded.Revision,
 		map[string]any{"reason": "联调结束卸载"}, http.StatusOK)
 	if removed.Status != "uninstalled" {
 		t.Fatalf("uninstalled=%+v", removed)
@@ -201,6 +282,10 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 	}
 	if result := deliver("uninstalled"); result.Code != "runtime_authorization_denied" || receiver.count() != 3 {
 		t.Fatalf("uninstalled plugin must not receive events: %+v", result)
+	}
+	if available("chosen tenant after uninstall", token, auditPluginID) ||
+		available("tenant B after uninstall", tokenB, auditPluginID) {
+		t.Fatal("an uninstalled plugin still covers tenants")
 	}
 	actions := license.receiptActions()
 	t.Logf("license receipts: %s", strings.Join(actions, ","))
@@ -218,10 +303,12 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 
 	if _, ok := fixture.Plugins[rulePackPluginID]; ok {
 		// Before runMarketPluginFlow: it signals the market process to stop serving the catalog origin.
-		platformClient := controlClient{t: t, handler: handler, token: platformE2EToken(t, pool)(tokens), platform: true}
 		runMarketRulePackFlow(t, fixture, client, platformClient, pool, trust)
 	}
-	runMarketPluginFlow(t, directory, fixture, client)
+	runMarketPluginFlow(t, directory, fixture, platformClient, []controlClient{client, clientB},
+		func(label string) bool {
+			return available(label, token, marketPluginID) && available(label, tokenB, marketPluginID)
+		})
 }
 
 func contains(values []string, want string) bool {

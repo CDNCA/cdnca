@@ -1,0 +1,406 @@
+openapi: 3.1.0
+info:
+  title: dnspup probe plugin API (拨测插件 module.probe.dnspup)
+  version: 1.0.0
+  description: >-
+    docs/architecture/probe-dnspup-unified.md. Admin routes need a platform session with
+    system.probe_dnspup.manage (or platform.admin). Plugin routes accept only a tenant API key bound to an
+    enabled plugin installation (`Authorization: CdncaKey <key_id>.<secret>`) holding probes.dnspup.request;
+    the control plane runs the probe with the platform's dnspup key pair and quota and answers the result to
+    the installation that created it only (anything else reads 404). Errors use the control-api ErrorEnvelope;
+    plugin codes: probe_dnspup_plugin_identity_required 403, probe_dnspup_not_installed 409,
+    probe_dnspup_not_configured 409, probe_dnspup_paused 503, probe_dnspup_rate_limited 429,
+    probe_dnspup_quota_exceeded 429, probe_dnspup_target_restricted 422.
+paths:
+  /v1/admin/probe-dnspup/purposes:
+    get:
+      operationId: getProbeDNSPupPurposes
+      x-summary-zh: "按用途的拨测开关、月上限、频率、本月用量、预计月用量与降频状态"
+      summary: Probe purposes with usage, projection and budget gate
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      responses:
+        '200': {description: Purposes, content: {application/json: {schema: {$ref: '#/components/schemas/PurposesView'}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putProbeDNSPupPurposes
+      x-summary-zh: "修改用途的开关、月上限与最小间隔（可用性类用途不能关闭）"
+      summary: Change purposes (availability purposes cannot be disabled)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [purposes]
+              properties:
+                purposes:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [purpose, enabled, monthly_cap, interval_seconds]
+                    properties:
+                      purpose: {$ref: '#/components/schemas/Purpose'}
+                      enabled: {type: boolean}
+                      monthly_cap: {type: integer, minimum: 0, maximum: 1000000000}
+                      interval_seconds: {type: integer, minimum: 0, maximum: 86400}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/PurposesView'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /v1/admin/probe-dnspup/matrix:
+    get:
+      operationId: getProbeDNSPupMatrix
+      x-summary-zh: "节点或第三方 CDN 候选的「地区 × 运营商」矩阵与历史曲线"
+      summary: Area × carrier matrix and history of a node or a CDN candidate host
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      parameters:
+        - {name: subject, in: query, required: true, schema: {type: string, enum: [node, edge]}}
+        - {name: id, in: query, required: true, description: "node id, or the candidate host", schema: {type: string, maxLength: 300}}
+        - {name: window, in: query, schema: {type: string, enum: [1h, 6h, 24h, 7d], default: 24h}}
+      responses:
+        '200':
+          description: Matrix
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subject, id, window, cells, series]
+                properties:
+                  subject: {type: string}
+                  id: {type: string}
+                  window: {type: string}
+                  cells:
+                    type: array
+                    items:
+                      type: object
+                      required: [area, carrier, total, ok, availability, avg_latency_ms]
+                      properties:
+                        area: {type: string, description: "mainland province, else region code (hk, us, …)"}
+                        carrier: {$ref: '#/components/schemas/Carrier'}
+                        total: {type: integer}
+                        ok: {type: integer}
+                        availability: {type: number, minimum: 0, maximum: 1}
+                        avg_latency_ms: {type: integer}
+                        top_failure: {$ref: '#/components/schemas/Failure'}
+                  series:
+                    type: array
+                    items:
+                      type: object
+                      required: [at, total, availability, avg_latency_ms]
+                      properties:
+                        at: {type: string, format: date-time}
+                        total: {type: integer}
+                        availability: {type: number}
+                        avg_latency_ms: {type: integer}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /v1/admin/probe-dnspup/edge-subjects:
+    get:
+      operationId: listProbeDNSPupEdgeSubjects
+      x-summary-zh: "最近一天有拨测结果的第三方 CDN 候选主机"
+      summary: CDN candidate hosts probed in the last day
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      responses:
+        '200':
+          description: Hosts
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {type: string}}}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/admin/probe-dnspup/node-monitoring/overrides:
+    get:
+      operationId: listProbeDNSPupNodeOverrides
+      x-summary-zh: "按节点或线路组覆盖的拨测类型与选点"
+      summary: Per node / line group overrides
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      responses:
+        '200':
+          description: Overrides
+          content: {application/json: {schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Override'}}}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putProbeDNSPupNodeOverride
+      x-summary-zh: "新建或替换一个节点（node_id）或线路组（tenant_scope_id + line_group_id）的覆盖"
+      summary: Create or replace the override of a node or a line group
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                node_id: {type: string, format: uuid}
+                tenant_scope_id: {type: string, format: uuid}
+                line_group_id: {type: string, format: uuid}
+                probe_type: {type: string, enum: [tcping, ping, http]}
+                selection: {$ref: '#/components/schemas/Selection'}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/Override'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /v1/admin/probe-dnspup/node-monitoring/overrides/{id}:
+    delete:
+      operationId: deleteProbeDNSPupNodeOverride
+      x-summary-zh: "删除覆盖（恢复继承）"
+      summary: Delete an override
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '204': {description: Deleted}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /v1/admin/probe-dnspup/diagnoses:
+    post:
+      operationId: createProbeDNSPupDiagnosis
+      x-summary-zh: "按需 MTR 排障（最多 2 个检测点，计入「排障」用途额度）"
+      summary: Run one mtr diagnosis (at most 2 checkpoints, metered as diagnose)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [target, checkpoints]
+              properties:
+                target: {type: string, description: "public IP or domain"}
+                node_id: {type: string, format: uuid}
+                checkpoints: {type: array, minItems: 1, maxItems: 2, items: {type: string}}
+      responses:
+        '202': {description: Started, content: {application/json: {schema: {$ref: '#/components/schemas/ProbeRequestView'}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/probe-dnspup/diagnoses/{id}:
+    get:
+      operationId: getProbeDNSPupDiagnosis
+      x-summary-zh: "读取排障结果（运行中带 Retry-After）"
+      summary: Read a diagnosis (Retry-After while pending)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system.probe_dnspup.manage]
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Diagnosis, content: {application/json: {schema: {$ref: '#/components/schemas/ProbeRequestView'}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /v1/probe-dnspup/plugin/status:
+    get:
+      operationId: getProbeDNSPupPluginStatus
+      x-summary-zh: "插件能否发起拨测（未安装/未配置/暂停/额度），不计量"
+      summary: Whether the plugin can probe now (not metered)
+      security: [{cdncaApiKey: []}]
+      x-required-permissions: [probes.dnspup.request]
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available, per_minute, tenant_monthly, used_this_month]
+                properties:
+                  available: {type: boolean}
+                  reason: {type: string, enum: [probe_dnspup_not_installed, probe_dnspup_not_configured, probe_dnspup_paused, probe_dnspup_quota_exceeded]}
+                  paused_until: {type: string, format: date-time}
+                  per_minute: {type: integer}
+                  tenant_monthly: {type: integer, description: "0: no tenant limit"}
+                  used_this_month: {type: integer}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/probe-dnspup/plugin/requests:
+    post:
+      operationId: createProbeDNSPupPluginRequest
+      x-summary-zh: "插件发起一次拨测（目标 + 类型 + 选点），用平台 DNSPup 凭据与额度执行"
+      summary: Start one probe with the platform's dnspup key pair and quota
+      security: [{cdncaApiKey: []}]
+      x-required-permissions: [probes.dnspup.request]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [type, target]
+              properties:
+                type: {type: string, enum: [tcping, ping, http, https, dns]}
+                target: {type: string, maxLength: 2048, description: "public IP / domain; http(s): URL with that scheme"}
+                port: {type: integer, minimum: 1, maximum: 65535, description: "tcping only"}
+                method: {type: string, enum: [GET, HEAD]}
+                record: {type: string, enum: [A, AAAA, CNAME, MX, NS, TXT]}
+                expect: {type: array, maxItems: 20, items: {type: string}, description: "dns: at least one answer must match"}
+                ip_version: {type: string, enum: ['4', '6']}
+                selection: {$ref: '#/components/schemas/Selection'}
+      responses:
+        '202': {description: Started, content: {application/json: {schema: {$ref: '#/components/schemas/ProbeRequestView'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/probe-dnspup/plugin/requests/{id}:
+    get:
+      operationId: getProbeDNSPupPluginRequest
+      x-summary-zh: "读取本插件发起的拨测结果（运行中带 Retry-After；其他安装读不到）"
+      summary: Read a probe this installation started (Retry-After while pending)
+      security: [{cdncaApiKey: []}]
+      x-required-permissions: [probes.dnspup.request]
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Probe, content: {application/json: {schema: {$ref: '#/components/schemas/ProbeRequestView'}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Send `CdncaKey <key_id>.<secret>` (tenant API key bound to a plugin installation).
+  parameters:
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}}
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message, request_id]
+                properties:
+                  code: {type: string}
+                  message: {type: string}
+                  request_id: {type: string}
+  schemas:
+    Purpose: {type: string, enum: [node_availability, origin_failover, edge_health, plugin, diagnose]}
+    Carrier: {type: string, enum: [telecom, unicom, mobile, edu, bgp, other]}
+    Failure: {type: string, enum: [ok, refused, timeout, reset, tls, http, dns, other]}
+    Selection:
+      type: object
+      additionalProperties: false
+      required: [points_per_group]
+      properties:
+        areas: {type: array, items: {type: string, enum: [mainland, hkmotw, overseas]}}
+        carriers: {type: array, items: {$ref: '#/components/schemas/Carrier'}}
+        include_provinces: {type: array, maxItems: 64, items: {type: string}, description: "mainland short names or region codes"}
+        exclude_provinces: {type: array, maxItems: 64, items: {type: string}}
+        exclude_checkpoints: {type: array, maxItems: 100, items: {type: string}}
+        points_per_group: {type: integer, minimum: 1, maximum: 20, description: "per area × carrier group"}
+        rotate: {type: boolean}
+    Gate:
+      type: object
+      required: [stopped, factor, daily_average, projected_monthly]
+      properties:
+        stopped: {type: boolean}
+        factor: {type: integer, description: "interval multiplier (1: normal, 3: slowed)"}
+        reason: {type: string, enum: [disabled, monthly_cap, account_budget, account_slowdown]}
+        daily_average: {type: integer}
+        projected_monthly: {type: integer}
+    PurposesView:
+      type: object
+      required: [purposes, monthly_limit, monthly_used, projected_monthly]
+      properties:
+        monthly_limit: {type: integer}
+        monthly_used: {type: integer}
+        projected_monthly: {type: integer}
+        purposes:
+          type: array
+          items:
+            type: object
+            required: [purpose, class, enabled, monthly_cap, interval_seconds, used_this_month, gate]
+            properties:
+              purpose: {$ref: '#/components/schemas/Purpose'}
+              class: {type: integer, enum: [1, 2, 3], description: "1 availability, 2 schedule, 3 report"}
+              enabled: {type: boolean}
+              monthly_cap: {type: integer}
+              interval_seconds: {type: integer}
+              used_this_month: {type: integer}
+              gate: {$ref: '#/components/schemas/Gate'}
+    Override:
+      type: object
+      required: [id, subject_kind, subject_name, revision]
+      properties:
+        id: {type: string, format: uuid}
+        subject_kind: {type: string, enum: [node, line_group]}
+        node_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        line_group_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        probe_type: {type: [string, 'null'], enum: [tcping, ping, http, null]}
+        selection: {oneOf: [{$ref: '#/components/schemas/Selection'}, {type: 'null'}]}
+        revision: {type: integer}
+    ProbeRequestView:
+      type: object
+      required: [id, status, type, target, created_at, results]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, completed, failed]}
+        type: {type: string}
+        target: {type: string}
+        error_code: {type: string}
+        created_at: {type: string, format: date-time}
+        traces: {description: "mtr hop sets as dnspup returns them"}
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, ok]
+            properties:
+              id: {type: string}
+              area: {type: string, enum: [mainland, hkmotw, overseas]}
+              carrier: {type: string}
+              line: {$ref: '#/components/schemas/Carrier'}
+              region: {type: string}
+              province: {type: string}
+              location: {type: string}
+              ok: {type: boolean}
+              failure: {$ref: '#/components/schemas/Failure'}
+              latency_ms: {type: integer}
+              loss_rate: {type: integer}
+              http_status: {type: integer}
+              values: {type: array, items: {type: string}}

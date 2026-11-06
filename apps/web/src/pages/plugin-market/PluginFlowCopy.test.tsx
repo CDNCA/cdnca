@@ -35,16 +35,16 @@ beforeEach(async () => {
 })
 
 describe('我的插件空态', () => {
-  it('首次进入：暂无主题或规则包安装记录，引导去浏览', async () => {
+  it('首次进入：暂无需要安装的插件，引导去浏览', async () => {
     vi.spyOn(platformPluginInstallationsApi, 'list').mockResolvedValue({ items: [] })
     renderWithProviders(<PlatformPluginsPanel />)
-    expect(await screen.findByText('暂无主题或规则包安装记录')).toBeInTheDocument()
+    expect(await screen.findByText('暂无需要安装的插件')).toBeInTheDocument()
   })
 
   it('失败分组为空：暂无失败插件，不引导去获取', async () => {
     const list = vi.spyOn(platformPluginInstallationsApi, 'list').mockResolvedValue({ items: [] })
     renderWithProviders(<PlatformPluginsPanel />)
-    await screen.findByText('暂无主题或规则包安装记录')
+    await screen.findByText('暂无需要安装的插件')
     fireEvent.click(within(screen.getByRole('radiogroup', { name: '按处理阶段筛选' })).getByText('失败'))
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.any(String), scopeID, expect.objectContaining({ status: 'upgrade_failed_lkg_preserved' })))
     expect(await screen.findByText('暂无失败插件')).toBeInTheDocument()
@@ -54,14 +54,14 @@ describe('我的插件空态', () => {
   it('搜索无匹配：说没有匹配项并能清除筛选回到全部', async () => {
     const list = vi.spyOn(platformPluginInstallationsApi, 'list').mockResolvedValue({ items: [] })
     renderWithProviders(<PlatformPluginsPanel />)
-    await screen.findByText('暂无主题或规则包安装记录')
+    await screen.findByText('暂无需要安装的插件')
     fireEvent.change(screen.getByPlaceholderText('按插件名称（ID）搜索'), { target: { value: 'nothing.here' } })
     fireEvent.click(screen.getByRole('button', { name: '查询' }))
     expect(await screen.findByText('没有匹配的插件')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '清除筛选' }))
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.any(String), scopeID, expect.not.objectContaining({ plugin_id: expect.anything() })))
     expect(screen.getByPlaceholderText('按插件名称（ID）搜索')).toHaveValue('')
-    expect(await screen.findByText('暂无主题或规则包安装记录')).toBeInTheDocument()
+    expect(await screen.findByText('暂无需要安装的插件')).toBeInTheDocument()
   })
 })
 

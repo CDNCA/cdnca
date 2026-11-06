@@ -16,6 +16,49 @@ const HTTP_METHODS = new Set(["delete", "get", "head", "options", "patch", "post
 const REDOCLY_VERSION = "1.34.5";
 const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
+// Operations that intentionally break one OpenAPI rule. Each entry names the rule, the root
+// document, the exact operation (and, for error-body, the statuses), and why. Only an actual
+// violation consumes an entry; an entry that no longer matches one is itself reported, so the
+// list cannot silently outlive its cause.
+//   error-body           4xx/5xx body without stable code and request_id (needs statuses)
+//   idempotency-conflict Idempotency-Key operation without a 409 key/payload conflict response
+//   idempotency-required Idempotency-Key parameter that is not required
+//   idempotency-schema   Idempotency-Key schema whose length bounds differ from 1..128
+export const EXEMPTION_RULES = ["error-body", "idempotency-conflict", "idempotency-required", "idempotency-schema"];
+export const CONTRACT_EXEMPTIONS = [
+  {
+    rule: "error-body", file: "api/openapi/v1/control.yaml", method: "get", path: "/v1/admin/market/plugin-library",
+    statuses: ["400", "401", "403", "500"],
+    reason: "marketsubscribehttp writes {\"error\":\"<code>\"} (a string, no request_id); apps/web/src/api/market.ts call() reads error as a string, so changing the shape would break existing clients."
+  },
+  {
+    rule: "error-body", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/admin/market/plugin-downloads",
+    statuses: ["400", "401", "402", "403", "404", "501", "502"],
+    reason: "marketsubscribehttp writes {\"error\":\"<code>\"} and passes market errors through in the same shape; changing it would break existing clients."
+  },
+  {
+    rule: "error-body", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/streams/batch",
+    statuses: ["422"],
+    reason: "Atomic batch rejection returns the per-line result (BatchCreateStreamsRejected, committed=false) so the caller sees which line failed; it is a result document, not an error envelope."
+  },
+  {
+    rule: "idempotency-conflict", file: "api/openapi/v1/license.yaml", method: "post", path: "/activation/v1/installations/{installation_id}/upgrade-options:list",
+    reason: "The Ed25519 proof signs the Idempotency-Key together with the body digest (licensing.UpgradeOptionsProofMessage), so the same key with another body fails verification with 401 and a 409 cannot occur. The listing is read-only."
+  },
+  {
+    rule: "idempotency-required", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/auth/login",
+    reason: "Only the second MFA step (login_challenge present) consumes the key; password login sends none, so requiring it would break every existing login client."
+  },
+  {
+    rule: "idempotency-schema", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/admin/analytics/logs/access/exports",
+    reason: "analyticslog exportIdempotencyPattern is {16,128} and analytics_log_exports_v1 has the same CHECK; relaxing it needs a migration, and the web client's generated keys already satisfy 16..128."
+  },
+  {
+    rule: "idempotency-schema", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/analytics/logs/access/exports",
+    reason: "Same handler and table as the admin export: exportIdempotencyPattern {16,128} plus the analytics_log_exports_v1 CHECK."
+  }
+];
+
 function listFiles(root, predicate) {
   if (!existsSync(root)) return [];
   const files = [];
@@ -287,8 +330,17 @@ function idempotencyPatternPreservesBounds(schema) {
   return [1, 128].every((length) => characters.some((character) => pattern.test(character.repeat(length))));
 }
 
-function checkOpenAPI(documents, errors) {
+function checkOpenAPI(documents, errors, exemptions = CONTRACT_EXEMPTIONS) {
   const crossDocumentOperations = new Map();
+  const usedExemptions = new Set();
+  // Consumes the matching exemption for an actual violation; false means the violation stands.
+  const exempt = (rule, file, method, path, status = "") => {
+    const index = exemptions.findIndex((item) => item.rule === rule && item.file === file && item.method === method &&
+      item.path === path && (rule !== "error-body" || item.statuses.includes(status)));
+    if (index < 0) return false;
+    usedExemptions.add(`${index}\0${status}`);
+    return true;
+  };
   let operationCount = 0;
   for (const entry of documents) {
     const {document, relativePath} = entry;
@@ -343,11 +395,22 @@ function checkOpenAPI(documents, errors) {
           }
         }
 
+        // x-required-permissions: [] means "any authenticated session"; it names no permission,
+        // so it falls under the 401/403 rule for protected operations instead of requiring 403.
+        const permissions = operation["x-required-permissions"];
+        const namedPermissions = Array.isArray(permissions) && permissions.length > 0;
         if (Object.hasOwn(operation, "x-required-permissions")) {
-          const permissions = operation["x-required-permissions"];
-          if (!Array.isArray(permissions) || permissions.length === 0 || permissions.some((value) => typeof value !== "string" || !value)) {
-            errors.push(`${relativePath}#${base}/x-required-permissions: expected a non-empty string array`);
+          if (!Array.isArray(permissions) || permissions.some((value) => typeof value !== "string" || !value)) {
+            errors.push(`${relativePath}#${base}/x-required-permissions: expected a string array (empty means any authenticated session)`);
+          } else if (!namedPermissions && !(security?.length > 0 && security.every((requirement) => Object.keys(requirement ?? {}).length > 0))) {
+            errors.push(`${relativePath}#${base}/x-required-permissions: empty array means any authenticated session and requires a security policy without anonymous access`);
           }
+        }
+        const authRequestTarget = operation["x-auth-request-target"];
+        if (Object.hasOwn(operation, "x-auth-request-target") && authRequestTarget !== true) {
+          errors.push(`${relativePath}#${base}/x-auth-request-target: must be true when present`);
+        }
+        if (namedPermissions) {
           if (!operation.responses?.["403"]) errors.push(`${relativePath}#${base}/responses/403: permission-gated operation must document denial`);
         } else if (security?.length > 0 && !operation.responses?.["401"] && !operation.responses?.["403"] && !/(?:^|\/)(?:auth|session)(?:\/|$)/.test(path)) {
           errors.push(`${relativePath}#${base}/responses: protected non-session operation must document authentication or authorization denial with 401 or 403`);
@@ -364,16 +427,19 @@ function checkOpenAPI(documents, errors) {
           (parameter) => parameter?.in === "header" && parameter?.name?.toLowerCase() === "idempotency-key"
         );
         if (idempotency) {
-          if (idempotency.required !== true) errors.push(`${relativePath}#${base}/parameters/Idempotency-Key/required: must be true`);
+          if (idempotency.required !== true && !exempt("idempotency-required", relativePath, method, path)) {
+            errors.push(`${relativePath}#${base}/parameters/Idempotency-Key/required: must be true`);
+          }
           const schema = dereference(document, idempotency.schema);
-          if (schema?.type !== "string" || schema?.minLength !== 1 || schema?.maxLength !== 128) {
+          if ((schema?.type !== "string" || schema?.minLength !== 1 || schema?.maxLength !== 128) &&
+            !exempt("idempotency-schema", relativePath, method, path)) {
             errors.push(`${relativePath}#${base}/parameters/Idempotency-Key/schema: expected type string with minLength 1 and maxLength 128`);
           }
           if (!idempotencyPatternPreservesBounds(schema)) {
             errors.push(`${relativePath}#${base}/parameters/Idempotency-Key/schema/pattern: must preserve accepted values at lengths 1 and 128`);
           }
           const hasSuccessResponse = Object.keys(operation.responses ?? {}).some((status) => /^[23][0-9X]{2}$/.test(status));
-          if (hasSuccessResponse && !operation.responses?.["409"]) {
+          if (hasSuccessResponse && !operation.responses?.["409"] && !exempt("idempotency-conflict", relativePath, method, path)) {
             errors.push(`${relativePath}#${base}/responses/409: idempotent operation must document key/payload conflict`);
           }
         }
@@ -382,6 +448,11 @@ function checkOpenAPI(documents, errors) {
           if (!/^[45][0-9X]{2}$/.test(status) && status !== "default") continue;
           const response = dereference(document, rawResponse);
           const mediaEntries = Object.entries(response?.content ?? {});
+          // nginx auth_request targets answer with a bare status; nginx renders the client page.
+          if (authRequestTarget === true) {
+            if (mediaEntries.length > 0) errors.push(`${relativePath}#${base}/responses/${status}: auth_request target error responses must not declare a body`);
+            continue;
+          }
           const validErrorContent = mediaEntries.length > 0 && mediaEntries.every(([type, media]) => {
             const schema = dereference(document, media?.schema);
             if (!schema || typeof schema !== "object" || Array.isArray(schema)) return false;
@@ -391,7 +462,8 @@ function checkOpenAPI(documents, errors) {
             return /^[a-z0-9!#$%&'+.^_`|~-]+\/[a-z0-9!#$%&'+.^_`|~-]+$/i.test(mediaType);
           });
           if (!validErrorContent) {
-            errors.push(`${relativePath}#${base}/responses/${status}: error response must expose stable code and request_id fields`);
+            // Only a response that actually fails consumes an exemption; a compliant one leaves it stale.
+            if (!exempt("error-body", relativePath, method, path, status)) errors.push(`${relativePath}#${base}/responses/${status}: error response must expose stable code and request_id fields`);
           }
         }
 
@@ -404,6 +476,29 @@ function checkOpenAPI(documents, errors) {
     }
     validateOpenAPIExamples(entry, ajv, documentID, errors);
   }
+  const loaded = new Set(documents.map(({relativePath}) => relativePath));
+  exemptions.forEach((item, index) => {
+    const location = `${item.file}#/paths/${pointerToken(item.path)}/${item.method}`;
+    if (!EXEMPTION_RULES.includes(item.rule)) {
+      errors.push(`${location}: exemption has unknown rule ${JSON.stringify(item.rule)}; expected one of ${EXEMPTION_RULES.join(", ")}`);
+      return;
+    }
+    if (typeof item.reason !== "string" || !item.reason.trim()) errors.push(`${location}: ${item.rule} exemption must state a reason`);
+    if (item.rule === "error-body" && !(Array.isArray(item.statuses) && item.statuses.length > 0)) {
+      errors.push(`${location}: error-body exemption must list statuses`);
+      return;
+    }
+    if (!loaded.has(item.file)) return;
+    if (item.rule === "error-body") {
+      for (const status of item.statuses) {
+        if (!usedExemptions.has(`${index}\0${status}`)) {
+          errors.push(`${location}/responses/${status}: error-body exemption no longer matches a documented response; remove it from CONTRACT_EXEMPTIONS`);
+        }
+      }
+    } else if (!usedExemptions.has(`${index}\0`)) {
+      errors.push(`${location}: ${item.rule} exemption no longer matches a violation; remove it from CONTRACT_EXEMPTIONS`);
+    }
+  });
   return operationCount;
 }
 
@@ -664,14 +759,14 @@ function runMarketplaceValidator(root, errors) {
   }
 }
 
-export function checkRepository(root, {runMarketplace = true} = {}) {
+export function checkRepository(root, {runMarketplace = true, exemptions = CONTRACT_EXEMPTIONS} = {}) {
   root = resolve(root);
   const errors = [];
   const {markers} = scanDocumentation(root, errors);
   checkPolicy(root, markers, errors);
   const documents = loadOpenAPIDocuments(root, errors);
   checkOpenAPIDocumentation(root, markers, documents, errors);
-  const operationCount = checkOpenAPI(documents, errors);
+  const operationCount = checkOpenAPI(documents, errors, exemptions);
   const serviceCount = checkProto(root, markers, errors);
   const pluginExampleCount = checkPluginExamples(root, markers, errors);
   if (runMarketplace) runMarketplaceValidator(root, errors);

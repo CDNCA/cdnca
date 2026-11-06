@@ -95,6 +95,8 @@ type ProbeRequest struct {
 	Port      int      `json:"port,omitempty"`
 	Count     int      `json:"count,omitempty"`
 	Method    string   `json:"method,omitempty"`
+	Record    string   `json:"record,omitempty"` // dns: A / AAAA / CNAME / …
+	Server    string   `json:"server,omitempty"` // dns: resolver (empty: the checkpoint's carrier DNS)
 	IPVersion string   `json:"ipVersion,omitempty"`
 	NodeIDs   []string `json:"nodeIds,omitempty"`
 }
@@ -114,6 +116,9 @@ type Result struct {
 	LossRate   int    `json:"loss_rate"`
 	Error      string `json:"error"`
 	ErrorCode  string `json:"errorCode"`
+	// IP is the address the checkpoint connected to; Values the dns answers.
+	IP     string   `json:"ip"`
+	Values []string `json:"values"`
 }
 
 // Job is a probe job (writeCustomerProbeJob): status queued / running /
@@ -125,6 +130,10 @@ type Job struct {
 	TotalNodes     int    `json:"totalNodes"`
 	Result         *struct {
 		Results []Result `json:"results"`
+		// Rows are the dns answers (customerJobResponse "dns").
+		Rows []DNSRow `json:"rows"`
+		// Traces are the traceroute / mtr hop sets, kept as dnspup sent them.
+		Traces json.RawMessage `json:"traces"`
 	} `json:"result"`
 	Error *struct {
 		Code string `json:"code"`
@@ -138,12 +147,42 @@ type Job struct {
 // Pending reports whether the job is still running.
 func (job Job) Pending() bool { return job.Status == "queued" || job.Status == "running" }
 
-// Results are the checkpoints' answers (none while pending).
+// DNSRow is one checkpoint's dns answer (models.DNSQueryRow subset).
+type DNSRow struct {
+	NodeID    string   `json:"nodeId"`
+	Region    string   `json:"region"`
+	City      string   `json:"city"`
+	ISP       string   `json:"isp"`
+	Results   []string `json:"results"`
+	ElapsedMS int      `json:"elapsedMs"`
+	Status    string   `json:"status"`
+	ErrorCode string   `json:"errorCode"`
+	Error     string   `json:"error"`
+}
+
+// Results are the checkpoints' answers (none while pending); dns rows are
+// mapped onto Result (Values = answers, LatencyMS = elapsed).
 func (job Job) Results() []Result {
 	if job.Result == nil {
 		return nil
 	}
-	return job.Result.Results
+	if len(job.Result.Results) > 0 || len(job.Result.Rows) == 0 {
+		return job.Result.Results
+	}
+	results := make([]Result, 0, len(job.Result.Rows))
+	for _, row := range job.Result.Rows {
+		results = append(results, Result{NodeID: row.NodeID, Region: row.Region, Location: row.City, ISP: row.ISP,
+			Status: row.Status, Values: row.Results, LatencyMS: row.ElapsedMS, ErrorCode: row.ErrorCode, Error: row.Error})
+	}
+	return results
+}
+
+// Traces are the traceroute / mtr hop sets (nil for other types).
+func (job Job) Traces() json.RawMessage {
+	if job.Result == nil {
+		return nil
+	}
+	return job.Result.Traces
 }
 
 // Client calls the dnspup customer API with one key pair.

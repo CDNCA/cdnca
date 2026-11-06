@@ -144,7 +144,7 @@ func lockInstallationAuthorization(ctx context.Context, tx pgx.Tx, tenantScopeID
 	var binding installationAuthorization
 	var approvedScopes []string
 	var status string
-	err := tx.QueryRow(ctx, `SELECT installation_id,plugin_id,approved_scopes,status FROM plugin_installation_heads WHERE tenant_scope_id=$1 AND authorization_id=$2 FOR UPDATE`, tenantScopeID, authorizationID).Scan(&binding.InstallationID, &binding.PluginID, &approvedScopes, &status)
+	err := tx.QueryRow(ctx, `SELECT installation_id,plugin_id,approved_scopes,status FROM plugin_installation_heads WHERE authorization_id=$2 AND plugin_installation_covers_tenant_636(authorization_id, $1) FOR UPDATE`, tenantScopeID, authorizationID).Scan(&binding.InstallationID, &binding.PluginID, &approvedScopes, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return installationAuthorization{}, ErrPermissionDenied
 	}

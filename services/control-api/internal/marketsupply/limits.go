@@ -294,5 +294,12 @@ func (s *Service) RefreshLimits(ctx context.Context, holds map[string]Hold) (int
 			republished++
 		}
 	}
+	// Subscriber bans of a held supply or an ended subscription (bans.go).
+	s.mu.Lock()
+	active := s.activeKeys
+	s.mu.Unlock()
+	if err := s.sweepBans(ctx, active); err != nil {
+		errs = append(errs, err)
+	}
 	return republished, errors.Join(errs...)
 }

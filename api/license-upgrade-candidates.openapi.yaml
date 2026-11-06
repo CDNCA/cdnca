@@ -77,12 +77,16 @@ paths:
               schema: {$ref: '#/components/schemas/SignedUpgradeCandidate'}
         '400':
           description: invalid_request — malformed or noncanonical body/query/content type.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '401':
           description: invalid_proof (including unknown installation) or request_expired.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '403':
           description: installation_denied — valid PoP for an inactive installation.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
         '503':
           description: upgrade_candidate_unavailable — database, authorized signer or signing provider unavailable; no raw backend message.
+          content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}
 components:
   securitySchemes:
     InstallationProof:
@@ -184,3 +188,4 @@ components:
         key_id: {type: string}
         snapshot: {$ref: '#/components/schemas/CandidateSnapshot'}
         signature: {type: string, description: Canonical unpadded base64url 64-byte Ed25519 signature.}
+    StableError: {type: object, description: 'license-service error body (writeError): code and request_id are always present.', required: [code, request_id], properties: {code: {type: string}, request_id: {type: string}}}

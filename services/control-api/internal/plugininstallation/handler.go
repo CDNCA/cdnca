@@ -30,6 +30,9 @@ const (
 	PermissionPlatformManage = "plugin_installations.platform.manage"
 )
 
+// actionTargets is PUT /v1/platform/plugin-installations/{authorization_id}/targets (migration 636).
+const actionTargets = "targets"
+
 var (
 	ErrResultUnknown = errors.New("plugin installation mutation result unknown")
 	pluginFilter     = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,127}$`)
@@ -70,6 +73,8 @@ type MutationRequest struct {
 	SensitivePermissionsConfirmed bool
 	NewPermissionsConfirmed       bool
 	Reason                        string
+	// Targets: confirming a tenant plugin from the platform scope names the tenants it is installed for.
+	Targets *Targets
 }
 
 type InstallationView struct {
@@ -85,6 +90,11 @@ type InstallationView struct {
 	PausedReason string
 	// AvailableUpgrade is a newer version the platform has already authorized for this installation.
 	AvailableUpgrade *AvailableUpgrade
+	// ManagedBy says who confirms and changes this installation (ManagedByPlatform/ManagedByTenant); empty for a
+	// candidate not installed yet.
+	ManagedBy string
+	// Targets: the tenants a platform-held tenant plugin is installed for (platform view only).
+	Targets *TargetsView
 }
 
 type AvailableUpgrade struct {
@@ -176,7 +186,9 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		handler.list(response, request, actor, route.tenantID)
 	case request.Method == http.MethodGet && route.action == "":
 		handler.get(response, request, actor, route.authorizationID)
-	case request.Method == http.MethodPost && route.action != "":
+	case request.Method == http.MethodPut && route.action == actionTargets && route.platform:
+		handler.updateTargets(response, request, actor, route)
+	case request.Method == http.MethodPost && route.action != "" && route.action != actionTargets:
 		handler.mutate(response, request, actor, route)
 	default:
 		writePluginInstallationError(response, http.StatusNotFound, "not_found")
@@ -282,15 +294,25 @@ func (handler *Handler) mutate(response http.ResponseWriter, request *http.Reque
 	switch route.action {
 	case ActionConfirm, ActionUpgrade:
 		var body struct {
-			VerificationID                uuid.UUID `json:"verification_id"`
-			ApprovedScopes                []string  `json:"approved_scopes"`
-			SensitivePermissionsConfirmed bool      `json:"sensitive_permissions_confirmed"`
-			NewPermissionsConfirmed       bool      `json:"new_permissions_confirmed"`
+			VerificationID                uuid.UUID    `json:"verification_id"`
+			ApprovedScopes                []string     `json:"approved_scopes"`
+			SensitivePermissionsConfirmed bool         `json:"sensitive_permissions_confirmed"`
+			NewPermissionsConfirmed       bool         `json:"new_permissions_confirmed"`
+			Targets                       *targetsWire `json:"targets"`
 		}
 		if strictJSON(raw, &body) != nil || body.VerificationID == uuid.Nil || body.ApprovedScopes == nil ||
 			!validScopes(body.ApprovedScopes) {
 			writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")
 			return
+		}
+		// Only the platform administrator's confirmation names tenants (migration 636).
+		if body.Targets != nil {
+			targets, ok := body.Targets.targets()
+			if route.action != ActionConfirm || !route.platform || !ok {
+				writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")
+				return
+			}
+			input.Targets = &targets
 		}
 		input.VerificationID = body.VerificationID
 		input.ApprovedScopes = append([]string{}, body.ApprovedScopes...)
@@ -322,6 +344,82 @@ func (handler *Handler) mutate(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	response.Header().Set("ETag", fmt.Sprintf(`"%d"`, result.Installation.Revision))
+	writePluginInstallationJSON(response, http.StatusOK,
+		struct {
+			Installation installationWire `json:"installation"`
+		}{Installation: installationToWire(result)})
+}
+
+// targetsWire is the body of a tenant plugin's targets: all tenants, or canonical tenant scope IDs.
+type targetsWire struct {
+	AllTenants     bool     `json:"all_tenants"`
+	TenantScopeIDs []string `json:"tenant_scope_ids"`
+}
+
+func (wire targetsWire) targets() (Targets, bool) {
+	if wire.TenantScopeIDs == nil || len(wire.TenantScopeIDs) > MaxTargetTenants ||
+		wire.AllTenants && len(wire.TenantScopeIDs) > 0 {
+		return Targets{}, false
+	}
+	targets := Targets{AllTenants: wire.AllTenants, TenantScopeIDs: make([]uuid.UUID, 0, len(wire.TenantScopeIDs))}
+	for _, raw := range wire.TenantScopeIDs {
+		id, err := canonicalPluginUUID(raw)
+		if err != nil {
+			return Targets{}, false
+		}
+		targets.TenantScopeIDs = append(targets.TenantScopeIDs, id)
+	}
+	targets = CanonicalTargets(targets)
+	return targets, validTargets(targets)
+}
+
+// updateTargets changes who a platform-held tenant plugin is installed for: If-Match is the targets revision.
+func (handler *Handler) updateTargets(response http.ResponseWriter, request *http.Request, actor Actor,
+	route pluginInstallationRoute) {
+	domain, ok := handler.domain.(TargetsDomain)
+	if !ok || route.authorizationID == uuid.Nil {
+		writePluginInstallationError(response, http.StatusNotFound, "not_found")
+		return
+	}
+	if request.URL.RawQuery != "" {
+		writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	revision, err := pluginExpectedRevision(request)
+	if err != nil {
+		writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	idempotencyKey, err := exactPluginHeader(request, "Idempotency-Key", true)
+	if err != nil || !idempotencyPattern.MatchString(idempotencyKey) {
+		writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	mediaType, parameters, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" || len(parameters) != 0 {
+		writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(request.Body, 64<<10+1))
+	var body targetsWire
+	if err != nil || len(raw) > 64<<10 || strictJSON(raw, &body) != nil {
+		writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	targets, ok := body.targets()
+	if !ok {
+		writePluginInstallationError(response, http.StatusUnprocessableEntity, "plugin_installation_targets_invalid")
+		return
+	}
+	result, err := domain.UpdateTargets(request.Context(), actor, TargetsUpdate{AuthorizationID: route.authorizationID,
+		ExpectedRevision: revision, IdempotencyKey: idempotencyKey, RequestID: actor.RequestID, Targets: targets})
+	if err != nil {
+		handler.writeDomainError(response, actor, actionTargets, route.authorizationID, err, true)
+		return
+	}
+	if result.Targets != nil {
+		response.Header().Set("ETag", fmt.Sprintf(`"%d"`, result.Targets.Revision))
+	}
 	writePluginInstallationJSON(response, http.StatusOK,
 		struct {
 			Installation installationWire `json:"installation"`
@@ -370,8 +468,8 @@ func parsePluginInstallationRoute(request *http.Request) (pluginInstallationRout
 	}
 	if len(parts) == 4 {
 		route.action = parts[3]
-		if route.action != ActionConfirm && route.action != ActionUpgrade &&
-			route.action != ActionDisable && route.action != ActionUninstall && route.action != ActionResume {
+		if route.action != ActionConfirm && route.action != ActionUpgrade && route.action != ActionDisable &&
+			route.action != ActionUninstall && route.action != ActionResume && (route.action != actionTargets || !route.platform) {
 			return pluginInstallationRoute{}, ErrInvalidInput
 		}
 	}
@@ -474,6 +572,20 @@ type installationWire struct {
 	PausedBy                  string       `json:"paused_by,omitempty"`
 	PausedReason              string       `json:"paused_reason,omitempty"`
 	AvailableUpgrade          *upgradeWire `json:"available_upgrade,omitempty"`
+	ManagedBy                 string       `json:"managed_by,omitempty"`
+	Targets                   *targetsView `json:"targets,omitempty"`
+}
+
+type targetsView struct {
+	AllTenants bool                `json:"all_tenants"`
+	Revision   uint64              `json:"revision"`
+	Tenants    []targetTenantsWire `json:"tenants"`
+}
+
+type targetTenantsWire struct {
+	ScopeID     uuid.UUID `json:"scope_id"`
+	DisplayName string    `json:"display_name"`
+	DisplayID   string    `json:"display_id"`
 }
 
 type upgradeWire struct {
@@ -509,6 +621,15 @@ func installationToWire(view InstallationView) installationWire {
 	}
 	if value.StableReasonCode != "" {
 		wire.StableReasonCode = &value.StableReasonCode
+	}
+	wire.ManagedBy = view.ManagedBy
+	if view.Targets != nil {
+		wire.Targets = &targetsView{AllTenants: view.Targets.AllTenants, Revision: view.Targets.Revision,
+			Tenants: make([]targetTenantsWire, len(view.Targets.Tenants))}
+		for index, tenant := range view.Targets.Tenants {
+			wire.Targets.Tenants[index] = targetTenantsWire{ScopeID: tenant.ScopeID, DisplayName: tenant.DisplayName,
+				DisplayID: tenant.DisplayID}
+		}
 	}
 	wire.AuthorizationStatus = view.AuthorizationStatus
 	wire.PausedBy, wire.PausedReason = view.PausedBy, view.PausedReason
@@ -611,6 +732,10 @@ func pluginInstallationDomainError(err error, mutation bool) (int, string) {
 		status, code = http.StatusUnprocessableEntity, "plugin_installation_scope_approval_required"
 	case errors.Is(err, ErrPlatformPaused):
 		status, code = http.StatusConflict, "plugin_installation_platform_paused"
+	case errors.Is(err, ErrPlatformManaged):
+		status, code = http.StatusForbidden, "plugin_installation_platform_managed"
+	case errors.Is(err, ErrTargetsInvalid):
+		status, code = http.StatusUnprocessableEntity, "plugin_installation_targets_invalid"
 	case errors.Is(err, ErrFactUnavailable):
 		status, code = http.StatusServiceUnavailable, "plugin_installation_license_unavailable"
 	case errors.Is(err, ErrTransitionInvalid):

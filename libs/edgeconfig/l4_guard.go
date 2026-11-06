@@ -40,10 +40,21 @@ type L4GuardRuleV2 struct {
 	WindowSeconds int          `json:"window_seconds,omitempty"`
 }
 
-// L4GuardFirstPacket matches the first data the client sends: the first TCP
-// segment(s) available within the preread wait (at most
-// L4GuardFirstPacketBytes) or the first UDP datagram. A client that sends
-// nothing within the wait (server-first protocols) does not match.
+// L4GuardFirstPacket matches the first data the client sends: its first
+// L4GuardFirstPacketBytes over TCP or the first UDP datagram (as much of it).
+// Over TCP the node waits up to 2.5 s for data. Once some came it waits only
+// for bytes known to be on their way (data in several segments): to the end
+// of a TLS ClientHello whose record header states its length (with a
+// contains / regex rule), or to a prefix's length when the data is its
+// start; other data is matched as it first came (nothing tells whether the
+// client sent all). A client that sends nothing within the wait
+// (server-first protocols) does not match.
+//
+// Match a TLS server name with ServerNames (the node's ssl_preread reads the
+// whole ClientHello), not contains / regex here: the first packet is only the
+// first L4GuardFirstPacketBytes of what came within the waits, and rules
+// stop at the first one that holds, so an allow on the name that misses
+// lets a later drop / ban refuse the client.
 //
 //   - prefix_hex: the data starts with these bytes (lower-case hex).
 //   - contains: the data contains this text (bytes, case-sensitive).
@@ -73,8 +84,10 @@ const (
 
 	// L4GuardRulesMax bounds the rules of one stream.
 	L4GuardRulesMax = 64
-	// L4GuardFirstPacketBytes is how much of the first data a rule sees.
-	L4GuardFirstPacketBytes = 512
+	// L4GuardFirstPacketBytes is how much of the first data a rule sees
+	// (GUARD_FIRST_BYTES in edge/openresty/l4geo/engine.lua): a whole
+	// ClientHello, about 1.8 KB with Chrome's X25519MLKEM768 key share.
+	L4GuardFirstPacketBytes = 4096
 	// L4GuardRegexMax bounds a first packet regular expression (bytes).
 	L4GuardRegexMax = 256
 	// L4GuardContainsMax and L4GuardPrefixBytesMax bound the other matches.

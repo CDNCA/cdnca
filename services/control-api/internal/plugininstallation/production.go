@@ -66,6 +66,9 @@ func NewProductionDomain(repository InstallationRepository, activation Activatio
 }
 
 func (domain *ProductionDomain) List(ctx context.Context, actor Actor, request ListRequest) (Page, error) {
+	if actor.resourceScope() == ResourceScopeTenant {
+		return domain.tenantList(ctx, actor, request)
+	}
 	page, err := domain.list(ctx, actor, request)
 	if err != nil || request.Cursor != "" {
 		return page, err
@@ -94,6 +97,44 @@ func (domain *ProductionDomain) List(ctx context.Context, actor Actor, request L
 	return page, nil
 }
 
+// tenantList is what a tenant console shows: the plugins installed for this tenant, read
+// only from the local store. Tenants no longer confirm anything, so neither pending market authorizations nor
+// authorized candidates are offered here; the platform administrator confirms them in My plugins.
+func (domain *ProductionDomain) tenantList(ctx context.Context, actor Actor, request ListRequest) (Page, error) {
+	if ctx == nil || domain == nil || domain.repository == nil || domain.activation == nil {
+		return Page{}, ErrFactUnavailable
+	}
+	page, err := domain.repository.List(ctx, actor, request)
+	if err != nil || len(page.Items) == 0 {
+		return page, err
+	}
+	remote, err := domain.remoteAuthorizations(ctx, actor)
+	if err != nil {
+		// The local store stays authoritative while the license service is unreachable.
+		return page, nil
+	}
+	for index := range page.Items {
+		annotateInstallation(&page.Items[index], remote)
+	}
+	return page, nil
+}
+
+// manages: the platform administrator confirms platform resources and, for chosen tenants, tenant plugins
+// (migration 636); a tenant scope only ever holds tenant plugins.
+func (actor Actor) manages(resourceScope string) bool {
+	return resourceScope == ResourceScopeTenant || actor.resourceScope() == ResourceScopePlatform
+}
+
+// requireTargets: the platform administrator confirming a tenant plugin says which tenants it is for; nothing else
+// carries targets.
+func requireTargets(actor Actor, resourceScope string, targets *Targets) error {
+	wanted := actor.resourceScope() == ResourceScopePlatform && resourceScope == ResourceScopeTenant
+	if wanted != (targets != nil) || targets != nil && !validTargets(*targets) {
+		return ErrTargetsInvalid
+	}
+	return nil
+}
+
 // pending returns this installation's market authorizations waiting for the controller administrator
 // (AuthorizationStatus pending_confirmation, local status pending_confirmation). Any failure, including a
 // license service without migration 076, yields none: the controller then behaves as before.
@@ -112,7 +153,7 @@ func (domain *ProductionDomain) pending(ctx context.Context, actor Actor, reques
 	}
 	items := make([]InstallationView, 0, len(page.Items))
 	for _, item := range page.Items {
-		if item.Installation.TenantID == actor.TenantID && item.Installation.ResourceScope == actor.resourceScope() &&
+		if item.Installation.TenantID == actor.TenantID && actor.manages(item.Installation.ResourceScope) &&
 			item.AuthorizationStatus == StatusPendingConfirmation {
 			items = append(items, item)
 		}
@@ -133,7 +174,7 @@ func (domain *ProductionDomain) pendingElsewhere(ctx context.Context, actor Acto
 		return false
 	}
 	for _, item := range page.Items {
-		if item.Installation.AuthorizationID == authorizationID && item.Installation.ResourceScope != actor.resourceScope() {
+		if item.Installation.AuthorizationID == authorizationID && !actor.manages(item.Installation.ResourceScope) {
 			return true
 		}
 	}
@@ -205,7 +246,8 @@ func (domain *ProductionDomain) Get(ctx context.Context, actor Actor,
 		}
 		return result, nil
 	}
-	if !errors.Is(err, ErrNotFound) {
+	if !errors.Is(err, ErrNotFound) || actor.resourceScope() == ResourceScopeTenant {
+		// A tenant only reads installed plugins; candidates are confirmed by the platform administrator.
 		return result, err
 	}
 	page, discoveryErr := domain.discover(ctx, actor, ListRequest{TenantID: actor.TenantID, Limit: 100})
@@ -295,11 +337,29 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 		request.ExpectedRevision == 0 || request.RequestID != actor.RequestID {
 		return InstallationView{}, ErrInvalidInput
 	}
+	if request.Targets != nil {
+		if request.Action != ActionConfirm || request.Targets.AllTenants && len(request.Targets.TenantScopeIDs) > 0 {
+			return InstallationView{}, ErrTargetsInvalid
+		}
+		canonical := CanonicalTargets(*request.Targets)
+		request.Targets = &canonical
+	}
+	if actor.resourceScope() == ResourceScopeTenant {
+		// tenants never confirm. A tenant still pauses, resumes, upgrades or uninstalls the
+		// head its own console confirmed before 1.0.35; a plugin the platform installed for it is read-only here.
+		if request.Action == ActionConfirm || request.Targets != nil {
+			return InstallationView{}, ErrPlatformManaged
+		}
+		if current, err := domain.repository.Get(ctx, actor, request.AuthorizationID); err == nil &&
+			current.ManagedBy == ManagedByPlatform {
+			return InstallationView{}, ErrPlatformManaged
+		}
+	}
 	command := Command{TenantID: request.TenantID, AuthorizationID: request.AuthorizationID,
 		Action: request.Action, ExpectedRevision: request.ExpectedRevision,
 		IdempotencyKey: request.IdempotencyKey, RequestID: request.RequestID,
 		SensitivePermissionsConfirmed: request.SensitivePermissionsConfirmed,
-		NewPermissionsConfirmed:       request.NewPermissionsConfirmed, Reason: request.Reason}
+		NewPermissionsConfirmed:       request.NewPermissionsConfirmed, Reason: request.Reason, Targets: request.Targets}
 	var verifier CandidateVerifier
 	switch request.Action {
 	case ActionConfirm, ActionUpgrade:
@@ -340,8 +400,13 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 		if !activation.verified ||
 			activation.Candidate.AuthorizationID != request.AuthorizationID ||
 			activation.Candidate.VerificationID != request.VerificationID ||
-			activation.Candidate.ResourceScope != actor.resourceScope() {
+			!actor.manages(activation.Candidate.ResourceScope) {
 			return InstallationView{}, ErrFactDenied
+		}
+		if request.Action == ActionConfirm {
+			if err := requireTargets(actor, activation.Candidate.ResourceScope, request.Targets); err != nil {
+				return InstallationView{}, err
+			}
 		}
 		activation.Candidate.TenantID = request.TenantID
 		if err := activation.Verifier().VerifyCandidate(ctx, activation.Candidate, nil); err != nil {
@@ -392,7 +457,14 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 		return InstallationView{}, StageError(request.Action+".report",
 			fmt.Errorf("%w: report license lifecycle: %v", ErrResultUnknown, err))
 	}
-	return installationView(result.Installation), nil
+	view := installationViewFor(actor, result.Installation)
+	if command.Targets != nil {
+		view.Targets = &TargetsView{AllTenants: command.Targets.AllTenants, Revision: 1, Tenants: []TargetTenant{}}
+		for _, id := range command.Targets.TenantScopeIDs {
+			view.Targets.Tenants = append(view.Targets.Tenants, TargetTenant{ScopeID: id})
+		}
+	}
+	return view, nil
 }
 
 // stageError names the step of a mutation that failed (for example resume.apply, resume.report) so a server
@@ -498,6 +570,10 @@ func (domain *ProductionDomain) confirmPending(ctx context.Context, actor Actor,
 		if target.Installation.Revision != request.ExpectedRevision {
 			return 0, ErrRevisionConflict
 		}
+		// Before the license service records the confirmation: a tenant plugin needs its tenants named.
+		if err := requireTargets(actor, target.Installation.ResourceScope, request.Targets); err != nil {
+			return 0, err
+		}
 	}
 	if actor.Username == "" {
 		if target != nil {
@@ -555,8 +631,9 @@ func (domain *ProductionDomain) discoverAll(ctx context.Context, actor Actor, re
 		if item.Installation.TenantID != actor.TenantID {
 			return Page{}, ErrFactDenied
 		}
-		// Platform resources (themes, rule data packs) belong to the platform scope; tenant plugins to tenants.
-		if item.Installation.ResourceScope == actor.resourceScope() {
+		// Platform resources (themes, rule data packs) belong to the platform scope; tenant plugins are confirmed
+		// there too (for chosen tenants, migration 636), or by a tenant for its own legacy head.
+		if actor.manages(item.Installation.ResourceScope) {
 			items = append(items, item)
 		}
 	}

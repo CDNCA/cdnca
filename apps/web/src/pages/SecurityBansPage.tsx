@@ -10,6 +10,8 @@ import {
   type SecurityBan,
   type SecurityBanAudience,
   type SecurityBanCreateInput,
+  type SecurityBanDelivery,
+  type SecurityBanDeliveryState,
   type SecurityBanState,
 } from '../api/securityBans'
 import { sitesApi } from '../api/sites'
@@ -23,6 +25,11 @@ import { siteSearch as siteNameSearch } from './idNameSources'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const stateColors: Record<SecurityBanState, string> = { active: 'red', released: 'green', expired: 'default' }
+// an active ban of a site served by market leaves (or by no node) shows how it is enforced.
+const deliveryColors: Record<SecurityBanDeliveryState, string> = {
+  effective: 'red', delivering: 'processing', pending: 'default', no_nodes: 'warning', unsupported: 'warning',
+  failed: 'error', refused: 'error',
+}
 // Durations offered for a manual ban (the server allows 1 minute to 30 days).
 const durations = [{ key: 'm10', seconds: 600 }, { key: 'h1', seconds: 3600 }, { key: 'd1', seconds: 86400 },
   { key: 'd7', seconds: 7 * 86400 }, { key: 'd30', seconds: 30 * 86400 }] as const
@@ -127,6 +134,17 @@ export default function SecurityBansPage() {
     else void query.refetch()
   }
   const siteOptions = useMemo(() => siteNameSearch(accessToken ?? '', 'id'), [accessToken])
+  const marketSites = (query.data?.items ?? []).some((item) => (item.delivery?.leaves ?? 0) > 0)
+  const deliveryReason = (reason: string) => (i18n.exists(`delivery.reasons.${reason}`, { ns: 'securityBans' })
+    ? t(`delivery.reasons.${reason}`) : t('delivery.reasons.unknown', { code: reason }))
+  const deliveryCell = (value: SecurityBanDelivery) => (
+    <Space direction="vertical" size={2}>
+      <Tag color={deliveryColors[value.state]}>{t(`delivery.${value.state}`)}</Tag>
+      {value.reason ? <Typography.Text type="secondary">{deliveryReason(value.reason)}</Typography.Text> : null}
+      {value.leaves > 1 ? <Typography.Text type="secondary">{t('delivery.leaves', { effective: value.effective, leaves: value.leaves })}</Typography.Text> : null}
+      {value.own_nodes > 0 ? <Typography.Text type="secondary">{t('delivery.ownNodes', { count: value.own_nodes })}</Typography.Text> : null}
+    </Space>
+  )
 
   // One request per (site, address); the results are summed up, every
   // failure with its reason.
@@ -206,14 +224,25 @@ export default function SecurityBansPage() {
       title: t('columns.ip'), dataIndex: 'client_ip', key: 'ip',
       render: (value: string) => (isNetwork(value) ? <Space size={4}>{value}<Tag color="blue">{t('network')}</Tag></Space> : value),
     },
-    { title: t('columns.source'), dataIndex: 'source', key: 'source', render: (value: SecurityBan['source']) => t(`source.${value}`) },
+    {
+      title: t('columns.source'), dataIndex: 'source', key: 'source',
+      render: (value: SecurityBan['source'], row: SecurityBan) => (row.market ? (
+        <Space direction="vertical" size={2}>
+          {t(`source.${value}`)}
+          <Typography.Text type="secondary">{t('market.origin', { subscription: row.market.subscription.slice(0, 8),
+            source: i18n.exists(`source.${row.market.buyer_source}`, { ns: 'securityBans' }) ? t(`source.${row.market.buyer_source}`) : row.market.buyer_source })}</Typography.Text>
+        </Space>
+      ) : t(`source.${value}`)),
+    },
     { title: t('columns.rule'), dataIndex: 'rule_id', key: 'rule', render: (value: string) => value || '-' },
     { title: t('columns.reason'), dataIndex: 'reason', key: 'reason', render: (value: string) => value || '-' },
     { title: t('columns.bannedAt'), dataIndex: 'banned_at', key: 'bannedAt', render: (value: string) => formatDateTime(value, locale) },
     { title: t('columns.bannedUntil'), dataIndex: 'banned_until', key: 'bannedUntil', render: (value: string) => formatDateTime(value, locale) },
     {
       title: t('columns.state'), dataIndex: 'state', key: 'state',
-      render: (value: SecurityBanState) => <Tag color={stateColors[value]}>{t(`state.${value}`)}</Tag>,
+      render: (value: SecurityBanState, row: SecurityBan) => (row.delivery
+        ? deliveryCell(row.delivery)
+        : <Tag color={stateColors[value]}>{t(`state.${value}`)}</Tag>),
     },
     {
       title: t('columns.releasedAt'), dataIndex: 'released_at', key: 'releasedAt',
@@ -232,6 +261,7 @@ export default function SecurityBansPage() {
       <Typography.Title level={4}>{t('title')}</Typography.Title>
       <Typography.Paragraph type="secondary">{t('description')}</Typography.Paragraph>
       {message ? resultAlert(message, () => setMessage(null)) : null}
+      {marketSites ? <Alert type="info" showIcon message={t('delivery.hint')} style={{ marginBottom: 12 }} /> : null}
       <Space wrap style={{ marginBottom: 12 }}>
         <IdOrNameInput aria-label={t('filters.site')} placeholder={t('filters.sitePlaceholder')} value={draft.site} style={{ width: 300 }}
           isId={(text) => uuidPattern.test(text.toLowerCase())} search={siteOptions} onPressEnter={search}

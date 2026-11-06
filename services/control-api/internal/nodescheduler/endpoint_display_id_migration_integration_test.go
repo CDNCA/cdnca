@@ -4,8 +4,11 @@ package nodescheduler
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/migrations"
@@ -145,9 +148,56 @@ func seedLineGroup274WithEndpoints(t *testing.T, f *integrationFixture, request 
 			input.note, input.sortOrder, f.actor.UserID, integrationBaseTime); err != nil {
 			return err
 		}
-		return insertRevision(ctx, tx, f.actor, input, 1, integrationBaseTime)
+		return insertRevision274(ctx, tx, f.actor, input, 1, integrationBaseTime)
 	})
 	if err != nil {
 		t.Fatalf("seed actual 274 configuration: %v", err)
 	}
+}
+
+// insertRevision274 writes one sealed revision in the 274 schema: insertRevision as of 274, before 624 added
+// node_line_endpoints.market_node_id (the current insertRevision cannot write a database rolled back to 274).
+func insertRevision274(ctx context.Context, tx pgx.Tx, actor Actor, input normalizedPut, revision int64, now time.Time) error {
+	policy := canonicalizePolicy(input.policy)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO node_line_group_revisions (
+			line_group_id,tenant_scope_id,revision,name,region,resolved_value,ipv4_resolved_value,l2_config_id,
+			failover_mode,note,sort_order,probe_interval_ms,probe_timeout_ms,failure_threshold,recovery_threshold,
+			failure_debounce_ms,recovery_debounce_ms,endpoint_count,configuration_digest,created_by_user_id,created_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+		input.groupID, actor.ScopeID, revision, input.name, input.region, input.resolvedValue, input.ipv4ResolvedValue,
+		input.l2ConfigID, input.failoverMode, input.note, input.sortOrder, policy.ProbeIntervalMS, policy.ProbeTimeoutMS,
+		policy.FailureThreshold, policy.RecoveryThreshold, policy.FailureDebounceMS, policy.RecoveryDebounceMS,
+		len(input.endpoints), input.configDigest[:], actor.UserID, now); err != nil {
+		return err
+	}
+	for _, endpoint := range input.endpoints {
+		addressFamily := 6
+		if address, _ := netip.ParseAddr(endpoint.Address); address.Is4() {
+			addressFamily = 4
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO node_line_endpoints (
+				id,node_id,tenant_scope_id,line_group_id,config_revision,address,address_family,
+				port,region,carrier,priority,sort_order,weight,enabled
+			) VALUES ($1,NULLIF($2,'')::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+			endpoint.ID, uuidString(endpoint.NodeID), actor.ScopeID, input.groupID, revision, endpoint.Address,
+			addressFamily, endpoint.Port, endpoint.Region, endpoint.Carrier,
+			endpoint.Priority, endpoint.SortOrder, endpoint.Weight, endpoint.Enabled); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO node_line_endpoint_health (
+				tenant_scope_id,line_group_id,config_revision,endpoint_id,status,
+				consecutive_successes,consecutive_failures,last_sequence,last_changed_at,
+				row_revision,created_at,updated_at
+			) VALUES ($1,$2,$3,$4,'unknown',0,0,0,$5,1,$5,$5)`,
+			actor.ScopeID, input.groupID, revision, endpoint.ID, now); err != nil {
+			return err
+		}
+	}
+	_, err := tx.Exec(ctx, `UPDATE node_line_group_revisions SET sealed_at=$4
+		WHERE tenant_scope_id=$1 AND line_group_id=$2 AND revision=$3 AND sealed_at IS NULL`,
+		actor.ScopeID, input.groupID, revision, now)
+	return err
 }

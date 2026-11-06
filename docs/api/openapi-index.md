@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 889 个 operation，并包含
-863 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 907 个 operation，并包含
+881 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -43,7 +43,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，614 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，632 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -211,6 +211,18 @@
 | `control.yaml` | `PUT` | `/v1/admin/notifications/templates/{template_id}/versions/{version}/{channel}` | `putNotificationTemplateVersion` |
 | `control.yaml` | `GET` | `/v1/admin/plugin-providers` | `listPluginProviders` |
 | `control.yaml` | `POST` | `/v1/admin/plugin-providers/{plugin_id}/{action}` | `actOnPluginProvider` |
+| `control.yaml` | `POST` | `/v1/admin/probe-dnspup/diagnoses` | `createProbeDNSPupDiagnosis` |
+| `control.yaml` | `GET` | `/v1/admin/probe-dnspup/diagnoses/{id}` | `getProbeDNSPupDiagnosis` |
+| `control.yaml` | `GET` | `/v1/admin/probe-dnspup/edge-subjects` | `listProbeDNSPupEdgeSubjects` |
+| `control.yaml` | `GET` | `/v1/admin/probe-dnspup/matrix` | `getProbeDNSPupMatrix` |
+| `control.yaml` | `GET` | `/v1/admin/probe-dnspup/node-monitoring/overrides` | `listProbeDNSPupNodeOverrides` |
+| `control.yaml` | `PUT` | `/v1/admin/probe-dnspup/node-monitoring/overrides` | `putProbeDNSPupNodeOverride` |
+| `control.yaml` | `DELETE` | `/v1/admin/probe-dnspup/node-monitoring/overrides/{id}` | `deleteProbeDNSPupNodeOverride` |
+| `control.yaml` | `GET` | `/v1/admin/probe-dnspup/purposes` | `getProbeDNSPupPurposes` |
+| `control.yaml` | `PUT` | `/v1/admin/probe-dnspup/purposes` | `putProbeDNSPupPurposes` |
+| `control.yaml` | `GET` | `/v1/admin/security-bans` | `listAdminSecurityBans` |
+| `control.yaml` | `POST` | `/v1/admin/security-bans` | `createAdminSecurityBan` |
+| `control.yaml` | `POST` | `/v1/admin/security-bans/{entry_id}/release` | `releaseAdminSecurityBan` |
 | `control.yaml` | `GET` | `/v1/admin/security-ip-lists` | `listAdminSecurityIPLists` |
 | `control.yaml` | `POST` | `/v1/admin/security-ip-lists` | `createAdminSecurityIPList` |
 | `control.yaml` | `PUT` | `/v1/admin/security-ip-lists/{list_id}` | `updateAdminSecurityIPList` |
@@ -506,6 +518,9 @@
 | `control.yaml` | `POST` | `/v1/plugin-ui/{plugin_id}/identity` | `authorizePluginIdentity` |
 | `control.yaml` | `DELETE` | `/v1/plugin-ui/{plugin_id}/identity` | `revokePluginIdentity` |
 | `control.yaml` | `POST` | `/v1/plugin-ui/{plugin_id}/proxy` | `proxyPluginUIRequest` |
+| `control.yaml` | `POST` | `/v1/probe-dnspup/plugin/requests` | `createProbeDNSPupPluginRequest` |
+| `control.yaml` | `GET` | `/v1/probe-dnspup/plugin/requests/{id}` | `getProbeDNSPupPluginRequest` |
+| `control.yaml` | `GET` | `/v1/probe-dnspup/plugin/status` | `getProbeDNSPupPluginStatus` |
 | `control.yaml` | `GET` | `/v1/regions` | `listPlatformRegions` |
 | `control.yaml` | `POST` | `/v1/regions` | `createPlatformRegion` |
 | `control.yaml` | `GET` | `/v1/regions/{id}` | `getPlatformRegion` |
@@ -513,6 +528,9 @@
 | `control.yaml` | `PATCH` | `/v1/regions/{id}` | `updatePlatformRegion` |
 | `control.yaml` | `DELETE` | `/v1/regions/{id}` | `deletePlatformRegion` |
 | `control.yaml` | `GET` | `/v1/runtime-features` | `listRuntimeFeatures` |
+| `control.yaml` | `GET` | `/v1/security-bans` | `listSecurityBans` |
+| `control.yaml` | `POST` | `/v1/security-bans` | `createSecurityBan` |
+| `control.yaml` | `POST` | `/v1/security-bans/{entry_id}/release` | `releaseSecurityBan` |
 | `control.yaml` | `GET` | `/v1/security-ip-lists` | `listSecurityIPLists` |
 | `control.yaml` | `POST` | `/v1/security-ip-lists` | `createSecurityIPList` |
 | `control.yaml` | `PUT` | `/v1/security-ip-lists/{list_id}` | `updateSecurityIPList` |

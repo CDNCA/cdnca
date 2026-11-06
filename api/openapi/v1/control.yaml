@@ -142,6 +142,14 @@ paths:
     $ref: '../../control-market-security.openapi.yaml#/paths/~1v1~1analytics~1market-security'
   /v1/admin/analytics/market-security:
     $ref: '../../control-market-security.openapi.yaml#/paths/~1v1~1admin~1analytics~1market-security'
+  /v1/security-bans:
+    $ref: '../../control-security-bans.openapi.yaml#/paths/~1v1~1security-bans'
+  /v1/security-bans/{entry_id}/release:
+    $ref: '../../control-security-bans.openapi.yaml#/paths/~1v1~1security-bans~1{entry_id}~1release'
+  /v1/admin/security-bans:
+    $ref: '../../control-security-bans.openapi.yaml#/paths/~1v1~1admin~1security-bans'
+  /v1/admin/security-bans/{entry_id}/release:
+    $ref: '../../control-security-bans.openapi.yaml#/paths/~1v1~1admin~1security-bans~1{entry_id}~1release'
   /v1/observability/logs:
     $ref: './observability-log.yaml#/paths/~1v1~1observability~1logs'
   /v1/admin/system-backup-runs:
@@ -511,6 +519,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/admin/inbox/read-all:
     post:
       operationId: markAllAdminInboxMessagesRead
@@ -522,6 +532,8 @@ paths:
           content:
             application/json:
               schema: {type: object, additionalProperties: false, required: [marked], properties: {marked: {type: integer, minimum: 0}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/account/inbox:
     get:
       operationId: listAccountInbox
@@ -592,6 +604,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/account/inbox/read-all:
     post:
       operationId: markAllAccountInboxMessagesRead
@@ -603,6 +617,8 @@ paths:
           content:
             application/json:
               schema: {type: object, additionalProperties: false, required: [marked], properties: {marked: {type: integer, minimum: 0}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/tenant/members:
     get:
       operationId: listTenantMembers
@@ -1064,7 +1080,7 @@ paths:
         - bearerAuth: []
       parameters:
         - {name: plugin_id, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9]+([.-][a-z0-9]+)+$'}}
-        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', minLength: 1, maxLength: 128}}
       responses:
         '200':
           description: The plugin identity status (never the secret).
@@ -3611,6 +3627,26 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /v1/admin/probe-dnspup/purposes:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1admin~1probe-dnspup~1purposes'
+  /v1/admin/probe-dnspup/matrix:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1admin~1probe-dnspup~1matrix'
+  /v1/admin/probe-dnspup/edge-subjects:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1admin~1probe-dnspup~1edge-subjects'
+  /v1/admin/probe-dnspup/node-monitoring/overrides:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1admin~1probe-dnspup~1node-monitoring~1overrides'
+  /v1/admin/probe-dnspup/node-monitoring/overrides/{id}:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1admin~1probe-dnspup~1node-monitoring~1overrides~1{id}'
+  /v1/admin/probe-dnspup/diagnoses:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1admin~1probe-dnspup~1diagnoses'
+  /v1/admin/probe-dnspup/diagnoses/{id}:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1admin~1probe-dnspup~1diagnoses~1{id}'
+  /v1/probe-dnspup/plugin/status:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1probe-dnspup~1plugin~1status'
+  /v1/probe-dnspup/plugin/requests:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1probe-dnspup~1plugin~1requests'
+  /v1/probe-dnspup/plugin/requests/{id}:
+    $ref: '../../control-probe-dnspup.openapi.yaml#/paths/~1v1~1probe-dnspup~1plugin~1requests~1{id}'
   /v1/dns/hub/domains:
     $ref: '../../control-dns-hub.openapi.yaml#/paths/~1v1~1dns~1hub~1domains'
   /v1/dns/hub/domains/refresh:
@@ -3930,12 +3966,17 @@ paths:
       x-required-permissions: [security_policies.manage]
       x-description-zh: >-
         需要 security_policies.manage 权限。每一项单独按版本号校验后写入，幂等键按 Idempotency-Key 逐项派生，重试同一批次会重放已写入的项。
+        Idempotency-Key 绑定整个请求（action 与按序 items）：同键同体时已完成的批次原样返回原结果，同键异体在写入任何一项之前返回 409 idempotency_conflict。
         结果按请求顺序逐项返回；版本冲突、系统规则库、不存在、使用中等拒绝都作为该项结果，不中断整批。存储失败时该项为 error，其余为 not_attempted。
         平台（系统）规则库永远不会被修改。
       description: >-
         Requires security_policies.manage. Each item is written
         on its own with a version check (CAS) under an item key derived from
         Idempotency-Key, so retrying the same batch replays written items.
+        The Idempotency-Key is bound to the whole request (action and the
+        items in order): the same key and body returns the stored results of
+        a completed batch, and the same key with another body is a 409
+        idempotency_conflict before any item is written.
         Results come back in request order, one per item; refusals (version
         conflict, system library, not found, in use, ...) are item results and
         do not stop the batch. A store failure marks that item error and the
@@ -3994,6 +4035,7 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '500': {$ref: '#/components/responses/InternalError'}
   /v1/security-policies/matchers:
     get:
@@ -5265,6 +5307,8 @@ paths:
         '200': {description: New token., content: {application/json: {schema: {$ref: '#/components/schemas/AgentGatewayBindingToken'}}}}
         '404': {description: gateway_not_found, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '409': {description: gateway_state_conflict (already bound), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/admin/gateways/{id}/disable:
     post:
       operationId: disableAgentGateway
@@ -5275,6 +5319,8 @@ paths:
         '204': {description: Disabled.}
         '404': {description: gateway_not_found, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '409': {description: gateway_state_conflict, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/admin/gateways/{id}/enable:
     post:
       operationId: enableAgentGateway
@@ -5285,6 +5331,8 @@ paths:
         '204': {description: Enabled.}
         '404': {description: gateway_not_found, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '409': {description: gateway_state_conflict, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/admin/gateways/{id}:
     delete:
       operationId: deleteAgentGateway
@@ -5294,6 +5342,8 @@ paths:
       responses:
         '204': {description: Deleted.}
         '404': {description: gateway_not_found, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/admin/gateways/{id}/allowed-ips:
     put:
       operationId: setAgentGatewayAllowedIPs
@@ -5315,6 +5365,8 @@ paths:
         '404': {description: gateway_not_found, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '409': {description: gateway_state_conflict (not bound yet), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '422': {description: invalid_input, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/admin/gateway-settings:
     get:
       operationId: getAgentGatewaySettings
@@ -5351,6 +5403,8 @@ paths:
         '409': {description: gateway_settings_changed (someone else saved since the form was loaded; reload and retry), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '422': {description: invalid_input, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
         '428': {description: precondition_required (If-Match missing or repeated), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /v1/gateway-bindings/complete:
     post:
       operationId: completeAgentGatewayBinding
@@ -5437,6 +5491,10 @@ components:
         Send `CdncaKey <key_id>.<secret>`. Effective permissions are the live intersection of the key scopes
         and its owner's current RBAC grants. Login, refresh, logout, /v1/auth/me, password changes, and all
         API key management endpoints require a bearer session and reject this credential type.
+    bearerSession: {$ref: './recharge-identity-policy.yaml#/components/securitySchemes/bearerSession'}
+    sessionBearer: {$ref: '../../control-node-isolation.openapi.yaml#/components/securitySchemes/sessionBearer'}
+    workloadMTLS: {$ref: '../../control-node-isolation.openapi.yaml#/components/securitySchemes/workloadMTLS'}
+    internalBearer: {$ref: '../../control-upgrade-plan.openapi.yaml#/components/securitySchemes/internalBearer'}
   headers:
     errorPageRequestID:
       $ref: '../../control-error-pages.openapi.yaml#/components/headers/RequestID'

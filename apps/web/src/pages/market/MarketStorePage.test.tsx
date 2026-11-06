@@ -140,8 +140,9 @@ describe('MarketStorePage', () => {
     expect(within(b).queryByRole('button', { name: '下载' })).toBeNull()
   })
 
-  // F1：免费“获取”只取得/重放许可；本机没有安装记录前不显示完成或“去启用”，重入后状态一致。
-  it('gets a free plugin and keeps showing it as syncing after a remount, with no 去启用 before it is installed', async () => {
+  // 免费“获取”只取得/重放许可；页面插件领取后提示“待主控管理员确认安装”，
+  // 卡片给去“我的插件”确认的入口（不是租户确认、也不笼统写“正在同步”）；本机没有安装记录前不显示“去启用”，重入后状态一致。
+  it('gets a free page plugin, says it waits for the controller administrator and keeps that after a remount', async () => {
     const state = { licenses: [] as unknown[], library: [] as unknown[] }
     const fetchMock = routes(state, {
       '/v1/admin/market/plugin-downloads': () => {
@@ -152,16 +153,63 @@ describe('MarketStorePage', () => {
     vi.stubGlobal('fetch', fetchMock)
     const first = renderWithProviders(<MarketStorePage />)
     fireEvent.click(within(await card('acme.reports')).getByRole('button', { name: '获取' }))
-    expect(await screen.findByText('已取得使用权，正在同步到本主控')).toBeInTheDocument()
-    expect(await within(await card('acme.reports')).findByText('使用权已取得，正在同步')).toBeInTheDocument()
+    expect(await screen.findByText('已领取，待主控管理员在“我的插件”确认安装')).toBeInTheDocument()
+    expect(await within(await card('acme.reports')).findByRole('button', { name: '去我的插件确认' })).toBeInTheDocument()
+    expect(within(await card('acme.reports')).queryByText('使用权已取得，正在同步')).toBeNull()
     expect(screen.queryByText('下载完成')).toBeNull()
     expect(within(await card('acme.reports')).queryByText('去启用')).toBeNull()
     first.unmount()
 
     renderWithProviders(<MarketStorePage />)
-    expect(await within(await card('acme.reports')).findByText('使用权已取得，正在同步')).toBeInTheDocument()
+    expect(await within(await card('acme.reports')).findByRole('button', { name: '去我的插件确认' })).toBeInTheDocument()
     expect(within(await card('acme.reports')).queryByRole('button', { name: '获取' })).toBeNull()
   })
+
+  // 0 元试用单不进收银台，
+  // 弹窗里直接给结果：功能类插件“已领取，已生效”，可安装插件“已领取，待主控管理员确认安装”并给去“我的插件”的入口；
+  // 之后几秒一次重读已购、本机插件与授权模块（不等 5 分钟轮询）。
+  it('shows the result of a 0-yuan trial in the dialog and follows the holdings right after it', async () => {
+    const trialPlan = { ...paidPlan, id: 'p-trial', kind: 'subscription', interval: 'month', price_minor: 900, trial_days: 7 }
+    const trialOfficial = { ...official, price_plans: [trialPlan] }
+    const trialTheme = { ...third, price_plans: [trialPlan] }
+    const state = { licenses: [] as unknown[], library: [] as unknown[], modules: [] as string[] }
+    const reads: string[] = []
+    const fetchMock = routes(state, {
+      '/v1/admin/market/plugins?': () => json({ items: [trialOfficial, trialTheme], next_cursor: null }),
+      '/v1/admin/market/orders': () => {
+        state.licenses = [...state.licenses, license(state.licenses.length ? 'bob.theme' : 'io.cdnca.waf-pro')]
+        return json({ order: { id: 'o-1', order_no: '100001', status: 'fulfilled', amount_minor: 0, currency: 'CNY', refunds: [] },
+          checkout_url: null }, 201)
+      },
+      '/v1/admin/market/plugin-downloads': () => json({ plugin_id: 'x', publisher_kind: 'official', source: 'licensed',
+        license: license('io.cdnca.waf-pro') }),
+      '/v1/modules': () => {
+        reads.push('modules')
+        return ({ ok: true, status: 200, json: async () => ({ status: 'valid', lease_serial: 1, modules: state.modules }) }) as unknown as Response
+      },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<MarketStorePage />)
+    fireEvent.click(within(await card('io.cdnca.waf-pro')).getByRole('button', { name: '购买' }))
+    let dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: '试用 7 天' }))
+    expect(await within(dialog).findByText('已领取，已生效')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: '去我的插件' })).toBeNull()
+    const [, init] = fetchMock.mock.calls.find(([p]) => p === '/v1/admin/market/orders')!
+    expect(JSON.parse(init!.body as string)).toMatchObject({ market: 'plugin', price_plan_id: 'p-trial', trial: true })
+    // Followed: the module list is read again within seconds, not after the 5-minute poll.
+    const before = reads.length
+    await waitFor(() => expect(reads.length).toBeGreaterThan(before), { timeout: 5000 })
+    fireEvent.click(within(dialog).getByRole('button', { name: '知道了' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    // An installable plugin: the trial is claimed but waits for the controller administrator.
+    fireEvent.click(within(await card('bob.theme')).getByRole('button', { name: '购买' }))
+    dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: '试用 7 天' }))
+    expect(await within(dialog).findByText('已领取，待主控管理员在“我的插件”确认安装')).toBeInTheDocument()
+    expect(within(dialog).getByRole('link', { name: '去我的插件' })).toHaveAttribute('href', '/sys/plugin-store?tab=mine')
+  }, 15000)
 
   it('gives an installed theme no link to the removed theme management page', async () => {
     const userTheme = { ...third, applies_to: ['user'] }
@@ -169,7 +217,7 @@ describe('MarketStorePage', () => {
       '/v1/admin/market/plugins?': () => json({ items: [userTheme], next_cursor: null }),
     }))
     renderWithProviders(<MarketStorePage />)
-    expect(await within(await card('bob.theme')).findByText('已购买，待你确认')).toBeInTheDocument()
+    expect(await within(await card('bob.theme')).findByText('待主控管理员确认安装')).toBeInTheDocument()
     expect(within(await card('bob.theme')).queryByRole('link', { name: '去启用' })).toBeNull()
   })
 
@@ -444,7 +492,7 @@ describe('我的插件与已购名称', () => {
     expect(within(within(owned).getByText('迁移导入').closest('tr')!).queryByRole('link', { name: '去配置' })).toBeNull()
     expect(within(owned).queryByText('本主控还没有插件')).toBeNull()
     // 主题与规则包的安装确认仍在，作为其中一节。
-    expect(screen.getByRole('heading', { name: '主题与规则包安装记录' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '安装确认与安装记录' })).toBeInTheDocument()
   })
 
   it('shows 我的插件 to a buyer without platform install rights and says plainly when nothing is owned', async () => {
@@ -452,7 +500,7 @@ describe('我的插件与已购名称', () => {
     renderWithProviders(<MarketStorePage />)
     fireEvent.click(await screen.findByRole('tab', { name: '我的插件' }))
     expect(await screen.findByText('本主控还没有插件')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '主题与规则包安装记录' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: '安装确认与安装记录' })).toBeNull()
   })
 
   it('names purchased plugins from the catalog and keeps the ID as secondary text', async () => {

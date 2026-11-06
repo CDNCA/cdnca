@@ -4,6 +4,13 @@
 <!-- contract-doc:openapi file="../../api/openapi/v1/sites.yaml" -->
 <!-- contract-doc:openapi file="../../api/openapi/v1/dns-acme.yaml" -->
 <!-- contract-doc:openapi file="../../api/openapi/v1/license.yaml" -->
+<!-- contract-doc:openapi file="../../api/openapi/v1/account-login-challenge.yaml" -->
+<!-- contract-doc:openapi file="../../api/openapi/v1/account-registration-challenge.yaml" -->
+<!-- contract-doc:openapi file="../../api/openapi/v1/account-registration.yaml" -->
+<!-- contract-doc:openapi file="../../api/openapi/v1/dns-credential-rewrap.yaml" -->
+<!-- contract-doc:openapi file="../../api/openapi/v1/observability-log.yaml" -->
+<!-- contract-doc:openapi file="../../api/openapi/v1/recharge-identity-policy.yaml" -->
+<!-- contract-doc:openapi file="../../api/openapi/v1/node-inventory-order.yaml" -->
 
 本指南说明公开 HTTP API 的共同调用规则。字段、路径、权限和响应 Schema 仍以 [`api/openapi/v1`](../../api/openapi/v1/) 中对应 OpenAPI 文件为准；参考站抓包记录只用于兼容性研究，不是本系统的调用契约。
 

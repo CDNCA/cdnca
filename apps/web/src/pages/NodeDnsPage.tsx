@@ -36,8 +36,8 @@ interface CredentialField {
   pattern?: RegExp
   max?: number
   validate?: (value: unknown) => boolean
-  // credentials.<label> instead of credentials.<name>; credentials.<hint> below the input.
-  label?: string
+  // credentials.<labelKey> instead of credentials.<name>; credentials.<hint> below the input.
+  labelKey?: string
   hint?: string
 }
 
@@ -99,8 +99,8 @@ export const credentialFields: Record<CreatableDNSProviderType, CredentialField[
   ],
   namesilo: [{ name: 'key', secret: true, validate: isValidNamesiloCredential }],
   cloudns: [
-    { name: 'sub_auth_id', label: 'cloudns_sub_auth_id', hint: 'cloudnsHint', validate: (value) => isValidKeyedDNSCredential('sub_auth_id', value) },
-    { name: 'auth_password', secret: true, label: 'cloudns_auth_password', validate: (value) => isValidKeyedDNSCredential('auth_password', value) },
+    { name: 'sub_auth_id', labelKey: 'cloudns_sub_auth_id', hint: 'cloudnsHint', validate: (value) => isValidKeyedDNSCredential('sub_auth_id', value) },
+    { name: 'auth_password', secret: true, labelKey: 'cloudns_auth_password', validate: (value) => isValidKeyedDNSCredential('auth_password', value) },
   ],
   namecheap: [
     { name: 'username', validate: (value) => isValidKeyedDNSCredential('username', value) },
@@ -327,7 +327,7 @@ export function ProviderEditor({
           <Form.Item
             key={field.name}
             name={['credentials', field.name]}
-            label={t(`credentials.${field.label ?? field.name}`)}
+            label={t(`credentials.${field.labelKey ?? field.name}`)}
             extra={field.name === 'plan' ? t('credentials.planHint') : field.hint ? t(`credentials.${field.hint}`) : undefined}
             initialValue={field.select && field.selectLabels ? field.select[0] : undefined}
             rules={[

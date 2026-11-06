@@ -26,10 +26,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BackupRunHistoryPage'
-        '400': {description: Invalid query or cursor}
-        '401': {description: Authentication required}
-        '403': {description: Platform administrator permission required}
-        '503': {description: Protected backup history capability unavailable}
+        '400': {description: Invalid query or cursor, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Platform administrator permission required, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '503': {description: Protected backup history capability unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
 components:
   schemas:
     BackupRunHistoryRecord:
@@ -61,3 +61,4 @@ components:
         next_cursor: {type: string}
         snapshot_at: {type: string, format: date-time}
         unconfigured: {type: boolean, description: 'True when no backup runner (manifest directory, source cluster and signing trust) is bound to this control plane; items is then empty because there is no backup target.'}
+    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}

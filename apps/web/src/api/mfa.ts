@@ -51,7 +51,8 @@ export interface MfaTerminalInput {
 }
 
 export interface CreateStepUpProofInput {
-  tenant_id: string
+  /** Omitted: a platform-scoped proof (platform sessions only; the server refuses tenant sessions). */
+  tenant_id?: string
   audience: string
   action: string
   authentication: { method: MfaAuthenticationMethod; code: string }
@@ -407,9 +408,10 @@ function stepUpText(value: unknown): value is string {
 }
 
 function validStepUpInput(value: unknown): value is CreateStepUpProofInput {
+  const platformScope = record(value) && !Object.hasOwn(value, 'tenant_id')
   if (!record(value) || !exactKeys(value, [
-    'tenant_id', 'audience', 'action', 'authentication', 'ttl_seconds', 'max_uses',
-  ]) || !canonicalUUID(value.tenant_id) || !stepUpText(value.audience) || !stepUpText(value.action) ||
+    ...(platformScope ? [] : ['tenant_id']), 'audience', 'action', 'authentication', 'ttl_seconds', 'max_uses',
+  ]) || (!platformScope && !canonicalUUID(value.tenant_id)) || !stepUpText(value.audience) || !stepUpText(value.action) ||
     !record(value.authentication) || !exactKeys(value.authentication, ['method', 'code']) ||
     (value.authentication.method !== 'totp' && value.authentication.method !== 'recovery_code') ||
     typeof value.authentication.code !== 'string' || value.authentication.code.length < 6 ||

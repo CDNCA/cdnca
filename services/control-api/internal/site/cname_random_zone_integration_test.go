@@ -95,7 +95,7 @@ func TestCNAMERandomZoneAllocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := platformScheduler.SetPlatformDefault(t.Context(), platformActor, group.Group.GroupID, true, "cname-random-default"); err != nil {
+	if _, err := platformScheduler.SetPlatformDefault(t.Context(), platformActor, group.Group.GroupID, true, "cname-random-default", "cname-random-default"); err != nil {
 		t.Fatal(err)
 	}
 

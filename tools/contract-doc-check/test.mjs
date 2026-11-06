@@ -57,6 +57,46 @@ function mutate(root, mutation) {
       writeJSON(root, controlPath, document);
       return;
     }
+    case "empty-permission-anonymous": {
+      const document = readJSON(root, controlPath);
+      document.paths["/v1/widgets"].post["x-required-permissions"] = [];
+      document.paths["/v1/widgets"].post.security = [];
+      writeJSON(root, controlPath, document);
+      return;
+    }
+    case "empty-permission-without-denial": {
+      const document = readJSON(root, controlPath);
+      document.paths["/v1/widgets/{id}"].get["x-required-permissions"] = [];
+      delete document.paths["/v1/widgets/{id}"].get.responses["403"];
+      writeJSON(root, controlPath, document);
+      return;
+    }
+    case "blank-permission": {
+      const document = readJSON(root, controlPath);
+      document.paths["/v1/widgets"].post["x-required-permissions"] = [""];
+      writeJSON(root, controlPath, document);
+      return;
+    }
+    case "auth-request-target": {
+      const document = readJSON(root, controlPath);
+      document.paths["/v1/widgets/{id}"].get["x-auth-request-target"] = true;
+      document.paths["/v1/widgets/{id}"].get.responses["403"] = {description: "Denied; nginx renders the page"};
+      document.paths["/v1/widgets/{id}"].get.responses["503"] = {description: "Store unavailable; nginx fails closed"};
+      writeJSON(root, controlPath, document);
+      return;
+    }
+    case "auth-request-target-with-body": {
+      const document = readJSON(root, controlPath);
+      document.paths["/v1/widgets/{id}"].get["x-auth-request-target"] = true;
+      writeJSON(root, controlPath, document);
+      return;
+    }
+    case "auth-request-target-not-true": {
+      const document = readJSON(root, controlPath);
+      document.paths["/v1/widgets/{id}"].get["x-auth-request-target"] = "yes";
+      writeJSON(root, controlPath, document);
+      return;
+    }
     case "permission-marker-without-403": {
       const document = readJSON(root, controlPath);
       document.paths["/v1/widgets"].post.responses["401"] = document.paths["/v1/widgets"].post.responses["403"];
@@ -260,7 +300,7 @@ withFixture((root) => {
   assert.deepEqual(result.errors, [], `valid fixture failed:\n${result.errors.join("\n")}`);
 });
 
-for (const mutation of ["fail-closed-idempotency", "secured-operation-with-401", "auth-session-denial-exception", "idempotency-pattern-boundaries"]) {
+for (const mutation of ["fail-closed-idempotency", "secured-operation-with-401", "auth-session-denial-exception", "idempotency-pattern-boundaries", "empty-permission", "auth-request-target"]) {
   withFixture((root) => {
     mutate(root, mutation);
     const result = checkRepository(root, {runMarketplace: false});
@@ -298,6 +338,59 @@ for (const testCase of errorMediaCases) {
   });
 }
 
+// Exemptions: a listed violation passes; an entry that no longer matches one, an unknown rule,
+// or an entry without a reason is reported.
+const widgetForbidden = (statuses) => [
+  {rule: "error-body", file: "api/openapi/v1/control.json", method: "post", path: "/v1/widgets", statuses, reason: "test"},
+  {rule: "error-body", file: "api/openapi/v1/control.json", method: "get", path: "/v1/widgets/{id}", statuses, reason: "test"}
+];
+const widgetCreate = (rule, reason = "test") => ({rule, file: "api/openapi/v1/control.json", method: "post", path: "/v1/widgets", reason});
+withFixture((root) => {
+  const document = readJSON(root, "api/openapi/v1/control.json");
+  document.components.responses.Forbidden = {description: "Permission denied"};
+  writeJSON(root, "api/openapi/v1/control.json", document);
+  const result = checkRepository(root, {runMarketplace: false, exemptions: widgetForbidden(["403"])});
+  assert.deepEqual(result.errors, [], `exempted error body failed:\n${result.errors.join("\n")}`);
+});
+withFixture((root) => {
+  const result = checkRepository(root, {runMarketplace: false, exemptions: widgetForbidden(["403", "418"])});
+  assert.deepEqual(result.errors, [
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post/responses/403: error-body exemption no longer matches a documented response; remove it from CONTRACT_EXEMPTIONS",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post/responses/418: error-body exemption no longer matches a documented response; remove it from CONTRACT_EXEMPTIONS",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets~1{id}/get/responses/403: error-body exemption no longer matches a documented response; remove it from CONTRACT_EXEMPTIONS",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets~1{id}/get/responses/418: error-body exemption no longer matches a documented response; remove it from CONTRACT_EXEMPTIONS"
+  ], "stale exemptions must be reported");
+});
+withFixture((root) => {
+  const document = readJSON(root, "api/openapi/v1/control.json");
+  delete document.paths["/v1/widgets"].post.responses["409"];
+  document.components.parameters.IdempotencyKey.required = false;
+  document.components.parameters.IdempotencyKey.schema.minLength = 16;
+  writeJSON(root, "api/openapi/v1/control.json", document);
+  const exemptions = ["idempotency-conflict", "idempotency-required", "idempotency-schema"].map((rule) => widgetCreate(rule));
+  const result = checkRepository(root, {runMarketplace: false, exemptions});
+  assert.deepEqual(result.errors, [], `exempted idempotency violations failed:\n${result.errors.join("\n")}`);
+  // An exemption covers only its own rule.
+  const partial = checkRepository(root, {runMarketplace: false, exemptions: [widgetCreate("idempotency-conflict")]});
+  assert.deepEqual(partial.errors, [
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post/parameters/Idempotency-Key/required: must be true",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post/parameters/Idempotency-Key/schema: expected type string with minLength 1 and maxLength 128"
+  ], "an exemption must not cover other rules");
+});
+withFixture((root) => {
+  const exemptions = [widgetCreate("idempotency-conflict"), widgetCreate("idempotency-required"), widgetCreate("idempotency-schema"),
+    widgetCreate("idempotency-anything"), widgetCreate("idempotency-required", " ")];
+  const result = checkRepository(root, {runMarketplace: false, exemptions});
+  assert.deepEqual(result.errors, [
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post: idempotency-conflict exemption no longer matches a violation; remove it from CONTRACT_EXEMPTIONS",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post: idempotency-required exemption no longer matches a violation; remove it from CONTRACT_EXEMPTIONS",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post: idempotency-schema exemption no longer matches a violation; remove it from CONTRACT_EXEMPTIONS",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post: exemption has unknown rule \"idempotency-anything\"; expected one of error-body, idempotency-conflict, idempotency-required, idempotency-schema",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post: idempotency-required exemption must state a reason",
+    "api/openapi/v1/control.json#/paths/~1v1~1widgets/post: idempotency-required exemption no longer matches a violation; remove it from CONTRACT_EXEMPTIONS"
+  ], "stale, unknown, and unexplained exemptions must be reported");
+});
+
 for (const testCase of cases) {
   withFixture((root) => {
     mutate(root, testCase.mutation);
@@ -321,4 +414,4 @@ for (const testCase of cases) {
   });
 }
 
-console.log(`contract-doc-check tests: 5 valid fixtures, ${cases.length} negative fixtures, and ${errorMediaCases.length} error-media fixtures passed`);
+console.log(`contract-doc-check tests: 7 valid fixtures, 4 exemption fixtures, ${cases.length} negative fixtures, and ${errorMediaCases.length} error-media fixtures passed`);

@@ -1087,7 +1087,7 @@ paths:
       parameters:
         - {name: subscription_id, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: If-Match, in: header, required: true, schema: {type: string}}
-        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
         - {name: X-Request-ID, in: header, required: true, schema: {type: string}}
         - {name: traceparent, in: header, required: true, schema: {type: string}}
       requestBody:
@@ -1097,11 +1097,11 @@ paths:
             schema: {$ref: '#/components/schemas/AdminCancelSubscriptionRequest'}
       responses:
         '201': {$ref: '#/components/responses/AdminCancelCreated'}
-        '400': {description: Invalid request.}
-        '403': {description: Permission denied.}
-        '404': {description: Subscription not found.}
-        '409': {description: Invalid subscription state or idempotency conflict.}
-        '412': {description: Revision conflict.}
+        '400': {description: Invalid request., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '403': {description: Permission denied., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '404': {description: Subscription not found., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '409': {description: Invalid subscription state or idempotency conflict., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '412': {description: Revision conflict., content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
   /v1/admin/package-commerce/subscriptions/{subscription_id}/suspend:
     post:
       operationId: suspendPackageSubscriptionAsPlatform

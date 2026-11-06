@@ -897,9 +897,13 @@ func (m *Manager) SiteDropCounters() (SiteDropCounters, error) {
 		return SiteDropCounters{}, ErrNotRunning
 	}
 	var counters [siteStatCount]Counter
+	stats := m.collection.Maps[mapSiteStats]
 	for index := uint32(0); index < siteStatCount; index++ {
+		if index == siteStatSNIMissed && stats.MaxEntries() <= index {
+			break // an object built before the SNI miss counter: none
+		}
 		var perCPU []rawCounter
-		if err := m.collection.Maps[mapSiteStats].Lookup(index, &perCPU); err != nil {
+		if err := stats.Lookup(index, &perCPU); err != nil {
 			return SiteDropCounters{}, fmt.Errorf("read %s: %w", mapSiteStats, err)
 		}
 		for _, value := range perCPU {
@@ -908,5 +912,6 @@ func (m *Manager) SiteDropCounters() (SiteDropCounters, error) {
 		}
 	}
 	counters[siteStatPort].Kind, counters[siteStatSNI].Kind = "site_port", "site_sni"
-	return SiteDropCounters{Port: counters[siteStatPort], SNI: counters[siteStatSNI]}, nil
+	counters[siteStatSNIMissed].Kind = "site_sni_missed"
+	return SiteDropCounters{Port: counters[siteStatPort], SNI: counters[siteStatSNI], SNIMissed: counters[siteStatSNIMissed]}, nil
 }

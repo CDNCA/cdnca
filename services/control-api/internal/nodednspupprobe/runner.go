@@ -55,12 +55,13 @@ type AlertEnqueuer interface {
 
 // Runner runs dnspup node probe rounds.
 type Runner struct {
-	pool    *pgxpool.Pool
-	sources Sources
-	alerts  AlertEnqueuer
-	auditor *audit.Log
-	now     func() time.Time
-	logger  *slog.Logger
+	pool     *pgxpool.Pool
+	sources  Sources
+	alerts   AlertEnqueuer
+	diagnose Diagnoser
+	auditor  *audit.Log
+	now      func() time.Time
+	logger   *slog.Logger
 
 	mu       sync.Mutex
 	lastRun  time.Time
@@ -71,9 +72,15 @@ type Config struct {
 	Pool    *pgxpool.Pool
 	Sources Sources
 	Alerts  AlertEnqueuer // nil: verdicts and budget are recorded, not notified
-	Now     func() time.Time
-	Logger  *slog.Logger
+	// Diagnose runs one mtr after a line alert (dnspupprobe.Service.Diagnose;
+	// nil: no automatic diagnosis).
+	Diagnose Diagnoser
+	Now      func() time.Time
+	Logger   *slog.Logger
 }
+
+// Diagnoser is dnspupprobe.Service.Diagnose.
+type Diagnoser func(ctx context.Context, origin string, input dnspupprobe.DiagnoseInput) (dnspupprobe.ProbeRequestView, error)
 
 func NewRunner(config Config) (*Runner, error) {
 	if config.Pool == nil || config.Sources == nil {
@@ -85,7 +92,7 @@ func NewRunner(config Config) (*Runner, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
-	return &Runner{pool: config.Pool, sources: config.Sources, alerts: config.Alerts,
+	return &Runner{pool: config.Pool, sources: config.Sources, alerts: config.Alerts, diagnose: config.Diagnose,
 		auditor: audit.NewWithClock(config.Pool, config.Now), now: config.Now, logger: config.Logger}, nil
 }
 
@@ -110,6 +117,14 @@ type Target struct {
 	NodeID, ScopeID uuid.UUID
 	Address         netip.Addr
 	Port            uint16
+	// Groups are the line groups publishing the address (override lookup).
+	Groups []uuid.UUID
+}
+
+// plan is how one target is probed this round.
+type plan struct {
+	settings Settings
+	nodeIDs  []string
 }
 
 func (target Target) key() string {
@@ -142,11 +157,12 @@ func (runner *Runner) round(ctx context.Context) (RoundReport, error) {
 		return report, nil
 	}
 	runtime := runner.sources(ctx)
-	if runtime.Probe == nil || runtime.Account == nil || runtime.Checkpoints == nil {
-		// Not licensed, disabled, no key pair or paused: the local probe decides.
+	if runtime.Probe == nil || runtime.Account == nil || runtime.Checkpoints == nil || runtime.Stopped(dnspupprobe.ConsumerNode) {
+		// Not licensed, disabled, no key pair, paused or over its purpose cap:
+		// the local probe decides.
 		return report, nil
 	}
-	wait := EffectiveInterval(settings, budget)
+	wait := runtime.IntervalFor(dnspupprobe.ConsumerNode, EffectiveInterval(settings, budget))
 	if budget == BudgetExhausted {
 		wait = ExhaustedRecheck
 	}
@@ -174,6 +190,11 @@ func (runner *Runner) round(ctx context.Context) (RoundReport, error) {
 	if interval == 0 {
 		return report, nil
 	}
+	interval = runtime.IntervalFor(dnspupprobe.ConsumerNode, interval)
+	overrides, err := readOverrides(ctx, runner.pool)
+	if err != nil {
+		return report, err
+	}
 	checkpoints, err := runtime.Checkpoints(ctx)
 	if err != nil {
 		return report, err
@@ -190,12 +211,59 @@ func (runner *Runner) round(ctx context.Context) (RoundReport, error) {
 	runner.mu.Unlock()
 	report.Probed, report.Targets = true, len(targets)
 	roundNumber := dnspupprobe.Round(now, interval)
-	nodeIDs := SelectCheckpoints(checkpoints, settings, roundNumber)
-	if len(nodeIDs) == 0 || len(targets) == 0 {
+	plans := map[string]plan{}
+	picked := map[string][]string{}
+	for _, target := range targets {
+		effective, _ := Effective(settings, overrides, target.NodeID, target.Groups)
+		signature, _ := json.Marshal([]any{effective.Selection, effective.Groups, effective.PointsPerGroup})
+		ids, ok := picked[string(signature)]
+		if !ok {
+			ids = pickFor(checkpoints, effective, roundNumber)
+			picked[string(signature)] = ids
+		}
+		if len(ids) > 0 {
+			plans[target.key()] = plan{settings: effective, nodeIDs: ids}
+		}
+	}
+	if len(plans) == 0 {
 		return report, nil
 	}
-	rounds := runner.probe(ctx, runtime, targets, nodeIDs, settings, roundNumber)
-	return report, runner.apply(ctx, targets, rounds, settings, interval*time.Duration(cycles), now)
+	rounds := runner.probe(ctx, runtime, targets, plans, roundNumber)
+	if err := runner.apply(ctx, targets, rounds, settings, interval*time.Duration(cycles), now); err != nil {
+		return report, err
+	}
+	return report, runner.lineAlerts(ctx, targets, rounds, settings, now)
+}
+
+// pickFor selects the checkpoints of effective settings: the Selection when
+// set, otherwise the monitoring groups.
+func pickFor(checkpoints []dnspupprobe.Checkpoint, effective Settings, round int64) []string {
+	if effective.Selection == nil {
+		return SelectCheckpoints(checkpoints, effective, round)
+	}
+	var ids []string
+	for _, item := range dnspupprobe.Select(checkpoints, *effective.Selection, round) {
+		ids = append(ids, item.ID)
+	}
+	return ids
+}
+
+// requestOf is the dnspup body probing target with kind.
+func requestOf(target Target, kind string, nodeIDs []string) dnspupprobe.ProbeRequest {
+	ipVersion := "4"
+	if target.Address.Is6() {
+		ipVersion = "6"
+	}
+	request := dnspupprobe.ProbeRequest{Type: ProbeTCPing, Target: target.Address.String(), Port: int(target.Port),
+		IPVersion: ipVersion, NodeIDs: nodeIDs}
+	switch kind {
+	case ProbePing:
+		request.Type, request.Port, request.Count = ProbePing, 0, 4
+	case ProbeHTTP:
+		request.Type, request.Port, request.Method = ProbeHTTP, 0, "GET"
+		request.Target = "http://" + netip.AddrPortFrom(target.Address, target.Port).String() + "/"
+	}
+	return request
 }
 
 // rotate keeps at most MaxAddressesPerRound targets, starting where the
@@ -214,26 +282,26 @@ func (runner *Runner) rotate(targets []Target) []Target {
 	return out
 }
 
-func (runner *Runner) probe(ctx context.Context, runtime dnspupprobe.Runtime, targets []Target, nodeIDs []string,
-	settings Settings, round int64) map[string]RoundResult {
+func (runner *Runner) probe(ctx context.Context, runtime dnspupprobe.Runtime, targets []Target, plans map[string]plan,
+	round int64) map[string]RoundResult {
 	var mu sync.Mutex
 	out := map[string]RoundResult{}
 	var wait sync.WaitGroup
 	slots := make(chan struct{}, probeConcurrency)
 	for _, target := range targets {
+		plan, ok := plans[target.key()]
+		if !ok {
+			continue
+		}
 		wait.Add(1)
 		slots <- struct{}{}
 		go func(target Target) {
 			defer wait.Done()
 			defer func() { <-slots }()
-			ipVersion := "4"
-			if target.Address.Is6() {
-				ipVersion = "6"
-			}
+			settings := plan.settings
 			results, err := runtime.Probe(ctx, dnspupprobe.ConsumerNode, target.NodeID.String(),
-				netip.AddrPortFrom(target.Address, target.Port).String(), round,
-				dnspupprobe.ProbeRequest{Type: "tcping", Target: target.Address.String(), Port: int(target.Port),
-					IPVersion: ipVersion, NodeIDs: nodeIDs})
+				netip.AddrPortFrom(target.Address, target.Port).String()+"|"+settings.ProbeType, round,
+				requestOf(target, settings.ProbeType, plan.nodeIDs))
 			if err != nil {
 				if !errors.Is(err, dnspupprobe.ErrDelivered) && ctx.Err() == nil {
 					runner.logger.Debug("dnspup node probe skipped", "node", target.NodeID, "error", err)
@@ -258,7 +326,8 @@ func (runner *Runner) targets(ctx context.Context) ([]Target, error) {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	rows, err := tx.Query(ctx, `SELECT DISTINCT published.node_id,node.scope_id,host(published.address),endpoint.port
+	rows, err := tx.Query(ctx, `SELECT published.node_id,node.scope_id,host(published.address),endpoint.port,
+		array_agg(DISTINCT published.line_group_id::text)
 		FROM node_line_endpoint_published published
 		JOIN node_line_groups line_group ON line_group.tenant_scope_id=published.tenant_scope_id
 		 AND line_group.id=published.line_group_id AND line_group.current_revision=published.config_revision
@@ -268,7 +337,7 @@ func (runner *Runner) targets(ctx context.Context) ([]Target, error) {
 		 AND endpoint.id=published.endpoint_id
 		JOIN nodes node ON node.id=published.node_id AND node.admin_state IN ('active','draining')
 		WHERE published.node_id IS NOT NULL AND endpoint.enabled
-		ORDER BY 1,3,4`)
+		GROUP BY 1,2,3,4 ORDER BY 1,3,4`)
 	if err != nil {
 		return nil, err
 	}
@@ -277,9 +346,15 @@ func (runner *Runner) targets(ctx context.Context) ([]Target, error) {
 		var target Target
 		var address string
 		var port int32
-		if err := rows.Scan(&target.NodeID, &target.ScopeID, &address, &port); err != nil {
+		var groups []string
+		if err := rows.Scan(&target.NodeID, &target.ScopeID, &address, &port, &groups); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		for _, raw := range groups {
+			if group, err := uuid.Parse(raw); err == nil {
+				target.Groups = append(target.Groups, group)
+			}
 		}
 		parsed, err := netip.ParseAddr(address)
 		if err != nil || port < 1 || port > 65535 {

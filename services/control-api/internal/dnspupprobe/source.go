@@ -17,6 +17,9 @@ const (
 	ConsumerEdge   = "edge"
 	// ConsumerNode is node availability monitoring (internal/nodednspupprobe).
 	ConsumerNode = "node"
+	// ConsumerPlugin is the plugin probe API; ConsumerDiagnose on-demand mtr.
+	ConsumerPlugin   = "plugin"
+	ConsumerDiagnose = "diagnose"
 )
 
 // Runtime is what a probe round sees: the configured source orders and,
@@ -30,6 +33,10 @@ type Runtime struct {
 	Account func(ctx context.Context) (Account, error)
 	// Checkpoints lists the key's dnspup checkpoints (nil with Probe).
 	Checkpoints func(ctx context.Context) ([]Checkpoint, error)
+	// Gates and Intervals are the purposes' budget gate and minimum interval
+	// (probe_dnspup_purposes); RoundFor / Stopped read them.
+	Gates     map[string]Gate
+	Intervals map[string]time.Duration
 }
 
 // Uses reports whether sources contains source and the dnspup source is
@@ -50,6 +57,7 @@ func (service *Service) Runtime(ctx context.Context) Runtime {
 	now := service.now()
 	var value stored
 	var usable bool
+	var purposes PurposesView
 	err := pgx.BeginTxFunc(ctx, service.config.Pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
 		var err error
 		if value, err = readSettings(ctx, tx, false); err != nil {
@@ -66,7 +74,11 @@ func (service *Service) Runtime(ctx context.Context) Runtime {
 		}
 		usable = licensed && value.Enabled && value.Ciphertext != nil && value.KeyID != nil &&
 			(paused == nil || !paused.After(now))
-		return nil
+		if !usable {
+			return nil
+		}
+		purposes, err = readPurposes(ctx, tx, now)
+		return err
 	})
 	if err != nil {
 		if ctx.Err() == nil {
@@ -82,7 +94,17 @@ func (service *Service) Runtime(ctx context.Context) Runtime {
 		service.config.Logger.Warn("dnspup probe client unavailable", "error", err)
 		return runtime
 	}
-	runtime.Probe = prober.Run
+	runtime.Gates, runtime.Intervals = gates(purposes)
+	runtime.Probe = func(ctx context.Context, consumer, site, target string, round int64, request ProbeRequest) ([]Result, error) {
+		if runtime.Stopped(consumer) {
+			return nil, ErrBudgetStopped
+		}
+		results, err := prober.Run(ctx, consumer, site, target, round, request)
+		if err == nil && consumer == ConsumerEdge {
+			service.observe(ctx, consumer, request, results)
+		}
+		return results, err
+	}
 	runtime.Checkpoints = prober.client.Nodes
 	runtime.Account = func(ctx context.Context) (Account, error) {
 		account, err := prober.client.Account(ctx)
@@ -118,6 +140,7 @@ func (service *Service) proberFor(value stored) (*Prober, error) {
 		service.Degrade(context.Background(), revision, reason, code, until)
 	})
 	service.prober.now = service.config.Now
+	service.prober.onCreated = service.meter
 	service.loaded = revision
 	return service.prober, nil
 }

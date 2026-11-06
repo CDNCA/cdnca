@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, List, Result, Row, Select, Space, Spin, Tabs, Tag, Typography } from 'antd'
 import { ShieldOff } from 'lucide-react'
@@ -16,7 +16,7 @@ import { LicensesTab } from '../plugin-market/PluginStorePage'
 import { activePlans, highRiskPermission } from '../plugin-market/pluginStoreModel'
 import { useAdvisories } from '../plugin-market/useAdvisories'
 import { pluginDescription, pluginSummary, pluginTitle } from '../plugin-market/usePluginCatalog'
-import { enablePath, planPrice, publisherOf, storeState, type StoreState } from './marketModel'
+import { acquiredPendingInstall, enablePath, needsInstallConfirm, planPrice, publisherOf, storeState, type StoreState } from './marketModel'
 import { PriceTag, PublisherBadge } from './PriceTag'
 import { PurchaseModal } from './PurchaseModal'
 import { MarketNotJoined } from './MarketNotJoined'
@@ -47,8 +47,8 @@ function StateHint({ plugin, state }: { plugin: MarketPlugin; state: StoreState 
   if (state === 'revoked') return <Alert type="error" showIcon message={t('state.revoked')} description={t('state.revokedHint')} />
   if (state === 'activating') return <Alert type="info" showIcon message={t('state.activatingHint')} />
   if (state === 'distributing') {
-    // Themes and rule packs are instance-wide: the controller administrator confirms them under 我的插件.
-    if (plugin.kind === 'theme' || plugin.kind === 'rule_pack') {
+    // Installable plugins wait for the controller administrator under 我的插件 (tenant plugins with chosen tenants).
+    if (needsInstallConfirm(plugin)) {
       return <Alert type="info" showIcon message={t('state.platformConfirm')}
         description={<>{t('state.platformConfirmHint')} <Link to="/sys/plugin-store?tab=mine">{t('state.goMine')}</Link></>} />
     }
@@ -71,8 +71,8 @@ function StoreAction({ plugin, state, canBuy, onBuy, onDownload, downloading }: 
       return free ? <Button type="primary" disabled={!canBuy} loading={downloading} onClick={onDownload}>{t('state.get')}</Button>
         : <Button type="primary" disabled={!canBuy || !activePlans(plugin.price_plans ?? []).length} onClick={onBuy}>{t('state.purchase')}</Button>
     case 'distributing':
-      // Themes and rule packs wait for a person (the controller administrator), not for a sync.
-      return plugin.kind === 'theme' || plugin.kind === 'rule_pack'
+      // Installable plugins wait for a person (the controller administrator), not for a sync.
+      return needsInstallConfirm(plugin)
         ? <Link to="/sys/plugin-store?tab=mine"><Button size="small">{t('state.goMine')}</Button></Link>
         : <Tag color="processing">{t('state.distributing')}</Tag>
     case 'enable': {
@@ -91,7 +91,13 @@ function StoreAction({ plugin, state, canBuy, onBuy, onDownload, downloading }: 
   }
 }
 
-function useHoldings(token: string): Holdings & { refresh: () => void } {
+// After an acquisition the licence is there at once, but the lease (feature codes) and the local installation follow
+// a few seconds later; the module list itself only polls every 5 minutes (useGrantedModules). So for a while after
+// buying or claiming, licences, library and modules are re-read every few seconds.
+const followMs = 3_000
+const followForMs = 120_000
+
+function useHoldings(token: string): Holdings & { refresh: () => void; follow: (pluginID: string) => void; following: string | null } {
   const client = useQueryClient()
   const licenses = useQuery({ queryKey: ['pluginStore', 'licenses'], queryFn: () => marketApi.licenses(token), enabled: !!token, retry: false })
   const library = useQuery({ queryKey: ['marketStore', 'library'], queryFn: () => marketApi.library(token), enabled: !!token, retry: false })
@@ -101,7 +107,22 @@ function useHoldings(token: string): Holdings & { refresh: () => void } {
     void client.invalidateQueries({ queryKey: ['marketStore', 'library'] })
     void client.invalidateQueries({ queryKey: ['entitlement', 'modules'] })
   }, [client])
-  return { licenses: licenses.data?.items ?? [], library: library.data ?? [], modules, loading: licenses.isLoading || library.isLoading, refresh }
+  const [following, setFollowing] = useState<string | null>(null)
+  useEffect(() => {
+    if (!following) return
+    const timer = setInterval(refresh, followMs)
+    const stop = setTimeout(() => setFollowing(null), followForMs)
+    return () => { clearInterval(timer); clearTimeout(stop) }
+  }, [following, refresh])
+  const follow = useCallback((pluginID: string) => { setFollowing(pluginID); refresh() }, [refresh])
+  return { licenses: licenses.data?.items ?? [], library: library.data ?? [], modules, loading: licenses.isLoading || library.isLoading,
+    refresh, follow, following }
+}
+
+// What an acquisition gives right away: an official feature plugin is active once the lease follows; an installable
+// plugin waits for the controller administrator's installation (tenants never confirm).
+function acquiredMessage(plugin: MarketPlugin, how: 'claimed' | 'paid'): string {
+  return `acquired.${how}${acquiredPendingInstall(plugin) ? 'Pending' : 'Active'}`
 }
 
 function PluginDetail({ plugin, state, actions }: {
@@ -186,11 +207,15 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
   const query = useQuery({ queryKey: ['marketStore', 'plugins', filters, kind, appliesTo, pages.cursor], enabled: !!token,
     queryFn: () => marketApi.plugins(token, { q: filters.q, price: filters.price, kind, appliesTo, cursor: pages.cursor }) })
   const download = useMutation({
-    mutationFn: (plugin: MarketPlugin) => marketApi.download(token, plugin.plugin_id),
-    // The market only grants (or replays) the licence; whether it reached this controller is the library's answer.
-    onSuccess: () => { holdings.refresh(); void message.success(t('download.done')) },
+    mutationFn: ({ plugin }: { plugin: MarketPlugin; how: 'claimed' | 'paid' | 'shown' }) => marketApi.download(token, plugin.plugin_id),
+    // The market only grants (or replays) the licence; whether it reached this controller is the library's answer,
+    // followed for a while so the card changes without a reload.
+    onSuccess: (_, { plugin, how }) => {
+      holdings.follow(plugin.plugin_id)
+      if (how !== 'shown') void message.success(t(acquiredMessage(plugin, how)))
+    },
     // 402 purchase_required: no live licence of this controller yet, go straight to paying for it.
-    onError: (error, plugin) => {
+    onError: (error, { plugin }) => {
       if (!(error instanceof ApiError && error.status === 402)) return void feedback.error(t('errors.failed', { code: codeOf(error) }))
       if (canBuy && activePlans(plugin.price_plans ?? []).length) setBuying(plugin)
       else void feedback.warning(t('download.required'))
@@ -199,13 +224,14 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
   const items = (query.data?.items ?? []).filter((plugin) => !feature || plugin.feature_code === feature)
   const stateOf = (plugin: MarketPlugin) => storeState(plugin, holdings.licenses, holdings.library, [...holdings.modules])
   const action = (plugin: MarketPlugin) => <StoreAction plugin={plugin} state={stateOf(plugin)} canBuy={canBuy} onBuy={() => setBuying(plugin)}
-    onDownload={() => download.mutate(plugin)} downloading={download.isPending && download.variables?.id === plugin.id} />
-  const bought = useCallback(() => {
+    onDownload={() => download.mutate({ plugin, how: 'claimed' })} downloading={download.isPending && download.variables?.plugin.id === plugin.id} />
+  // A paid order closes the dialog and says it here; a 0-yuan order (free plan, trial) shows its result in the dialog.
+  const bought = useCallback((how: 'claimed' | 'paid') => {
     const plugin = buying
-    setBuying(null)
+    if (how === 'paid') setBuying(null)
     holdings.refresh()
-    // Paid: take the licence for this controller right away; the card then shows 正在同步 until it is installed here.
-    if (plugin) download.mutate(plugin)
+    // Take the licence for this controller right away; the card then follows the lease or the installation.
+    if (plugin) download.mutate({ plugin, how: how === 'paid' ? 'paid' : 'shown' })
   }, [buying, holdings, download])
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
@@ -249,7 +275,8 @@ function BrowseTab({ pendingAdvisories }: { pendingAdvisories: Set<string> }) {
         title={selected ? `${pluginTitle(selected, i18n.resolvedLanguage)} · ${selected.plugin_id}` : ''} destroyOnHidden>
         {selected ? <PluginDetail plugin={selected} state={stateOf(selected)} actions={action(selected)} /> : null}
       </Drawer>
-      {buying ? <PurchaseModal plugin={buying} plans={buying.price_plans ?? []} token={token} onClose={() => setBuying(null)} onDone={bought} /> : null}
+      {buying ? <PurchaseModal plugin={buying} plans={buying.price_plans ?? []} token={token} onClose={() => setBuying(null)} onDone={bought}
+        acquired={(how) => t(acquiredMessage(buying, how))} pending={acquiredPendingInstall(buying)} /> : null}
     </Space>
   )
 }

@@ -104,6 +104,33 @@ describe('第三方支付插件二次确认 (PA-23)', () => {
     expect(await within(row).findByText('可用')).toBeInTheDocument()
   })
 
+  // 主控管理员替租户装的支付插件由平台作用域持有，没有所属租户：二次验证用平台作用域证明（不带 tenant_id）。
+  it('asks a platform-scoped step-up for a payment plugin the platform installed', async () => {
+    authenticate()
+    const platformHeld = { ...payPlugin, tenant_id: undefined }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/admin/plugin-providers') return json({ items: [platformHeld] })
+      if (url.pathname === '/v1/account/mfa/step-up-proofs') return json({ proof_id: '44444444-4444-4444-8444-444444444444',
+        token: stepUpToken, method: 'totp', issued_at: at, expires_at: at, max_uses: 1, replayed: false }, 201)
+      if (url.pathname.endsWith('/enable') && init?.method === 'POST') return json({ ...platformHeld, enabled: true, usable: true })
+      return json({ error: { code: 'not_found' } }, 404)
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<PluginProvidersPage />, ['/sys/plugin-providers'])
+    const row = (await screen.findByText('com.example.payplus')).closest('tr')!
+    await user.click(within(row).getByRole('button', { name: /启用/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('checkbox'))
+    await user.type(within(dialog).getByLabelText('验证码'), '123456')
+    await user.click(within(dialog).getByRole('button', { name: '验证并启用' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/enable'))).toBe(true))
+    const proof = fetchMock.mock.calls.find(([input]) => String(input).includes('step-up-proofs'))!
+    const body = JSON.parse(String(proof[1]!.body))
+    expect(body).not.toHaveProperty('tenant_id')
+    expect(body).toMatchObject({ audience: 'plugin.provider.enable_payment', action: 'plugin.provider.enable_payment' })
+  })
+
   it('shows a refused step-up in the dialog', async () => {
     authenticate()
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {

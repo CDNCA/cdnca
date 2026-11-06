@@ -30,6 +30,9 @@ const (
 	operationGroupRollback        = "node_scheduling.group.rollback"
 	operationGroupDelete          = "node_scheduling.group.delete"
 	operationTargetSnapshotCreate = "node_scheduling.target_snapshot.create"
+	// Write request operations added by migration 639; also the audit actions.
+	operationGroupPlatformDefault = "node_scheduling.group.platform_default"
+	operationGroupSmartSchedule   = "node_scheduling.group.smart_schedule"
 )
 
 type auditAppender interface {

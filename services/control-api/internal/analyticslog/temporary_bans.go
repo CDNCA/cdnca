@@ -19,6 +19,7 @@ type TemporaryBanEvent struct {
 	ClientIP   string
 	RuleID     string
 	PolicyID   string
+	Detector   string // "count_key": a CC ban of a rule's counted key, not of the client
 	OccurredAt time.Time
 	IngestedAt time.Time
 }
@@ -34,6 +35,7 @@ const temporaryBanSQL = `SELECT
 	toString(client_ip) AS client_ip,
 	rule_id,
 	policy_id,
+	toString(detector) AS detector,
 	toInt64(toUnixTimestamp64Milli(occurred_at)) AS occurred_ms,
 	toInt64(toUnixTimestamp64Milli(ingested_at)) AS ingested_ms
 FROM security_events FINAL
@@ -53,6 +55,7 @@ type temporaryBanRow struct {
 	ClientIP   string `json:"client_ip"`
 	RuleID     string `json:"rule_id"`
 	PolicyID   string `json:"policy_id"`
+	Detector   string `json:"detector"`
 	OccurredMS int64  `json:"occurred_ms"`
 	IngestedMS int64  `json:"ingested_ms"`
 }
@@ -82,12 +85,13 @@ func (client *Client) ListTemporaryBans(ctx context.Context, after, through time
 		ingested := time.UnixMilli(row.IngestedMS).UTC()
 		if !validOutputText(row.EventID, 128, true) || !validCanonicalUUID(row.TenantID) || !validCanonicalUUID(row.SiteID) ||
 			(row.EventType != "waf" && row.EventType != "cc") || !validOutputText(row.RuleID, 128, false) ||
-			!validOutputText(row.PolicyID, 64, false) || !ingested.After(after) || ingested.After(through) {
+			!validOutputText(row.PolicyID, 64, false) || !validOutputText(row.Detector, 16, false) ||
+			!ingested.After(after) || ingested.After(through) {
 			return nil, ErrInvalidResponse
 		}
 		result = append(result, TemporaryBanEvent{
 			EventID: row.EventID, TenantID: row.TenantID, SiteID: row.SiteID, EventType: row.EventType,
-			ClientIP: unmappedIP(row.ClientIP), RuleID: row.RuleID, PolicyID: row.PolicyID,
+			ClientIP: unmappedIP(row.ClientIP), RuleID: row.RuleID, PolicyID: row.PolicyID, Detector: row.Detector,
 			OccurredAt: time.UnixMilli(row.OccurredMS).UTC(), IngestedAt: ingested,
 		})
 	}

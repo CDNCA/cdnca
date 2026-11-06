@@ -194,7 +194,7 @@ func TestSessionLogQueryScopesFiltersAndPages(t *testing.T) {
 	if _, err := service.ReadSessionLogs(t.Context(), tenant, query); err != nil {
 		t.Fatal(err)
 	}
-	if sql, params := fake.queries[len(fake.queries)-1], fake.params[len(fake.params)-1]; !strings.Contains(sql, "(finalized_at, event_id) < ({after_finalized:DateTime64(3)}, {after_event:String})") ||
+	if sql, params := fake.queries[len(fake.queries)-1], fake.params[len(fake.params)-1]; !strings.Contains(sql, "(finalized_at, event_id) < ({after_finalized:DateTime64(3, 'UTC')}, {after_event:String})") ||
 		params["after_event"] != "a" {
 		t.Fatalf("second page query %s %v", sql, params)
 	}

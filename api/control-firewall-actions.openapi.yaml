@@ -169,7 +169,7 @@ components:
     SiteID: {name: site_id, in: query, required: true, schema: {$ref: '#/components/schemas/UUID'}}
     IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
     IfMatchExisting: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
-    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$', minLength: 1, maxLength: 128}}
     RequestID: {name: X-Request-ID, in: header, required: true, schema: {$ref: '#/components/schemas/UUID'}}
   headers:
     ETag: {description: Quoted desired revision, schema: {type: string, pattern: '^"[0-9]+"$'}}
@@ -185,8 +185,8 @@ components:
     Error:
       type: object
       additionalProperties: false
-      required: [code]
-      properties: {code: {type: string}}
+      required: [code, request_id]
+      properties: {code: {type: string}, request_id: {type: string, description: 'Same value as the X-Request-ID response header.'}}
     ReturnPage:
       type: object
       additionalProperties: false

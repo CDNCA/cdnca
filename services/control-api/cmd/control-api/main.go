@@ -1803,7 +1803,8 @@ func runServer() error {
 	}
 	go ticketService.RunCleanup(ctx, ticketAttachmentCleanupInterval)
 	go ticketService.RunOverdueReminders(ctx, ticketOverdueReminderInterval)
-	probeSources, probeDNSPupHandlerFactory, err := buildProbeDNSPupRuntime(pool, identityService, credentialCipher, trust)
+	probeSources, probeDNSPupHandlerFactory, probeDiagnose, err := buildProbeDNSPupRuntime(pool, identityService,
+		credentialCipher, trust, apikey.NewServiceWithPepperKeyring(pool, cfg.APIKeyPepperKeyring, time.Now))
 	if err != nil {
 		return runtimeStageError{stage: "initialize dnspup probing", err: err}
 	}
@@ -1825,7 +1826,7 @@ func runServer() error {
 	}
 	go nodeExternalProbe.Run(ctx, nodeExternalProbeInterval)
 	if probeSources != nil {
-		nodeDNSPupProbe, err := openNodeDNSPupProbe(pool, probeSources)
+		nodeDNSPupProbe, err := openNodeDNSPupProbe(pool, probeSources, probeDiagnose)
 		if err != nil {
 			return runtimeStageError{stage: "initialize dnspup node probe", err: err}
 		}
@@ -2642,6 +2643,8 @@ func runServer() error {
 	if communityReports != nil {
 		go func() { _ = communityReports.Run(ctx) }()
 	}
+	// Market sites' ban lists go to the leaves; this leaf takes them.
+	wireMarketBans(marketRuntime, marketSubscribe, securityBans)
 	nodeArtifactSets, err := buildNodeArtifactSetDistributor(pool, edgePublishSigner, trust)
 	if err != nil {
 		return runtimeStageError{stage: "initialize node artifact set distribution", err: err}

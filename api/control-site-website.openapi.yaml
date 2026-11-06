@@ -22,7 +22,7 @@ paths:
       responses:
         '200': {description: Published view, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/View'}}}}
         '304': {description: Not modified}
-        '503': {description: Unavailable}
+        '503': {description: Unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/control-site/assets/{sha256}:
     parameters: [{name: sha256, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
@@ -33,7 +33,7 @@ paths:
       responses:
         '200': {description: Image bytes}
         '304': {description: Not modified}
-        '404': {description: Not found}
+        '404': {description: Not found, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/control-site/packages:
     get:
       operationId: listControlSitePackages
@@ -46,7 +46,7 @@ paths:
         unlimited, prices are minor units of prices.currency. Empty when none are on sale.
       responses:
         '200': {description: Package list, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPackageList'}}}}
-        '503': {description: Unavailable}
+        '503': {description: Unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site:
     get:
       operationId: getControlSite
@@ -54,8 +54,8 @@ paths:
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Draft, published copy and assets, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
     put:
       operationId: saveControlSiteDraft
       x-summary-zh: "保存主控官网草稿"
@@ -66,9 +66,9 @@ paths:
         content: {application/json: {schema: {type: object, additionalProperties: false, required: [draft], properties: {draft: {$ref: '#/components/schemas/Document'}}}}}
       responses:
         '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}}
-        '400': {description: Invalid content or unknown image}
-        '403': {description: Permission denied}
-        '409': {description: Revision or idempotency conflict}
+        '400': {description: Invalid content or unknown image, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: Revision or idempotency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/publish:
     post:
       operationId: publishControlSite
@@ -77,8 +77,8 @@ paths:
       parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/RequestID'}]
       responses:
         '200': {description: Published, content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}}
-        '403': {description: Permission denied}
-        '409': {description: Revision conflict or nothing to publish}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: Revision conflict or nothing to publish, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/assets:
     post:
       operationId: uploadControlSiteAsset
@@ -95,8 +95,11 @@ paths:
           image/x-icon: {schema: {type: string, format: binary}}
       responses:
         '200': {description: Stored image, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
-        '400': {description: Not an accepted image or an unsafe SVG}
-        '413': {description: Larger than 2 MiB}
+        '400': {description: Not an accepted image or an unsafe SVG, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '413': {description: Larger than 2 MiB, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: 'control_site_idempotency_conflict: the Idempotency-Key was used for a different upload', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/themes:
     get:
       operationId: listWebsiteThemes
@@ -105,7 +108,7 @@ paths:
       description: Built-in, uploaded and market website theme plugins (installed or available) and the active one.
       responses:
         '200': {description: Catalog, headers: {ETag: {description: Activation revision, schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
-        '403': {description: Permission denied}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
     post:
       operationId: uploadWebsiteTheme
       x-summary-zh: "上传官网主题"
@@ -118,8 +121,8 @@ paths:
       responses:
         '200': {description: Installed, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
         '400': {description: 'control_site_theme_invalid with reason and field', content: {application/json: {schema: {$ref: '#/components/schemas/ThemeInvalid'}}}}
-        '403': {description: Permission denied}
-        '413': {description: Larger than 8 MiB}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '413': {description: Larger than 8 MiB, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/themes/{theme_id}:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     delete:
@@ -130,8 +133,10 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}]
       responses:
         '200': {description: Uninstalled, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
-        '404': {description: Unknown theme}
-        '409': {description: 'control_site_theme_active or control_site_theme_not_installed'}
+        '404': {description: Unknown theme, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: 'control_site_theme_active or control_site_theme_not_installed', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/themes/{theme_id}/install:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     post:
@@ -142,9 +147,9 @@ paths:
       parameters: [{$ref: '#/components/parameters/RequestID'}]
       responses:
         '200': {description: Installed, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
-        '403': {description: 'Permission denied, or control_site_theme_withdrawn'}
-        '404': {description: Unknown theme}
-        '409': {description: control_site_theme_unchanged (already installed)}
+        '403': {description: 'Permission denied, or control_site_theme_withdrawn', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '404': {description: Unknown theme, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: control_site_theme_unchanged (already installed), content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/themes/{theme_id}/activate:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     post:
@@ -157,8 +162,8 @@ paths:
         - {$ref: '#/components/parameters/RequestID'}
       responses:
         '200': {description: Activated, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
-        '403': {description: 'Permission denied, or control_site_theme_withdrawn'}
-        '409': {description: 'Revision conflict, control_site_theme_not_installed or control_site_theme_unchanged'}
+        '403': {description: 'Permission denied, or control_site_theme_withdrawn', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: 'Revision conflict, control_site_theme_not_installed or control_site_theme_unchanged', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/themes/{theme_id}/customization:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     put:
@@ -181,8 +186,10 @@ paths:
                 images: {type: object, maxProperties: 64, additionalProperties: {$ref: '#/components/schemas/AssetRef'}}
       responses:
         '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
-        '400': {description: Unknown token, invalid value, unknown slot or missing image}
-        '409': {description: Revision conflict or not installed}
+        '400': {description: Unknown token, invalid value, unknown slot or missing image, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '409': {description: Revision conflict or not installed, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/control-site/themes/{theme_id}/seed:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     get:
@@ -191,7 +198,9 @@ paths:
       security: [{bearerAuth: []}]
       responses:
         '200': {description: The plugin's default content, content: {application/json: {schema: {$ref: '#/components/schemas/SeedContent'}}}}
-        '404': {description: Unknown theme}
+        '404': {description: Unknown theme, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -201,6 +210,7 @@ components:
     RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
     ThemeID: {name: theme_id, in: path, required: true, schema: {$ref: '#/components/schemas/ThemeID'}}
   schemas:
+    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}
     SHA256: {type: string, pattern: '^[0-9a-f]{64}$'}
     AssetRef: {type: string, pattern: '^asset:[0-9a-f]{64}$'}
     ImageRef:

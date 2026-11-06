@@ -68,13 +68,22 @@ func TestProductionPluginInstallationDomainDiscoversInitialCandidatesWhenLocalSt
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, RequestID: "discover-1"}
+	// the platform administrator discovers tenant plugin candidates (tenantID is the platform scope here).
+	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopePlatform,
+		RequestID: "discover-1"}
 	page, err := domain.List(context.Background(), actor, ListRequest{TenantID: tenantID, Limit: 50})
 	if err != nil || provider.discoverCalls != 1 || len(page.Items) != 1 ||
 		provider.discoveryRequest.TenantID != tenantID ||
 		page.Items[0].Installation.AuthorizationID != authorizationID ||
 		page.Items[0].Installation.VerificationID != verificationID {
 		t.Fatalf("discovery page=%+v calls=%d err=%v", page, provider.discoverCalls, err)
+	}
+	// A tenant console reads installed plugins only: no candidate discovery, nothing to confirm.
+	tenant := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopeTenant,
+		RequestID: "discover-2"}
+	page, err = domain.List(context.Background(), tenant, ListRequest{TenantID: tenantID, Limit: 50})
+	if err != nil || provider.discoverCalls != 1 || len(page.Items) != 0 {
+		t.Fatalf("tenant page=%+v calls=%d err=%v", page, provider.discoverCalls, err)
 	}
 }
 
@@ -86,7 +95,8 @@ func TestProductionPluginInstallationDomainPreflightsRemoteCursorAndMapsLifecycl
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, RequestID: "discover-next-1"}
+	actor := Actor{UserID: uuid.New(), SessionID: uuid.New(), TenantID: tenantID, ScopeKind: ScopePlatform,
+		RequestID: "discover-next-1"}
 	cursor := "license:" + uuid.NewString()
 	if _, err := domain.List(context.Background(), actor, ListRequest{TenantID: tenantID, Limit: 50, Cursor: cursor}); err != nil || repository.listCalls != 1 || provider.discoverCalls != 1 ||
 		provider.discoveryRequest.Cursor != cursor {

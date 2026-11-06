@@ -1,11 +1,12 @@
 import i18n from './index'
 
 // Plugin store for platform administrators (/sys/plugin-store): browse, buy,
-// licences and security advisories. Installing stays in each tenant's
-// /sys/plugin-market (pluginInstallations namespace).
+// licences and security advisories. Plugins are installed by the platform
+// administrator (tenant plugins for the tenants they choose); tenants do
+// nothing.
 const zhCN = {
   title: '插件商店',
-  subtitle: '为本主控购买或试用插件。付款完成后插件会出现在租户的“插件市场”里，由租户管理员确认权限后安装。',
+  subtitle: '为本主控购买或试用插件。功能类插件付款或领取后自动生效；主题、规则包、页面插件和外部服务由主控管理员在“我的插件”核对权限并确认安装（页面插件和外部服务同时选择装给哪些租户），租户无需操作。',
   tabs: { browse: '浏览', licenses: '许可证', advisories: '安全公告' },
   filters: {
     search: '搜索插件名称、ID 或简介', kind: '类型', anyKind: '全部类型', price: '价格', anyPrice: '全部价格', free: '免费', paid: '付费',
@@ -28,12 +29,12 @@ const zhCN = {
     install: '安装', trial: '试用', buy: '购买', prepaid: '用市场余额支付',
   },
   order: {
-    opened: '已在新窗口打开付款页面。付款完成后，租户管理员到“插件市场”确认安装。',
-    free: '已领取。安装候选生成后，租户管理员到“插件市场”确认安装。',
+    opened: '已在新窗口打开付款页面。付款完成后，功能类插件自动生效；其他插件由主控管理员在“我的插件”确认安装，租户无需操作。',
+    free: '已领取。功能类插件已生效；其他插件由主控管理员在“我的插件”确认安装，租户无需操作。',
     blocked: '收银台地址不安全，已拒绝打开', priceChanged: '价格刚刚改过，已刷新，请重新确认',
-    waiting: '订单 {{no}}：等待付款', paid: '订单 {{no}} 已付款，正在生成安装候选', fulfilled: '订单 {{no}} 已完成，许可证已生效；安装候选生成后，租户管理员到“插件市场”确认安装',
-    expired: '订单 {{no}} 已过期或取消', reopen: '重新打开付款页面',
-    prepaidDone: '已用市场余额付款，许可证已生效。安装候选需平台确认后出现在租户“插件市场”。', insufficientBalance: '市场预付余额不足：可在“节点市场 → 收款与余额”充值，或改用“购买”在门户付款', alreadyLicensed: '本主控已有这个插件的有效许可证',
+    waiting: '订单 {{no}}：等待付款', paid: '订单 {{no}} 已付款，正在生成安装候选', fulfilled: '订单 {{no}} 已完成，许可证已生效；功能类插件已开通，其他插件由主控管理员在“我的插件”确认安装',
+    expired: '订单 {{no}} 已过期或取消', refunded: '订单 {{no}} 已退款', reopen: '重新打开付款页面',
+    prepaidDone: '已用市场余额付款，许可证已生效。功能类插件已开通，其他插件由主控管理员在“我的插件”确认安装。', insufficientBalance: '市场预付余额不足：可在“节点市场 → 收款与余额”充值，或改用“购买”在门户付款', alreadyLicensed: '本主控已有这个插件的有效许可证',
   },
   licenses: {
     plugin: '插件', kind: '类型', status: '状态', periodEnd: '到期时间', autoRenew: '自动续费', on: '开启', off: '到期后停止',
@@ -73,7 +74,7 @@ type Messages = MessageShape<typeof zhCN>
 
 const enUS: Messages = {
   title: 'Plugin store',
-  subtitle: 'Buy or try plugins for this controller. Once paid, the plugin appears in each tenant\'s Plugin marketplace, where a tenant administrator approves its permissions and installs it.',
+  subtitle: 'Buy or try plugins for this controller. Feature plugins take effect once paid or claimed; themes, rule packs, UI page plugins and external services are confirmed by the controller administrator in My plugins (choosing the tenants for UI page plugins and external services); tenants do nothing.',
   tabs: { browse: 'Browse', licenses: 'Licenses', advisories: 'Security advisories' },
   filters: {
     search: 'Search by name, ID or summary', kind: 'Type', anyKind: 'Any type', price: 'Price', anyPrice: 'Any price', free: 'Free', paid: 'Paid',
@@ -96,12 +97,12 @@ const enUS: Messages = {
     install: 'Install', trial: 'Try', buy: 'Buy', prepaid: 'Pay from market balance',
   },
   order: {
-    opened: 'The payment page opened in a new window. Once paid, a tenant administrator installs it from Plugin marketplace.',
-    free: 'Claimed. Once the install candidate exists, a tenant administrator installs it from Plugin marketplace.',
+    opened: 'The payment page opened in a new window. Once paid, feature plugins take effect; other plugins are installed by the controller administrator in My plugins; tenants do nothing.',
+    free: 'Claimed. Feature plugins are active; other plugins are installed by the controller administrator in My plugins; tenants do nothing.',
     blocked: 'The checkout address is not safe and was not opened', priceChanged: 'The price just changed and was reloaded; please confirm again',
-    waiting: 'Order {{no}}: waiting for payment', paid: 'Order {{no}} paid; preparing the install candidate', fulfilled: 'Order {{no}} completed and the licence is active; once the install candidate exists, a tenant administrator installs it from Plugin marketplace',
-    expired: 'Order {{no}} expired or was cancelled', reopen: 'Open the payment page again',
-    prepaidDone: 'Paid from the market balance; the licence is active. The install candidate appears in tenants\' Plugin marketplace once the platform confirms it.', insufficientBalance: 'Not enough market prepaid balance: top up in Node market → Payments & balance, or use Buy to pay in the portal', alreadyLicensed: 'This controller already holds an active licence for this plugin',
+    waiting: 'Order {{no}}: waiting for payment', paid: 'Order {{no}} paid; preparing the install candidate', fulfilled: 'Order {{no}} completed and the licence is active; feature plugins are on, other plugins are installed by the controller administrator in My plugins',
+    expired: 'Order {{no}} expired or was cancelled', refunded: 'Order {{no}} refunded', reopen: 'Open the payment page again',
+    prepaidDone: 'Paid from the market balance; the licence is active. Feature plugins are on; other plugins are installed by the controller administrator in My plugins.', insufficientBalance: 'Not enough market prepaid balance: top up in Node market → Payments & balance, or use Buy to pay in the portal', alreadyLicensed: 'This controller already holds an active licence for this plugin',
   },
   licenses: {
     plugin: 'Plugin', kind: 'Type', status: 'Status', periodEnd: 'Ends', autoRenew: 'Auto-renew', on: 'On', off: 'Stops at period end',

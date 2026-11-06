@@ -437,6 +437,10 @@
      "description": "The site is absent, deleted, or outside the tenant scope."
     },
     {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
      "status": "500",
      "description": "The operation failed without exposing internal details."
     }

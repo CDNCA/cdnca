@@ -216,6 +216,8 @@ func (bridge *NodeMonitoringBridge) ReportNodeMonitoring(_ context.Context, repo
 					Kind: drop.Kind, Packets: drop.Packets, Bytes: drop.Bytes})
 			}
 			if drop := telemetry.SiteDrop; drop != nil {
+				// SNIMissedPackets / SNIMissedBytes wait for their
+				// NodeSiteDropV1 field numbers (not sent).
 				load.Telemetry.SiteDrop = &agentv1.NodeSiteDropV1{SiteIds: append([]string(nil), drop.SiteIDs...),
 					Packets: drop.Packets, Bytes: drop.Bytes}
 			}

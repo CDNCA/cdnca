@@ -61,8 +61,9 @@ type responseData struct {
 
 type errorEnvelope struct {
 	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
 	} `json:"error"`
 }
 
@@ -192,6 +193,7 @@ func writeServiceError(writer http.ResponseWriter, err error) {
 func writeError(writer http.ResponseWriter, status int, code, message string) {
 	response := errorEnvelope{}
 	response.Error.Code, response.Error.Message = code, message
+	response.Error.RequestID = writer.Header().Get("X-Request-ID")
 	writeJSON(writer, status, response)
 }
 

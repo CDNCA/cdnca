@@ -195,6 +195,11 @@ paths:
       operationId: batchTenantDNSHubRecords
       x-summary-zh: "最多 50 条记录变更逐条执行（第 i 条用键 <Idempotency-Key>.<i>）"
       summary: Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)
+      description: >-
+        The Idempotency-Key is bound to the whole items list (compared after re-encoding each item, so formatting
+        does not matter): another list under the same key is 409 idempotency_conflict before any item runs. The same
+        list runs again item by item and items already done replay their stored result. The caller must hold
+        dns.manage or dns.records.manage (403 otherwise); each item is then authorized on its own account.
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-any-permission: [dns.manage, dns.records.manage]
       parameters:
@@ -250,6 +255,7 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -260,7 +266,7 @@ components:
       description: Send `CdncaKey <key_id>.<secret>` (tenant API key).
   parameters:
     RequestID: {name: X-Request-ID, in: header, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
-    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', minLength: 1, maxLength: 128}}
     ProviderID: {name: provider_id, in: path, required: true, schema: {type: string, format: uuid}}
     Apex: {name: apex, in: path, required: true, schema: {type: string, maxLength: 253}}
     RecordRef: {name: record_ref, in: path, required: true, description: "opaque, from a listed record", schema: {type: string}}

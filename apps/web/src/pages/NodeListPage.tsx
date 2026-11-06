@@ -1884,16 +1884,16 @@ function NodeListContent({
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   })
-  const lineGroupCounts = useMemo(() => {
-    const counts = new Map<string, number>()
+  // Line groups (the list only returns general ones, not market supply groups)
+  // holding each node, each group once however many endpoints it has there.
+  const nodeLineGroups = useMemo(() => {
+    const byNode = new Map<string, string[]>()
     for (const group of lineGroupsQuery.data?.items ?? []) {
-      for (const name of [group.region, ...(group.endpoints ?? []).map((endpoint) => endpoint.region)]) {
-        const key = (name ?? '').trim()
-        if (!key) continue
-        counts.set(key, (counts.get(key) ?? 0) + 1)
+      for (const nodeID of new Set((group.endpoints ?? []).map((endpoint) => endpoint.node_id))) {
+        byNode.set(nodeID, [...(byNode.get(nodeID) ?? []), group.name])
       }
     }
-    return counts
+    return byNode
   }, [lineGroupsQuery.data?.items])
   const cursor = cursorHistory[pageIndex]
   const queryKey = useMemo(
@@ -2606,11 +2606,11 @@ function NodeListContent({
           {!value?.trim() && regionNames.length > 0
             ? <Tag className="node-region-unset" color="warning">{t('region.unset')}</Tag>
             : <span>{value || t('region.default')}</span>}
-          {canViewLineGroups ? (
-            <Link to="/node/line-group">
-              {t('region.lineGroupCount', { count: lineGroupCounts.get(value?.trim() ?? '') ?? 0 })}
-            </Link>
-          ) : null}
+          {canViewLineGroups ? (() => {
+            const groups = nodeLineGroups.get(item.id) ?? []
+            const link = <Link to="/node/line-group">{t('region.lineGroupCount', { count: groups.length })}</Link>
+            return groups.length ? <Tooltip title={t('region.lineGroupHint', { names: groups.join('、') })}>{link}</Tooltip> : link
+          })() : null}
           {/* Hidden market supply groups hold the node too but no line group list shows them. */}
           {item.market_supply_groups?.length ? (
             <Tooltip title={t('region.marketSupplyHint', { names: item.market_supply_groups.map((group) => group.name).join('、') })}>
@@ -2938,7 +2938,7 @@ function NodeListContent({
           ) : null}
           {canManage && nodeTab === 'pending' ? (
             <>
-              <Button type="primary" disabled={query.isFetching} onClick={() => void query.refetch()}>{t('actions.refresh')}</Button>
+              <Button type="primary" disabled={query.isFetching} onClick={() => { void query.refetch(); if (canViewLineGroups) void lineGroupsQuery.refetch() }}>{t('actions.refresh')}</Button>
               <Button danger disabled={writeLocked || selectedItems.length === 0 || !batchTargets.includes('retired')} onClick={() => openBatchFor('retired')}>
                 {t('actions.delete')}
               </Button>

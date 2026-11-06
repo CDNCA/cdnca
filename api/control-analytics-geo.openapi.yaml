@@ -113,8 +113,8 @@ components:
         error:
           type: object
           additionalProperties: false
-          required: [code, message]
-          properties: {code: {type: string}, message: {type: string}}
+          required: [code, message, request_id]
+          properties: {code: {type: string}, message: {type: string}, request_id: {type: string, description: 'Same value as the X-Request-ID response header.'}}
   responses:
     OK:
       description: Verified bounded geo evidence.

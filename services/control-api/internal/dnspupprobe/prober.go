@@ -43,6 +43,9 @@ type Prober struct {
 	now     func() time.Time
 	sleep   func(context.Context, time.Duration) error
 
+	// onCreated is told about every new (charged, 202) job's consumer.
+	onCreated func(consumer string)
+
 	mu      sync.Mutex
 	round   map[string]int64 // consumer → current round
 	created map[string]int   // consumer → jobs created this round
@@ -142,6 +145,9 @@ func (prober *Prober) Run(ctx context.Context, consumer, site, target string, ro
 	} else {
 		// The same key and body returns the existing job (200), never a new charge.
 		job, err = prober.client.CreateProbe(ctx, key, request)
+		if err == nil && job.Created && prober.onCreated != nil {
+			prober.onCreated(consumer)
+		}
 	}
 	for err == nil && job.Pending() {
 		prober.remember(key, cached{round: round, requestID: job.RequestID})

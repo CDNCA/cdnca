@@ -55,9 +55,14 @@ func runMarketRulePackFlow(t *testing.T, fixture licenseFixture, client, platfor
 	if item == nil || item.Status != "pending_confirmation" || item.Version != "1.0.0" {
 		t.Fatalf("market rule pack not offered: %+v", item)
 	}
-	installed := client.mutate(item.AuthorizationID, "confirm", item.Revision, map[string]any{
-		"verification_id": item.VerificationID, "approved_scopes": item.ApprovedScopes,
-		"sensitive_permissions_confirmed": true, "new_permissions_confirmed": true}, http.StatusOK)
+	body := map[string]any{"verification_id": item.VerificationID, "approved_scopes": item.ApprovedScopes,
+		"sensitive_permissions_confirmed": true, "new_permissions_confirmed": true}
+	// a platform resource is instance-wide; naming tenants for it is refused.
+	body["targets"] = allTenantTargets()
+	client.refused(item.AuthorizationID, "confirm", item.Revision, body, http.StatusUnprocessableEntity,
+		"plugin_installation_targets_invalid")
+	delete(body, "targets")
+	installed := client.mutate(item.AuthorizationID, "confirm", item.Revision, body, http.StatusOK)
 	if installed.Status != "enabled" {
 		t.Fatalf("market rule pack install=%+v", installed)
 	}

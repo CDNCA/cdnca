@@ -65,6 +65,9 @@ var supportedEventTypes = [...]string{
 	"node.dnspup.recovered",
 	"probe.dnspup.balance_low",
 	"probe.dnspup.balance_exhausted",
+	// 638: per carrier × area line alerts (internal/nodednspupprobe).
+	"node.dnspup.line_unreachable",
+	"node.dnspup.line_recovered",
 	// 429: expired node certificate self-recovery (internal/nodeidentity).
 	"node.certificate.recovered",
 	// 633: control-api database pool saturated / recovered (internal/poolmon).

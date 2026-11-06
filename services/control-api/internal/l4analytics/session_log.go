@@ -224,9 +224,10 @@ type sessionLogRow struct {
 
 const sessionLogTable = "l4_session_logs_v1"
 
+// Parameters are UTC strings typed DateTime64(3, 'UTC') (see readSnapshot).
 func (source *ClickHouseSource) readSessionLogs(ctx context.Context, scope Scope, filter sessionLogFilter, after *sessionLogAfter) ([]SessionLogRow, error) {
 	const layout = "2006-01-02 15:04:05.000"
-	conditions := []string{"finalized_at >= {from:DateTime64(3)}", "finalized_at < {to:DateTime64(3)}"}
+	conditions := []string{"finalized_at >= {from:DateTime64(3, 'UTC')}", "finalized_at < {to:DateTime64(3, 'UTC')}"}
 	params := url.Values{"from": {filter.From.UTC().Format(layout)}, "to": {filter.To.UTC().Format(layout)},
 		"limit": {strconv.Itoa(int(filter.Limit) + 1)}}
 	add := func(condition, key, value string) {
@@ -267,7 +268,7 @@ func (source *ClickHouseSource) readSessionLogs(ctx context.Context, scope Scope
 		add("end_reason = {end_reason:String}", "end_reason", filter.EndReason)
 	}
 	if after != nil {
-		conditions = append(conditions, "(finalized_at, event_id) < ({after_finalized:DateTime64(3)}, {after_event:String})")
+		conditions = append(conditions, "(finalized_at, event_id) < ({after_finalized:DateTime64(3, 'UTC')}, {after_event:String})")
 		params.Set("after_finalized", after.FinalizedAt.UTC().Format(layout))
 		params.Set("after_event", after.EventID)
 	}

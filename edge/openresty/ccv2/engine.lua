@@ -487,6 +487,11 @@ local function validate_count_by(rule)
     if target ~= nil and (target ~= "count_key" or rule.action.kind ~= "temporary_ban" or rule.count_by == nil) then
         return false
     end
+    -- _bans_client: a temporary ban of this rule is a ban
+    -- of the client itself (it counts by the client and bans it), the only
+    -- kind raised to the kernel and folded into the site's ban list; one
+    -- counting by another key, or banning the key, stays the rule's own.
+    rule._bans_client = rule.count_by == nil
     if rule.count_by == nil then return true end
     local length = array_length(rule.count_by, 2)
     if not length or length == 0 or rule.match.distinct_user_agents ~= nil or rule.match.status_404_count ~= nil
@@ -511,6 +516,7 @@ local function validate_count_by(rule)
     end
     rule._count_by = rule.count_by
     rule._counts_ja4 = seen.ja4 == true
+    rule._bans_client = seen.client_ip == true and target == nil
     return true
 end
 
@@ -1320,7 +1326,11 @@ function _M.kernel_bans()
     return lines
 end
 
-local function emit_temporary_ban(rule)
+-- client: the ban is of the client itself (rule._bans_client, a challenge
+-- failure ban). Otherwise the security line's detector is "count_key":
+-- the control plane folds only client bans into the site's ban
+-- list (securityban.fold).
+local function emit_temporary_ban(rule, client)
     pcall(function()
         ngx.var[vars.type] = "cc"
         ngx.var[vars.action] = "temporary_ban"
@@ -1328,6 +1338,8 @@ local function emit_temporary_ban(rule)
         ngx.var[vars.rule_id] = rule.rule_id
         ngx.var[vars.emit] = "1"
     end)
+    -- its own pcall: a runtime without the evidence variable still logs the ban
+    pcall(function() ngx.var.cdnca_security_detector = client and "" or "count_key" end)
 end
 
 -- aggregate marks a challenge page / 429 for the per-minute security log
@@ -1928,7 +1940,7 @@ local function record_failure(entry, rule, peer, dict, reason)
     end
     ngx.log(ngx.WARN, "cc challenge ban rule=", rule.rule_id, " ip=", peer.text, " seconds=", rule.action.ban_seconds, " reason=", reason)
     dict:set(ban_key(entry, peer), math.floor(ngx.now()), rule.action.ban_seconds)
-    emit_temporary_ban(rule)
+    emit_temporary_ban(rule, true)
     queue_kernel_ban(entry, rule, peer)
     dict:delete(key)
     return true
@@ -2097,7 +2109,44 @@ local function auto_switch_prefix(entry)
     return scoped(entry, "ccv2:autoswitch:" .. entry.config.site_id .. ":")
 end
 
-local function auto_switch_evaluate(entry, switch, dict, now)
+-- Dynamic routing sites: their policies are objects, not
+-- registry entries, so an engage of an object entry records the site (what
+-- auto_switch_status reports: identity, thresholds, layer) under
+-- <prefix>object and pushes the prefix onto a shared list. The status read
+-- evaluates every listed site that is still engaged (so an idle one
+-- recovers), reports it, and keeps it listed while it stays engaged.
+auto_switch_fields._objects = { list = "ccv2:autoswitch:objects", max = 10000 }
+
+function auto_switch_fields._objects.track(entry, switch, source, dict, prefix)
+    local config = entry.config
+    dict:set(prefix .. "object", cjson.encode({
+        tenant_scope_id = config.tenant_scope_id, site_id = config.site_id,
+        policy_id = config.policy_id, policy_version = config.policy_version,
+        qps_total = switch.qps_total, qps_5xx = switch.qps_5xx, recover_seconds = switch.recover_seconds,
+        source = source,
+    }))
+    local length = dict:lpush(auto_switch_fields._objects.list, prefix)
+    if length and length > auto_switch_fields._objects.max then dict:rpop(auto_switch_fields._objects.list) end
+end
+
+-- row: one site of auto_switch_status.
+function auto_switch_fields._objects.row(config, switch, source, dict, prefix, active)
+    return {
+        tenant_scope_id = config.tenant_scope_id, site_id = config.site_id,
+        policy_id = config.policy_id, policy_version = config.policy_version,
+        active = active, sequence = dict:get(prefix .. "seq") or 0,
+        since = dict:get(prefix .. "since") or 0,
+        trigger_qps = dict:get(prefix .. "trigger_qps") or 0,
+        trigger_5xx = dict:get(prefix .. "trigger_5xx") or 0,
+        observed_qps = dict:get(prefix .. "observed_qps") or 0,
+        observed_5xx = dict:get(prefix .. "observed_5xx") or 0,
+        qps_total = switch.qps_total, qps_5xx = switch.qps_5xx, recover_seconds = switch.recover_seconds,
+        source = source,
+    }
+end
+
+-- source: the auto switch's layer (effective), recorded for an object entry.
+local function auto_switch_evaluate(entry, switch, dict, now, source)
     local prefix = auto_switch_prefix(entry)
     local second = math.floor(now)
     local active = dict:get(prefix .. "active") == true
@@ -2116,6 +2165,7 @@ local function auto_switch_evaluate(entry, switch, dict, now)
         dict:set(prefix .. "trigger_qps", total)
         dict:set(prefix .. "trigger_5xx", errors)
         dict:incr(prefix .. "seq", 1, 0)
+        if entry.digest then auto_switch_fields._objects.track(entry, switch, source or "global", dict, prefix) end
         ngx.log(ngx.WARN, "cc auto switch engaged site=", entry.config.site_id, " qps=", total, " qps_5xx=", errors)
         return true
     end
@@ -2179,20 +2229,27 @@ function _M.auto_switch_status()
             seen[key] = true
             local prefix = auto_switch_prefix(entry)
             local active = auto_switch_evaluate(entry, switch, dict, now)
-            sites[#sites + 1] = {
-                tenant_scope_id = config.tenant_scope_id, site_id = config.site_id,
-                policy_id = config.policy_id, policy_version = config.policy_version,
-                active = active, sequence = dict:get(prefix .. "seq") or 0,
-                since = dict:get(prefix .. "since") or 0,
-                trigger_qps = dict:get(prefix .. "trigger_qps") or 0,
-                trigger_5xx = dict:get(prefix .. "trigger_5xx") or 0,
-                observed_qps = dict:get(prefix .. "observed_qps") or 0,
-                observed_5xx = dict:get(prefix .. "observed_5xx") or 0,
-                qps_total = switch.qps_total, qps_5xx = switch.qps_5xx, recover_seconds = switch.recover_seconds,
-                source = source,
-            }
+            sites[#sites + 1] = auto_switch_fields._objects.row(config, switch, source, dict, prefix, active)
         end
     end
+    -- dynamic routing sites engaged since the last read; a recovered one
+    -- is reported once more (active false), then dropped from the list
+    local objects = auto_switch_fields._objects
+    local keep = {}
+    for _ = 1, math.min(dict:llen(objects.list) or 0, objects.max) do
+        local prefix = dict:rpop(objects.list)
+        if not prefix then break end
+        local record = not seen[prefix] and dict:get(prefix .. "active") == true and cjson.decode(dict:get(prefix .. "object") or "")
+        seen[prefix] = true
+        if type(record) == "table" and not seen[record.tenant_scope_id .. ":" .. record.site_id] then
+            seen[record.tenant_scope_id .. ":" .. record.site_id] = true
+            local entry = { scoped = true, config = record }
+            local active = auto_switch_evaluate(entry, record, dict, now)
+            sites[#sites + 1] = objects.row(record, record, record.source, dict, prefix, active)
+            if active then keep[#keep + 1] = prefix end
+        end
+    end
+    for _, prefix in ipairs(keep) do dict:lpush(objects.list, prefix) end
     table.sort(sites, function(left, right)
         return left.tenant_scope_id .. left.site_id < right.tenant_scope_id .. right.site_id
     end)
@@ -2629,15 +2686,18 @@ run = function(entry, policy, reload_error, lkg_usable)
         ngx.log(ngx.ERR, "CC v2 peer address is invalid")
         return block_exit(ngx.HTTP_SERVICE_UNAVAILABLE)
     end
+    -- the ban list is this run's to apply (below, or not for a trusted
+    -- crawler): dynamic routing's own checkpoint skips it
+    ngx.ctx.ccv2_banlist_checked = true
     local dict = ngx.shared[state_dict_name]
     local now = ngx.now()
     local rules = policy.rules
-    local switch = auto_switch_fields._overrides.effective(policy)
+    local switch, switch_source = auto_switch_fields._overrides.effective(policy)
     if switch then
         local prefix = auto_switch_prefix(entry)
         ngx.ctx.ccv2_auto_switch_prefix = prefix
         dict:incr(prefix .. "req:" .. math.floor(now), 1, 0, AUTO_SWITCH_COUNTER_TTL)
-        if auto_switch_evaluate(entry, switch, dict, now) then rules = switch.rules end
+        if auto_switch_evaluate(entry, switch, dict, now, switch_source) then rules = switch.rules end
     end
     -- FX47: a verified search engine crawler skips every rule, ban and
     -- challenge (it still counts towards the auto switch's load).
@@ -2661,12 +2721,14 @@ run = function(entry, policy, reload_error, lkg_usable)
         return block_exit(ngx.HTTP_FORBIDDEN)
     end
     -- A ban of the ban list library (another node's
-    -- automatic ban of the client on this site, or a manual one).
+    -- automatic ban of the client on this site, or a manual one); a site
+    -- the list has no ban of is not looked up (read fresh, so a
+    -- ban applies here as soon as it is applied)
     if banlist == nil then
         local ok, module = pcall(require, "cdnca_banlist")
         banlist = ok and module or false
     end
-    if banlist then
+    if banlist and banlist.listed(entry.config.site_id, true) then
         local remaining = banlist.banned(entry.config.site_id, peer.text)
         if remaining then return banlist.deny(remaining, vars.block_page) end
     end
@@ -2754,8 +2816,11 @@ run = function(entry, policy, reload_error, lkg_usable)
                         if rule.action.kind == "temporary_ban" then
                             local ok, ban_error, ban_forcible = dict:set("ban:" .. ban_ref, math.floor(ngx.now()), rule.action.ban_seconds)
                             if not ok or ban_forcible then return state_failure(entry, rule, ban_error or "shared dict eviction", ban_forcible) end
-                            emit_temporary_ban(rule)
-                            if ban_ref == key then queue_kernel_ban(entry, rule, peer) end
+                            emit_temporary_ban(rule, rule._bans_client)
+                            -- Only a ban of the client itself reaches the
+                            -- kernel (a count_by uri ban that falls on a client
+                            -- is the rule's, not the client's on the site)
+                            if rule._bans_client then queue_kernel_ban(entry, rule, peer) end
                         end
                         stat(entry, rule.rule_id, "blocked", peer)
                         -- the ban's own request is its temporary_ban line

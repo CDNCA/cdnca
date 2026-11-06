@@ -104,6 +104,25 @@ export type DNSPupMonitorGroup = 'domestic' | 'telecom' | 'unicom' | 'mobile' | 
 export const dnspupMonitorGroups: DNSPupMonitorGroup[] = ['telecom', 'unicom', 'mobile', 'domestic', 'overseas']
 export const dnspupNodeIntervals = [0, 60, 300, 900] as const
 
+// Checkpoint selection (migration 638): groups are area × carrier.
+export type ProbeArea = 'mainland' | 'hkmotw' | 'overseas'
+export type ProbeCarrier = 'telecom' | 'unicom' | 'mobile' | 'edu' | 'bgp' | 'other'
+export type ProbeFailure = 'ok' | 'refused' | 'timeout' | 'reset' | 'tls' | 'http' | 'dns' | 'other'
+export const probeAreas: ProbeArea[] = ['mainland', 'hkmotw', 'overseas']
+export const probeCarriers: ProbeCarrier[] = ['telecom', 'unicom', 'mobile', 'edu', 'bgp', 'other']
+export const nodeProbeTypes = ['tcping', 'ping', 'http'] as const
+export type NodeProbeType = (typeof nodeProbeTypes)[number]
+
+export interface ProbeSelection {
+  areas?: ProbeArea[]
+  carriers?: ProbeCarrier[]
+  include_provinces?: string[]
+  exclude_provinces?: string[]
+  exclude_checkpoints?: string[]
+  points_per_group: number
+  rotate?: boolean
+}
+
 export interface DNSPupNodeMonitoringSettings {
   interval_seconds: (typeof dnspupNodeIntervals)[number]
   groups: DNSPupMonitorGroup[]
@@ -112,6 +131,11 @@ export interface DNSPupNodeMonitoringSettings {
   failure_rounds: number
   recovery_rounds: number
   low_balance: number
+  probe_type?: NodeProbeType
+  selection?: ProbeSelection | null
+  line_alert_min_points?: number
+  line_alert_rounds?: number
+  auto_diagnose?: boolean
 }
 
 export interface DNSPupNodeMonitoringStatus extends DNSPupNodeMonitoringSettings {
@@ -147,4 +171,109 @@ export const dnspupNodeMonitoringApi = {
   status: (token: string) => call<DNSPupNodeMonitoringStatus>(token, nodeMonitoringPath),
   save: (token: string, settings: DNSPupNodeMonitoringSettings, key: string) =>
     call<DNSPupNodeMonitoringStatus>(token, nodeMonitoringPath, { method: 'PUT', body: JSON.stringify(settings) }, key),
+}
+
+// Purposes (api/control-probe-dnspup.openapi.yaml): one shared dnspup quota,
+// metered per purpose; when the month cannot be covered report slows first,
+// then schedule; availability is never stopped here.
+export type ProbePurpose = 'node_availability' | 'origin_failover' | 'edge_health' | 'plugin' | 'diagnose'
+
+export interface ProbeGate {
+  stopped: boolean
+  factor: number
+  reason?: 'disabled' | 'monthly_cap' | 'account_budget' | 'account_slowdown'
+  daily_average: number
+  projected_monthly: number
+}
+
+export interface ProbePurposeStatus {
+  purpose: ProbePurpose
+  class: 1 | 2 | 3
+  enabled: boolean
+  monthly_cap: number
+  interval_seconds: number
+  used_this_month: number
+  gate: ProbeGate
+}
+
+export interface ProbePurposesView {
+  purposes: ProbePurposeStatus[]
+  monthly_limit: number
+  monthly_used: number
+  projected_monthly: number
+}
+
+export interface ProbePurposeInput {
+  purpose: ProbePurpose
+  enabled: boolean
+  monthly_cap: number
+  interval_seconds: number
+}
+
+export interface ProbeMatrixCell {
+  area: string
+  carrier: ProbeCarrier
+  total: number
+  ok: number
+  availability: number
+  avg_latency_ms: number
+  top_failure?: ProbeFailure
+}
+
+export interface ProbeMatrix {
+  subject: 'node' | 'edge'
+  id: string
+  window: ProbeWindow
+  cells: ProbeMatrixCell[]
+  series: { at: string; total: number; availability: number; avg_latency_ms: number }[]
+}
+
+export const probeWindows = ['1h', '6h', '24h', '7d'] as const
+export type ProbeWindow = (typeof probeWindows)[number]
+
+export interface ProbeOverride {
+  id: string
+  subject_kind: 'node' | 'line_group'
+  node_id?: string
+  tenant_scope_id?: string
+  line_group_id?: string
+  subject_name: string
+  probe_type: NodeProbeType | null
+  selection: ProbeSelection | null
+  revision: number
+}
+
+export interface ProbeOverrideInput {
+  node_id?: string
+  tenant_scope_id?: string
+  line_group_id?: string
+  probe_type?: NodeProbeType
+  selection?: ProbeSelection
+}
+
+export interface ProbeDiagnosis {
+  id: string
+  status: 'pending' | 'completed' | 'failed'
+  type: string
+  target: string
+  error_code?: string
+  created_at: string
+  traces?: unknown
+}
+
+export const probeDNSPupUnifiedApi = {
+  purposes: (token: string) => call<ProbePurposesView>(token, `${path}/purposes`),
+  savePurposes: (token: string, purposes: ProbePurposeInput[], key: string) =>
+    call<ProbePurposesView>(token, `${path}/purposes`, { method: 'PUT', body: JSON.stringify({ purposes }) }, key),
+  matrix: (token: string, subject: 'node' | 'edge', id: string, window: ProbeWindow) =>
+    call<ProbeMatrix>(token, `${path}/matrix?${new URLSearchParams({ subject, id, window })}`),
+  edgeSubjects: (token: string) => call<{ items: string[] }>(token, `${path}/edge-subjects`),
+  overrides: (token: string) => call<{ items: ProbeOverride[] }>(token, `${nodeMonitoringPath}/overrides`),
+  saveOverride: (token: string, input: ProbeOverrideInput, key: string) =>
+    call<ProbeOverride>(token, `${nodeMonitoringPath}/overrides`, { method: 'PUT', body: JSON.stringify(input) }, key),
+  deleteOverride: (token: string, id: string, key: string) =>
+    call<undefined>(token, `${nodeMonitoringPath}/overrides/${encodeURIComponent(id)}`, { method: 'DELETE' }, key),
+  diagnose: (token: string, input: { target: string; node_id?: string; checkpoints: string[] }, key: string) =>
+    call<ProbeDiagnosis>(token, `${path}/diagnoses`, { method: 'POST', body: JSON.stringify(input) }, key),
+  diagnosis: (token: string, id: string) => call<ProbeDiagnosis>(token, `${path}/diagnoses/${encodeURIComponent(id)}`),
 }

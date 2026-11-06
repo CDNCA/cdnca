@@ -4,8 +4,8 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 647,
- "api_key_count": 141,
+ "total": 665,
+ "api_key_count": 144,
  "groups": [
   {
    "id": "-health-live",
@@ -2234,6 +2234,122 @@
    ]
   },
   {
+   "id": "admin-probe-dnspup",
+   "prefix": "/v1/admin/probe-dnspup",
+   "count": 9,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "POST",
+     "path": "/v1/admin/probe-dnspup/diagnoses",
+     "summary": "Run one mtr diagnosis (at most 2 checkpoints, metered as diagnose)",
+     "summary_zh": "按需 MTR 排障（最多 2 个检测点，计入「排障」用途额度）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "createProbeDNSPupDiagnosis"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/probe-dnspup/diagnoses/{id}",
+     "summary": "Read a diagnosis (Retry-After while pending)",
+     "summary_zh": "读取排障结果（运行中带 Retry-After）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "getProbeDNSPupDiagnosis"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/probe-dnspup/edge-subjects",
+     "summary": "CDN candidate hosts probed in the last day",
+     "summary_zh": "最近一天有拨测结果的第三方 CDN 候选主机",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "listProbeDNSPupEdgeSubjects"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/probe-dnspup/matrix",
+     "summary": "Area × carrier matrix and history of a node or a CDN candidate host",
+     "summary_zh": "节点或第三方 CDN 候选的「地区 × 运营商」矩阵与历史曲线",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "getProbeDNSPupMatrix"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/probe-dnspup/node-monitoring/overrides",
+     "summary": "Per node / line group overrides",
+     "summary_zh": "按节点或线路组覆盖的拨测类型与选点",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "listProbeDNSPupNodeOverrides"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/admin/probe-dnspup/node-monitoring/overrides",
+     "summary": "Create or replace the override of a node or a line group",
+     "summary_zh": "新建或替换一个节点（node_id）或线路组（tenant_scope_id + line_group_id）的覆盖",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "putProbeDNSPupNodeOverride"
+    },
+    {
+     "method": "DELETE",
+     "path": "/v1/admin/probe-dnspup/node-monitoring/overrides/{id}",
+     "summary": "Delete an override",
+     "summary_zh": "删除覆盖（恢复继承）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "deleteProbeDNSPupNodeOverride"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/probe-dnspup/purposes",
+     "summary": "Probe purposes with usage, projection and budget gate",
+     "summary_zh": "按用途的拨测开关、月上限、频率、本月用量、预计月用量与降频状态",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "getProbeDNSPupPurposes"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/admin/probe-dnspup/purposes",
+     "summary": "Change purposes (availability purposes cannot be disabled)",
+     "summary_zh": "修改用途的开关、月上限与最小间隔（可用性类用途不能关闭）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "putProbeDNSPupPurposes"
+    }
+   ]
+  },
+  {
    "id": "admin-security",
    "prefix": "/v1/admin/security",
    "count": 4,
@@ -2286,6 +2402,50 @@
      "api_key": false,
      "source": "api/control-ja4-block.openapi.yaml",
      "operation_id": "getAdminJA4BlockWorkflow"
+    }
+   ]
+  },
+  {
+   "id": "admin-security-bans",
+   "prefix": "/v1/admin/security-bans",
+   "count": 3,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/admin/security-bans",
+     "summary": "List the ban list of every site",
+     "summary_zh": "列出所有网站的封禁名单",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-security-bans.openapi.yaml",
+     "operation_id": "listAdminSecurityBans"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/security-bans",
+     "summary": "Ban a client on any site",
+     "summary_zh": "在任意网站手工封禁 IP 或网段",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-security-bans.openapi.yaml",
+     "operation_id": "createAdminSecurityBan"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/security-bans/{entry_id}/release",
+     "summary": "Release a ban of any site",
+     "summary_zh": "解除任意网站的一条封禁",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-security-bans.openapi.yaml",
+     "operation_id": "releaseAdminSecurityBan"
     }
    ]
   },
@@ -6599,6 +6759,50 @@
    ]
   },
   {
+   "id": "probe-dnspup",
+   "prefix": "/v1/probe-dnspup",
+   "count": 3,
+   "api_key_count": 3,
+   "operations": [
+    {
+     "method": "POST",
+     "path": "/v1/probe-dnspup/plugin/requests",
+     "summary": "Start one probe with the platform's dnspup key pair and quota",
+     "summary_zh": "插件发起一次拨测（目标 + 类型 + 选点），用平台 DNSPup 凭据与额度执行",
+     "auth": [
+      "apiKey"
+     ],
+     "api_key": true,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "createProbeDNSPupPluginRequest"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/probe-dnspup/plugin/requests/{id}",
+     "summary": "Read a probe this installation started (Retry-After while pending)",
+     "summary_zh": "读取本插件发起的拨测结果（运行中带 Retry-After；其他安装读不到）",
+     "auth": [
+      "apiKey"
+     ],
+     "api_key": true,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "getProbeDNSPupPluginRequest"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/probe-dnspup/plugin/status",
+     "summary": "Whether the plugin can probe now (not metered)",
+     "summary_zh": "插件能否发起拨测（未安装/未配置/暂停/额度），不计量",
+     "auth": [
+      "apiKey"
+     ],
+     "api_key": true,
+     "source": "api/control-probe-dnspup.openapi.yaml",
+     "operation_id": "getProbeDNSPupPluginStatus"
+    }
+   ]
+  },
+  {
    "id": "regions",
    "prefix": "/v1/regions",
    "count": 6,
@@ -6739,6 +6943,50 @@
      "api_key": false,
      "source": "api/control-ja4-block.openapi.yaml",
      "operation_id": "getTenantJA4BlockWorkflow"
+    }
+   ]
+  },
+  {
+   "id": "security-bans",
+   "prefix": "/v1/security-bans",
+   "count": 3,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/security-bans",
+     "summary": "List the ban list of the session tenant's sites",
+     "summary_zh": "列出会话租户网站的封禁名单",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-security-bans.openapi.yaml",
+     "operation_id": "listSecurityBans"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/security-bans",
+     "summary": "Ban a client on a site of the session tenant",
+     "summary_zh": "在会话租户网站手工封禁 IP 或网段",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-security-bans.openapi.yaml",
+     "operation_id": "createSecurityBan"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/security-bans/{entry_id}/release",
+     "summary": "Release a ban of the session tenant",
+     "summary_zh": "解除会话租户网站的一条封禁",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-security-bans.openapi.yaml",
+     "operation_id": "releaseSecurityBan"
     }
    ]
   },
@@ -8660,8 +8908,8 @@
     {
      "method": "POST",
      "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/confirm",
-     "summary": "Confirm declared and sensitive plugin scopes before installation",
-     "summary_zh": "安装前确认插件声明的权限与敏感权限",
+     "summary": "Tenants no longer confirm installations: always 403 plugin_installation_platform_managed. The controller's platform administrator confirms tenant plugins under /v1/platform and chooses their tenants.",
+     "summary_zh": "租户不再确认安装：一律 403 plugin_installation_platform_managed，由主控平台管理员在平台路由确认",
      "auth": [
       "bearer"
      ],
@@ -8884,7 +9132,7 @@
      "summary": "",
      "summary_zh": "读取主题素材",
      "auth": [
-      "bearer"
+      "none"
      ],
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",
@@ -8896,7 +9144,7 @@
      "summary": "",
      "summary_zh": "读取登录页主题样式",
      "auth": [
-      "bearer"
+      "none"
      ],
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",
@@ -8908,7 +9156,7 @@
      "summary": "",
      "summary_zh": "读取登录页主题素材",
      "auth": [
-      "bearer"
+      "none"
      ],
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",
@@ -8920,7 +9168,7 @@
      "summary": "",
      "summary_zh": "读取当前主题",
      "auth": [
-      "bearer"
+      "none"
      ],
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",
@@ -8932,7 +9180,7 @@
      "summary": "",
      "summary_zh": "读取主题样式表",
      "auth": [
-      "bearer"
+      "none"
      ],
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",
@@ -8944,7 +9192,7 @@
      "summary": "",
      "summary_zh": "读取主题设计变量",
      "auth": [
-      "bearer"
+      "none"
      ],
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",

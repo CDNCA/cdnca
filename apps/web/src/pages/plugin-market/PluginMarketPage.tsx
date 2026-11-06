@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Badge, Button, Checkbox, Collapse, Descriptions, Drawer, Empty, Input, Modal, Result, Segmented, Select, Space, Spin, Table, Tag,
-  type TableColumnsType,
+  Typography, type TableColumnsType,
 } from 'antd'
 import { ChevronLeft, ChevronRight, Eye, RefreshCw, Search, ShieldOff } from 'lucide-react'
 import type { TFunction } from 'i18next'
@@ -28,6 +28,8 @@ import '../../i18n/pluginInstallations'
 import { AdvisoryList } from './AdvisoryList'
 import { PluginIdentityKeyPanel } from './PluginIdentityKeyPanel'
 import { SigningKeyPanel, UIPageDisclosure } from './PluginUIDisclosure'
+import { allTenantsDraft, draftComplete, draftTargets, type TargetsDraft } from './targetsDraft'
+import { TenantTargetsPicker } from './TenantTargetsPicker'
 import { useAdvisories } from './useAdvisories'
 import { pluginName, usePluginCatalog } from './usePluginCatalog'
 
@@ -87,6 +89,8 @@ function errorText(error: unknown, t: TFunction<'pluginInstallations'>): string 
     case 'plugin_installation_manifest_invalid': return t('errors.manifestInvalid')
     case 'plugin_installation_version_incompatible': return t('errors.versionIncompatible')
     case 'plugin_installation_platform_paused': return t('errors.platformPaused')
+    case 'plugin_installation_platform_managed': return t('errors.platformManaged')
+    case 'plugin_installation_targets_invalid': return t('errors.targetsInvalid')
     case 'plugin_installation_license_unavailable': return t('errors.licenseUnavailable')
     case 'plugin_installation_result_unknown': return t('errors.resultUnknown')
     // The signed license answer was refused before anything changed here: retry the same action.
@@ -111,7 +115,7 @@ function sameAttempt(left: ActionAttempt, right: ActionAttempt): boolean {
 
 // What a permission lets the plugin do, for the known platform data-pack scopes (license-service
 // plugin_data_pack.go); any other scope shows its stable ID only.
-const scopePurposes = new Set(['platform.themes.provide', 'security.rule_packs.provide', 'dns.records.manage'])
+const scopePurposes = new Set(['platform.themes.provide', 'security.rule_packs.provide', 'dns.records.manage', 'probes.dnspup.request'])
 
 // A plugin-specific purpose first, then the permission's display name; an unknown code shows the code only.
 function ScopeLabel({ scope, t }: { scope: string; t: TFunction<'pluginInstallations'> }) {
@@ -213,6 +217,23 @@ function installedPlatformPlugin(installation: PluginInstallation): boolean {
   return installation.resource_scope === 'platform' && installation.status === 'enabled'
 }
 
+// 租户插件（页面插件、外部服务）也由主控平台管理员确认，确认时选装给哪些租户。
+function tenantPlugin(installation: PluginInstallation): boolean {
+  return installation.resource_scope === 'tenant'
+}
+
+// In a tenant console only a tenant's own installation from before 1.0.35 can still be changed; what the platform
+// administrator installed for it is read-only there.
+function tenantWritable(installation: PluginInstallation): boolean {
+  return installation.managed_by === 'tenant'
+}
+
+function targetsSummary(installation: PluginInstallation, t: TFunction<'pluginInstallations'>): string | null {
+  const targets = installation.targets
+  if (!targets) return null
+  return targets.all_tenants ? t('targets.summaryAll') : t('targets.summaryCount', { count: targets.tenants.length })
+}
+
 function actionResult(
   api: InstallationsApi, attempt: ActionAttempt, accessToken: string,
 ): Promise<PluginInstallationMutationResult> {
@@ -287,6 +308,10 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
   const [sensitiveConfirmed, setSensitiveConfirmed] = useState(false)
   const [newConfirmed, setNewConfirmed] = useState(false)
   const [reason, setReason] = useState('')
+  const [targetsDraft, setTargetsDraft] = useState<TargetsDraft>(allTenantsDraft)
+  const [editingTargets, setEditingTargets] = useState<PluginInstallation | null>(null)
+  const [editDraft, setEditDraft] = useState<TargetsDraft>(allTenantsDraft)
+  const canSearchTenants = principal.permissions.includes('identity.users.manage') || principal.permissions.includes('platform.admin')
   const [pendingAttempt, setPendingAttempt] = useState<ActionAttempt | null>(null)
   const [lastOutcome, setLastOutcome] = useState<ActionOutcome | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -328,6 +353,8 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
       // Keep the drawer on whatever the administrator is reading now; open it on the result only when closed.
       setSelected((current) => (!current || current.authorization_id === authorizationID ? result.installation : current))
       void queryClient.invalidateQueries({ queryKey: ['plugin-installations', owner, scopeID] })
+      // 我的插件 above reads the local library: refresh it so the row leaves 待确认 at once.
+      void queryClient.invalidateQueries({ queryKey: ['marketStore', 'library'] })
       // A write answer may omit the optional license fields (authorization_status/paused_by): show it at once,
       // then read the same object back so the owner of a pause comes from the server, not from this click.
       const detailKey = ['plugin-installation', owner, scopeID, authorizationID]
@@ -354,6 +381,27 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     },
   })
 
+  // Who a platform-held tenant plugin is installed for: PUT .../targets with If-Match = targets.revision.
+  const targetsMutation = useMutation({
+    gcTime: 0,
+    mutationFn: async ({ installation, draft, key }: { installation: PluginInstallation; draft: TargetsDraft; key: string }) => {
+      const token = currentTokenForManage(owner, true)
+      if (!token || !installation.targets) throw new ApiError('Permission denied', 403, 'permission_denied')
+      return platformPluginInstallationsApi.updateTargets(token, installation.authorization_id, installation.targets.revision,
+        draftTargets(draft), key)
+    },
+    onSuccess: (result) => {
+      setEditingTargets(null)
+      setActionError(null)
+      setSelected((current) => (current?.authorization_id === result.installation.authorization_id ? result.installation : current))
+      void queryClient.invalidateQueries({ queryKey: ['plugin-installations', owner, scopeID] })
+      void queryClient.invalidateQueries({ queryKey: ['plugin-installation', owner, scopeID, result.installation.authorization_id] })
+    },
+    onError: (error) => setActionError(errorText(error, t)),
+  })
+  // One key per attempt: a retry of the same body after an unknown result replays it; another body is a new attempt.
+  const targetsAttempt = useRef<{ key: string; body: string } | null>(null)
+
   const items = listQuery.data?.items ?? []
   const nextCursor = listQuery.data?.next_cursor
   const detail = detailQuery.data ?? selected
@@ -374,7 +422,23 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     setSensitiveConfirmed(false)
     setNewConfirmed(false)
     setReason('')
+    setTargetsDraft(allTenantsDraft)
     setActionError(null)
+  }
+
+  function openTargets(installation: PluginInstallation) {
+    if (!installation.targets) return
+    targetsAttempt.current = null
+    setEditDraft({ allTenants: installation.targets.all_tenants, tenants: installation.targets.tenants.map((tenant) => ({
+      value: tenant.scope_id, label: tenant.display_name ? `${tenant.display_name} · ${tenant.display_id}` : t('targets.unnamed') })) })
+    setEditingTargets(installation)
+  }
+
+  function saveTargets() {
+    if (!editingTargets || targetsMutation.isPending) return
+    const body = JSON.stringify(draftTargets(editDraft))
+    if (targetsAttempt.current?.body !== body) targetsAttempt.current = { key: newPluginInstallationIdempotencyKey('targets'), body }
+    targetsMutation.mutate({ installation: editingTargets, draft: editDraft, key: targetsAttempt.current.key })
   }
 
   function submitAction() {
@@ -384,6 +448,7 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
       approved_scopes: approvedScopes,
       sensitive_permissions_confirmed: sensitiveConfirmed,
       new_permissions_confirmed: newConfirmed,
+      ...(platform && action.kind === 'confirm' && tenantPlugin(action.installation) ? { targets: draftTargets(targetsDraft) } : {}),
     } : undefined
     mutation.mutate({
       ...action, ownerKey: owner, key: newPluginInstallationIdempotencyKey(action.kind),
@@ -435,6 +500,8 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     { title: t('columns.version'), dataIndex: 'version', width: 110 },
     { title: t('columns.status'), dataIndex: 'status', width: 190, render: (value: PluginInstallationStatus, item) => <Space size={4} wrap>
       <Tag color={statusColor(value)}>{t(`states.${value}`)}</Tag>
+      {targetsSummary(item, t) ? <Tag>{targetsSummary(item, t)}</Tag> : null}
+      {!platform && item.managed_by === 'platform' ? <Tag>{t('platform.managedByPlatform')}</Tag> : null}
       {platformPaused(item) ? <Tag color="orange">{t('states.platformPaused')}</Tag> : null}
       {awaitingController(item) ? <Tag color="gold">{t('states.awaitingController')}</Tag> : null}
       {item.available_upgrade && value !== 'uninstalled' ? <Tag color="blue">{t('states.upgradeAvailable', { version: item.available_upgrade.version })}</Tag> : null}
@@ -444,15 +511,19 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     { title: t('columns.updated'), dataIndex: 'updated_at', width: 180, render: (value: string) => formatDateTime(value, i18n.resolvedLanguage ?? 'zh-CN') || value },
     { title: t('columns.actions'), key: 'actions', fixed: 'right', width: 230, render: (_, item) => <Space size={4}>
       <Button size="small" aria-label={t('actions.view')} icon={<Eye size={14} />} onClick={() => setSelected(item)} />
-      {canManage && item.status === 'pending_confirmation' ? <Button size="small" type="primary" disabled={writeLocked} onClick={() => openAction('confirm', item)}>{t('actions.confirm')}</Button> : null}
-      {canManage && canUpgrade(item) ? <Button size="small" disabled={writeLocked} onClick={() => openAction('upgrade', item)}>{t('actions.upgrade')}</Button> : null}
+      {canManage && platform && item.status === 'pending_confirmation' ? <Button size="small" type="primary" disabled={writeLocked} onClick={() => openAction('confirm', item)}>{t('actions.confirm')}</Button> : null}
+      {canManage && (platform || tenantWritable(item)) && canUpgrade(item) ? <Button size="small" disabled={writeLocked} onClick={() => openAction('upgrade', item)}>{t('actions.upgrade')}</Button> : null}
     </Space> },
-  ], [advisories.pending, canManage, catalog, i18n.resolvedLanguage, t, writeLocked])
+  ], [advisories.pending, canManage, catalog, i18n.resolvedLanguage, platform, t, writeLocked])
 
   const approvalAction = action?.kind === 'confirm' || action?.kind === 'upgrade'
   const sensitiveRequired = Boolean(action?.installation.sensitive_scopes.length)
   const newRequired = Boolean(action?.installation.new_scopes.length)
-  const approvalDisabled = approvalAction && ((!sensitiveConfirmed && sensitiveRequired) || (!newConfirmed && newRequired))
+  const targetsRequired = Boolean(platform && action?.kind === 'confirm' && action && tenantPlugin(action.installation))
+  const approvalDisabled = approvalAction && ((!sensitiveConfirmed && sensitiveRequired) || (!newConfirmed && newRequired) ||
+    (targetsRequired && !draftComplete(targetsDraft)))
+  // The tenant console manages only its own pre-1.0.35 installations; the platform view everything it holds.
+  const manageDetail = (item: PluginInstallation) => canManage && (platform || tenantWritable(item))
   const reasonDisabled = Boolean(action && (action.kind === 'disable' || action.kind === 'uninstall') &&
     ([...reason.trim()].length < 1 || [...reason.trim()].length > 500))
 
@@ -473,7 +544,7 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     <div className="plugin-market-toolbar">
       <Input value={pluginDraft} maxLength={128} placeholder={t('filters.pluginPlaceholder')} onChange={(event) => setPluginDraft(event.target.value)} onPressEnter={applyFilters} />
       {platform ? null : <Select<PluginInstallationStatus> allowClear value={statusDraft} placeholder={t('filters.all')} style={{ minWidth: 180 }} onChange={setStatusDraft} options={Array.from([
-        'pending_confirmation', 'authorized', 'installing', 'enabled', 'disabled', 'upgrade_failed_lkg_preserved', 'uninstalled',
+        'enabled', 'disabled', 'upgrade_failed_lkg_preserved', 'uninstalled',
       ] as PluginInstallationStatus[]).map((value) => ({ value, label: t(`states.${value}`) }))} />}
       <Button type="primary" icon={<Search size={15} />} onClick={applyFilters}>{t('actions.search')}</Button>
       <Button icon={<RefreshCw size={15} />} loading={listQuery.isFetching} onClick={() => void listQuery.refetch()}>{t('actions.refresh')}</Button>
@@ -513,7 +584,14 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
       {detail ? <>
         {/* 平台插件：先给下一步（确认安装 / 去对应页面启用），技术字段放在后面。 */}
         {platform && detail.status === 'pending_confirmation' && canManage ? <Alert className="plugin-market-consent-note" type="info" showIcon
-          message={t('platform.pendingHint')} action={<Button type="primary" disabled={writeLocked} onClick={() => openAction('confirm', detail)}>{t('actions.confirm')}</Button>} /> : null}
+          message={t(tenantPlugin(detail) ? 'platform.pendingTenantHint' : 'platform.pendingHint')} action={<Button type="primary" disabled={writeLocked} onClick={() => openAction('confirm', detail)}>{t('actions.confirm')}</Button>} /> : null}
+        {platform && detail.targets && detail.status !== 'uninstalled' ? <Alert className="plugin-market-consent-note" type="success" showIcon
+          message={t('platform.installedTenant')}
+          description={detail.targets.all_tenants ? t('targets.summaryAll') : <Space size={[4, 4]} wrap>{detail.targets.tenants.map((tenant) =>
+            <Tag key={tenant.scope_id}>{tenant.display_name ? `${tenant.display_name} · ${tenant.display_id}` : t('targets.unnamed')}</Tag>)}</Space>}
+          action={canManage ? <Button disabled={writeLocked || targetsMutation.isPending} onClick={() => openTargets(detail)}>{t('targets.edit')}</Button> : null} /> : null}
+        {!platform && detail.managed_by === 'platform' ? <Alert className="plugin-market-consent-note" type="info" showIcon
+          message={t('platform.managedByPlatform')} /> : null}
         {installedPlatformPlugin(detail) ? <Alert className="plugin-market-consent-note" type="success" showIcon
           message={t('platform.installed')} description={detail.entrypoint_type === 'theme'
             ? null
@@ -527,8 +605,7 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
           {pauseOwnerUnknown(detail) ? <p className="plugin-market-state-reason">{t(detailQuery.isError ? 'pause.readFailed' : 'pause.checking')}</p>
             : pauseText(detail, t) ? <p className="plugin-market-state-reason">{pauseText(detail, t)}</p> : null}
           {pendingNote ? <p className="plugin-market-pending-note">{pendingNote}</p> : null}
-          {canManage && detail.status !== 'uninstalled' ? <div className="plugin-market-actions"><Space wrap>
-            {detail.status === 'pending_confirmation' && !platform ? <Button type="primary" disabled={writeLocked} onClick={() => openAction('confirm', detail)}>{t('actions.confirm')}</Button> : null}
+          {manageDetail(detail) && detail.status !== 'uninstalled' ? <div className="plugin-market-actions"><Space wrap>
             {canResume(detail) ? <Button type="primary" disabled={Boolean(pendingAttempt)} loading={mutation.isPending && mutation.variables?.kind === 'resume'} onClick={() => resumeNow(detail)}>{t('actions.resume')}</Button> : null}
             {canUpgrade(detail) ? <Button disabled={writeLocked} onClick={() => openAction('upgrade', detail)}>{t('actions.upgrade')}</Button> : null}
             {detail.status === 'enabled' ? <Button disabled={writeLocked} onClick={() => openAction('disable', detail)}>{t('actions.disable')}</Button> : null}
@@ -561,13 +638,15 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
             <Descriptions.Item label={t('detail.added')}>{detail.new_scopes.join(', ') || t('lkg.none')}</Descriptions.Item>
           </Descriptions>,
         }]} />
-        {/* 主题与规则包不加页面、不调签名接口；页面声明与签名公钥只对租户扩展有意义。 */}
+        {/* 主题与规则包不加页面、不调签名接口；页面声明与签名公钥只对租户扩展有意义。平台管理员核对页面插件会加哪些页面。 */}
+        {platform && tenantPlugin(detail) ? <UIPageDisclosure token={accessToken} pluginID={detail.plugin_id}
+          version={detail.version} manifestSHA256={detail.manifest_sha256} /> : null}
         {platform ? null : <>
           <UIPageDisclosure token={accessToken} pluginID={detail.plugin_id} version={detail.version} manifestSHA256={detail.manifest_sha256} />
           <SigningKeyPanel token={accessToken} />
           <PluginIdentityKeyPanel token={accessToken} principal={principal} installation={detail} />
         </>}
-        {canManage && detail.status !== 'uninstalled' ? <div className="plugin-market-danger">
+        {manageDetail(detail) && detail.status !== 'uninstalled' && detail.status !== 'pending_confirmation' ? <div className="plugin-market-danger">
           <Button danger disabled={writeLocked} onClick={() => openAction('uninstall', detail)}>{t('actions.uninstall')}</Button>
         </div> : null}
       </> : null}
@@ -587,9 +666,19 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
         {newRequired ? <div><Checkbox checked={newConfirmed} onChange={(event) => setNewConfirmed(event.target.checked)}>
           {t(action.kind === 'upgrade' ? 'consent.added' : 'consent.firstInstall')}</Checkbox>
           <div>{t(action.kind === 'upgrade' ? 'consent.addedHelp' : 'consent.firstInstallHelp')}</div></div> : null}
-        {platform ? null : <UIPageDisclosure token={accessToken} pluginID={action.installation.plugin_id} version={action.installation.version}
+        {targetsRequired ? <TenantTargetsPicker token={accessToken} value={targetsDraft} onChange={setTargetsDraft}
+          canSearch={canSearchTenants} disabled={mutation.isPending} /> : null}
+        {platform && !tenantPlugin(action.installation) ? null : <UIPageDisclosure token={accessToken} pluginID={action.installation.plugin_id} version={action.installation.version}
           manifestSHA256={action.kind === 'upgrade' ? undefined : action.installation.manifest_sha256} />}
       </> : action ? <label>{t('protective.reason')}<Input.TextArea aria-label={t('protective.reason')} value={reason} maxLength={500} placeholder={t('protective.reasonPlaceholder')} onChange={(event) => setReason(event.target.value)} /></label> : null}
+    </Modal>
+
+    <Modal open={Boolean(editingTargets)} title={t('targets.edit')} okText={t('targets.save')} cancelText={t('actions.cancel')}
+      confirmLoading={targetsMutation.isPending} okButtonProps={{ disabled: !draftComplete(editDraft) }}
+      onCancel={() => !targetsMutation.isPending && setEditingTargets(null)} onOk={saveTargets} destroyOnHidden>
+      <TenantTargetsPicker token={accessToken} value={editDraft} onChange={setEditDraft} canSearch={canSearchTenants}
+        disabled={targetsMutation.isPending} />
+      <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>{t('targets.removedHint')}</Typography.Paragraph>
     </Modal>
   </div>
 }

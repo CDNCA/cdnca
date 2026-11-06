@@ -32,6 +32,8 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 		"/v1/platform/plugin-installations/{authorization_id}/upgrade":   "post",
 		"/v1/platform/plugin-installations/{authorization_id}/disable":   "post",
 		"/v1/platform/plugin-installations/{authorization_id}/uninstall": "post",
+		// 平台管理员改租户插件装给哪些租户。
+		"/v1/platform/plugin-installations/{authorization_id}/targets": "put",
 	}
 	if len(document.Paths) != len(expectedRoutes) {
 		t.Fatalf("paths=%v", document.Paths)
@@ -49,7 +51,7 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 		if _, found := operation.Responses["502"]; !found {
 			t.Errorf("%s %s does not declare 502", method, route)
 		}
-		if method == "post" && (route[len(route)-7:] == "confirm" || route[len(route)-7:] == "upgrade") {
+		if method == "put" || method == "post" && (route[len(route)-7:] == "confirm" || route[len(route)-7:] == "upgrade") {
 			if _, found := operation.Responses["422"]; !found {
 				t.Errorf("%s %s does not declare 422", method, route)
 			}
@@ -67,6 +69,13 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 	if !reflect.DeepEqual(entrypointType.Enum, []string{"theme", "rule_pack", "external_https", "ui_page"}) {
 		t.Fatalf("entrypoint_type enum=%v", entrypointType.Enum)
 	}
+	if managedBy := document.Components.Schemas["PluginInstallation"].Properties["managed_by"]; !reflect.DeepEqual(managedBy.Enum,
+		[]string{"platform", "tenant"}) {
+		t.Fatalf("managed_by enum=%v", managedBy.Enum)
+	}
+	if _, found := document.Components.Schemas["PluginInstallationTargets"].Properties["tenant_scope_ids"]; !found {
+		t.Fatal("PluginInstallationTargets.tenant_scope_ids missing")
+	}
 	identityGeneration := document.Components.Schemas["PluginInstallation"].Properties["identity_generation"]
 	if identityGeneration.Minimum == nil || *identityGeneration.Minimum != 0 {
 		t.Fatalf("identity_generation minimum=%v, pending candidates must allow zero", identityGeneration.Minimum)
@@ -75,6 +84,7 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 		"authentication_required", "permission_denied", "invalid_request", "plugin_installation_not_found",
 		"plugin_installation_revision_conflict", "plugin_installation_idempotency_conflict",
 		"plugin_installation_scope_approval_required", "plugin_installation_platform_paused",
+		"plugin_installation_platform_managed", "plugin_installation_targets_invalid",
 		"plugin_installation_license_unavailable",
 		"plugin_installation_state_conflict", "plugin_installation_result_unknown",
 		"plugin_installation_activation_response_invalid", "internal_error",

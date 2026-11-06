@@ -230,10 +230,11 @@ components:
         expected_revision: {type: integer, minimum: 1}
         name: {type: string, minLength: 1, maxLength: 128}
         remark: {type: string, maxLength: 1024, pattern: '^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]*$', description: 'Omission preserves the current remark and legacy digest. An explicit empty string clears it. Null is invalid.'}
+    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}
   responses:
-    BadRequest: {description: 'Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}.'}
-    Unauthorized: {description: Authentication required.}
-    Forbidden: {description: Permission denied.}
-    NotFound: {description: Site group not found.}
-    Conflict: {description: 'Revision, idempotency, name, or in-use conflict.'}
-    Unavailable: {description: Site group service unavailable.}
+    BadRequest: {description: 'Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}.', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    Unauthorized: {description: Authentication required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    Forbidden: {description: Permission denied., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    NotFound: {description: Site group not found., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    Conflict: {description: 'Revision, idempotency, name, or in-use conflict.', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    Unavailable: {description: Site group service unavailable., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}

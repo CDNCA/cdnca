@@ -954,9 +954,10 @@ export const marketApi = {
       .then((v) => list<{ group_id: string; status: 'updated' | 'unchanged' | 'failed'; removed: string[]; error?: string }>(v)),
   // allocation (ports, HTTP/3; omitted = kept, new subscriptions only) and plugins (omitted = kept,
   // reaches sold subscriptions at once) ride on the same revision as the limits.
+  // tags (the declared features without plugins; omitted = kept) too.
   updateOfferLimits: (token: string, offerID: string,
     body: { limits: MarketLimit[]; prepaid_exhausted_action: MarketPrepaidAction; expected_revision?: number;
-      allocation?: MarketOfferListing['allocation']; plugins?: string[] }, key: string) =>
+      allocation?: MarketOfferListing['allocation']; plugins?: string[]; tags?: Omit<MarketTags, 'plugins'> }, key: string) =>
     call<MarketOfferListing>(token, `/v1/admin/market/offers/${id(offerID)}/limits`, json('PUT', body), key),
   publishOffer: (token: string, id: string) =>
     call<{ status: string }>(token, `/v1/admin/market/offers/${encodeURIComponent(id)}/publish`, { method: 'POST' }),

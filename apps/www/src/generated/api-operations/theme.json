@@ -9,7 +9,7 @@
    "summary": "",
    "summary_zh": "读取主题素材",
    "auth": [
-    "bearer"
+    "none"
    ],
    "description": "A theme brand image (png/jpeg/ico). Immutable.",
    "params": [
@@ -38,7 +38,7 @@
    "summary": "",
    "summary_zh": "读取登录页主题样式",
    "auth": [
-    "bearer"
+    "none"
    ],
    "description": "Public sign-in page style of the theme plugin active on the user console (site theme C, auth_style): CSS the console puts in a <style> of its own on /auth/* and the plugin's images. Forms and submission stay the platform's; nginx serves /auth/* with img-src, font-src and connect-src 'self'. An empty css without one. Cache-Control no-cache.",
    "responses": [
@@ -71,7 +71,7 @@
    "summary": "",
    "summary_zh": "读取登录页主题素材",
    "auth": [
-    "bearer"
+    "none"
    ],
    "description": "An image of an installed plugin's sign-in style, served with a sandboxing CSP. Immutable.",
    "params": [
@@ -100,7 +100,7 @@
    "summary": "",
    "summary_zh": "读取当前主题",
    "auth": [
-    "bearer"
+    "none"
    ],
    "description": "Public pointer to the theme the caller sees (Cache-Control no-store). A tenant session gets its tenant's theme; without a session, a Host bound to a tenant (sign-in page) gets that tenant's theme; the platform console and everyone else get the platform theme (the default theme until one is activated).",
    "params": [
@@ -172,7 +172,7 @@
    "summary": "",
    "summary_zh": "读取主题样式表",
    "auth": [
-    "bearer"
+    "none"
    ],
    "description": "Rendered custom properties on :root[data-cdnca-theme], then one block per tokens_by_role role on :root[data-cdnca-theme][data-cdnca-role=\"admin\"|\"user\"] carrying only that role's overrides. Immutable.",
    "params": [
@@ -201,7 +201,7 @@
    "summary": "",
    "summary_zh": "读取主题设计变量",
    "auth": [
-    "bearer"
+    "none"
    ],
    "description": "Rendered tokens (cdnca.theme.rendered/v1) for ConfigProvider and layout slots. Immutable.",
    "params": [

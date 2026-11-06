@@ -605,7 +605,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$', minLength: 1, maxLength: 128}
     JobRevision:
       name: If-Match
       in: header

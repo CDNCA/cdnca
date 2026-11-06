@@ -14,7 +14,9 @@
 # Scenarios: ① A lists, B buys by direct top-up and resells, C buys the resale (balances per seller); ② visibility a
 #   (A sees C only as a downstream number via B); ③ C's site committed through the relay onto A's line group;
 #   ④ attack digest of A's site (stand-in ClickHouse readers) reaches C bound to its site, B only gets
-#   market.downstream.attacked; ⑤–⑦ A's stop complaint on the downstream number, operator see-through to C, stop
+#   market.downstream.attacked; ④b C's ban list of its site reaches A's leaf site (source market) within 60 s, A's
+#   distributor sends it to the node (stand-in edge bus), C's list shows it in effect, the release follows;
+#   ⑤–⑦ A's stop complaint on the downstream number, operator see-through to C, stop
 #   held on C's root and applied by A to C's share only, notices to A/B/C, release restores.
 # Not here: a real OpenResty node answering 503 for the stopped share (deploy acceptance, docs/runbooks/deploy-1035.md).
 set -euo pipefail

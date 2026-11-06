@@ -37,10 +37,6 @@ export function PaymentEnableDialog({ provider, busy, onCancel, onConfirm }: {
   const [error, setError] = useState<string | null>(null)
   const requireMfaCode = useMfaActive() !== false
   const submit = async (values: ConfirmValues) => {
-    if (!provider.tenant_id) {
-      setError(t('hints.noTenant'))
-      return
-    }
     setVerifying(true)
     setError(null)
     try {
@@ -49,8 +45,10 @@ export function PaymentEnableDialog({ provider, busy, onCancel, onConfirm }: {
         await onConfirm({ risk_acknowledged: true, step_up_token: '' })
         return
       }
+      // A provider the platform administrator installed for chosen tenants has no tenant of its own:
+      // the proof is platform-scoped; one a tenant installed before 1.0.35 stays bound to that tenant.
       const proof = await mfaApi.createStepUpProof(accessToken, {
-        tenant_id: provider.tenant_id, audience: paymentStepUpAction, action: paymentStepUpAction,
+        ...(provider.tenant_id ? { tenant_id: provider.tenant_id } : {}), audience: paymentStepUpAction, action: paymentStepUpAction,
         authentication: { method: values.method, code: values.code.trim() }, ttl_seconds: 300, max_uses: 1,
       }, createMfaWriteMetadata('step-up'))
       if (proof.replayed) throw new ApiError('Step-up replayed', 409, 'plugin_provider_step_up_required')

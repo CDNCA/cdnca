@@ -39,9 +39,9 @@ paths:
       responses:
         '200': {description: One page of rows, content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}}
         '400': {description: Invalid filter (audit_log_invalid_request), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
-        '503': {description: Log storage unavailable (audit_log_unavailable)}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {description: Log storage unavailable (audit_log_unavailable), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /v1/audit-logs/export:
     get:
       summary: Export the filtered rows as UTF-8 CSV (at most 10000 rows; the export itself is audited as system.audit_log.export)
@@ -52,9 +52,9 @@ paths:
       responses:
         '200': {description: CSV file, content: {text/csv: {schema: {type: string}}}}
         '400': {description: Invalid filter (audit_log_invalid_request), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
-        '503': {description: Log storage or audit unavailable (audit_log_unavailable)}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {description: Log storage or audit unavailable (audit_log_unavailable), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /v1/audit-logs/categories:
     get:
       summary: Event categories with labels and default retention days
@@ -74,8 +74,8 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/CategoryInfo'}}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}

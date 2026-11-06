@@ -39,15 +39,40 @@ export function headlinePlan(plans: MarketPricePlan[] | undefined): MarketPriceP
 //   revoked      held here before but the licence ended or moved to another controller (授权失效).
 export type StoreState = 'purchase' | 'distributing' | 'enable' | 'installed' | 'enabled' | 'activating' | 'revoked'
 
+// Kinds that only work once the controller's platform administrator confirmed an installation (user
+// 11-05): themes and rule packs for the controller, page plugins and external services for the tenants chosen.
+const installableKinds = new Set(['theme', 'rule_pack', 'ui_page', 'provider', 'external_service'])
+// Of those, a feature code never stands in for the installation: a page plugin such as CF 优选 carries one that the
+// default package already grants, yet nothing is usable before it is installed.
+const installFirstKinds = new Set(['ui_page', 'provider', 'external_service'])
+
+/** The platform administrator confirms its installation under 我的插件 (tenants never do). */
+export function needsInstallConfirm(plugin: Pick<MarketPlugin, 'kind'>): boolean {
+  return installableKinds.has(plugin.kind)
+}
+
 export function storeState(plugin: MarketPlugin, licenses: MarketLicense[], library: MarketLibraryItem[],
   modules: string[]): StoreState {
   const licensed = !!liveLicense(licenses, plugin.plugin_id)
   const local = library.find((item) => item.plugin_id === plugin.plugin_id)
   if (!licensed) return local && (local.installed || local.withdrawn) ? 'revoked' : 'purchase'
-  if (plugin.feature_code) return modules.includes(plugin.feature_code) ? 'enabled' : 'activating'
+  if (plugin.feature_code && !installFirstKinds.has(plugin.kind)) return modules.includes(plugin.feature_code) ? 'enabled' : 'activating'
   if (local?.enabled) return 'installed'
   if (local?.installed) return 'enable'
   return 'distributing'
+}
+
+/**
+ * After an acquisition, does the plugin still wait for the controller administrator's installation? Feature plugins
+ * (official module.* / pack.* codes) are active once the lease follows; everything that is installed is pending.
+ */
+export function acquiredPendingInstall(plugin: Pick<MarketPlugin, 'kind' | 'feature_code'>): boolean {
+  return installFirstKinds.has(plugin.kind) || (installableKinds.has(plugin.kind) && !plugin.feature_code)
+}
+
+/** Settled: nothing changes without a person (or a purchase) any more, so polling after an acquisition can stop. */
+export function settledState(state: StoreState): boolean {
+  return state !== 'activating' && state !== 'purchase'
 }
 
 // Where an administrator enables an installed plugin, by kind; null: installed by the platform administrator in My plugins.
@@ -83,8 +108,8 @@ export type OwnedState = Exclude<StoreState, 'purchase'> | 'pendingConfirm'
 export interface OwnedRow { pluginID: string; plugin?: MarketPlugin; state: OwnedState; path: string | null }
 
 // ownedRows: every plugin this controller holds (a live licence) or held (a local installation whose licence
-// ended), in licence order. The state is the same server-derived one the Browse cards show; a theme or rule
-// pack still on its way waits for the controller administrator (the installation records below).
+// ended), in licence order. The state is the same server-derived one the Browse cards show; an installable plugin
+// still on its way waits for the controller administrator (the installation records below).
 export function ownedRows(licenses: MarketLicense[], library: MarketLibraryItem[], modules: string[],
   catalog: Map<string, MarketPlugin>, path: (plugin: MarketPlugin) => string | null): OwnedRow[] {
   const ids = [...new Set([
@@ -95,9 +120,8 @@ export function ownedRows(licenses: MarketLicense[], library: MarketLibraryItem[
     const plugin = catalog.get(pluginID)
     const subject = plugin ?? { plugin_id: pluginID, kind: 'module', feature_code: null } as unknown as MarketPlugin
     const state = storeState(subject, licenses, library, modules)
-    const platform = subject.kind === 'theme' || subject.kind === 'rule_pack'
     return {
-      pluginID, plugin, state: state === 'distributing' && platform ? 'pendingConfirm' : state as OwnedState,
+      pluginID, plugin, state: state === 'distributing' && needsInstallConfirm(subject) ? 'pendingConfirm' : state as OwnedState,
       // 去配置只给已在本机可用的：授权生效中、同步中、待确认安装时对应页面还进不去。
       path: plugin && (state === 'enabled' || state === 'installed' || state === 'enable') ? path(plugin) : null,
     }

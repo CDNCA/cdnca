@@ -30,10 +30,17 @@ type queryRower interface {
 func ReadSettings(ctx context.Context, db queryRower) (Settings, string, error) {
 	var value Settings
 	var budget string
+	var selection []byte
 	err := db.QueryRow(ctx, `SELECT interval_seconds,groups,points_per_group,failure_percent,failure_rounds,
-		recovery_rounds,low_balance,budget_state FROM node_dnspup_probe_settings WHERE singleton`).Scan(
+		recovery_rounds,low_balance,budget_state,probe_type,selection,line_alert_min_points,line_alert_rounds,auto_diagnose
+		FROM node_dnspup_probe_settings WHERE singleton`).Scan(
 		&value.IntervalSeconds, &value.Groups, &value.PointsPerGroup, &value.FailurePercent, &value.FailureRounds,
-		&value.RecoveryRounds, &value.LowBalance, &budget)
+		&value.RecoveryRounds, &value.LowBalance, &budget, &value.ProbeType, &selection, &value.LineAlertMinPoints,
+		&value.LineAlertRounds, &value.AutoDiagnose)
+	if err == nil && selection != nil {
+		value.Selection = new(dnspupprobe.Selection)
+		err = json.Unmarshal(selection, value.Selection)
+	}
 	return value, budget, err
 }
 
@@ -99,14 +106,17 @@ func (store *Store) Status(ctx context.Context, actor Actor) (Status, error) {
 func (store *Store) readStatus(ctx context.Context, tx pgx.Tx) (Status, error) {
 	var status Status
 	var enabled, secret bool
-	if err := tx.QueryRow(ctx, `SELECT node.interval_seconds,node.groups,node.points_per_group,node.failure_percent,
-			node.failure_rounds,node.recovery_rounds,node.low_balance,node.budget_state,node.revision,
+	settings, _, err := ReadSettings(ctx, tx)
+	if err != nil {
+		return Status{}, err
+	}
+	status.Settings = settings
+	if err := tx.QueryRow(ctx, `SELECT node.budget_state,node.revision,
 			plugin.enabled,plugin.secret_ciphertext IS NOT NULL,state.monthly_limit,state.monthly_used,
 			state.account_checked_at,CASE WHEN state.paused_until>$1 THEN state.paused_until END
 		FROM node_dnspup_probe_settings node,probe_dnspup_settings plugin,probe_dnspup_state state
-		WHERE node.singleton AND plugin.singleton AND state.singleton`, store.clock()).Scan(&status.IntervalSeconds,
-		&status.Groups, &status.PointsPerGroup, &status.FailurePercent, &status.FailureRounds, &status.RecoveryRounds,
-		&status.LowBalance, &status.BudgetState, &status.Revision, &enabled, &secret, &status.MonthlyLimit,
+		WHERE node.singleton AND plugin.singleton AND state.singleton`, store.clock()).Scan(
+		&status.BudgetState, &status.Revision, &enabled, &secret, &status.MonthlyLimit,
 		&status.MonthlyUsed, &status.AccountCheckedAt, &status.PausedUntil); err != nil {
 		return Status{}, err
 	}
@@ -138,17 +148,24 @@ func (store *Store) NodeProbeStatus(ctx context.Context, actor Actor) (any, erro
 	return store.Status(ctx, actor)
 }
 
-// UpdateNodeProbe serves PUT /v1/admin/probe-dnspup/node-monitoring (every
-// field required, unknown fields refused).
+// UpdateNodeProbe serves PUT /v1/admin/probe-dnspup/node-monitoring (the
+// 462 fields required; the 638 fields — probe_type, selection, line alert
+// thresholds, auto_diagnose — keep their stored value when absent; unknown
+// fields refused). "selection": null clears the selection (groups apply).
 func (store *Store) UpdateNodeProbe(ctx context.Context, actor Actor, key string, body []byte) (any, error) {
 	var input struct {
-		IntervalSeconds *int     `json:"interval_seconds"`
-		Groups          []string `json:"groups"`
-		PointsPerGroup  *int     `json:"points_per_group"`
-		FailurePercent  *int     `json:"failure_percent"`
-		FailureRounds   *int     `json:"failure_rounds"`
-		RecoveryRounds  *int     `json:"recovery_rounds"`
-		LowBalance      *int64   `json:"low_balance"`
+		IntervalSeconds    *int            `json:"interval_seconds"`
+		Groups             []string        `json:"groups"`
+		PointsPerGroup     *int            `json:"points_per_group"`
+		FailurePercent     *int            `json:"failure_percent"`
+		FailureRounds      *int            `json:"failure_rounds"`
+		RecoveryRounds     *int            `json:"recovery_rounds"`
+		LowBalance         *int64          `json:"low_balance"`
+		ProbeType          *string         `json:"probe_type"`
+		Selection          json.RawMessage `json:"selection"`
+		LineAlertMinPoints *int            `json:"line_alert_min_points"`
+		LineAlertRounds    *int            `json:"line_alert_rounds"`
+		AutoDiagnose       *bool           `json:"auto_diagnose"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
@@ -157,9 +174,37 @@ func (store *Store) UpdateNodeProbe(ctx context.Context, actor Actor, key string
 		input.RecoveryRounds == nil || input.LowBalance == nil {
 		return nil, ErrInvalidSettings
 	}
-	return store.Update(ctx, actor, key, Settings{IntervalSeconds: *input.IntervalSeconds, Groups: input.Groups,
+	current, _, err := ReadSettings(ctx, store.pool)
+	if err != nil {
+		return nil, err
+	}
+	value := Settings{IntervalSeconds: *input.IntervalSeconds, Groups: input.Groups,
 		PointsPerGroup: *input.PointsPerGroup, FailurePercent: *input.FailurePercent, FailureRounds: *input.FailureRounds,
-		RecoveryRounds: *input.RecoveryRounds, LowBalance: *input.LowBalance})
+		RecoveryRounds: *input.RecoveryRounds, LowBalance: *input.LowBalance, ProbeType: current.ProbeType,
+		Selection: current.Selection, LineAlertMinPoints: current.LineAlertMinPoints, LineAlertRounds: current.LineAlertRounds,
+		AutoDiagnose: current.AutoDiagnose}
+	if input.ProbeType != nil {
+		value.ProbeType = *input.ProbeType
+	}
+	if input.Selection != nil {
+		value.Selection = nil
+		if string(input.Selection) != "null" {
+			value.Selection = new(dnspupprobe.Selection)
+			if json.Unmarshal(input.Selection, value.Selection) != nil {
+				return nil, ErrInvalidSettings
+			}
+		}
+	}
+	if input.LineAlertMinPoints != nil {
+		value.LineAlertMinPoints = *input.LineAlertMinPoints
+	}
+	if input.LineAlertRounds != nil {
+		value.LineAlertRounds = *input.LineAlertRounds
+	}
+	if input.AutoDiagnose != nil {
+		value.AutoDiagnose = *input.AutoDiagnose
+	}
+	return store.Update(ctx, actor, key, value)
 }
 
 // Update saves the settings (idempotent per session + key) and audits the
@@ -215,10 +260,16 @@ func (store *Store) update(ctx context.Context, actor Actor, key string, input S
 		if err != nil {
 			return err
 		}
+		var selection []byte
+		if input.Selection != nil {
+			selection, _ = json.Marshal(input.Selection)
+		}
 		if _, err := tx.Exec(ctx, `UPDATE node_dnspup_probe_settings SET interval_seconds=$1,groups=$2,points_per_group=$3,
 			failure_percent=$4,failure_rounds=$5,recovery_rounds=$6,low_balance=$7,revision=revision+1,
-			updated_by_user_id=$8,updated_at=$9 WHERE singleton`, input.IntervalSeconds, input.Groups, input.PointsPerGroup,
-			input.FailurePercent, input.FailureRounds, input.RecoveryRounds, input.LowBalance, actor.UserID, now); err != nil {
+			updated_by_user_id=$8,updated_at=$9,probe_type=$10,selection=$11,line_alert_min_points=$12,
+			line_alert_rounds=$13,auto_diagnose=$14 WHERE singleton`, input.IntervalSeconds, input.Groups, input.PointsPerGroup,
+			input.FailurePercent, input.FailureRounds, input.RecoveryRounds, input.LowBalance, actor.UserID, now,
+			input.ProbeType, selection, input.LineAlertMinPoints, input.LineAlertRounds, input.AutoDiagnose); err != nil {
 			return err
 		}
 		changes := map[string]any{}
@@ -236,6 +287,11 @@ func (store *Store) update(ctx context.Context, actor Actor, key string, input S
 		add("failure_rounds", before.FailureRounds, input.FailureRounds)
 		add("recovery_rounds", before.RecoveryRounds, input.RecoveryRounds)
 		add("low_balance", before.LowBalance, input.LowBalance)
+		add("probe_type", before.ProbeType, input.ProbeType)
+		add("selection", before.Selection, input.Selection)
+		add("line_alert_min_points", before.LineAlertMinPoints, input.LineAlertMinPoints)
+		add("line_alert_rounds", before.LineAlertRounds, input.LineAlertRounds)
+		add("auto_diagnose", before.AutoDiagnose, input.AutoDiagnose)
 		if err := store.appendAudit(ctx, tx, actor, "success", map[string]any{"changes": changes}); err != nil {
 			return err
 		}

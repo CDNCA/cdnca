@@ -1,0 +1,183 @@
+openapi: 3.1.0
+info:
+  title: cdnca Security Ban List API
+  version: 1.0.0
+  description: >-
+    The security ban list (封禁名单): manual bans and the nodes' automatic WAF / CC / auto defence
+    bans per site; a release lifts a ban on every node serving the site. Tenants use /v1/security-bans (their own
+    sites), the platform /v1/admin/security-bans (every site). Since migration 635 a site served by market
+    subscription nodes sends its list to each market leaf (libs/marketproto/bansync); an active ban of such a site,
+    or of a site with no node at all, carries its delivery, and a leaf shows the subscriber's bans of its market
+    sites as source market.
+paths:
+  /v1/security-bans:
+    get:
+      operationId: listSecurityBans
+      x-summary-zh: "列出会话租户网站的封禁名单"
+      summary: List the ban list of the session tenant's sites
+      security: [{bearerSession: []}]
+      x-required-permissions: [security_policies.read]
+      parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/ClientIP'}, {$ref: '#/components/parameters/State'}, {$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/Limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}}
+    post:
+      operationId: createSecurityBan
+      x-summary-zh: "在会话租户网站手工封禁 IP 或网段"
+      summary: Ban a client on a site of the session tenant
+      security: [{bearerSession: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {$ref: '#/components/requestBodies/Create'}
+      responses: {'201': {$ref: '#/components/responses/Entry'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /v1/security-bans/{entry_id}/release:
+    post:
+      operationId: releaseSecurityBan
+      x-summary-zh: "解除会话租户网站的一条封禁"
+      summary: Release a ban of the session tenant
+      security: [{bearerSession: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters: [{$ref: '#/components/parameters/EntryID'}]
+      responses: {'200': {$ref: '#/components/responses/Entry'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}}
+  /v1/admin/security-bans:
+    get:
+      operationId: listAdminSecurityBans
+      x-summary-zh: "列出所有网站的封禁名单"
+      summary: List the ban list of every site
+      security: [{bearerSession: []}]
+      x-required-permissions: [security_policies.read]
+      parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/ClientIP'}, {$ref: '#/components/parameters/State'}, {$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/Limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}}
+    post:
+      operationId: createAdminSecurityBan
+      x-summary-zh: "在任意网站手工封禁 IP 或网段"
+      summary: Ban a client on any site
+      security: [{bearerSession: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {$ref: '#/components/requestBodies/Create'}
+      responses: {'201': {$ref: '#/components/responses/Entry'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /v1/admin/security-bans/{entry_id}/release:
+    post:
+      operationId: releaseAdminSecurityBan
+      x-summary-zh: "解除任意网站的一条封禁"
+      summary: Release a ban of any site
+      security: [{bearerSession: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters: [{$ref: '#/components/parameters/EntryID'}]
+      responses: {'200': {$ref: '#/components/responses/Entry'}, '400': {$ref: '#/components/responses/Error'}, '401': {$ref: '#/components/responses/Error'}, '403': {$ref: '#/components/responses/Error'}, '404': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Error'}}
+components:
+  securitySchemes:
+    bearerSession: {type: http, scheme: bearer, bearerFormat: opaque-session}
+  parameters:
+    SiteID: {name: site_id, in: query, required: false, schema: {type: string, format: uuid}}
+    ClientIP: {name: client_ip, in: query, required: false, description: An address or a network., schema: {type: string}}
+    State: {name: state, in: query, required: false, schema: {$ref: '#/components/schemas/State'}}
+    Page: {name: page, in: query, required: false, schema: {type: integer, minimum: 1, default: 1}}
+    Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+    EntryID: {name: entry_id, in: path, required: true, schema: {type: string, format: uuid}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$', minLength: 1, maxLength: 128}}
+  requestBodies:
+    Create:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [site_id, client_ip, duration_seconds]
+            properties:
+              site_id: {type: string, format: uuid}
+              client_ip: {type: string, description: 'An IPv4 / IPv6 address, or a network IPv4 /8../31, IPv6 /32../127 (nodes with BAN_CIDR).'}
+              duration_seconds: {type: integer, minimum: 60, maximum: 2592000}
+              reason: {type: string, maxLength: 256}
+  schemas:
+    State: {type: string, enum: [active, released, expired]}
+    Entry:
+      type: object
+      required: [id, tenant_scope_id, site_id, site_domain, client_ip, source, rule_id, reason, banned_at, banned_until,
+        created_by, released_at, released_by, state, market, delivery]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        site_domain: {type: string}
+        client_ip: {type: string}
+        source:
+          type: string
+          enum: [waf, cc, manual, autodefense, market]
+          description: market is a root subscriber's ban of a market site, written on this leaf from its snapshot.
+        rule_id: {type: string}
+        reason: {type: string}
+        banned_at: {type: string, format: date-time}
+        banned_until: {type: string, format: date-time}
+        created_by: {type: [string, 'null'], format: uuid}
+        released_at: {type: [string, 'null'], format: date-time}
+        released_by: {type: [string, 'null'], format: uuid}
+        state: {$ref: '#/components/schemas/State'}
+        market:
+          description: Source market only; null otherwise.
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/MarketOrigin'}]
+        delivery:
+          description: >-
+            Listed active bans of a site served by market leaves or by no node of this controller; null for a site
+            served only by its own nodes (active stands) and in create / release responses.
+          oneOf: [{type: 'null'}, {$ref: '#/components/schemas/Delivery'}]
+    MarketOrigin:
+      type: object
+      required: [subscription, buyer_source]
+      properties:
+        subscription: {type: string, description: The market subscription key (market tenant mkt-<key>).}
+        buyer_source: {type: string, description: 'The subscriber''s own source (manual, cc, waf, autodefense).'}
+    Delivery:
+      type: object
+      required: [state, reason, leaves, effective, own_nodes]
+      properties:
+        state:
+          type: string
+          enum: [effective, delivering, pending, no_nodes, unsupported, failed, refused]
+          description: >-
+            The worst over the site's market leaves: effective (every node of every leaf runs it), delivering (taken,
+            nodes not all there yet), pending (not sent or not answered yet), no_nodes (no node serves the site, or the
+            leaf has none / does not send ban lists), unsupported (the leaf or the market predates it), failed (a leaf
+            node refused the list), refused (the leaf refused it; reason says why).
+        reason:
+          type: string
+          description: >-
+            Empty, or a code: site_limit, tenant_limit, rate_limited, released_by_supplier, invalid_client,
+            ban_sync_invalid, ban_sync_rate_limited, supply_paused, subscription_ended, leaf_site_not_found,
+            ban_list_unavailable, relay_refused, leaf_timeout, leaf_error, peer_unsupported, distribution_off, or a
+            node receipt code.
+        leaves: {type: integer, minimum: 0}
+        effective: {type: integer, minimum: 0}
+        own_nodes: {type: integer, minimum: 0}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            request_id: {type: string}
+  responses:
+    Page:
+      description: Newest first.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [items, total, page, limit]
+            properties:
+              items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Entry'}}
+              total: {type: integer, minimum: 0}
+              page: {type: integer, minimum: 1}
+              limit: {type: integer, minimum: 1, maximum: 100}
+    Entry:
+      description: The ban.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Entry'}
+    Error:
+      description: Error.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

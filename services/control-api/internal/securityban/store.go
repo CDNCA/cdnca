@@ -19,6 +19,8 @@ type Store struct {
 	now     func() time.Time
 	// changed is called after a committed write (the distributor's Wake).
 	changed func()
+	// market reports market leaves behind sites (delivery.go).
+	market MarketDeliveries
 }
 
 func NewStore(pool *pgxpool.Pool, now func() time.Time) *Store {
@@ -38,15 +40,29 @@ func (s *Store) notify() {
 }
 
 const entryColumns = `entry.id,entry.tenant_scope_id,entry.site_id,site.domain,entry.client_ip,entry.source,entry.rule_id,
-	entry.reason,entry.banned_at,entry.banned_until,entry.created_by,entry.released_at,entry.released_by`
+	entry.reason,entry.banned_at,entry.banned_until,entry.created_by,entry.released_at,entry.released_by,
+	CASE WHEN entry.source='market' THEN (SELECT substr(account.username,5) FROM memberships membership
+		JOIN users account ON account.id=membership.user_id
+		WHERE membership.scope_id=entry.tenant_scope_id AND account.username LIKE 'mkt-%' ORDER BY account.username LIMIT 1) END,
+	(SELECT ref.buyer_source FROM market_supply_ban_refs ref WHERE ref.entry_id=entry.id)`
 
 func scanEntry(row pgx.Row, now time.Time) (Entry, error) {
 	var entry Entry
 	var client netip.Prefix
+	var subscription, buyerSource *string
 	if err := row.Scan(&entry.ID, &entry.TenantScopeID, &entry.SiteID, &entry.SiteDomain, &client, &entry.Source,
 		&entry.RuleID, &entry.Reason, &entry.BannedAt, &entry.BannedUntil, &entry.CreatedBy, &entry.ReleasedAt,
-		&entry.ReleasedBy); err != nil {
+		&entry.ReleasedBy, &subscription, &buyerSource); err != nil {
 		return Entry{}, err
+	}
+	if entry.Source == SourceMarket {
+		entry.Market = &MarketOrigin{}
+		if subscription != nil {
+			entry.Market.Subscription = *subscription
+		}
+		if buyerSource != nil {
+			entry.Market.BuyerSource = *buyerSource
+		}
 	}
 	entry.ClientIP = clientText(client)
 	entry.BannedAt, entry.BannedUntil = entry.BannedAt.UTC(), entry.BannedUntil.UTC()
@@ -119,6 +135,9 @@ func (s *Store) List(ctx context.Context, actor Actor, filter ListFilter) (ListR
 		return rows.Err()
 	})
 	if err != nil {
+		return ListResult{}, fmt.Errorf("list security bans: %w", err)
+	}
+	if err := s.annotate(ctx, result.Items); err != nil {
 		return ListResult{}, fmt.Errorf("list security bans: %w", err)
 	}
 	return result, nil

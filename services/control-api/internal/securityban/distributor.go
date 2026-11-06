@@ -60,6 +60,10 @@ type Distributor struct {
 	mu        sync.Mutex
 	published map[uuid.UUID]published
 	lastError string
+	// passStarted: the start of the last pass that read the list and
+	// published every node it had to (MarketDelivery: a node's receipt counts
+	// for a list change only after such a pass began after it).
+	passStarted time.Time
 }
 
 type published struct {
@@ -129,6 +133,16 @@ type content struct {
 // (and unanswered ones after RetryAfter).
 func (distributor *Distributor) PublishOnce(ctx context.Context) error {
 	now := distributor.config.Now().UTC()
+	failure := distributor.publishOnce(ctx, now)
+	if failure == nil {
+		distributor.mu.Lock()
+		distributor.passStarted = now
+		distributor.mu.Unlock()
+	}
+	return failure
+}
+
+func (distributor *Distributor) publishOnce(ctx context.Context, now time.Time) error {
 	contents, err := distributor.contents(ctx, now)
 	if err != nil {
 		return err
@@ -287,7 +301,7 @@ func (distributor *Distributor) contents(ctx context.Context, now time.Time) (ma
 				continue
 			}
 			if current, ok := bans[key]; !ok || value.until.Unix() > current.Until {
-				bans[key] = contract.Ban{SiteID: key[0], Client: key[1], Until: value.until.Unix(), Source: value.source}
+				bans[key] = contract.Ban{SiteID: key[0], Client: key[1], Until: value.until.Unix(), Source: wireSource(value.source)}
 			}
 		}
 		capable, err := banCIDRNodes(ctx, tx, mapKeys(serving))
@@ -319,6 +333,16 @@ func (distributor *Distributor) contents(ctx context.Context, now time.Time) (ma
 		return nil, fmt.Errorf("read security ban list: %w", err)
 	}
 	return result, nil
+}
+
+// wireSource is the source a node receives: a market row (a subscriber's
+// ban) goes as manual, since node agents accept only waf, cc, manual
+// and autodefense and the source is shown in node logs only.
+func wireSource(source string) string {
+	if source == SourceMarket {
+		return SourceManual
+	}
+	return source
 }
 
 func mapKeys[V any](values map[uuid.UUID]V) []uuid.UUID {

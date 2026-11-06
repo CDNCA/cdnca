@@ -38,6 +38,7 @@ const zhCN: Record<string, string> = {
   'dns.records.manage': '管理解析记录：在域名解析里增改删你自己 DNS 账号下的记录（含分线路），不能查看或修改 DNS 账号密钥',
   'domains.security.manage': '管理域名黑名单与所有权',
   'edge.aggregated.manage': '管理聚合边缘',
+  'probes.dnspup.request': '发起拨测：用平台的 dnspup 拨测额度测你指定的公网目标，结果只回给本插件',
   'edge_publications.manage': '发布边缘配置',
   'edge_publications.read': '查看边缘配置发布',
   'error_pages.manage': '管理自定义错误页',

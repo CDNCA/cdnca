@@ -36,6 +36,14 @@
      "description": "Stable error envelope; messages are not localization keys."
     },
     {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
      "status": "default",
      "description": "Stable error envelope; messages are not localization keys."
     }
@@ -162,6 +170,14 @@
     {
      "status": "409",
      "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     },
     {
      "status": "default",
@@ -312,6 +328,14 @@
      "description": "Stable error envelope; messages are not localization keys."
     },
     {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
      "status": "default",
      "description": "Stable error envelope; messages are not localization keys."
     }
@@ -444,6 +468,14 @@
     {
      "status": "409",
      "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     },
     {
      "status": "default",
@@ -635,6 +667,14 @@
      "description": "Stable error envelope; messages are not localization keys."
     },
     {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
      "status": "default",
      "description": "Stable error envelope; messages are not localization keys."
     }
@@ -717,8 +757,8 @@
    "auth": [
     "bearer"
    ],
-   "description": "Normal line groups of the platform scope only; setting a default clears the previous one. Does not advance the line group revision. Websites without a package use it to freeze their CNAME target IPs.",
-   "description_zh": "只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。",
+   "description": "Normal line groups of the platform scope only; setting a default clears the previous one. Does not advance the line group revision. Websites without a package use it to freeze their CNAME target IPs. The Idempotency-Key is bound to the line group and is_platform_default: another value under the same key is 409; a replay writes nothing and returns the line group as it is now.",
+   "description_zh": "只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。Idempotency-Key 绑定线路组与 is_platform_default：同键换值返回 409；同键重放不再写入，返回线路组当前状态。",
    "params": [
     {
      "name": "id",
@@ -775,6 +815,10 @@
     {
      "status": "404",
      "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "node_scheduling_idempotency_conflict: the Idempotency-Key was used for a different request"
     },
     {
      "status": "default",
@@ -931,6 +975,14 @@
      "description": "Stable error envelope; messages are not localization keys."
     },
     {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
      "status": "default",
      "description": "Stable error envelope; messages are not localization keys."
     }
@@ -1015,6 +1067,14 @@
     {
      "status": "409",
      "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
     },
     {
      "status": "default",
@@ -1141,8 +1201,8 @@
     "apiKey",
     "bearer"
    ],
-   "description": "Replaces the configuration (audited as node_scheduling.group.smart_schedule). Disabling drops the selections at once; the DNS lines return to the static endpoint sets on the next publication tick, identical to a line group that never enabled it. fallback is always carrier_then_default.",
-   "description_zh": "整体替换配置（审计动作 node_scheduling.group.smart_schedule）。关闭时立即清除选中结果，DNS 线路在下一轮发布时恢复静态端点集合，与从未开启一致。fallback 固定为 carrier_then_default。",
+   "description": "Replaces the configuration (audited as node_scheduling.group.smart_schedule). Disabling drops the selections at once; the DNS lines return to the static endpoint sets on the next publication tick, identical to a line group that never enabled it. fallback is always carrier_then_default. The Idempotency-Key is bound to the line group and the settings: other settings under the same key are 409; a replay writes nothing and returns the current view.",
+   "description_zh": "整体替换配置（审计动作 node_scheduling.group.smart_schedule）。关闭时立即清除选中结果，DNS 线路在下一轮发布时恢复静态端点集合，与从未开启一致。fallback 固定为 carrier_then_default。Idempotency-Key 绑定线路组与配置：同键换配置返回 409；同键重放不再写入，返回当前视图。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -1278,6 +1338,10 @@
     {
      "status": "404",
      "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "node_scheduling_idempotency_conflict: the Idempotency-Key was used for a different request"
     },
     {
      "status": "503",
@@ -1484,6 +1548,18 @@
     {
      "status": "400",
      "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "node_scheduling_idempotency_conflict: the Idempotency-Key was used for a different request"
     },
     {
      "status": "default",

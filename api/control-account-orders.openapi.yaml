@@ -277,6 +277,8 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9._-]{1,128}$'
+        minLength: 1
+        maxLength: 128
     IfMatch:
       name: If-Match
       in: header

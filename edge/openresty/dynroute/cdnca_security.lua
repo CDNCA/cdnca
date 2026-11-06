@@ -5,7 +5,8 @@
 -- decisions are v7's (libs/edgeconfig security fragments, site runtime v2
 -- compiler writeRuntimePolicyLocation):
 --
---   server_rewrite  CC (security.cc binding of the request's public port)
+--   server_rewrite  CC (security.cc binding of the request's public port),
+--                   then the ban list for a site CC did not check
 --   rewrite         ACL/WAF rule plan (D6 interpreter)
 --   access          firewall action -> JS challenge -> HTTP policy
 --   header_filter   HTTP policy response headers
@@ -352,8 +353,29 @@ end
 -- ---------------------------------------------------------------------------
 -- Phases.
 -- ---------------------------------------------------------------------------
+-- banlist: the ban list library's bans of the site apply
+-- whatever the site binds. The CC engine checks them in its run
+-- (ngx.ctx.ccv2_banlist_checked, also when it lets a trusted crawler pass);
+-- a site without an enabled CC policy is checked here, with the same answer
+-- (403, X-Cdnca-Ban: listed). Nothing is read per request for a site the
+-- node's list has no ban of (cdnca_banlist.listed).
+local banlist
+
+function _M.banlist(site)
+    if ngx.ctx.ccv2_banlist_checked then return end
+    if banlist == nil then
+        local ok, module = pcall(require, "cdnca_banlist")
+        banlist = ok and module or false
+    end
+    if not banlist or not banlist.listed(site.site_id) then return end
+    local remaining = banlist.banned(site.site_id, ngx_var.remote_addr)
+    if remaining then return banlist.deny(remaining, "cdnca_security_block_page") end
+end
+
 function _M.server_rewrite(site)
-    return _M.cc(site)
+    local result = _M.cc(site)
+    if result ~= nil then return result end
+    return _M.banlist(site)
 end
 
 function _M.rewrite(site)

@@ -58,6 +58,10 @@ type Service struct {
 	mu     sync.Mutex
 	prober *Prober
 	loaded int64 // settings revision the prober was built for (-1: none)
+	// checkpoints caches GET /v1/nodes for the plugin / diagnose requests.
+	checkpoints         []Checkpoint
+	checkpointsAt       time.Time
+	checkpointsRevision int64
 }
 
 func New(config Config) (*Service, error) {

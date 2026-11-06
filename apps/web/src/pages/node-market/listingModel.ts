@@ -95,13 +95,30 @@ export function offerOf(v: ListingValues, rows: LimitRow[], floor: LoadFloor | n
   const { limits } = toLimits(rows, floor)
   return {
     name: v.name.trim(), billing_model: v.billing_model, allocation: allocationOf(v), limits,
-    tags: {
-      cc_protection: v.cc, ddos_protection_gbps: v.ddos, complaint_resistant: v.complaint, tenancy: v.tenancy,
-      mobile_reachable: v.mobile, region_block: v.regionBlock, ...(v.lineClass?.trim() ? { line_class: v.lineClass.trim() } : {}),
-      ...(v.plugins?.length ? { plugins: [...v.plugins].sort() } : {}), ...customOf(v),
-    },
+    tags: { ...declaredTagsOf(v), ...(v.plugins?.length ? { plugins: [...v.plugins].sort() } : {}) },
     prepaid_exhausted_action: v.prepaid, compliance: { require_icp: v.icp }, pricing: pricingOf(v),
     trial_days: trialDaysOf(v),
+  }
+}
+
+export type TagValues = Pick<ListingValues, 'cc' | 'ddos' | 'tenancy' | 'lineClass' | 'complaint' | 'mobile' | 'regionBlock' | 'custom'>
+
+// declaredTagsOf is the seller's declared features (Tags without plugins), as listed and as 修改报价 › 特性标签 sends them.
+export function declaredTagsOf(v: TagValues): Omit<MarketTags, 'plugins'> {
+  return {
+    cc_protection: v.cc, ddos_protection_gbps: v.ddos, complaint_resistant: v.complaint, tenancy: v.tenancy,
+    mobile_reachable: v.mobile, region_block: v.regionBlock, ...(v.lineClass?.trim() ? { line_class: v.lineClass.trim() } : {}),
+    ...customOf(v),
+  }
+}
+
+// tagValuesOf reads an offer's stored tags back into the form (missing = the listing defaults).
+export function tagValuesOf(tags: Partial<MarketTags> | undefined): TagValues {
+  const t = tags ?? {}
+  return {
+    cc: t.cc_protection ?? defaultValues.cc, ddos: t.ddos_protection_gbps ?? 0, tenancy: t.tenancy ?? defaultValues.tenancy,
+    lineClass: t.line_class ?? '', complaint: !!t.complaint_resistant, mobile: !!t.mobile_reachable, regionBlock: !!t.region_block,
+    custom: t.custom ?? [],
   }
 }
 

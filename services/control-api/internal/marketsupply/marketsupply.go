@@ -92,12 +92,18 @@ type Service struct {
 
 	summaries AttackSummaries
 	security  SiteSecurity
+	// bans / banDelivery take subscribers' ban lists (bans.go).
+	bans        BanList
+	banDelivery BanDelivery
 
 	mu     sync.Mutex
 	actor  *serviceActor
 	grants map[uuid.UUID]grant.Grant
 	// subscribers: root subscriber member by external key (secdigest.go).
 	subscribers map[string]uuid.UUID
+	// activeKeys: the keys with an active or grace grant in the last Sync
+	// (nil before the first); RefreshLimits lifts the bans of the others.
+	activeKeys map[string]bool
 }
 
 type serviceActor struct {
@@ -209,6 +215,16 @@ func (s *Service) Sync(ctx context.Context, grants []grant.Grant) ([]Outcome, er
 		return nil, err
 	}
 	s.remember(grants)
+	active := map[string]bool{}
+	for _, g := range grants {
+		switch g.StatusAt(s.now()) {
+		case grant.StatusActive, grant.StatusGrace:
+			active[Key(g)] = true
+		}
+	}
+	s.mu.Lock()
+	s.activeKeys = active
+	s.mu.Unlock()
 	latest := map[string]grant.Grant{}
 	for _, g := range grants {
 		key := Key(g)

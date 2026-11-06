@@ -20,3 +20,9 @@ type Transaction interface {
 	Replay(idempotencyKey string) (Receipt, bool, error)
 	Save(Installation, Receipt) error
 }
+
+// TargetSaver is a Transaction that can record the tenants of a platform-confirmed tenant plugin in the same
+// transaction as its first head (control migration 636).
+type TargetSaver interface {
+	SaveTargets(Installation, Receipt, Targets) error
+}

@@ -2,7 +2,7 @@
 
 本文只解释协议边界，不重复定义字段。service、method、message、枚举和字段 tag 均以 [`proto/`](../../proto/) 为唯一事实源；下面的隐藏标记由契约检查器核对，名称漂移会直接失败。
 
-<!-- contract-doc:proto file="../../proto/agent/v1/gateway_service.proto" service="AgentGatewayService" methods="Enroll,RenewCertificate,Connect,StreamTelemetry,FetchArtifact" messages="EnrollRequest,EnrollResponse,RenewCertificateRequest,RenewCertificateResponse,ConnectRequest,ConnectResponse,StreamTelemetryRequest,StreamTelemetryResponse,FetchArtifactRequest,FetchArtifactResponse" -->
+<!-- contract-doc:proto file="../../proto/agent/v1/gateway_service.proto" service="AgentGatewayService" methods="Enroll,RenewCertificate,Connect,StreamTelemetry,FetchArtifact,RecoverCertificate,ReportNodeNetworkInventoryV1,FetchSiteObjects" messages="EnrollRequest,EnrollResponse,RenewCertificateRequest,RenewCertificateResponse,ConnectRequest,ConnectResponse,StreamTelemetryRequest,StreamTelemetryResponse,FetchArtifactRequest,FetchArtifactResponse,RecoverCertificateRequest,RecoverCertificateResponse,ReportNodeNetworkInventoryV1Request,ReportNodeNetworkInventoryV1Response,FetchSiteObjectsRequest,FetchSiteObjectsResponse" -->
 
 ## AgentGatewayService
 
@@ -20,7 +20,7 @@
 
 协商 23+24 后，Gateway 只有在取得精确 JetStream PubAck 并持久保存对应 `UpgradeStatusAck` 后才发送确认。Agent 必须先持久保存且核对 `UpgradeStatusAckReceipt`，再收敛状态 outbox；其确认丢失时双方使用相同 `ack_sha256`、stream 和 sequence 重放，不得重新发布状态。Gateway 只在收到并持久处理 Agent 的确认后清理自己的确认记录。
 
-<!-- contract-doc:proto file="../../proto/controlinternal/v1/control_internal.proto" service="ControlInternalService" methods="AuthorizeEnrollment,CompleteEnrollment,RenewNodeCertificate,GetNodeAuthorization,FetchArtifact" messages="AuthorizeEnrollmentRequest,AuthorizeEnrollmentResponse,CompleteEnrollmentRequest,CompleteEnrollmentResponse,RenewNodeCertificateRequest,RenewNodeCertificateResponse,GetNodeAuthorizationRequest,GetNodeAuthorizationResponse,FetchArtifactRequest,FetchArtifactResponse" -->
+<!-- contract-doc:proto file="../../proto/controlinternal/v1/control_internal.proto" service="ControlInternalService" methods="AuthorizeEnrollment,CompleteEnrollment,RenewNodeCertificate,GetNodeAuthorization,FetchArtifact,ReportGatewayReady,RenewGatewayCertificate,GetGatewaySettings,ReportNodeNetworkInventoryV1,RecoverNodeCertificate,FetchSiteObjects" messages="AuthorizeEnrollmentRequest,AuthorizeEnrollmentResponse,CompleteEnrollmentRequest,CompleteEnrollmentResponse,RenewNodeCertificateRequest,RenewNodeCertificateResponse,GetNodeAuthorizationRequest,GetNodeAuthorizationResponse,FetchArtifactRequest,FetchArtifactResponse,ReportGatewayReadyRequest,ReportGatewayReadyResponse,RenewGatewayCertificateRequest,RenewGatewayCertificateResponse,GetGatewaySettingsRequest,GetGatewaySettingsResponse,ReportNodeNetworkInventoryV1Request,ReportNodeNetworkInventoryV1Response,RecoverNodeCertificateRequest,RecoverNodeCertificateResponse,FetchSiteObjectsRequest,FetchSiteObjectsResponse" -->
 
 ## ControlInternalService
 

@@ -115,9 +115,12 @@ const PaymentStepUpAction = "plugin.provider.enable_payment"
 type StepUpCheck struct {
 	UserID, ScopeID, SessionID uuid.UUID
 	TenantID                   uuid.UUID
-	Token                      string
-	RequestID                  string
-	Binding                    [32]byte
+	// PlatformScope: the provider is installed by the platform administrator for the whole controller (control
+	// migration 636), so the proof is platform-scoped (TenantID nil) instead of bound to a tenant.
+	PlatformScope bool
+	Token         string
+	RequestID     string
+	Binding       [32]byte
 }
 
 // StepUpVerifier consumes a step-up proof and returns its id (production:
@@ -168,14 +171,19 @@ func (service *Service) Enable(ctx context.Context, actor Actor, pluginID string
 	switch {
 	case !confirm.RiskAcknowledged:
 		reason, err = "risk_not_acknowledged", ErrRiskNotAcknowledged
-	case service.StepUp == nil || confirm.SessionID == uuid.Nil || provider.TenantID == nil:
+	case service.StepUp == nil || confirm.SessionID == uuid.Nil:
 		reason, err = "step_up_required", ErrStepUpRequired
 	}
 	var proofID uuid.UUID
 	if err == nil {
-		proofID, err = service.StepUp.Consume(ctx, StepUpCheck{UserID: actor.UserID, ScopeID: actor.ScopeID,
-			SessionID: confirm.SessionID, TenantID: *provider.TenantID, Token: confirm.StepUpToken, RequestID: actor.RequestID,
-			Binding: PaymentBindingDigest(pluginID, provider.declarationSHA256)})
+		// A provider without a tenant is held by the platform scope: the proof is platform-scoped.
+		check := StepUpCheck{UserID: actor.UserID, ScopeID: actor.ScopeID, SessionID: confirm.SessionID,
+			PlatformScope: provider.TenantID == nil, Token: confirm.StepUpToken, RequestID: actor.RequestID,
+			Binding: PaymentBindingDigest(pluginID, provider.declarationSHA256)}
+		if provider.TenantID != nil {
+			check.TenantID = *provider.TenantID
+		}
+		proofID, err = service.StepUp.Consume(ctx, check)
 		if err != nil || proofID == uuid.Nil {
 			reason, err = "step_up_required", ErrStepUpRequired
 		}

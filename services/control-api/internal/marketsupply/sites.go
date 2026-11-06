@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
+	"github.com/cdnca/cdnca/libs/marketproto/bansync"
 	"github.com/cdnca/cdnca/libs/marketproto/envelope"
 	"github.com/cdnca/cdnca/libs/marketproto/grant"
 	"github.com/cdnca/cdnca/libs/marketproto/siteconf"
@@ -267,6 +268,8 @@ func (s *Service) Handle(ctx context.Context, header envelope.Header, payload []
 		}
 		reply.OK, reply.AppliedRevision = true, 0
 		return reply, nil
+	case bansync.OpSync:
+		return s.syncBans(ctx, header, payload, g, tenant, reply)
 	case siteconf.OpPurge:
 		if s.purge == nil {
 			return fail(ErrUnsupportedOp)
@@ -541,4 +544,14 @@ func normalizedHeaderDomains(in []string) []string {
 
 func siteActor(a serviceActor) site.Actor {
 	return site.Actor{UserID: a.userID, ScopeID: a.scopeID, ScopeKind: "platform", SessionID: a.sessionID}
+}
+
+// SiteActor is the platform service account as a site actor, for this
+// controller's own background writes as a subscriber.
+func (s *Service) SiteActor(ctx context.Context) (site.Actor, error) {
+	actor, err := s.ensureActor(ctx)
+	if err != nil {
+		return site.Actor{}, err
+	}
+	return siteActor(actor), nil
 }

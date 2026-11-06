@@ -1,0 +1,285 @@
+{
+ "id": "probe-dnspup",
+ "prefix": "/v1/probe-dnspup",
+ "operations": [
+  {
+   "operation_id": "createProbeDNSPupPluginRequest",
+   "method": "POST",
+   "path": "/v1/probe-dnspup/plugin/requests",
+   "summary": "Start one probe with the platform's dnspup key pair and quota",
+   "summary_zh": "插件发起一次拨测（目标 + 类型 + 选点），用平台 DNSPup 凭据与额度执行",
+   "auth": [
+    "apiKey"
+   ],
+   "permissions": [
+    "probes.dnspup.request"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "type",
+      "type": "string: tcping / ping / http / https / dns",
+      "required": true
+     },
+     {
+      "name": "target",
+      "type": "string",
+      "required": true,
+      "description": "public IP / domain; http(s): URL with that scheme"
+     },
+     {
+      "name": "port",
+      "type": "integer",
+      "description": "tcping only"
+     },
+     {
+      "name": "method",
+      "type": "string: GET / HEAD"
+     },
+     {
+      "name": "record",
+      "type": "string: A / AAAA / CNAME / MX / NS / TXT"
+     },
+     {
+      "name": "expect",
+      "type": "array<string>",
+      "description": "dns: at least one answer must match"
+     },
+     {
+      "name": "ip_version",
+      "type": "string: 4 / 6"
+     },
+     {
+      "name": "selection",
+      "type": "Selection"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Started",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / completed / failed",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "traces",
+       "type": "any",
+       "description": "mtr hop sets as dnspup returns them"
+      },
+      {
+       "name": "results",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    },
+    {
+     "status": "429",
+     "description": "Error envelope"
+    },
+    {
+     "status": "503",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "getProbeDNSPupPluginRequest",
+   "method": "GET",
+   "path": "/v1/probe-dnspup/plugin/requests/{id}",
+   "summary": "Read a probe this installation started (Retry-After while pending)",
+   "summary_zh": "读取本插件发起的拨测结果（运行中带 Retry-After；其他安装读不到）",
+   "auth": [
+    "apiKey"
+   ],
+   "permissions": [
+    "probes.dnspup.request"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Probe",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / completed / failed",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "traces",
+       "type": "any",
+       "description": "mtr hop sets as dnspup returns them"
+      },
+      {
+       "name": "results",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "getProbeDNSPupPluginStatus",
+   "method": "GET",
+   "path": "/v1/probe-dnspup/plugin/status",
+   "summary": "Whether the plugin can probe now (not metered)",
+   "summary_zh": "插件能否发起拨测（未安装/未配置/暂停/额度），不计量",
+   "auth": [
+    "apiKey"
+   ],
+   "permissions": [
+    "probes.dnspup.request"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Status",
+     "fields": [
+      {
+       "name": "available",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string: probe_dnspup_not_installed / probe_dnspup_not_configured / probe_dnspup_paused / probe_dnspup_quota_exceeded"
+      },
+      {
+       "name": "paused_until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "per_minute",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "tenant_monthly",
+       "type": "integer",
+       "required": true,
+       "description": "0: no tenant limit"
+      },
+      {
+       "name": "used_this_month",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    }
+   ]
+  }
+ ]
+}

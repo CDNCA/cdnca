@@ -54,6 +54,15 @@ func (service Service) Apply(ctx context.Context, command Command) (MutationResu
 		if err := tx.Save(next, receipt); err != nil {
 			return err
 		}
+		if command.Targets != nil {
+			saver, ok := tx.(TargetSaver)
+			if !ok {
+				return ErrTargetsInvalid
+			}
+			if err := saver.SaveTargets(next, receipt, *command.Targets); err != nil {
+				return err
+			}
+		}
 		result = MutationResult{Installation: cloneInstallation(next), Receipt: cloneReceipt(receipt)}
 		return nil
 	})
@@ -186,6 +195,11 @@ func validCommand(command Command) bool {
 		command.Candidate.AuthorizationID != command.AuthorizationID {
 		return false
 	}
+	// Targets only accompany the first confirmation of a tenant plugin.
+	if command.Targets != nil && (command.Action != ActionConfirm ||
+		command.Candidate.ResourceScope != ResourceScopeTenant || !validTargets(*command.Targets)) {
+		return false
+	}
 	switch command.Action {
 	case ActionConfirm, ActionUpgrade:
 		return command.Reason == "" && (command.Applied || command.Action == ActionUpgrade && validFailureCode(command.StableReasonCode))
@@ -255,10 +269,12 @@ func commandDigest(command Command) ([sha256.Size]byte, error) {
 		Applied            bool         `json:"applied"`
 		StableReasonCode   string       `json:"stable_reason_code"`
 		Reason             string       `json:"reason"`
+		// omitempty: commands without targets keep the digest their stored receipts were written with.
+		Targets *Targets `json:"targets,omitempty"`
 	}{command.TenantID, command.InstallationID, command.AuthorizationID, command.Action,
 		command.ExpectedRevision, command.RequestID, command.Candidate, facts,
 		command.SensitivePermissionsConfirmed, command.NewPermissionsConfirmed, command.Applied,
-		command.StableReasonCode, command.Reason})
+		command.StableReasonCode, command.Reason, command.Targets})
 	if err != nil {
 		return [sha256.Size]byte{}, ErrInvalidInput
 	}

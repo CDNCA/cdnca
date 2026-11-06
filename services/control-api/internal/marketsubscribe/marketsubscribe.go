@@ -76,12 +76,14 @@ type Service struct {
 	// Receipt reconciliation (reconcile.go).
 	reconcile ReconcilePolicy
 	notices   ReceiptNotifier
+	// banWake runs a ban list pass soon (bans.go).
+	banWake chan struct{}
 }
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 
 func New(pool *pgxpool.Pool, market Market, caller Caller) *Service {
-	return &Service{pool: pool, market: market, caller: caller, now: time.Now}
+	return &Service{pool: pool, market: market, caller: caller, now: time.Now, banWake: make(chan struct{}, 1)}
 }
 
 // SyncTargets records every market subscription as a supply with its current

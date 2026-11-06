@@ -33,6 +33,7 @@ const zhCN = {
   },
   region: {
     default: '默认', lineGroups: '线路组', lineGroupCount: '线路组({{count}}个)', unset: '未设置区域',
+    lineGroupHint: '所在线路组：{{names}}',
     marketSupplyCount: '市场供货({{count}})',
     marketSupplyHint: '该节点在节点市场供货组中：{{names}}。供货组不在线路组列表显示，但同样占用节点，删除节点前需先在供货组里移除。',
     label: '区域', placeholder: '选择区域', catalogEmpty: '区域目录为空，请先在“区域管理”中新增区域',
@@ -388,6 +389,7 @@ const enUS: typeof zhCN = {
   },
   region: {
     default: 'Default', lineGroups: 'Line groups', lineGroupCount: 'Line groups ({{count}})', unset: 'No region',
+    lineGroupHint: 'In line groups: {{names}}',
     marketSupplyCount: 'Market supply ({{count}})',
     marketSupplyHint: 'The node is in node market supply groups: {{names}}. Supply groups are not shown in the line group list, but they hold the node too; remove it from the supply group before deleting the node.',
     label: 'Region', placeholder: 'Select a region', catalogEmpty: 'The region catalog is empty. Add a region in Region management first.',

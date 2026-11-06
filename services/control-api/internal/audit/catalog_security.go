@@ -169,6 +169,10 @@ func init() {
 		e("security.site_quick_block.update", CategorySecurity, "修改网站 {resource} 的快速屏蔽设置{changes}", "updated quick block of site {resource}{changes}"),
 		e("security.ban.create", CategorySecurity, "在网站 {resource} 封禁 IP {client_ip}（至 {banned_until}）", "banned IP {client_ip} on site {resource} (until {banned_until})").f("client_ip", "source", "duration_seconds", "banned_until", "reason", "entry_id"),
 		e("security.ban.release", CategorySecurity, "解除网站 {resource} 对 IP {client_ip} 的封禁", "released the ban of IP {client_ip} on site {resource}").f("client_ip", "source", "banned_until", "entry_id"),
+		e("security.ban.market_sync", CategorySecurity, "按市场订阅 {subscription} 的封禁名单更新网站 {resource}（新增 {added}、延长 {extended}、解除 {released}、到期 {expired}、拒收 {refused}）", "applied the ban list of market subscription {subscription} to site {resource} ({added} added, {extended} extended, {released} released, {expired} expired, {refused} refused)").
+			f("subscription", "revision", "added", "extended", "released", "expired", "refused", "subscriber_site_id"),
+		e("security.ban.market_release", CategorySecurity, "市场订阅 {subscription} 已取消或暂停，解除其 {released} 条封禁", "market subscription {subscription} ended or paused: released its {released} bans").
+			f("subscription", "released", "reason"),
 		e("security.ip_list.create", CategorySecurity, "新建 IP 名单 {name}", "created IP list {name}").f("name", "entries", "revision", "list_id"),
 		e("security.ip_list.update", CategorySecurity, "修改 IP 名单 {name}（版本 {revision}，重新发布 {republished_scopes} 个租户）", "updated IP list {name} (revision {revision}, republished {republished_scopes} tenants)").f("name", "from_revision", "revision", "entries_before", "entries", "republished_scopes", "list_id"),
 		e("security.ip_list.delete", CategorySecurity, "删除 IP 名单 {name}", "deleted IP list {name}").f("name", "revision", "list_id"),

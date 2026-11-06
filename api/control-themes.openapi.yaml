@@ -18,6 +18,7 @@ paths:
         platform console and everyone else get the platform theme (the default theme until one is activated).
       parameters:
         - {name: Authorization, in: header, required: false, schema: {type: string}, description: Optional bearer session}
+      security: []
       responses:
         '200': {description: Active theme, content: {application/json: {schema: {$ref: '#/components/schemas/Current'}}}}
   /v1/theme/theme.{sha}.css:
@@ -26,27 +27,30 @@ paths:
       operationId: getThemeStylesheet
       x-summary-zh: "读取主题样式表"
       description: 'Rendered custom properties on :root[data-cdnca-theme], then one block per tokens_by_role role on :root[data-cdnca-theme][data-cdnca-role="admin"|"user"] carrying only that role''s overrides. Immutable.'
+      security: []
       responses:
         '200': {description: Stylesheet, content: {text/css: {schema: {type: string}}}}
-        '404': {description: Unknown digest}
+        '404': {description: Unknown digest, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/theme/theme.{sha}.json:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemeTokens
       x-summary-zh: "读取主题设计变量"
       description: Rendered tokens (cdnca.theme.rendered/v1) for ConfigProvider and layout slots. Immutable.
+      security: []
       responses:
         '200': {description: Rendered theme, content: {application/json: {schema: {$ref: '#/components/schemas/Rendered'}}}}
-        '404': {description: Unknown digest}
+        '404': {description: Unknown digest, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/theme/assets/{sha}:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemeAsset
       x-summary-zh: "读取主题素材"
       description: A theme brand image (png/jpeg/ico). Immutable.
+      security: []
       responses:
         '200': {description: Image}
-        '404': {description: Unknown digest}
+        '404': {description: Unknown digest, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/theme/auth-style:
     get:
       operationId: getThemeAuthStyle
@@ -56,20 +60,22 @@ paths:
         CSS the console puts in a <style> of its own on /auth/* and the plugin's images. Forms and submission
         stay the platform's; nginx serves /auth/* with img-src, font-src and connect-src 'self'. An empty css
         without one. Cache-Control no-cache.
+      security: []
       responses:
         '200':
           description: Sign-in style
           content: {application/json: {schema: {type: object, required: [css, images], properties: {css: {type: string}, images: {type: object, additionalProperties: {type: string, pattern: '^/v1/theme/auth-style/assets/[0-9a-f]{64}$'}}}}}}
-        '405': {description: Not GET or HEAD}
+        '405': {description: Not GET or HEAD, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/theme/auth-style/assets/{sha}:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemeAuthStyleAsset
       x-summary-zh: "读取登录页主题素材"
       description: An image of an installed plugin's sign-in style, served with a sandboxing CSP. Immutable.
+      security: []
       responses:
         '200': {description: Image}
-        '404': {description: Unknown digest}
+        '404': {description: Unknown digest, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/themes:
     get:
       operationId: listThemes
@@ -78,8 +84,8 @@ paths:
       description: Catalog themes with download state and the downloaded packages. Requires system_configuration.read.
       responses:
         '200': {description: Catalog, content: {application/json: {schema: {$ref: '#/components/schemas/Catalog'}}}}
-        '401': {description: Unauthenticated}
-        '403': {description: Permission denied}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/themes/catalog/{theme_id}/download:
     parameters: [{name: theme_id, in: path, required: true, schema: {type: string, pattern: '^(default|official\.[a-z][a-z0-9-]{0,31})$'}}]
     post:
@@ -89,7 +95,9 @@ paths:
       description: Store a catalog theme (downloaded, not active). Requires system_configuration.manage.
       responses:
         '200': {description: Downloaded package, content: {application/json: {schema: {$ref: '#/components/schemas/Package'}}}}
-        '404': {description: Unknown catalog theme}
+        '404': {description: Unknown catalog theme, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/themes/packages:
     post:
       operationId: uploadTheme
@@ -99,8 +107,10 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {type: object}}}}
       responses:
         '201': {description: Downloaded package, content: {application/json: {schema: {$ref: '#/components/schemas/Package'}}}}
-        '413': {description: Larger than 8 MiB}
+        '413': {description: Larger than 8 MiB, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
         '422': {description: Refused package, content: {application/json: {schema: {$ref: '#/components/schemas/InvalidPackage'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/themes/packages/{sha}/activate:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     post:
@@ -120,10 +130,10 @@ paths:
         content: {application/json: {schema: {type: object, additionalProperties: false, properties: {slot: {type: string, enum: [all, admin, user]}}}}}
       responses:
         '200': {description: Activated, content: {application/json: {schema: {$ref: '#/components/schemas/Activation'}}}}
-        '400': {description: Unknown slot}
-        '403': {description: Permission denied, entitlement_feature_denied (paid official theme) or admin_slot_official_only}
-        '404': {description: Not downloaded}
-        '412': {description: Revision conflict}
+        '400': {description: Unknown slot, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, entitlement_feature_denied (paid official theme) or admin_slot_official_only, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '404': {description: Not downloaded, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '412': {description: Revision conflict, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
   /v1/admin/themes/packages/{sha}:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
@@ -136,18 +146,23 @@ paths:
         whose derived_from names this package. Requires system_configuration.read.
       responses:
         '200': {description: Package JSON, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {type: object}}}}
-        '404': {description: Never stored and not in the catalog}
+        '404': {description: Never stored and not in the catalog, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
     delete:
       operationId: removeTheme
       x-summary-zh: "删除主题包"
       security: [{bearerAuth: []}]
       responses:
         '204': {description: Removed (can be downloaded again)}
-        '409': {description: 'The active package, or one a tenant uses (theme_package_selected_by_tenant), cannot be removed'}
+        '409': {description: 'The active package, or one a tenant uses (theme_package_selected_by_tenant), cannot be removed', content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+        '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
   schemas:
+    StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}
     SHA256: {type: string, pattern: '^[0-9a-f]{64}$'}
     Rendered:
       type: object

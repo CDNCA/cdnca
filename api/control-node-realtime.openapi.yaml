@@ -188,8 +188,9 @@ components:
       in: query
       schema: {type: integer, minimum: 1, maximum: 2000, default: 2000}
   responses:
-    Invalid: {description: Invalid parameters; validation_error.}
-    Unauthorized: {description: Authentication required.}
-    Forbidden: {description: Platform scope and nodes.read or platform.admin required.}
-    NotFound: {description: Node absent from the caller scope; node_metrics_not_found.}
-    Unavailable: {description: Metrics runtime unavailable; node_metrics_unavailable.}
+    Invalid: {description: Invalid parameters; validation_error., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    Unauthorized: {description: Authentication required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    Forbidden: {description: Platform scope and nodes.read or platform.admin required., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    NotFound: {description: Node absent from the caller scope; node_metrics_not_found., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+    Unavailable: {description: Metrics runtime unavailable; node_metrics_unavailable., content: {application/json: {schema: {$ref: '#/components/schemas/StableError'}}}}
+  schemas: {StableError: {type: object, description: 'Error body: error.code and error.request_id are always present.', required: [error], properties: {error: {type: object, required: [code, request_id], properties: {code: {type: string}, message: {type: string}, request_id: {type: string}}}}}}

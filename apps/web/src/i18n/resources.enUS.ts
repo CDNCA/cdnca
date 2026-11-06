@@ -2706,7 +2706,7 @@ export const enUS = {
       certificateType: 'Certificate type', certificateTypeSystem: 'System default', recommended: ' (recommended)',
       selectUserFirst: 'Please select a user first.', dnsApi: 'DNS API',
       dnsApiPlaceholder: 'Select', dnsApiSelectUser: 'Select a user to load available DNS APIs.',
-      dnsApiHelp: 'Once set, one-click certificate requests use this DNS API first.',
+      dnsApiHelp: 'Used by default when a request chooses DNS validation or covers a wildcard domain.',
       saved: 'Saved', loadFailed: 'Failed to load default settings', retry: 'Retry',
     },
     dnsApi: {

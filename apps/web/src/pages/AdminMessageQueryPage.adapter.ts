@@ -203,6 +203,8 @@ const typeTranslationKeys: Record<string, string> = {
   'certificate.renew_failed': 'certificateRenewFailed',
   'node.dnspup.unreachable': 'dnspupNodeUnreachable',
   'node.dnspup.recovered': 'dnspupNodeRecovered',
+  'node.dnspup.line_unreachable': 'dnspupLineUnreachable',
+  'node.dnspup.line_recovered': 'dnspupLineRecovered',
   'probe.dnspup.balance_low': 'dnspupBalanceLow',
   'probe.dnspup.balance_exhausted': 'dnspupBalanceExhausted',
   'reseller.prepaid.low_balance': 'resellerPrepaidLow',

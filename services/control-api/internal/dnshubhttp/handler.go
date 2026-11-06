@@ -15,6 +15,8 @@ package dnshubhttp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -60,6 +62,7 @@ type Service interface {
 	RefreshDomains(context.Context, dnsproviderremotesource.HubActor, uuid.UUID) ([]dnsproviderremotesource.HubRefreshResult, error)
 	ListRecords(context.Context, dnsproviderremotesource.HubActor, uuid.UUID, string, dnsproviderremotesource.HubRecordQuery) (dnsproviderremotesource.HubRecordList, error)
 	Mutate(context.Context, dnsproviderremotesource.HubActor, dnsproviderremotesource.HubMutation) (dnsproviderremotesource.HubMutationResult, error)
+	ClaimBatch(ctx context.Context, actor dnsproviderremotesource.HubActor, key, digest string) error
 }
 
 type Handler struct {
@@ -322,6 +325,17 @@ func (handler *Handler) batch(response http.ResponseWriter, request *http.Reques
 		writeFieldError(response, request, "items")
 		return
 	}
+	// The batch key is bound to the whole items list (migration 639): another list under the same key is
+	// 409 before any item runs. The same list runs again item by item; done items replay by their own key.
+	digest, err := batchDigest(body.Items)
+	if err != nil {
+		writeFieldError(response, request, "items")
+		return
+	}
+	if err := handler.hub.ClaimBatch(request.Context(), actor, key, digest); err != nil {
+		writeServiceError(response, request, err)
+		return
+	}
 	results := make([]batchResult, 0, len(body.Items))
 	for index, raw := range body.Items {
 		result := batchResult{Index: index}
@@ -347,6 +361,28 @@ func (handler *Handler) batch(response http.ResponseWriter, request *http.Reques
 		results = append(results, result)
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"results": results})
+}
+
+// batchDigest hashes the items re-encoded one by one (object keys sorted, whitespace dropped), so a retry
+// of the same list matches whatever its formatting.
+func batchDigest(items []json.RawMessage) (string, error) {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("cdnca.dns-hub.records-batch/v1\x00"))
+	for _, raw := range items {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return "", err
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return "", err
+		}
+		_, _ = hash.Write(encoded)
+		_, _ = hash.Write([]byte{0})
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func requestID(request *http.Request) string {

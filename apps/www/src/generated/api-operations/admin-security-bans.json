@@ -1,0 +1,387 @@
+{
+ "id": "admin-security-bans",
+ "prefix": "/v1/admin/security-bans",
+ "operations": [
+  {
+   "operation_id": "listAdminSecurityBans",
+   "method": "GET",
+   "path": "/v1/admin/security-bans",
+   "summary": "List the ban list of every site",
+   "summary_zh": "列出所有网站的封禁名单",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "client_ip",
+     "in": "query",
+     "type": "string",
+     "description": "An address or a network."
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: active / released / expired"
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Entry>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "createAdminSecurityBan",
+   "method": "POST",
+   "path": "/v1/admin/security-bans",
+   "summary": "Ban a client on any site",
+   "summary_zh": "在任意网站手工封禁 IP 或网段",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "client_ip",
+      "type": "string",
+      "required": true,
+      "description": "An IPv4 / IPv6 address, or a network IPv4 /8../31, IPv6 /32../127 (nodes with BAN_CIDR)."
+     },
+     {
+      "name": "duration_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "The ban.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_domain",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "client_ip",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "source",
+       "type": "string: waf / cc / manual / autodefense / market",
+       "required": true,
+       "description": "market is a root subscriber's ban of a market site, written on this leaf from its snapshot."
+      },
+      {
+       "name": "rule_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "banned_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "banned_until",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "released_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "released_by",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: active / released / expired",
+       "required": true
+      },
+      {
+       "name": "market",
+       "type": "null | MarketOrigin",
+       "required": true,
+       "description": "Source market only; null otherwise."
+      },
+      {
+       "name": "delivery",
+       "type": "null | Delivery",
+       "required": true,
+       "description": "Listed active bans of a site served by market leaves or by no node of this controller; null for a site served only by its own nodes (active stands) and in create / release responses."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    },
+    {
+     "status": "422",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "releaseAdminSecurityBan",
+   "method": "POST",
+   "path": "/v1/admin/security-bans/{entry_id}/release",
+   "summary": "Release a ban of any site",
+   "summary_zh": "解除任意网站的一条封禁",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "entry_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The ban.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_domain",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "client_ip",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "source",
+       "type": "string: waf / cc / manual / autodefense / market",
+       "required": true,
+       "description": "market is a root subscriber's ban of a market site, written on this leaf from its snapshot."
+      },
+      {
+       "name": "rule_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "banned_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "banned_until",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "released_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "released_by",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: active / released / expired",
+       "required": true
+      },
+      {
+       "name": "market",
+       "type": "null | MarketOrigin",
+       "required": true,
+       "description": "Source market only; null otherwise."
+      },
+      {
+       "name": "delivery",
+       "type": "null | Delivery",
+       "required": true,
+       "description": "Listed active bans of a site served by market leaves or by no node of this controller; null for a site served only by its own nodes (active stands) and in create / release responses."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    }
+   ]
+  }
+ ]
+}

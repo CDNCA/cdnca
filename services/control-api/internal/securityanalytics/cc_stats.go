@@ -207,9 +207,10 @@ const ccStatsSums = `sum(matched) AS matched, sum(triggered) AS triggered, sum(c
 	sum(blocked) AS blocked, sum(passed) AS passed, sum(ja4_unavailable) AS ja4_unavailable`
 
 // The FINAL subquery removes redelivered rows before summing; output aliases
-// differ from column names (see verdictSelect).
+// differ from column names (see verdictSelect). The range parameters are
+// UTC strings: a bare {from:DateTime} would be read in the server's time zone.
 const ccStatsSource = `(SELECT * FROM ` + CCStatTable + ` FINAL WHERE tenant_id = {tenant:UUID} AND site_id = {site:UUID}
-	AND minute >= {from:DateTime} AND minute < {to:DateTime})`
+	AND minute >= {from:DateTime('UTC')} AND minute < {to:DateTime('UTC')})`
 
 // SiteCCStats reads the statistics of one site of tenant. from and to are
 // aligned to step by the caller (a multiple of 60 seconds).
@@ -335,7 +336,7 @@ func (ch *ClickHouse) RuleCCTotals(ctx context.Context, rules []uuid.UUID, from,
 	var out []CCSiteRuleTotal
 	err := ch.queryRows(ctx, `SELECT toString(site_id) AS out_site_id, policy_id AS out_policy_id, toString(rule_id) AS out_rule_id, `+
 		ccStatsSums+` FROM (SELECT * FROM `+CCStatTable+` FINAL WHERE rule_id IN {rules:Array(UUID)}
-		AND minute >= {from:DateTime} AND minute < {to:DateTime}) GROUP BY site_id, policy_id, rule_id
+		AND minute >= {from:DateTime('UTC')} AND minute < {to:DateTime('UTC')}) GROUP BY site_id, policy_id, rule_id
 		ORDER BY out_site_id, out_policy_id, out_rule_id`, params, func(line []byte) error {
 		var row CCSiteRuleTotal
 		if err := json.Unmarshal(line, &row); err != nil {

@@ -12,7 +12,7 @@ const zhCN = {
   status: { enabled: '已启用', disabled: '未启用', usable: '可用', highRisk: '高风险' },
   actions: { run: '重新测试', enable: '启用', disable: '停用', details: '查看用例', refresh: '刷新' },
   detail: { title: '契约测试用例 · {{id}}', passed: '通过', failed: '失败', code: '原因' },
-  hints: { enableNeedsContract: '契约测试通过后才能启用', empty: '还没有已授权的第三方服务商插件', noTenant: '找不到该插件安装所属租户，无法完成二次验证' },
+  hints: { enableNeedsContract: '契约测试通过后才能启用', empty: '还没有已授权的第三方服务商插件' },
   confirm: {
     title: '启用支付插件 · {{id}}', intro: '支付插件属于高风险权限，需要确认风险并通过 MFA 二次验证。',
     risk: '我已阅读以上风险提示，确认启用该支付插件', method: '验证方式', totp: '身份验证器', recovery: '恢复码',
@@ -45,7 +45,7 @@ const enUS: Messages = {
   status: { enabled: 'Enabled', disabled: 'Disabled', usable: 'Usable', highRisk: 'High risk' },
   actions: { run: 'Run again', enable: 'Enable', disable: 'Disable', details: 'Cases', refresh: 'Refresh' },
   detail: { title: 'Contract cases · {{id}}', passed: 'Passed', failed: 'Failed', code: 'Reason' },
-  hints: { enableNeedsContract: 'The contract test must pass before enabling', empty: 'No authorized third-party provider plugin yet', noTenant: 'The tenant of this plugin installation is unknown; step-up verification is not possible' },
+  hints: { enableNeedsContract: 'The contract test must pass before enabling', empty: 'No authorized third-party provider plugin yet' },
   confirm: {
     title: 'Enable payment plugin · {{id}}', intro: 'A payment plugin is a high-risk permission: acknowledge the risk and pass an MFA step-up.',
     risk: 'I have read the risk notice above and want to enable this payment plugin', method: 'Method', totp: 'Authenticator app', recovery: 'Recovery code',

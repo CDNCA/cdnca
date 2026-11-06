@@ -49,7 +49,13 @@ type Server struct {
 	// Checkpoints is GET /v1/nodes.
 	Checkpoints []Checkpoint
 	// Answer builds a job's results from its request.
-	Answer   func(ProbeRequest) []Result
+	Answer func(ProbeRequest) []Result
+	// AnswerDNS builds a dns job's rows; AnswerTraces a traceroute / mtr
+	// job's traces (customerJobResponse puts them in rows / traces).
+	AnswerDNS    func(ProbeRequest) []DNSRow
+	AnswerTraces func(ProbeRequest) []map[string]any
+	// Bodies are the created jobs' requests, in order.
+	Bodies   []ProbeRequest
 	Creates  int
 	Gets     int
 	Requests []string
@@ -83,6 +89,20 @@ type Result struct {
 	AvgLatency int    `json:"avg_latency"`
 	LossRate   int    `json:"loss_rate"`
 	Error      string `json:"error,omitempty"`
+	ErrorCode  string `json:"errorCode,omitempty"`
+	IP         string `json:"ip,omitempty"`
+}
+
+// DNSRow is one dns answer row (models.DNSQueryRow subset).
+type DNSRow struct {
+	NodeID    string   `json:"nodeId"`
+	Region    string   `json:"region"`
+	City      string   `json:"city"`
+	ISP       string   `json:"isp"`
+	Results   []string `json:"results"`
+	ElapsedMS int      `json:"elapsedMs"`
+	Status    string   `json:"status"`
+	ErrorCode string   `json:"errorCode,omitempty"`
 }
 
 // Checkpoint is one GET /v1/nodes item.
@@ -266,6 +286,7 @@ func (fake *Server) create(w http.ResponseWriter, r *http.Request, body []byte) 
 	}
 	fake.MonthlyUsed++
 	fake.Creates++
+	fake.Bodies = append(fake.Bodies, request)
 	fake.nextID++
 	job := &fakeJob{id: "req_" + strconv.Itoa(fake.nextID), hash: hash, request: request}
 	fake.jobs[job.id], fake.byIdem[idem] = job, job.id
@@ -293,13 +314,23 @@ func (fake *Server) writeJob(w http.ResponseWriter, job *fakeJob, code int) {
 	if status == "running" {
 		w.Header().Set("Retry-After", "2")
 	} else {
-		results := []Result{}
-		if fake.Answer != nil {
-			results = fake.Answer(job.request)
+		result := map[string]any{"requestId": job.id, "status": status, "type": job.request.Type,
+			"target": job.request.Target}
+		switch {
+		case job.request.Type == "dns" && fake.AnswerDNS != nil:
+			rows := fake.AnswerDNS(job.request)
+			result["rows"], value["completedNodes"] = rows, len(rows)
+		case (job.request.Type == "mtr" || job.request.Type == "traceroute") && fake.AnswerTraces != nil:
+			traces := fake.AnswerTraces(job.request)
+			result["traces"], value["completedNodes"] = traces, len(traces)
+		default:
+			results := []Result{}
+			if fake.Answer != nil {
+				results = fake.Answer(job.request)
+			}
+			result["results"], value["completedNodes"] = results, len(results)
 		}
-		value["completedNodes"] = len(results)
-		value["result"] = map[string]any{"requestId": job.id, "status": status, "type": job.request.Type,
-			"target": job.request.Target, "results": results}
+		value["result"] = result
 	}
 	writeFakeData(w, code, value)
 }

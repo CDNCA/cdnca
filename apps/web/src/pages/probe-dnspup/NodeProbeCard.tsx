@@ -1,22 +1,32 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Checkbox, Descriptions, Form, InputNumber, Select, Space, Typography } from 'antd'
+import { Alert, App, Button, Card, Checkbox, Descriptions, Form, InputNumber, Select, Space, Switch, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
 import { newIdempotencyKey } from '../../api/market'
 import {
-  dnspupMonitorGroups, dnspupNodeIntervals, dnspupNodeMonitoringApi, estimateDNSPupNodeRequests,
+  dnspupMonitorGroups, dnspupNodeIntervals, dnspupNodeMonitoringApi, estimateDNSPupNodeRequests, nodeProbeTypes,
   type DNSPupNodeMonitoringSettings, type DNSPupNodeMonitoringStatus,
 } from '../../api/probeDNSPup'
+import { SelectionFields, selectionOf, valuesOf, type SelectionValues } from './SelectionFields'
 import '../../i18n/probeDNSPup'
 import { useFeedback, FeedbackWhen, useFormSubmitError } from '@cdnca/ui'
 
 const queryKey = ['probe-dnspup-node-monitoring'] as const
 
-function settingsOf(status: DNSPupNodeMonitoringStatus): DNSPupNodeMonitoringSettings {
+type NodeForm = Omit<DNSPupNodeMonitoringSettings, 'selection'> & { selection: SelectionValues }
+
+function formOf(status: DNSPupNodeMonitoringStatus): NodeForm {
   const { interval_seconds, groups, points_per_group, failure_percent, failure_rounds, recovery_rounds, low_balance } = status
-  return { interval_seconds, groups, points_per_group, failure_percent, failure_rounds, recovery_rounds, low_balance }
+  return { interval_seconds, groups, points_per_group, failure_percent, failure_rounds, recovery_rounds, low_balance,
+    probe_type: status.probe_type ?? 'tcping', line_alert_min_points: status.line_alert_min_points ?? 3,
+    line_alert_rounds: status.line_alert_rounds ?? 2, auto_diagnose: status.auto_diagnose ?? true,
+    selection: valuesOf(status.selection) }
+}
+
+function settingsOf(values: NodeForm): DNSPupNodeMonitoringSettings {
+  return { ...values, selection: selectionOf(values.selection ?? {}) }
 }
 
 // Node availability probing from dnspup checkpoints: the
@@ -27,7 +37,7 @@ export function NodeProbeCard({ token }: { token: string }) {
   const { message } = App.useApp()
   const feedback = useFeedback()
   const client = useQueryClient()
-  const [form] = Form.useForm<DNSPupNodeMonitoringSettings>()
+  const [form] = Form.useForm<NodeForm>()
   const markSubmitError = useFormSubmitError(form)
   const status = useQuery({ queryKey, queryFn: () => dnspupNodeMonitoringApi.status(token), enabled: Boolean(token) })
   const interval = Form.useWatch('interval_seconds', form)
@@ -36,11 +46,11 @@ export function NodeProbeCard({ token }: { token: string }) {
     ? t(`errors.${error.code}`) : t('errors.request_failed')
 
   useEffect(() => {
-    if (status.data) form.setFieldsValue(settingsOf(status.data))
+    if (status.data) form.setFieldsValue(formOf(status.data))
   }, [status.data, form])
 
   const save = useMutation({
-    mutationFn: async () => dnspupNodeMonitoringApi.save(token, await form.validateFields(), newIdempotencyKey('probe-dnspup-node')),
+    mutationFn: async () => dnspupNodeMonitoringApi.save(token, settingsOf(await form.validateFields()), newIdempotencyKey('probe-dnspup-node')),
     onSuccess: (data) => { client.setQueryData(queryKey, data); void message.success(t('node.saved')) },
     onError: (error) => { markSubmitError(error, () => void feedback.error(reason(error))) },
   })
@@ -77,6 +87,10 @@ export function NodeProbeCard({ token }: { token: string }) {
         <Form.Item name="interval_seconds" label={t('node.interval')}>
           <Select options={intervalOptions} aria-label={t('node.interval')} />
         </Form.Item>
+        <Form.Item name="probe_type" label={t('unified.node.probeType')} extra={t('unified.node.probeTypeExtra')}>
+          <Select aria-label={t('unified.node.probeType')}
+            options={nodeProbeTypes.map((value) => ({ value, label: t(`unified.node.probeTypes.${value}`) }))} />
+        </Form.Item>
         <Form.Item name="groups" label={t('node.groups')} rules={[{ required: true, type: 'array', min: 1 }]}>
           <Checkbox.Group aria-label={t('node.groups')}
             options={dnspupMonitorGroups.map((value) => ({ value, label: t(`node.groupNames.${value}`) }))} />
@@ -98,8 +112,22 @@ export function NodeProbeCard({ token }: { token: string }) {
         <Form.Item name="low_balance" label={t('node.lowBalance')} extra={t('node.lowBalanceExtra')} rules={[{ required: true }]}>
           <InputNumber min={0} max={1_000_000_000} precision={0} aria-label={t('node.lowBalance')} />
         </Form.Item>
+        <SelectionFields form={form} prefix="selection" />
+        <Typography.Text type="secondary">{t('unified.node.lineAlertExtra')}</Typography.Text>
+        <Space wrap size="large">
+          <Form.Item name="line_alert_min_points" label={t('unified.node.lineAlertMinPoints')} rules={[{ required: true }]}>
+            <InputNumber min={1} max={20} precision={0} aria-label={t('unified.node.lineAlertMinPoints')} />
+          </Form.Item>
+          <Form.Item name="line_alert_rounds" label={t('unified.node.lineAlertRounds')} rules={[{ required: true }]}>
+            <InputNumber min={1} max={10} precision={0} aria-label={t('unified.node.lineAlertRounds')} />
+          </Form.Item>
+          <Form.Item name="auto_diagnose" label={t('unified.node.autoDiagnose')} valuePropName="checked">
+            <Switch aria-label={t('unified.node.autoDiagnose')} />
+          </Form.Item>
+        </Space>
         <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>{t('node.save')}</Button>
       </Form>
     </Space>
   </Card>
 }
+

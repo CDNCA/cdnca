@@ -53,7 +53,9 @@ test('scoped writes preserve idempotency and revision headers instead of adding 
   assert.equal(collection.post.responses['201'].headers.ETag.$ref, '#/components/headers/ETag')
   assert.equal(resource.get.responses['200'].content['application/json'].schema.$ref, '#/components/schemas/CurrentSiteGroup')
   assert.ok(resource.delete.responses['204'])
-  assert.deepEqual(Object.keys(document.components.responses.Conflict), ['description'])
+  // 409 is written by writeAPIError: the ErrorEnvelope with code and request_id.
+  assert.deepEqual(Object.keys(document.components.responses.Conflict), ['description', 'content'])
+  assert.equal(document.components.responses.Conflict.content['application/json'].schema.$ref, '#/components/schemas/StableError')
 })
 
 test('immutable legacy write receipts stay valid while current reads require real metadata', () => {

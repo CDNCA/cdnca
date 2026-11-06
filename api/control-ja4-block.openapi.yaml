@@ -113,7 +113,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$', minLength: 1, maxLength: 128}
     IfMatchCreate:
       name: If-Match
       in: header

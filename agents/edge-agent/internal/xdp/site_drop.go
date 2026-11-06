@@ -14,7 +14,9 @@ import (
 //     shorter one, as nginx selects the server.
 //
 // A ClientHello the program cannot parse in the first segment passes
-// (OpenResty closes it, esc-node §4). The zero SiteDrop drops nothing.
+// (OpenResty closes it, esc-node §4); one whose server_name is not in its
+// first segment or first TLS record is counted (SiteDropCounters.SNIMissed).
+// The zero SiteDrop drops nothing.
 type SiteDrop struct {
 	Ports     []uint16
 	SNIPorts  []uint16
@@ -38,13 +40,20 @@ const (
 const (
 	siteStatPort = iota
 	siteStatSNI
+	siteStatSNIMissed
 	siteStatCount
 )
 
 // SiteDropCounters are the site drops since the program was loaded.
+// SNIMissed is not a drop: the ClientHellos on SNIPorts the program passed
+// because their server_name is not in the first segment (Chrome puts it
+// after its 1.2 KB X25519MLKEM768 key share in about half of its hellos) or
+// not in the first TLS record; OpenResty judges them. A client resending a
+// hello counts again (per packet, like the drops).
 type SiteDropCounters struct {
-	Port Counter `json:"port"`
-	SNI  Counter `json:"sni"`
+	Port      Counter `json:"port"`
+	SNI       Counter `json:"sni"`
+	SNIMissed Counter `json:"sni_missed"`
 }
 
 // sniHash is the program's key of a name: FNV-1a 64 over its lower case

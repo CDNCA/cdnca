@@ -16,6 +16,10 @@
 --                        {site: {"<network>/<bits>": until}}
 --   nets_gen             grows when nets changes; each worker rebuilds its
 --                        per-site prefix matchers (lua-resty-ipmatcher) then
+--   sites                the sites with a listed ban of the applied snapshot
+--                        (JSON list, address and network bans alike)
+--   sites_gen            grows when sites changes; each worker rebuilds its
+--                        site -> true table then (listed())
 -- A snapshot replaces the previous one: listed bans not in it are lifted.
 -- A single address ban is one exact key (looked up first); a network ban is
 -- matched by prefix. A network release only drops the network ban (the
@@ -130,6 +134,34 @@ function _M.deny(remaining, block_page_variable)
     return ngx.exit(403)
 end
 
+-- listed(site, fresh): whether the applied snapshot lists a ban (address or
+-- network) of the site, so that only such a site pays for banned() (the
+-- dynamic routing checkpoint and the CC run). Each worker keeps a site -> true
+-- table, rebuilt when "sites_gen" moves. The generation is read from the
+-- dictionary once a second (the worker that applies a snapshot sees it at
+-- once), or on every call when fresh (the CC run, which looked every request
+-- up before: a ban applies there with no delay). A dictionary with a
+-- revision but no "sites_gen" (a snapshot applied before this key existed,
+-- kept over a reload) lists every site.
+local sites_gen, sites_set, sites_until, sites_all = nil, {}, 0, false
+
+function _M.listed(site, fresh)
+    local now = ngx.now()
+    if fresh or now >= sites_until then
+        sites_until = now + 1
+        local state = dict()
+        local gen = state and state:get("sites_gen")
+        if gen == nil then
+            sites_gen, sites_set, sites_all = nil, {}, state ~= nil and state:get("rev") ~= nil
+        elseif gen ~= sites_gen then
+            local set = {}
+            for _, id in ipairs(cjson.decode(state:get("sites") or "[]") or {}) do set[id] = true end
+            sites_gen, sites_set, sites_all = gen, set, false
+        end
+    end
+    return sites_all or sites_set[site] == true
+end
+
 -- check(site): deny the request when the client is on the list.
 function _M.check(site, block_page_variable)
     local remaining = _M.banned(site, ngx.var.remote_addr)
@@ -225,6 +257,24 @@ function _M.apply(body)
     for key in pairs(keys) do list[#list + 1] = key end
     table.sort(list)
     state:set("keys", cjson.encode(list) or "[]")
+    -- the sites with a listed ban (listed()): written after their bans, the
+    -- generation moves only when the set changes
+    local site_set, site_list = {}, {}
+    for _, ban in ipairs(snapshot.bans) do
+        if ban["until"] > now and not site_set[ban.site_id] then
+            site_set[ban.site_id] = true
+            site_list[#site_list + 1] = ban.site_id
+        end
+    end
+    table.sort(site_list)
+    local sites = cjson.encode(site_list) or "[]"
+    if sites == "{}" then sites = "[]" end
+    if sites ~= state:get("sites") or not state:get("sites_gen") then
+        local ok, err = state:set("sites", sites)
+        if not ok then return 507, { error = "dictionary_full", detail = err } end
+        state:incr("sites_gen", 1, 0)
+    end
+    sites_until = 0
     state:set("rev", snapshot.revision)
     return 200, { revision = snapshot.revision, bans = active, releases = released }
 end

@@ -27,8 +27,14 @@ type Handler struct {
 	service      *Service
 	authenticate AuthenticateSessionFunc
 	nodes        NodeProbeSettings
-	mux          *http.ServeMux
+	// apiKey authenticates the plugin probe API (nil: those routes answer 401).
+	apiKey AuthenticateAPIKeyFunc
+	mux    *http.ServeMux
 }
+
+// AuthenticateAPIKeyFunc authenticates `CdncaKey <key_id>.<secret>`
+// (apikey.Service.AuthenticateWithKeyID: scopes ∩ the owner's live RBAC).
+type AuthenticateAPIKeyFunc func(context.Context, string) (identity.Principal, uuid.UUID, error)
 
 // NodeProbeSettings is the node availability probe settings page
 // (internal/nodednspupprobe.Store; nil: routes answer 503). Errors are
@@ -36,6 +42,11 @@ type Handler struct {
 type NodeProbeSettings interface {
 	NodeProbeStatus(ctx context.Context, actor Actor) (any, error)
 	UpdateNodeProbe(ctx context.Context, actor Actor, key string, body []byte) (any, error)
+	// Overrides lists, PutOverride saves and DeleteOverride removes the
+	// per node / line group overrides.
+	Overrides(ctx context.Context, actor Actor) (any, error)
+	PutOverride(ctx context.Context, actor Actor, key string, body []byte) (any, error)
+	DeleteOverride(ctx context.Context, actor Actor, key string, id uuid.UUID) error
 }
 
 // Node probe settings errors the handler maps.
@@ -50,18 +61,32 @@ var Patterns = []string{
 	"POST /v1/admin/probe-dnspup/tests",
 	"GET /v1/admin/probe-dnspup/node-monitoring",
 	"PUT /v1/admin/probe-dnspup/node-monitoring",
+	"GET /v1/admin/probe-dnspup/purposes",
+	"PUT /v1/admin/probe-dnspup/purposes",
+	"GET /v1/admin/probe-dnspup/matrix",
+	"GET /v1/admin/probe-dnspup/edge-subjects",
+	"GET /v1/admin/probe-dnspup/node-monitoring/overrides",
+	"PUT /v1/admin/probe-dnspup/node-monitoring/overrides",
+	"DELETE /v1/admin/probe-dnspup/node-monitoring/overrides/{id}",
+	"POST /v1/admin/probe-dnspup/diagnoses",
+	"GET /v1/admin/probe-dnspup/diagnoses/{id}",
+	"GET /v1/probe-dnspup/plugin/status",
+	"POST /v1/probe-dnspup/plugin/requests",
+	"GET /v1/probe-dnspup/plugin/requests/{id}",
 }
 
-func NewHandler(service *Service, authenticate AuthenticateSessionFunc, nodes NodeProbeSettings) (*Handler, error) {
+func NewHandler(service *Service, authenticate AuthenticateSessionFunc, nodes NodeProbeSettings,
+	apiKey AuthenticateAPIKeyFunc) (*Handler, error) {
 	if service == nil || authenticate == nil {
 		return nil, ErrInvalidInput
 	}
-	handler := &Handler{service: service, authenticate: authenticate, nodes: nodes, mux: http.NewServeMux()}
-	handler.mux.HandleFunc(Patterns[0], handler.status)
-	handler.mux.HandleFunc(Patterns[1], handler.update)
-	handler.mux.HandleFunc(Patterns[2], handler.test)
-	handler.mux.HandleFunc(Patterns[3], handler.nodeStatus)
-	handler.mux.HandleFunc(Patterns[4], handler.nodeUpdate)
+	handler := &Handler{service: service, authenticate: authenticate, nodes: nodes, apiKey: apiKey, mux: http.NewServeMux()}
+	for index, route := range []http.HandlerFunc{handler.status, handler.update, handler.test, handler.nodeStatus,
+		handler.nodeUpdate, handler.purposes, handler.purposesUpdate, handler.matrix, handler.edgeSubjects,
+		handler.overrides, handler.overridePut, handler.overrideDelete, handler.diagnoseCreate, handler.diagnoseGet,
+		handler.pluginStatus, handler.pluginCreate, handler.pluginGet} {
+		handler.mux.HandleFunc(Patterns[index], route)
+	}
 	return handler, nil
 }
 

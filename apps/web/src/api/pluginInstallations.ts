@@ -60,7 +60,31 @@ export interface PluginInstallation {
   paused_reason?: string
   /** A newer version the platform already authorized for this installation. */
   available_upgrade?: PluginInstallationAvailableUpgrade
+  /**
+   * Who confirms and changes an installed plugin: platform = the controller's platform
+   * administrator (a tenant only reads it); tenant = a tenant's own installation confirmed before 1.0.35. Omitted on
+   * candidates not installed yet.
+   */
+  managed_by?: PluginInstallationManagedBy
+  /** Tenants a platform-confirmed tenant plugin is installed for (platform view only). */
+  targets?: PluginInstallationTargetsView
 }
+
+export type PluginInstallationManagedBy = 'platform' | 'tenant'
+
+/** All tenants (including tenants created later) with an empty list, or the listed tenant scopes. */
+export interface PluginInstallationTargets {
+  all_tenants: boolean
+  tenant_scope_ids: string[]
+}
+
+export interface PluginInstallationTargetsView {
+  all_tenants: boolean
+  revision: number
+  tenants: { scope_id: string; display_name: string; display_id: string }[]
+}
+
+export const maxTargetTenants = 1000
 
 export type PluginInstallationPausedBy = 'installation' | 'operator' | 'service'
 
@@ -94,6 +118,8 @@ export interface PluginInstallationApprovalInput {
   approved_scopes: string[]
   sensitive_permissions_confirmed: boolean
   new_permissions_confirmed: boolean
+  /** Platform confirmation of a tenant plugin only: which tenants it is installed for. */
+  targets?: PluginInstallationTargets
 }
 
 export interface PluginInstallationReasonInput {
@@ -171,12 +197,32 @@ function validUpgrade(value: unknown): boolean {
     sortedScopes(value.sensitive_scopes) && sortedScopes(value.new_scopes)
 }
 
+function validTargetsView(value: unknown): boolean {
+  return record(value) && exactKeys(value, ['all_tenants', 'revision', 'tenants']) && typeof value.all_tenants === 'boolean' &&
+    uint(value.revision, 1) && Array.isArray(value.tenants) && value.tenants.length <= maxTargetTenants &&
+    value.tenants.every((tenant) => record(tenant) && exactKeys(tenant, ['scope_id', 'display_name', 'display_id']) &&
+      uuid(tenant.scope_id) && typeof tenant.display_name === 'string' && typeof tenant.display_id === 'string')
+}
+
+// Which rows a route may answer: the platform route holds platform resources and the tenant plugins its administrator
+// confirmed (with targets); a tenant route its own tenant plugins and, read-only, those the platform installed for it
+// (managed_by=platform, held in another scope, never with targets).
+function validScopeRow(value: Record<string, unknown>, expected: ScopeTarget): boolean {
+  if (value.managed_by !== undefined && value.managed_by !== 'platform' && value.managed_by !== 'tenant') return false
+  if (expected.resourceScope === 'platform') {
+    return value.managed_by !== 'tenant' && (value.resource_scope === 'platform' || value.resource_scope === 'tenant') &&
+      (value.targets === undefined || (value.resource_scope === 'tenant' && validTargetsView(value.targets)))
+  }
+  return value.resource_scope === 'tenant' && value.targets === undefined &&
+    (value.managed_by === 'platform' || value.tenant_scope_id === expected.scopeID)
+}
+
 function parseInstallation(value: unknown, expected: ScopeTarget): PluginInstallation {
-  if (!record(value) || value.resource_scope !== expected.resourceScope ||
+  if (!record(value) || !validScopeRow(value, expected) ||
     typeof value.entrypoint_type !== 'string' || !Object.hasOwn(entrypointScopes, value.entrypoint_type) ||
     entrypointScopes[value.entrypoint_type as PluginInstallationEntrypointType] !== value.resource_scope ||
-    (expected.scopeID !== undefined && value.tenant_scope_id !== expected.scopeID) || !exactKeys(value, [...installationKeys, 'authorization_status', 'available_upgrade',
-    'paused_by', 'paused_reason'], installationKeys) || !validPause(value) ||
+    !exactKeys(value, [...installationKeys, 'authorization_status', 'available_upgrade',
+    'paused_by', 'paused_reason', 'managed_by', 'targets'], installationKeys) || !validPause(value) ||
     (value.authorization_status !== undefined && !authorizationStatuses.has(value.authorization_status as string)) ||
     (value.available_upgrade !== undefined && !validUpgrade(value.available_upgrade)) || value.schema !== 'cdnca.control.plugin-installation/v1' || !uuid(value.tenant_scope_id) ||
     !uuid(value.authorization_id) ||
@@ -308,9 +354,18 @@ function writeHeaders(revision: number, idempotencyKey: string): HeadersInit {
   return { 'If-Match': `"${revision}"`, 'Idempotency-Key': idempotencyKey }
 }
 
+export function validTargets(input: PluginInstallationTargets): boolean {
+  return record(input) && exactKeys(input as unknown as Record<string, unknown>, ['all_tenants', 'tenant_scope_ids']) &&
+    typeof input.all_tenants === 'boolean' && Array.isArray(input.tenant_scope_ids) &&
+    input.tenant_scope_ids.every(uuid) && new Set(input.tenant_scope_ids).size === input.tenant_scope_ids.length &&
+    (input.all_tenants ? input.tenant_scope_ids.length === 0
+      : input.tenant_scope_ids.length >= 1 && input.tenant_scope_ids.length <= maxTargetTenants)
+}
+
 function validApproval(input: PluginInstallationApprovalInput): boolean {
   return uuid(input.verification_id) && sortedScopes(input.approved_scopes) &&
-    typeof input.sensitive_permissions_confirmed === 'boolean' && typeof input.new_permissions_confirmed === 'boolean'
+    typeof input.sensitive_permissions_confirmed === 'boolean' && typeof input.new_permissions_confirmed === 'boolean' &&
+    (input.targets === undefined || validTargets(input.targets))
 }
 
 function validReason(input: PluginInstallationReasonInput): boolean {
@@ -326,7 +381,9 @@ function mutation<T extends PluginInstallationApprovalInput | PluginInstallation
     : action === 'confirm' || action === 'upgrade'
       ? validApproval(input as PluginInstallationApprovalInput)
       : validReason(input as PluginInstallationReasonInput)
-  if (!valid) throw invalidRequest()
+  // Only the platform administrator's confirmation names tenants.
+  const targets = (input as PluginInstallationApprovalInput).targets !== undefined
+  if (!valid || targets && (action !== 'confirm' || target.resourceScope !== 'platform')) throw invalidRequest()
   return request(accessToken, itemPath(target, authorizationID, action), {
     method: 'POST', headers: writeHeaders(revision, idempotencyKey), body: JSON.stringify(input),
   }, idempotencyKey, (value) => parseMutation(value, target))
@@ -367,6 +424,19 @@ function scopedApi(resolve: (scopeID: string) => ScopeTarget) {
   }
 }
 
+/**
+ * Replaces the tenants a platform-held tenant plugin is installed for (PUT .../targets). revision is
+ * targets.revision (If-Match); a retry with the same key and body answers the current state again.
+ */
+async function updateTargets(accessToken: string, authorizationID: string, revision: number,
+  input: PluginInstallationTargets, idempotencyKey: string): Promise<PluginInstallationMutationResult> {
+  if (!validTargets(input)) throw invalidRequest()
+  return request(accessToken, itemPath(platformTarget, authorizationID, 'targets'), {
+    method: 'PUT', headers: writeHeaders(revision, idempotencyKey),
+    body: JSON.stringify({ all_tenants: input.all_tenants, tenant_scope_ids: input.tenant_scope_ids }),
+  }, idempotencyKey, (value) => parseMutation(value, platformTarget))
+}
+
 export function newPluginInstallationIdempotencyKey(action: string): string {
   const safeAction = action.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24) || 'action'
   const random = typeof crypto.randomUUID === 'function'
@@ -379,7 +449,8 @@ export function newPluginInstallationIdempotencyKey(action: string): string {
 export const pluginInstallationsApi = scopedApi(tenantTarget)
 
 /**
- * Instance-wide plugins (themes, rule data packs) of this controller, confirmed by its platform administrator
- * (/v1/platform/plugin-installations). The scope argument is ignored: the server takes it from the session.
+ * Plugins this controller's platform administrator confirms (/v1/platform/plugin-installations): instance-wide
+ * plugins (themes, rule data packs) and tenant plugins for chosen tenants. The scope argument is
+ * ignored: the server takes it from the session.
  */
-export const platformPluginInstallationsApi = scopedApi(() => platformTarget)
+export const platformPluginInstallationsApi = { ...scopedApi(() => platformTarget), updateTargets }

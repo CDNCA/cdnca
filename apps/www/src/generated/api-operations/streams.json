@@ -826,7 +826,7 @@
     },
     {
      "status": "422",
-     "description": "Without ignore_errors a line failed; nothing was written (committed false)."
+     "description": "Without ignore_errors a line failed; nothing was written. The body is the per-line result (not an error envelope); the failed line carries its error code."
     },
     {
      "status": "500",

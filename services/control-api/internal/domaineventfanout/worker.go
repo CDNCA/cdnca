@@ -172,8 +172,8 @@ func (worker *Worker) claim(ctx context.Context) (sourceEvent, error) {
 		       subscription.plugin_id,clock_timestamp()
 		FROM plugin_webhook_subscriptions subscription
 		JOIN plugin_installation_heads installation
-		  ON installation.tenant_scope_id=subscription.tenant_scope_id
-		 AND installation.authorization_id=subscription.installation_authorization_id
+		  ON installation.authorization_id=subscription.installation_authorization_id
+		 AND plugin_installation_covers_tenant_636(installation.authorization_id, subscription.tenant_scope_id)
 		 AND installation.installation_id=subscription.installation_id
 		 AND installation.plugin_id=subscription.plugin_id
 		JOIN domain_event_types_368 contract ON contract.event_type=$3

@@ -142,6 +142,40 @@ func clientHello(source netip.Addr, port uint16, vlan bool, options int, extra i
 	return append(frame, record...)
 }
 
+// splitHello is an IPv4 frame (no VLAN, no options) whose ClientHello has a
+// padding extension of pad bytes before server_name (Chrome's 1.2 KB key
+// share before it, about half of its hellos), cut to its first segment bytes
+// of TCP payload (0: whole) or with its handshake split into two TLS
+// records after record1 bytes (0: one record).
+func splitHello(pad, segment, record1 int, name string) []byte {
+	full := clientHello(netip.MustParseAddr("198.51.100.7"), 443, false, 0, 0, name)
+	const payload = 54
+	handshake := append([]byte{}, full[payload+5:]...)
+	padding := append([]byte{0, 0x15}, binary.BigEndian.AppendUint16(nil, uint16(pad))...)
+	padding = append(padding, make([]byte, pad)...)
+	// The extensions start after: handshake header 4, version 2, random 32,
+	// session id 33, suites 2+4, compression 2, extensions length 2.
+	at := 4 + 2 + 32 + 33 + 6 + 2 + 2
+	extensions := int(binary.BigEndian.Uint16(handshake[at-2:])) + len(padding)
+	body := append(append(append([]byte{}, handshake[4:at-2]...), binary.BigEndian.AppendUint16(nil, uint16(extensions))...), padding...)
+	body = append(body, handshake[at:]...)
+	handshake = append([]byte{1, byte(len(body) >> 16), byte(len(body) >> 8), byte(len(body))}, body...)
+	parts := [][]byte{handshake}
+	if record1 > 0 {
+		parts = [][]byte{handshake[:record1], handshake[record1:]}
+	}
+	frame := append([]byte{}, full[:payload]...)
+	for _, part := range parts {
+		frame = append(frame, 0x16, 3, 1)
+		frame = binary.BigEndian.AppendUint16(frame, uint16(len(part)))
+		frame = append(frame, part...)
+	}
+	if segment > 0 && payload+segment < len(frame) {
+		frame = frame[:payload+segment]
+	}
+	return frame
+}
+
 // TestKernelSiteDropVerdictsMatchObject runs one set of frames through the
 // program. With CDNCA_XDP_COMPARE_OBJECT (another xdp.bpf.o, e.g. the
 // previous release's) every frame must get the same verdict from both.
@@ -187,11 +221,29 @@ func TestKernelSiteDropVerdictsMatchObject(t *testing.T) {
 	for _, n := range []int{14, 30, 54, 60, 100, len(full) - 3} {
 		frames = append(frames, frame{fmt.Sprintf("truncated %d", n), full[:n]})
 	}
+	// A dropped name past the first segment or the first record: passed and
+	// counted as an SNI miss (OpenResty closes the handshake).
+	split := []frame{
+		{"SNI in the 2nd segment (1200 B padding, 1000 B segment)", splitHello(1200, 1000, 0, "a.example.com")},
+		{"SNI in the 2nd segment (1500 B padding, 1400 B segment)", splitHello(1500, 1400, 0, "a.example.com")},
+		{"SNI in the 2nd record (400 B first record)", splitHello(600, 0, 400, "a.example.com")},
+		// first record: up to the server_name extension header (extensions at
+		// 81, the 4 byte padding extension, then the 4 byte header)
+		{"SNI across the record boundary", splitHello(0, 0, 81+4+4, "a.example.com")},
+	}
+	frames = append(frames, split...)
+	// The same hellos whole and in one record: dropped.
+	whole := []frame{
+		{"SNI after 1200 B padding, one segment", splitHello(1200, 0, 0, "a.example.com")},
+		{"SNI after 1500 B padding, one segment", splitHello(1500, 0, 0, "a.example.com")},
+	}
+	frames = append(frames, whole...)
 
+	var missed Counter
 	verdicts := func(object []byte) []uint32 {
 		collection, _ := loadFilter(t, object, false)
 		defer collection.Close()
-		manager := &Manager{collection: collection, links: map[string]link.Link{}}
+		manager := &Manager{collection: collection, links: map[string]link.Link{}, status: Status{Mode: ModeGeneric}}
 		if err := manager.writeConfig(Config{}); err != nil {
 			t.Fatal(err)
 		}
@@ -206,9 +258,27 @@ func TestKernelSiteDropVerdictsMatchObject(t *testing.T) {
 			}
 			out = append(out, got)
 		}
+		if counters, err := manager.SiteDropCounters(); err == nil {
+			missed = counters.SNIMissed
+		}
 		return out
 	}
 	current := verdicts(bpfObject)
+	for i, f := range frames {
+		if i >= len(frames)-len(split)-len(whole) {
+			want := uint32(2) // XDP_PASS
+			if i >= len(frames)-len(whole) {
+				want = 1 // XDP_DROP
+			}
+			if current[i] != want {
+				t.Errorf("%s: verdict %d, want %d", f.name, current[i], want)
+			}
+		}
+	}
+	// The split hellos and the truncated ones that start a hello.
+	if missed.Packets < uint64(len(split)) {
+		t.Errorf("SNI misses %+v, want at least %d", missed, len(split))
+	}
 	drops := 0
 	for _, v := range current {
 		if v == 1 {

@@ -200,10 +200,10 @@ func TestCNAMEWithoutPackageUsesPlatformDefaultLineGroup(t *testing.T) {
 
 	// 节点管理 → 线路组 → 设为平台默认 (tenants may not).
 	if _, err := scheduler.SetPlatformDefault(t.Context(), nodescheduler.Actor{UserID: tenant.userID, ScopeID: tenant.scopeID,
-		ScopeKind: "tenant"}, packageGroup.Group.GroupID, true, "cname-nopkg-tenant-default"); !errors.Is(err, nodescheduler.ErrPlatformWriteDenied) {
+		ScopeKind: "tenant"}, packageGroup.Group.GroupID, true, "cname-nopkg-tenant-default", "cname-nopkg-tenant-default"); !errors.Is(err, nodescheduler.ErrPlatformWriteDenied) {
 		t.Fatalf("tenant set platform default err=%v", err)
 	}
-	marked, err := platformScheduler.SetPlatformDefault(t.Context(), platformActor, platformGroup.Group.GroupID, true, "cname-nopkg-default")
+	marked, err := platformScheduler.SetPlatformDefault(t.Context(), platformActor, platformGroup.Group.GroupID, true, "cname-nopkg-default", "cname-nopkg-default")
 	if err != nil || !marked.IsPlatformDefault || marked.Revision != platformGroup.Group.Revision {
 		t.Fatalf("set platform default=%+v err=%v", marked.IsPlatformDefault, err)
 	}

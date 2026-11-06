@@ -754,6 +754,25 @@ components:
         failure_rounds: {type: integer, minimum: 1, maximum: 10}
         recovery_rounds: {type: integer, minimum: 1, maximum: 10}
         low_balance: {type: integer, minimum: 0, maximum: 1000000000, description: 剩余月额度低于此值降频（×3）并通知}
+        probe_type: {type: string, enum: [tcping, ping, http], description: 638；省略时保持原值；http 有任何 HTTP 应答即可达}
+        selection:
+          description: 638 细化选点（非空时代替 groups/points_per_group；null 清除）；见 api/control-probe-dnspup.openapi.yaml Selection
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [points_per_group]
+              properties:
+                areas: {type: array, items: {type: string, enum: [mainland, hkmotw, overseas]}}
+                carriers: {type: array, items: {type: string, enum: [telecom, unicom, mobile, edu, bgp, other]}}
+                include_provinces: {type: array, maxItems: 64, items: {type: string}}
+                exclude_provinces: {type: array, maxItems: 64, items: {type: string}}
+                exclude_checkpoints: {type: array, maxItems: 100, items: {type: string}}
+                points_per_group: {type: integer, minimum: 1, maximum: 20}
+                rotate: {type: boolean}
+            - {type: 'null'}
+        line_alert_min_points: {type: integer, minimum: 1, maximum: 20, description: 638 线路告警：格内失败点数下限}
+        line_alert_rounds: {type: integer, minimum: 1, maximum: 10, description: 638 线路告警：连续失败轮数}
+        auto_diagnose: {type: boolean, description: 638 线路告警首次触发时自动 mtr 一次}
     DNSPupNodeMonitoringStatus:
       allOf:
         - {$ref: '#/components/schemas/DNSPupNodeMonitoringSettings'}

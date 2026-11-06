@@ -66,12 +66,57 @@ describe('pluginInstallationsApi', () => {
     expect(String(fetchSpy.mock.calls[1]?.[0])).toBe(`/v1/platform/plugin-installations/${authorizationID}/confirm`)
     expect(new Headers(fetchSpy.mock.calls[1]?.[1]?.headers).get('If-Match')).toBe('"1"')
 
-    // A tenant list never accepts a platform row, and the platform list never a tenant row.
+    // A tenant list never accepts a platform row; a tenant row of the platform list is a plugin its administrator
+    // confirmed for chosen tenants, never one a tenant manages.
     fetchSpy.mockResolvedValueOnce(response({ items: [{ ...theme, tenant_scope_id: scopeID }] }))
     await expect(pluginInstallationsApi.list('token', scopeID)).rejects.toMatchObject({ code: 'invalid_response' })
-    fetchSpy.mockResolvedValueOnce(response({ items: [installation()] }))
+    fetchSpy.mockResolvedValueOnce(response({ items: [installation({ managed_by: 'platform',
+      targets: { all_tenants: true, revision: 1, tenants: [] } })] }))
+    expect((await platformPluginInstallationsApi.list('token', '')).items[0]?.targets?.all_tenants).toBe(true)
+    fetchSpy.mockResolvedValueOnce(response({ items: [installation({ managed_by: 'tenant' })] }))
+    await expect(platformPluginInstallationsApi.list('token', '')).rejects.toMatchObject({ code: 'invalid_response' })
+    fetchSpy.mockResolvedValueOnce(response({ items: [{ ...theme, targets: { all_tenants: true, revision: 1, tenants: [] } }] }))
     await expect(platformPluginInstallationsApi.list('token', '')).rejects.toMatchObject({ code: 'invalid_response' })
     fetchSpy.mockResolvedValueOnce(response({ items: [{ ...installation(), resource_scope: undefined }] }))
+    await expect(pluginInstallationsApi.list('token', scopeID)).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
+  // 平台管理员确认租户插件时带 targets，之后 PUT .../targets 改；租户只读看到平台替它装的
+  // 插件（managed_by=platform，head 在平台作用域），看不到 targets，也不能在租户路由带 targets 确认。
+  it('confirms tenant plugins with targets from the platform scope and reads them read-only in tenants', async () => {
+    const platformScope = '018cc251-f400-7def-8000-000000000030'
+    const tenantB = '018cc251-f400-7def-8000-000000000031'
+    const held = installation({ tenant_scope_id: platformScope, managed_by: 'platform' })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ installation: held }))
+    const approval = { verification_id: verificationID, approved_scopes: ['cache.purge', 'sites.read'],
+      sensitive_permissions_confirmed: true, new_permissions_confirmed: true }
+    await platformPluginInstallationsApi.confirm('token', '', authorizationID, 1,
+      { ...approval, targets: { all_tenants: false, tenant_scope_ids: [scopeID, tenantB] } }, 'platform-confirm-targets')
+    expect(JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)).targets).toEqual({ all_tenants: false, tenant_scope_ids: [scopeID, tenantB] })
+    await expect(platformPluginInstallationsApi.confirm('token', '', authorizationID, 1,
+      { ...approval, targets: { all_tenants: true, tenant_scope_ids: [scopeID] } }, 'k')).rejects.toMatchObject({ code: 'invalid_request' })
+    await expect(platformPluginInstallationsApi.confirm('token', '', authorizationID, 1,
+      { ...approval, targets: { all_tenants: false, tenant_scope_ids: [] } }, 'k')).rejects.toMatchObject({ code: 'invalid_request' })
+    await expect(pluginInstallationsApi.confirm('token', scopeID, authorizationID, 1,
+      { ...approval, targets: { all_tenants: true, tenant_scope_ids: [] } }, 'k')).rejects.toMatchObject({ code: 'invalid_request' })
+    await expect(platformPluginInstallationsApi.upgrade('token', '', authorizationID, 1,
+      { ...approval, targets: { all_tenants: true, tenant_scope_ids: [] } }, 'k')).rejects.toMatchObject({ code: 'invalid_request' })
+
+    fetchSpy.mockResolvedValueOnce(response({ installation: { ...held, targets: { all_tenants: true, revision: 2, tenants: [] } } }))
+    const changed = await platformPluginInstallationsApi.updateTargets('token', authorizationID, 1,
+      { all_tenants: true, tenant_scope_ids: [] }, 'platform-targets-1')
+    expect(changed.installation.targets?.revision).toBe(2)
+    const put = fetchSpy.mock.calls.at(-1)!
+    expect(String(put[0])).toBe(`/v1/platform/plugin-installations/${authorizationID}/targets`)
+    expect(put[1]?.method).toBe('PUT')
+    expect(put[1]?.headers).toMatchObject({ 'If-Match': '"1"', 'Idempotency-Key': 'platform-targets-1' })
+
+    // The tenant route: a platform-held row is accepted only as managed_by=platform and without targets.
+    fetchSpy.mockResolvedValueOnce(response({ items: [held] }))
+    expect((await pluginInstallationsApi.list('token', scopeID)).items[0]?.managed_by).toBe('platform')
+    fetchSpy.mockResolvedValueOnce(response({ items: [{ ...held, managed_by: undefined }] }))
+    await expect(pluginInstallationsApi.list('token', scopeID)).rejects.toMatchObject({ code: 'invalid_response' })
+    fetchSpy.mockResolvedValueOnce(response({ items: [{ ...held, targets: { all_tenants: true, revision: 1, tenants: [] } }] }))
     await expect(pluginInstallationsApi.list('token', scopeID)).rejects.toMatchObject({ code: 'invalid_response' })
   })
 

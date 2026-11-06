@@ -536,3 +536,27 @@ func wireMarketSecDigest(runtime *marketruntime.Runtime, subscribe *marketsubscr
 	runtime.WithSecDigest(source, receiver)
 	return nil
 }
+
+// wireMarketBans connects the ban list library to the market:
+// as a subscriber, ban lists of sites served by market leaves are pushed to
+// them on every change and the list page shows how each ban is enforced; as
+// a leaf, subscribers' ban lists of market sites land on the leaf sites and
+// the distributor (when configured) sends them to the nodes.
+func wireMarketBans(runtime *marketruntime.Runtime, subscribe *marketsubscribe.Service, bans *securityBanRuntime) {
+	if runtime == nil || bans == nil {
+		return
+	}
+	if subscribe != nil {
+		bans.store.WithMarketDeliveries(subscribe)
+		bans.onChange(subscribe.WakeBans)
+		log := slog.Default().With("component", "market-bans")
+		runtime.WithBackground(func(ctx context.Context) error { return subscribe.RunBanSync(ctx, log) })
+	}
+	if supply, ok := runtime.Supply().(*marketsupply.Service); ok {
+		var delivery marketsupply.BanDelivery
+		if bans.distributor != nil {
+			delivery = bans.distributor
+		}
+		supply.WithBanList(bans.store, delivery)
+	}
+}

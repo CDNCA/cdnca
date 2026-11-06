@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -384,6 +385,42 @@ func (h *Hub) Mutate(ctx context.Context, actor HubActor, mutation HubMutation) 
 	}
 	return result, nil
 }
+
+// ClaimBatch binds a batch Idempotency-Key to the digest of its items
+// (tenant_dns_record_batch_requests, migration 639): the first call records
+// it, the same digest passes again, another digest is ErrHubIdempotency.
+// The actor must be able to write records at all; each item is still
+// authorized on its own account.
+func (h *Hub) ClaimBatch(ctx context.Context, actor HubActor, key, digest string) error {
+	if !hubBatchKeyPattern.MatchString(key) || !hubDigestPattern.MatchString(digest) {
+		return ErrHubInvalid
+	}
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	if err := h.authorize(ctx, tx, actor, hubWritePermissions...); err != nil {
+		return err
+	}
+	// The no-op update makes a concurrent first use wait and then read the winner's digest.
+	var stored string
+	if err := tx.QueryRow(ctx, `INSERT INTO tenant_dns_record_batch_requests(scope_id,actor_user_id,idempotency_key,request_sha256,created_at)
+		VALUES($1,$2,$3,$4,$5)
+		ON CONFLICT (scope_id,actor_user_id,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
+		RETURNING request_sha256`, actor.ScopeID, actor.UserID, key, digest, h.now().UTC()).Scan(&stored); err != nil {
+		return err
+	}
+	if stored != digest {
+		return ErrHubIdempotency
+	}
+	return tx.Commit(ctx)
+}
+
+var (
+	hubBatchKeyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$`)
+	hubDigestPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
+)
 
 // hubOutcome carries what the change did (before/after summaries for the
 // op row and the audit event).

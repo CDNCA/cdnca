@@ -77,11 +77,26 @@ const inUseReasons = [
   { kind: 'cache_operation', count: 3 },
 ]
 
-function serve(items: NodeInventoryItem[]) {
+function lineGroup(id: string, displayID: string, name: string, nodeIDs: string[]) {
+  return {
+    id, display_id: displayID, tenant_scope_id: scopeID, revision: 1, name, region: '华东', resolved_value: `line-${displayID}`,
+    note: '', sort_order: 100,
+    health_policy: { probe_interval_ms: 10_000, probe_timeout_ms: 3_000, failure_threshold: 3, recovery_threshold: 3, failure_debounce_ms: 0, recovery_debounce_ms: 0 },
+    endpoints: nodeIDs.map((nodeID, index) => ({
+      id: `018f0000-0000-7000-8000-0000000001${displayID}${index}`, node_id: nodeID, address: `192.0.2.${100 + index}`, port: 80,
+      region: '华东', carrier: '', priority: 0, weight: 1, enabled: true,
+      health: { status: 'healthy', consecutive_successes: 1, consecutive_failures: 0, last_sequence: 1, row_revision: 1 },
+    })),
+    configuration_digest: 'a'.repeat(64), created_by_user_id: '018f0000-0000-7000-8000-0000000000ff',
+    created_at: '2026-11-04T08:00:00Z', sealed_at: '2026-11-04T08:00:01Z',
+  }
+}
+
+function serve(items: NodeInventoryItem[], lineGroups: unknown[] = []) {
   const ordered = [...items].sort((left, right) => Number(right.display_id) - Number(left.display_id))
   return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = String(input)
-    if (url.startsWith('/v1/node-line-groups')) return Promise.resolve(json({ items: [] }))
+    if (url.startsWith('/v1/node-line-groups')) return Promise.resolve(json({ items: lineGroups }))
     if (init?.method === 'PATCH') {
       return Promise.resolve(json({ error: { code: 'node_in_use', message: 'internal', request_id: 'r-1', details: { reasons: inUseReasons } } }, 409))
     }
@@ -147,6 +162,28 @@ describe('node list in-use and presence', () => {
     expect(await screen.findByText(/该节点在节点市场供货组中：香港 BGP。供货组不在线路组列表显示/)).toBeInTheDocument()
     const plain = screen.getByText('edge-online').closest('tr')!
     expect(within(plain.querySelector('.node-region-cell') as HTMLElement).queryByText(/市场供货/)).not.toBeInTheDocument()
+  })
+
+  // 只有 1 个线路组（区域与端点区域同为“香港默认体验2G”）却显示“线路组(2个)”。
+  // 计数只算本节点所在的普通线路组，每组算一次；悬停列出组名。
+  it('counts each line group holding the node once', async () => {
+    authenticate()
+    serve([base, offline, never], [
+      lineGroup('018f0000-0000-7000-8000-0000000000d1', '3', '华东 A 组', [base.id]),
+      lineGroup('018f0000-0000-7000-8000-0000000000d2', '4', '华东 B 组', [base.id, offline.id]),
+    ])
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<NodeListPage />)
+
+    const regionOf = (name: string) => screen.getByText(name).closest('tr')!.querySelector('.node-region-cell') as HTMLElement
+    await screen.findByText('edge-online')
+    const both = await within(regionOf('edge-online')).findByRole('link', { name: '线路组(2个)' })
+    expect(within(regionOf('edge-reset')).getByRole('link', { name: '线路组(1个)' })).toBeInTheDocument()
+    expect(within(regionOf('edge-reset')).getByText('市场供货(1)')).toBeInTheDocument()
+    // Same region but in no line group.
+    expect(within(regionOf('edge-never')).getByRole('link', { name: '线路组(0个)' })).toBeInTheDocument()
+    await user.hover(both)
+    expect(await screen.findByText('所在线路组：华东 A 组、华东 B 组')).toBeInTheDocument()
   })
 
   it('names what holds a node whose deletion is refused', async () => {

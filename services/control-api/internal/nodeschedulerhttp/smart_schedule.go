@@ -13,7 +13,7 @@ import (
 // implement it (migration 609).
 type smartScheduleService interface {
 	GetSmartSchedule(context.Context, nodescheduler.Actor, uuid.UUID, nodescheduler.SmartScheduleReader) (nodescheduler.SmartSchedule, error)
-	PutSmartSchedule(context.Context, nodescheduler.Actor, uuid.UUID, nodescheduler.SmartScheduleSettings, string) (nodescheduler.SmartScheduleSettings, int64, error)
+	PutSmartSchedule(context.Context, nodescheduler.Actor, uuid.UUID, nodescheduler.SmartScheduleSettings, string, string) (nodescheduler.SmartScheduleSettings, int64, error)
 	LatencyMatrix(context.Context, nodescheduler.Actor, uuid.UUID, int, nodescheduler.SmartScheduleReader) (any, error)
 }
 
@@ -58,7 +58,7 @@ func (handler *Handler) smartSchedule(response http.ResponseWriter, request *htt
 		return
 	}
 	if request.Method == http.MethodPut {
-		_, requestID, ok := handler.metadataWithoutRevision(response, request)
+		key, requestID, ok := handler.metadataWithoutRevision(response, request)
 		if !ok {
 			return
 		}
@@ -74,7 +74,7 @@ func (handler *Handler) smartSchedule(response http.ResponseWriter, request *htt
 		if _, _, err := service.PutSmartSchedule(request.Context(), actor, groupID, nodescheduler.SmartScheduleSettings{
 			Enabled: *body.Enabled, TopN: *body.TopN, Granularity: *body.Granularity,
 			LatencyWindowMinutes: *body.LatencyWindowMinutes, MaxLoadPercent: *body.MaxLoadPercent,
-		}, requestID); err != nil {
+		}, key, requestID); err != nil {
 			handler.writeError(response, request, err)
 			return
 		}

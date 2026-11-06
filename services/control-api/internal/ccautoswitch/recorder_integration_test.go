@@ -347,9 +347,11 @@ func TestCCAutoSwitchDropsEngagementsOutsideOwnership(t *testing.T) {
 		WHERE site_id IN ($1,$2)`, site, otherSite).Scan(&windows); err != nil || windows != 0 {
 		t.Fatalf("rejected engagements opened windows=%d err=%v", windows, err)
 	}
-	// The legitimate engagement is still notified afterwards.
+	// The legitimate engagement is still notified afterwards: one event on both channels (a never-chosen
+	// subscription defaults to SMS and email).
 	h.report(serving, scope, site, engaged)
-	if got := h.notices(scope, owner); len(got) != 1 {
+	if got := h.notices(scope, owner); len(got) != 2 || got[0].source != got[1].source ||
+		got[0].channel != "email" || got[1].channel != "sms" {
 		t.Fatalf("legitimate engagement notices=%+v", got)
 	}
 }
