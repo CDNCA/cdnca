@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Card, Form, Input, InputNumber, Popconfirm, Radio, Select, Space, Switch, Table, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -14,6 +14,7 @@ import { nodesApi } from '../../api/nodes'
 import { nodeSchedulingApi } from '../../api/nodeScheduling'
 import { useSessionStore } from '../../auth/session'
 import { MetricTrendChart } from '../../components/MetricTrendChart'
+import TenantScopeSelect from '../../components/TenantScopeSelect'
 import '../../i18n/probeDNSPup'
 import { FeedbackWhen, useFeedback } from '@cdnca/ui'
 import { SelectionFields, selectionOf, type SelectionValues } from './SelectionFields'
@@ -174,6 +175,9 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
 interface OverrideForm extends SelectionValues {
   kind: 'node' | 'line_group'
   node_id?: string
+  // Line group overrides: the platform's own groups, or a tenant's.
+  group_scope?: 'platform' | 'tenant'
+  tenant_scope_id?: string
   line_group_id?: string
   probe_type?: NodeProbeType | 'inherit'
 }
@@ -199,9 +203,9 @@ function NodePicker({ token, value, onChange }: { token: string; value?: string;
     onChange={(next: string) => { setPicked(options.find((option) => option.value === next)); onChange?.(next) }} />
 }
 
-// Line groups of the platform scope (the list carries each group's tenant scope).
-function useLineGroupOptions(token: string, enabled: boolean) {
-  const scopeID = useSessionStore((state) => state.principal?.scope_id ?? '')
+// Line groups of one scope: the platform's (the session scope) or a picked tenant's (the list carries each group's
+// tenant scope).
+function useLineGroupOptions(token: string, scopeID: string, enabled: boolean) {
   return useQuery({
     queryKey: ['probe-dnspup-override-line-groups', scopeID],
     queryFn: async () => (await nodeSchedulingApi.list(token, { kind: 'platform', targetScopeId: scopeID })).items
@@ -220,7 +224,13 @@ export function OverridesCard({ token }: { token: string }) {
   const [form] = Form.useForm<OverrideForm>()
   const [adding, setAdding] = useState(false)
   const kind = Form.useWatch('kind', form)
-  const lineGroups = useLineGroupOptions(token, adding && kind === 'line_group')
+  const groupScope = Form.useWatch('group_scope', form) ?? 'platform'
+  const tenantScopeID = Form.useWatch('tenant_scope_id', form) ?? ''
+  const principal = useSessionStore((state) => state.principal)
+  const platformScopeID = principal?.scope_id ?? ''
+  const canListTenants = Boolean(principal?.permissions.some((p) => p === 'identity.users.manage' || p === 'platform.admin'))
+  const groupScopeID = groupScope === 'tenant' ? tenantScopeID : platformScopeID
+  const lineGroups = useLineGroupOptions(token, groupScopeID, adding && kind === 'line_group')
   const query = useQuery({ queryKey: ['probe-dnspup-overrides'], queryFn: () => probeDNSPupUnifiedApi.overrides(token), enabled: Boolean(token) })
   const refresh = () => client.invalidateQueries({ queryKey: ['probe-dnspup-overrides'] })
   const save = useMutation({
@@ -252,7 +262,10 @@ export function OverridesCard({ token }: { token: string }) {
         columns={[
           { title: t('unified.overrides.subject'), render: (_, item) => <Space size={4}>
             <Tag>{t(`unified.overrides.kinds.${item.subject_kind}`)}</Tag>{item.subject_name || t('unified.overrides.unnamed')}
-            <Typography.Text type="secondary" copyable={{ text: item.node_id ?? item.line_group_id }}>{item.node_id ?? item.line_group_id}</Typography.Text></Space> },
+            {item.subject_kind === 'line_group' && item.tenant_scope_id !== platformScopeID ? <Tag>{t('unified.overrides.tenantTag')}</Tag> : null}
+            {/* Display ID when the subject still exists; the UUID stays one copy away. */}
+            <Typography.Text type="secondary" copyable={{ text: item.node_id ?? item.line_group_id }}>
+              {item.subject_display_id != null ? `ID ${item.subject_display_id}` : item.node_id ?? item.line_group_id}</Typography.Text></Space> },
           { title: t('unified.node.probeType'), render: (_, item) => item.probe_type ? t(`unified.node.probeTypes.${item.probe_type}`) : t('unified.overrides.inherit') },
           { title: t('unified.selection.title'), render: (_, item) => item.selection
             ? [...(item.selection.areas ?? []).map((value) => t(`unified.areas.${value}`)),
@@ -261,16 +274,28 @@ export function OverridesCard({ token }: { token: string }) {
           { title: '', render: (_, item) => <Popconfirm title={t('unified.overrides.remove')} onConfirm={() => remove.mutate(item.id)}>
             <Button size="small" danger>{t('unified.overrides.remove')}</Button></Popconfirm> },
         ]} />
-      {adding ? <Form form={form} layout="vertical" requiredMark={false} initialValues={{ kind: 'node', probe_type: 'inherit', selection_enabled: false, points_per_group: 3 }}>
+      {adding ? <Form form={form} layout="vertical" requiredMark={false} initialValues={{ kind: 'node', group_scope: 'platform', probe_type: 'inherit', selection_enabled: false, points_per_group: 3 }}>
         <Form.Item name="kind" label={t('unified.overrides.subject')}>
           <Select aria-label={t('unified.overrides.subject')} options={(['node', 'line_group'] as const).map((value) => ({ value, label: t(`unified.overrides.kinds.${value}`) }))} />
         </Form.Item>
-        {kind === 'line_group'
-          ? <Form.Item name="line_group_id" label={t('unified.overrides.lineGroup')} rules={[{ required: true, message: t('unified.overrides.required') }]}>
+        {kind === 'line_group' ? <>
+          <Form.Item name="group_scope" label={t('unified.overrides.groupScope')}>
+            <Radio.Group onChange={() => form.setFieldsValue({ tenant_scope_id: undefined, line_group_id: undefined })}
+              options={[{ value: 'platform', label: t('unified.overrides.groupScopes.platform') },
+                { value: 'tenant', label: t('unified.overrides.groupScopes.tenant') }]} />
+          </Form.Item>
+          {groupScope === 'tenant'
+            ? <Form.Item name="tenant_scope_id" label={t('unified.overrides.tenant')} rules={[{ required: true, message: t('unified.overrides.required') }]}>
+              <TenantScopeSelect accessToken={token} ownerKey={platformScopeID} canList={canListTenants} queryKeyPrefix="probe-dnspup-override-tenants"
+                ariaLabel={t('unified.overrides.tenant')} placeholder={t('unified.overrides.tenantPlaceholder')} emptyText={t('unified.overrides.noMatch')}
+                value={tenantScopeID}
+                onChange={(scopeID) => form.setFieldsValue({ tenant_scope_id: scopeID || undefined, line_group_id: undefined })} />
+            </Form.Item> : null}
+          <Form.Item name="line_group_id" label={t('unified.overrides.lineGroup')} rules={[{ required: true, message: t('unified.overrides.required') }]}>
             <Select aria-label={t('unified.overrides.lineGroup')} showSearch optionFilterProp="label" style={{ width: 360 }}
               placeholder={t('unified.overrides.lineGroupPlaceholder')} loading={lineGroups.isFetching} options={lineGroups.data ?? []}
               notFoundContent={lineGroups.isError ? t('unified.overrides.listFailed') : t('unified.overrides.noMatch')} />
-          </Form.Item>
+          </Form.Item></>
           : <Form.Item name="node_id" label={t('unified.overrides.node')} rules={[{ required: true, message: t('unified.overrides.required') }]}>
             <NodePicker token={token} />
           </Form.Item>}

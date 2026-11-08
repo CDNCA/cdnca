@@ -9,9 +9,11 @@ import (
 )
 
 // The hidden tenant's display name: "市场订阅 ·
-// <the seller's supply group name> · <subscriber code>", so the seller's
-// site list, user list and 订阅者 read the same thing and the buyer's
-// identity stays hidden. The name follows a group rename on the next grant
+// <the seller's offer name> · <subscriber code>", so the seller's site list,
+// user list and 订阅者 read the same thing and the buyer's identity stays
+// hidden. The offer name is the one frozen at purchase that the buyer also
+// sees; a market that does not send it leaves the supply group name. The
+// name follows on the next grant
 // sync (every grant round); the username (mkt-<Key>) never changes.
 
 const tenantNamePrefix = "市场订阅"
@@ -46,13 +48,16 @@ func tenantDisplayName(group string, g grant.Grant) string {
 }
 
 // nameTenant writes the hidden tenant's display name (its user and tenant
-// rows) when it differs; a no-op on every unchanged sync.
-func (s *Service) nameTenant(ctx context.Context, tenant tenantRef, poolID uuid.UUID, g grant.Grant) error {
-	var group string
-	if err := s.pool.QueryRow(ctx, `SELECT name FROM node_line_groups WHERE id=$1`, poolID).Scan(&group); err != nil {
-		return err
+// rows) when it differs; a no-op on every unchanged sync. offerName empty:
+// the supply group's name.
+func (s *Service) nameTenant(ctx context.Context, tenant tenantRef, poolID uuid.UUID, g grant.Grant, offerName string) error {
+	label := offerName
+	if strings.TrimSpace(label) == "" {
+		if err := s.pool.QueryRow(ctx, `SELECT name FROM node_line_groups WHERE id=$1`, poolID).Scan(&label); err != nil {
+			return err
+		}
 	}
-	name := tenantDisplayName(group, g)
+	name := tenantDisplayName(label, g)
 	now := s.now().UTC()
 	if _, err := s.pool.Exec(ctx, `UPDATE users SET display_name=$2, revision=revision+1, updated_at=$3
 		WHERE id=$1 AND display_name<>$2`, tenant.userID, name, now); err != nil {

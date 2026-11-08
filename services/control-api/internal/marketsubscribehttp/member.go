@@ -189,6 +189,7 @@ func (h *Handler) WithMember(forwarder Forwarder, version string) *Handler {
 	if !versionArg.MatchString(version) || version == "development" {
 		version = ""
 	}
+	h.catalog = forwarder
 	for pattern, route := range memberRoutes {
 		h.handle(pattern, route.access, h.forward(forwarder, route, version))
 	}

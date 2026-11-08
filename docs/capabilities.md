@@ -79,6 +79,7 @@ These capabilities are not in the Community Edition; the commercial edition prov
 
 - [Multi-CDN aggregated edge](https://www.cdnca.com/en/docs/capabilities/multi-cdn/), [cross-CDN scheduling](https://www.cdnca.com/en/docs/capabilities/cdn-scheduling/), [automatic fallback chain](https://www.cdnca.com/en/docs/capabilities/fallback-chain/)
 - [Automatic defense](https://www.cdnca.com/en/docs/capabilities/auto-defense/) (the Community Edition has CC auto-switching and WAF auto-ban only), [attack auto-escalation](https://www.cdnca.com/en/docs/capabilities/escalate/)
+- [SDK Shield](https://www.cdnca.com/en/docs/capabilities/sdk-shield/) (games and apps embed an SDK; first-packet token check, origin hiding)
 - [Cloudflare preferred IPs](https://www.cdnca.com/en/docs/capabilities/cf-optimize/)
 - [Online payments](https://www.cdnca.com/en/docs/capabilities/payments/), [billing bridge](https://www.cdnca.com/en/docs/capabilities/billing-bridge/), [migration import](https://www.cdnca.com/en/docs/capabilities/migrate-import/), multi-tenant plans and billing
 

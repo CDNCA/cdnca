@@ -160,7 +160,7 @@ func (service Service) transition(ctx context.Context, tx Transaction, current I
 		receipt.AttemptedVersion = command.Candidate.Version
 		return next, receipt, nil
 	case ActionDisable:
-		if current.Status != StatusEnabled || !validReason(command.Reason) || !sameCurrentCandidate(current, command.Candidate) {
+		if current.Status != StatusEnabled || command.Reason != "" || !sameCurrentCandidate(current, command.Candidate) {
 			return Installation{}, Receipt{}, ErrTransitionInvalid
 		}
 		next.Status = StatusDisabled
@@ -203,7 +203,10 @@ func validCommand(command Command) bool {
 	switch command.Action {
 	case ActionConfirm, ActionUpgrade:
 		return command.Reason == "" && (command.Applied || command.Action == ActionUpgrade && validFailureCode(command.StableReasonCode))
-	case ActionDisable, ActionUninstall:
+	case ActionDisable:
+		// A pause asks for no reason; uninstall still records one.
+		return len(command.Facts) == 0 && command.Reason == "" && command.StableReasonCode == ""
+	case ActionUninstall:
 		return len(command.Facts) == 0 && validReason(command.Reason) && command.StableReasonCode == ""
 	case ActionResume:
 		return len(command.Facts) == 0 && command.Reason == "" && command.StableReasonCode == "" &&

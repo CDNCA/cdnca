@@ -244,6 +244,8 @@ export interface ProbeOverride {
   tenant_scope_id?: string
   line_group_id?: string
   subject_name: string
+  /** The node's or line group's display ID; absent when it no longer exists. */
+  subject_display_id?: number
   probe_type: NodeProbeType | null
   selection: ProbeSelection | null
   revision: number

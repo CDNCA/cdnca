@@ -139,25 +139,36 @@ end
 -- dynamic routing checkpoint and the CC run). Each worker keeps a site -> true
 -- table, rebuilt when "sites_gen" moves. The generation is read from the
 -- dictionary once a second (the worker that applies a snapshot sees it at
--- once), or on every call when fresh (the CC run, which looked every request
--- up before: a ban applies there with no delay). A dictionary with a
--- revision but no "sites_gen" (a snapshot applied before this key existed,
--- kept over a reload) lists every site.
+-- once), or, when fresh, on every call the table says no (the CC run and
+-- the WAF gate, which looked every request up before: a ban applies there
+-- with no delay). A yes is answered from the table when fresh, with no clock
+-- or dictionary read: the caller then asks banned(), which reads the ban
+-- keys themselves, so a stale yes costs that lookup and nothing else (the
+-- once-a-second calls, the D5 checkpoint, still move the table on).
+-- The WAF gate's trace stops at enforce's closures (NYI UCLO)
+-- and its exits fall back to the interpreter, where the clock and
+-- dictionary reads of a yes cost about 1,700 instructions per request
+-- (perf stat). A dictionary with a revision but no "sites_gen" (a snapshot
+-- applied before this key existed, kept over a reload) lists every site.
 local sites_gen, sites_set, sites_until, sites_all = nil, {}, 0, false
 
 function _M.listed(site, fresh)
+    -- the table is looked up once: a no read fresh costs what it did before
+    local yes = sites_all or sites_set[site] == true
+    if fresh and yes then return true end
     local now = ngx.now()
-    if fresh or now >= sites_until then
-        sites_until = now + 1
-        local state = dict()
-        local gen = state and state:get("sites_gen")
-        if gen == nil then
-            sites_gen, sites_set, sites_all = nil, {}, state ~= nil and state:get("rev") ~= nil
-        elseif gen ~= sites_gen then
-            local set = {}
-            for _, id in ipairs(cjson.decode(state:get("sites") or "[]") or {}) do set[id] = true end
-            sites_gen, sites_set, sites_all = gen, set, false
-        end
+    if not fresh and now < sites_until then return yes end
+    sites_until = now + 1
+    local state = dict()
+    local gen = state and state:get("sites_gen")
+    if gen == nil then
+        sites_gen, sites_set, sites_all = nil, {}, state ~= nil and state:get("rev") ~= nil
+    elseif gen ~= sites_gen then
+        local set = {}
+        for _, id in ipairs(cjson.decode(state:get("sites") or "[]") or {}) do set[id] = true end
+        sites_gen, sites_set, sites_all = gen, set, false
+    else
+        return yes
     end
     return sites_all or sites_set[site] == true
 end

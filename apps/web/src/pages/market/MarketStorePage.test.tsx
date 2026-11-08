@@ -64,7 +64,8 @@ describe('market model', () => {
     expect(storeState(third as never, [], [], [])).toBe('purchase')
     // F1：许可已取得但本主控还没有安装记录——正在同步，不提前“去启用”，也不再给“下载”。
     expect(storeState(third as never, [license('bob.theme')] as never, [], [])).toBe('distributing')
-    expect(storeState(third as never, [license('bob.theme')] as never, lib(false), [])).toBe('enable')
+    // 本机安装都已停用（installed && !enabled）就是已停用，不是“去启用”。
+    expect(storeState(third as never, [license('bob.theme')] as never, lib(false), [])).toBe('disabled')
     expect(storeState(third as never, [license('bob.theme')] as never, lib(true), [])).toBe('installed')
     expect(storeState(third as never, [], lib(false, false, true), [])).toBe('revoked')
     expect(storeState(official as never, [license('io.cdnca.waf-pro')] as never, [], [])).toBe('activating')
@@ -213,12 +214,27 @@ describe('MarketStorePage', () => {
 
   it('gives an installed theme no link to the removed theme management page', async () => {
     const userTheme = { ...third, applies_to: ['user'] }
-    vi.stubGlobal('fetch', routes({ licenses: [license('bob.theme')], library: [{ plugin_id: 'bob.theme', installed: true, enabled: false, withdrawn: false }] }, {
+    vi.stubGlobal('fetch', routes({ licenses: [license('bob.theme')], library: [{ plugin_id: 'bob.theme', installed: true, enabled: true, withdrawn: false }] }, {
       '/v1/admin/market/plugins?': () => json({ items: [userTheme], next_cursor: null }),
     }))
     renderWithProviders(<MarketStorePage />)
-    expect(await within(await card('bob.theme')).findByText('待主控管理员确认安装')).toBeInTheDocument()
+    expect(await within(await card('bob.theme')).findByText('已安装，可使用')).toBeInTheDocument()
     expect(within(await card('bob.theme')).queryByRole('link', { name: '去启用' })).toBeNull()
+    expect(within(await card('bob.theme')).queryByRole('link', { name: '去主题管理' })).toBeNull()
+  })
+
+  // A session without plugin_installations.platform.read reads no installation record, but the
+  // library's installed && !enabled already says every installation here is paused (heads are enabled, disabled or
+  // uninstalled): 已停用, never 去启用.
+  it('shows a paused installation as 已停用 to a session that cannot read the records', async () => {
+    vi.stubGlobal('fetch', routes({ licenses: [license('bob.theme')], library: [{ plugin_id: 'bob.theme', installed: true, enabled: false, withdrawn: false }] }, {
+      '/v1/admin/market/plugins?': () => json({ items: [third], next_cursor: null }),
+    }))
+    renderWithProviders(<MarketStorePage />)
+    const c = await card('bob.theme')
+    expect(await within(c).findByText('已停用')).toBeInTheDocument()
+    expect(within(c).queryByRole('link', { name: '去启用' })).toBeNull()
+    expect(within(c).queryByRole('button', { name: '重新启用' })).toBeNull()
   })
 
   // market-buy-idem: a lost answer keeps the dialog on "check result", which

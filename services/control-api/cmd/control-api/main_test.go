@@ -1185,14 +1185,12 @@ func TestEdgeDeploymentRuntimeFailureChangesReadiness(t *testing.T) {
 func TestEdgeDeploymentRuntimeCloseOrdersAndBoundsResources(t *testing.T) {
 	var mu sync.Mutex
 	var operations []string
-	closed := make(chan struct{})
 	connection := &fakeOrderedNATSConnection{
 		connected: true,
-		onDrain: func() {
+		onFlush: func(timeout time.Duration) {
 			mu.Lock()
-			operations = append(operations, "drain NATS")
+			operations = append(operations, "flush NATS "+timeout.String())
 			mu.Unlock()
-			close(closed)
 		},
 		onClose: func() {
 			mu.Lock()
@@ -1207,7 +1205,7 @@ func TestEdgeDeploymentRuntimeCloseOrdersAndBoundsResources(t *testing.T) {
 		return nil
 	}}
 	runtime := &edgeDeploymentRuntime{
-		connection: connection, status: status, closed: closed, shutdownTimeout: time.Second,
+		connection: connection, status: status, shutdownTimeout: time.Second,
 	}
 	runtime.ready.Store(true)
 	if err := runtime.Close(); err != nil {
@@ -1218,11 +1216,23 @@ func TestEdgeDeploymentRuntimeCloseOrdersAndBoundsResources(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if got := strings.Join(operations, ","); got != "close status consumer,drain NATS" {
+	// No Drain. Pull consumers on this connection keep a late reply nobody reads once their
+	// worker stopped, and Drain then waited the whole drain timeout (= ShutdownPeriod) and the runtime reported
+	// "edge deployment NATS drain timed out" (exit 1). Workers have stopped when Close runs: flush what was
+	// published, then close; JetStream redelivers anything unacknowledged.
+	if got := strings.Join(operations, ","); got != "close status consumer,flush NATS 1s,close NATS" {
 		t.Fatalf("shutdown operations = %q", got)
 	}
 	if runtime.ready.Load() {
 		t.Fatal("runtime remained ready during shutdown")
+	}
+	// A connection already lost has nothing to flush: Close succeeds without waiting.
+	operations = nil
+	lost := &edgeDeploymentRuntime{connection: &fakeOrderedNATSConnection{onFlush: func(time.Duration) {
+		t.Fatal("flushed a disconnected connection")
+	}, onClose: func() { operations = append(operations, "close NATS") }}, shutdownTimeout: time.Second}
+	if err := lost.Close(); err != nil || strings.Join(operations, ",") != "close NATS" {
+		t.Fatalf("lost connection Close() = %v %v", err, operations)
 	}
 }
 
@@ -1314,23 +1324,22 @@ type fakeNATSRuntimeConnection struct {
 	connected bool
 }
 
-func (c fakeNATSRuntimeConnection) IsConnected() bool { return c.connected }
-func (fakeNATSRuntimeConnection) IsClosed() bool      { return false }
-func (fakeNATSRuntimeConnection) Drain() error        { return nil }
-func (fakeNATSRuntimeConnection) Close()              {}
+func (c fakeNATSRuntimeConnection) IsConnected() bool              { return c.connected }
+func (fakeNATSRuntimeConnection) IsClosed() bool                   { return false }
+func (fakeNATSRuntimeConnection) FlushTimeout(time.Duration) error { return nil }
+func (fakeNATSRuntimeConnection) Close()                           {}
 
 type fakeOrderedNATSConnection struct {
 	connected bool
 	closed    bool
-	onDrain   func()
+	onFlush   func(time.Duration)
 	onClose   func()
 }
 
 func (c *fakeOrderedNATSConnection) IsConnected() bool { return c.connected && !c.closed }
 func (c *fakeOrderedNATSConnection) IsClosed() bool    { return c.closed }
-func (c *fakeOrderedNATSConnection) Drain() error {
-	c.onDrain()
-	c.closed = true
+func (c *fakeOrderedNATSConnection) FlushTimeout(timeout time.Duration) error {
+	c.onFlush(timeout)
 	return nil
 }
 func (c *fakeOrderedNATSConnection) Close() {

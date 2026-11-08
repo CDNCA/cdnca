@@ -160,17 +160,21 @@ func (c *Client) register(ctx context.Context, id Identity, proofField string, p
 // and the root subscriber member of each (by grant ID, only for grants in
 // the result) so attack digests have a recipient before any subscriber
 // request arrives. Grants that fail verification or name another leaf are
-// dropped, not trusted.
-func (c *Client) Grants(ctx context.Context, self uuid.UUID) ([]grant.Grant, map[uuid.UUID]uuid.UUID, error) {
+// dropped, not trusted. names is the offer name the seller gave each grant's
+// offer (by grant ID; an older market sends none), a display
+// name outside the signed grant.
+func (c *Client) Grants(ctx context.Context, self uuid.UUID) ([]grant.Grant, map[uuid.UUID]uuid.UUID, map[uuid.UUID]string, error) {
 	var response struct {
 		Items       []grant.Signed          `json:"items"`
 		Subscribers map[uuid.UUID]uuid.UUID `json:"subscribers"`
+		OfferNames  map[uuid.UUID]string    `json:"offer_names"`
 	}
 	if err := c.do(ctx, http.MethodGet, "/v1/grants", nil, &response, requestTimeout); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	out := make([]grant.Grant, 0, len(response.Items))
 	subscribers := map[uuid.UUID]uuid.UUID{}
+	names := map[uuid.UUID]string{}
 	for _, signed := range response.Items {
 		g, err := c.grants.Verify(signed)
 		if err != nil || g.LeafMemberID != self {
@@ -180,8 +184,11 @@ func (c *Client) Grants(ctx context.Context, self uuid.UUID) ([]grant.Grant, map
 		if member := response.Subscribers[g.GrantID]; member != uuid.Nil {
 			subscribers[g.GrantID] = member
 		}
+		if name := response.OfferNames[g.GrantID]; name != "" {
+			names[g.GrantID] = name
+		}
 	}
-	return out, subscribers, nil
+	return out, subscribers, names, nil
 }
 
 // SupplyTarget is one row of GET /v1/supply-targets: the aggregate name of a

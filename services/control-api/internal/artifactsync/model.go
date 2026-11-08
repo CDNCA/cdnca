@@ -99,6 +99,14 @@ type TrustedCrawlerRepublisher interface {
 	RepublishTrustedCrawlersChangeTx(ctx context.Context, tx pgx.Tx, sourceID uuid.UUID) ([]uuid.UUID, error)
 }
 
+// MarketRulePackRepublisher (optional on a CRSRepublisher) republishes the
+// scopes whose sites mount one of packIDs, plugin market rule packs whose
+// source materialization withdrew or made usable again:
+// publication leaves a withdrawn market pack out of the site object.
+type MarketRulePackRepublisher interface {
+	RepublishMarketRulePackChangeTx(ctx context.Context, tx pgx.Tx, packIDs []string) ([]uuid.UUID, error)
+}
+
 // DefaultOnPackRepublisher (optional on a CRSRepublisher) republishes the
 // scopes whose rule pack mounts the control plane recomputed for a
 // default-on official pack.

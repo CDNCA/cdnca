@@ -377,7 +377,8 @@ function mutation<T extends PluginInstallationApprovalInput | PluginInstallation
   action: 'confirm' | 'upgrade' | 'disable' | 'resume' | 'uninstall', accessToken: string, target: ScopeTarget,
   authorizationID: string, revision: number, input: T, idempotencyKey: string,
 ): Promise<PluginInstallationMutationResult> {
-  const valid = action === 'resume' ? Object.keys(input).length === 0
+  // Pause and resume send {}; uninstall still sends its reason.
+  const valid = action === 'resume' || action === 'disable' ? Object.keys(input).length === 0
     : action === 'confirm' || action === 'upgrade'
       ? validApproval(input as PluginInstallationApprovalInput)
       : validReason(input as PluginInstallationReasonInput)
@@ -409,9 +410,9 @@ function scopedApi(resolve: (scopeID: string) => ScopeTarget) {
       input: PluginInstallationApprovalInput, idempotencyKey: string) {
       return mutation('upgrade', accessToken, resolve(scopeID), authorizationID, revision, input, idempotencyKey)
     },
-    async disable(accessToken: string, scopeID: string, authorizationID: string, revision: number,
-      input: PluginInstallationReasonInput, idempotencyKey: string) {
-      return mutation('disable', accessToken, resolve(scopeID), authorizationID, revision, input, idempotencyKey)
+    /** Pauses the plugin on this controller; no reason is asked for. */
+    async disable(accessToken: string, scopeID: string, authorizationID: string, revision: number, idempotencyKey: string) {
+      return mutation('disable', accessToken, resolve(scopeID), authorizationID, revision, {}, idempotencyKey)
     },
     /** Resumes a plugin this controller paused itself; a platform pause is refused (plugin_installation_platform_paused). */
     async resume(accessToken: string, scopeID: string, authorizationID: string, revision: number, idempotencyKey: string) {

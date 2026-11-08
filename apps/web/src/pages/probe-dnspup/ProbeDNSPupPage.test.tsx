@@ -9,8 +9,8 @@ import { renderWithProviders } from '../../test/render'
 import ProbeDNSPupPage from './ProbeDNSPupPage'
 
 function json(body: unknown, status = 200): Response {
-  return { ok: status >= 200 && status < 300, status, text: vi.fn().mockResolvedValue(JSON.stringify(body)),
-    json: vi.fn().mockResolvedValue(body) } as unknown as Response
+  return { ok: status >= 200 && status < 300, status, headers: new Headers({ 'content-type': 'application/json' }),
+    text: vi.fn().mockResolvedValue(JSON.stringify(body)), json: vi.fn().mockResolvedValue(body) } as unknown as Response
 }
 
 // Obviously fake credentials.
@@ -248,6 +248,54 @@ describe('ProbeDNSPupPage', () => {
     const [, second] = fetchMock.mock.calls.filter(([path, call]) => path.endsWith('/overrides') && call?.method === 'PUT')[1]
     expect(JSON.parse(String(second?.body))).toEqual({ tenant_scope_id: tenantScopeID, line_group_id: groupID })
     expect(fetchMock.mock.calls.some(([path]) => path.startsWith('/v1/node-line-groups?target_scope_id='))).toBe(true)
+  })
+
+  // A tenant's own line group can be overridden from the page again (pick the tenant, then its
+  // groups), and the list names subjects by display ID rather than by UUID.
+  it('overrides a tenant line group after picking the tenant and lists subjects by display ID', async () => {
+    const admin = principal({ scope_kind: 'platform', tenant_id: null, roles: ['custom'],
+      permissions: ['system.probe_dnspup.manage', 'identity.users.manage'] })
+    useSessionStore.getState().setSession({ ...authResponse(admin), access_token: 'probe-dnspup-token' }, admin)
+    const groupID = '018f0000-0000-7000-8000-0000000000c1'
+    const tenantScopeID = '66666666-6666-4666-8666-666666666666'
+    const user = { id: '55555555-5555-4555-8555-555555555555', display_id: '1024', scope_id: tenantScopeID,
+      tenant_id: tenantScopeID, username: 'jason', display_name: 'jason', email: 'jason@example.com', phone: null, status: 'active',
+      role: 'tenant_owner', group_id: null, group_name: null, revision: 1, created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z' }
+    const overrides = { items: [{ id: 'o2', subject_kind: 'line_group', tenant_scope_id: tenantScopeID, line_group_id: groupID,
+      subject_name: '租户电信组', subject_display_id: 9, probe_type: 'ping', selection: null, revision: 1 }] }
+    const fetchMock = vi.fn<Fetch>(async (path, init) => {
+      if (path === '/v1/admin/probe-dnspup') return json(status)
+      if (path.endsWith('/overrides') && !init?.method) return json(overrides)
+      if (path.endsWith('/overrides')) return json(overrides.items[0])
+      if (path.startsWith('/v1/nodes?')) return json({ items: [] })
+      if (path.startsWith('/v1/admin/users?')) return json({ items: [user], page: 1, limit: 20, total: 1 })
+      if (path === `/v1/node-line-groups?target_scope_id=${tenantScopeID}`) {
+        return json({ items: [{ id: groupID, display_id: '9', tenant_scope_id: tenantScopeID, name: '租户电信组' }] })
+      }
+      if (path.startsWith('/v1/node-line-groups?')) return json({ items: [] })
+      return json({ error: { code: 'not_found', message: 'x', request_id: 'r' } }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<ProbeDNSPupPage />)
+    expect(await screen.findByText('ID 9')).toBeInTheDocument()
+    expect(screen.queryByText(groupID)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '添加覆盖' }))
+    const form = (await screen.findByRole('button', { name: '保存覆盖' })).closest('form')!
+    fireEvent.mouseDown(within(form).getByRole('combobox', { name: '对象' }))
+    fireEvent.click(await screen.findByText('线路组', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+    fireEvent.click(await screen.findByRole('radio', { name: '租户线路组' }))
+    const tenantPicker = await screen.findByRole('combobox', { name: '租户' })
+    fireEvent.mouseDown(tenantPicker)
+    fireEvent.change(tenantPicker, { target: { value: '1024' } })
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.startsWith('/v1/admin/users?') && path.includes('display_id=1024'))).toBe(true))
+    fireEvent.click(await screen.findByText('jason（1024） · jason@example.com'))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: '线路组' }))
+    fireEvent.click(await screen.findByText('租户电信组 (ID 9)', { selector: '.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存覆盖' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path, call]) => path.endsWith('/overrides') && call?.method === 'PUT')).toBe(true))
+    const [, put] = fetchMock.mock.calls.find(([path, call]) => path.endsWith('/overrides') && call?.method === 'PUT')!
+    expect(JSON.parse(String(put?.body))).toEqual({ tenant_scope_id: tenantScopeID, line_group_id: groupID })
   })
 
   it('shows a 403 page without the permission', async () => {

@@ -135,6 +135,11 @@ var runtimePaths = []treePath{
 	// nftables allow-list units (install-control.sh setup_gateway_access_firewall).
 	{Path: "/etc/systemd/system/cdnca-control-api.service.d/60-gateway-access.conf"},
 	{Path: "/etc/systemd/system/cdnca-agent-gateway.service.d/60-gateway-access.conf"},
+	// control-api env drop-ins whose env files live under ConfigDirectory: DNS
+	// write runtime of a console converged after install (converge-dns-runtime.py)
+	// and the plugin runtime / market optional.env.
+	{Path: "/etc/systemd/system/cdnca-control-api.service.d/50-dns-runtime.conf"},
+	{Path: "/etc/systemd/system/cdnca-control-api.service.d/60-optional.conf"},
 	{Path: "/etc/systemd/system/cdnca-gateway-access.service"},
 	{Path: "/etc/systemd/system/cdnca-gateway-access.path"},
 	{Path: "/etc/systemd/system/cdnca-gateway-access-reload.service"},

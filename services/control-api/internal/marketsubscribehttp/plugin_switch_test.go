@@ -25,13 +25,15 @@ func (s *switchStore) EnablePlugin(_ context.Context, c Caller, key, pluginID st
 	return entitlementguard.LocalDisable{PluginID: pluginID, FeatureCode: "module.probe.dnspup"}, s.err
 }
 
+const probeCatalog = `{"items":[{"plugin_id":"io.cdnca.probe-dnspup","feature_code":"module.probe.dnspup"}],"next_cursor":null}`
+
 // the platform administrator (plugin_installations.platform.manage, or
 // the platform admin gate) stops and enables a plugin on this controller with an
 // Idempotency-Key; nobody else can, and the library says which are stopped.
 func TestPluginLocalSwitchRoutes(t *testing.T) {
 	store := &switchStore{libraryStore: libraryStore{items: []LibraryItem{{PluginID: "io.cdnca.probe-dnspup", LocallyDisabled: true}}}}
 	current := caller("platform", "plugin_installations.platform.manage")
-	h := buyerHandler(&current, &scriptedForwarder{status: 200, body: `{}`}, store)
+	h := buyerHandler(&current, &scriptedForwarder{status: 200, body: probeCatalog}, store)
 	key := map[string]string{"Idempotency-Key": "k-1"}
 	body := `{"feature_code":"module.probe.dnspup"}`
 	disable := "/v1/admin/market/plugin-library/io.cdnca.probe-dnspup/disable"
@@ -94,5 +96,46 @@ func TestPluginLocalSwitchRoutes(t *testing.T) {
 	current = caller("platform", PermissionBrowse)
 	if w := request(h, "GET", "/v1/admin/market/plugin-library", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"locally_disabled":true`) {
 		t.Fatalf("library: %d %s", w.Code, w.Body)
+	}
+}
+
+// The stop takes the feature code the market catalogue gives
+// the plugin, not whatever the body says. A code the catalogue does not give
+// this plugin (or a plugin not in the catalogue) is 422 and nothing is
+// written; with the catalogue unreachable it is 502 (the stop is not guessed).
+func TestPluginLocalDisableChecksCatalogFeatureCode(t *testing.T) {
+	current := caller("platform", "plugin_installations.platform.manage")
+	key := map[string]string{"Idempotency-Key": "k-1"}
+	disable := "/v1/admin/market/plugin-library/io.cdnca.probe-dnspup/disable"
+	for name, tc := range map[string]struct {
+		catalog, body, code string
+		status              int
+	}{
+		"other plugin's code": {probeCatalog, `{"feature_code":"module.autodefense"}`, "feature_code_mismatch", 422},
+		"catalogue has none":  {`{"items":[{"plugin_id":"io.cdnca.probe-dnspup","feature_code":null}],"next_cursor":null}`, `{"feature_code":"module.probe.dnspup"}`, "feature_code_mismatch", 422},
+		"not in catalogue":    {`{"items":[],"next_cursor":null}`, `{"feature_code":"module.probe.dnspup"}`, "feature_code_mismatch", 422},
+		"other plugin listed": {`{"items":[{"plugin_id":"io.cdnca.other","feature_code":"module.probe.dnspup"}],"next_cursor":null}`, `{"feature_code":"module.probe.dnspup"}`, "feature_code_mismatch", 422},
+	} {
+		store := &switchStore{}
+		forwarder := &scriptedForwarder{status: 200, body: tc.catalog}
+		h := buyerHandler(&current, forwarder, store)
+		w := request(h, "POST", disable, tc.body, key)
+		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.code) {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
+		}
+		if len(store.calls) != 0 {
+			t.Errorf("%s: reached the store: %v", name, store.calls)
+		}
+		if want := []string{"GET /v1/plugins?plugin_ids=io.cdnca.probe-dnspup key= "}; strings.Join(forwarder.calls, "|") != want[0] {
+			t.Errorf("%s: catalogue lookup %v, want %v", name, forwarder.calls, want)
+		}
+	}
+	for name, f := range map[string]Forwarder{"market 503": &scriptedForwarder{status: 503, body: `{"error":"x"}`},
+		"market down": failingForwarder{}} {
+		store := &switchStore{}
+		w := request(buyerHandler(&current, f, store), "POST", disable, `{"feature_code":"module.probe.dnspup"}`, key)
+		if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "market_unavailable") || len(store.calls) != 0 {
+			t.Errorf("%s: %d %s %v", name, w.Code, w.Body, store.calls)
+		}
 	}
 }

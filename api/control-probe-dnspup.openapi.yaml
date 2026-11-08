@@ -379,6 +379,7 @@ components:
         tenant_scope_id: {type: string, format: uuid}
         line_group_id: {type: string, format: uuid}
         subject_name: {type: string}
+        subject_display_id: {type: integer, description: "The node's or line group's display ID; omitted when it no longer exists"}
         probe_type: {type: [string, 'null'], enum: [tcping, ping, http, null]}
         selection: {oneOf: [{$ref: '#/components/schemas/Selection'}, {type: 'null'}]}
         revision: {type: integer}

@@ -1,0 +1,93 @@
+{
+ "id": "platform",
+ "prefix": "/v1/platform",
+ "operations": [
+  {
+   "operation_id": "resumePlatformPluginInstallation",
+   "method": "POST",
+   "path": "/v1/platform/plugin-installations/{authorization_id}/resume",
+   "summary": "Resume a plugin this controller paused (disable) itself in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Same as the tenant resume, in the platform scope of the session: requires plugin_installations.platform.manage, If-Match and Idempotency-Key, reads the signed license snapshot first, and only resumes a pause of this controller (paused_by=installation). A platform pause returns 409 plugin_installation_platform_paused and an unreachable license service 503; the plugin then stays paused.",
+   "params": [
+    {
+     "name": "authorization_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Durable mutation snapshot; replay returns the original snapshot",
+     "fields": [
+      {
+       "name": "installation",
+       "type": "PluginInstallation",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "503",
+     "description": "Stable localized-client error envelope"
+    }
+   ]
+  }
+ ]
+}

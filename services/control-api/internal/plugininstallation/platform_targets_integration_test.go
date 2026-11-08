@@ -119,7 +119,7 @@ func TestPostgresPlatformConfirmsTenantPluginForChosenTenants(t *testing.T) {
 		t.Fatalf("tenant B get err=%v", err)
 	}
 	// A tenant cannot write the platform's head (exact-scope write path).
-	pause := protectiveCommand(result.Installation, ActionDisable, "租户想暂停", "pt-pause")
+	pause := protectiveCommand(result.Installation, ActionDisable, "", "pt-pause")
 	pause.TenantID, pause.Candidate.TenantID = tenantA, tenantA
 	if _, err := repository.Apply(t.Context(), readerA, pause, nil); err == nil {
 		t.Fatal("tenant wrote the platform-held head")

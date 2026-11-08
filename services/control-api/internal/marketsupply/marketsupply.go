@@ -210,6 +210,14 @@ func Key(g grant.Grant) string {
 // its subscription simply runs out at not_after + grace. An empty or partial
 // response from the market therefore can never take sites down early.
 func (s *Service) Sync(ctx context.Context, grants []grant.Grant) ([]Outcome, error) {
+	return s.SyncNamed(ctx, grants, nil)
+}
+
+// SyncNamed is Sync with the name the seller gave each grant's offer (by
+// grant ID, GET /v1/grants offer_names): the hidden tenant is
+// named by it, the name the buyer sees; a grant without one keeps the supply
+// group name (a market that does not send them).
+func (s *Service) SyncNamed(ctx context.Context, grants []grant.Grant, offerNames map[uuid.UUID]string) ([]Outcome, error) {
 	actor, err := s.ensureActor(ctx)
 	if err != nil {
 		return nil, err
@@ -235,7 +243,7 @@ func (s *Service) Sync(ctx context.Context, grants []grant.Grant) ([]Outcome, er
 	out := make([]Outcome, 0, len(latest))
 	for key, g := range latest {
 		outcome := Outcome{GrantID: g.GrantID, Key: key}
-		if err := s.apply(ctx, actor, key, g, &outcome); err != nil {
+		if err := s.apply(ctx, actor, key, g, offerNames[g.GrantID], &outcome); err != nil {
 			outcome.Action, outcome.Error = "failed", err.Error()
 		}
 		out = append(out, outcome)
@@ -243,7 +251,7 @@ func (s *Service) Sync(ctx context.Context, grants []grant.Grant) ([]Outcome, er
 	return out, nil
 }
 
-func (s *Service) apply(ctx context.Context, actor serviceActor, key string, g grant.Grant, outcome *Outcome) error {
+func (s *Service) apply(ctx context.Context, actor serviceActor, key string, g grant.Grant, offerName string, outcome *Outcome) error {
 	now := s.now().UTC()
 	switch g.StatusAt(now) {
 	case grant.StatusActive, grant.StatusGrace:
@@ -260,7 +268,7 @@ func (s *Service) apply(ctx context.Context, actor serviceActor, key string, g g
 		return err
 	}
 	outcome.TenantScopeID = tenant.scopeID
-	if err := s.nameTenant(ctx, tenant, poolID, g); err != nil {
+	if err := s.nameTenant(ctx, tenant, poolID, g, offerName); err != nil {
 		return err
 	}
 	if err := s.ensureDelivery(ctx, actor, tenant, poolID); err != nil {

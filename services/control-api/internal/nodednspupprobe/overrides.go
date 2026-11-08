@@ -21,15 +21,18 @@ const ActionOverride = "system.probe_dnspup.node_override"
 // nil fields inherit. A node override wins over its line groups'; of several
 // line group overrides the smallest line_group_id applies.
 type Override struct {
-	ID            uuid.UUID              `json:"id"`
-	SubjectKind   string                 `json:"subject_kind"` // node / line_group
-	NodeID        *uuid.UUID             `json:"node_id,omitempty"`
-	TenantScopeID *uuid.UUID             `json:"tenant_scope_id,omitempty"`
-	LineGroupID   *uuid.UUID             `json:"line_group_id,omitempty"`
-	SubjectName   string                 `json:"subject_name"`
-	ProbeType     *string                `json:"probe_type"`
-	Selection     *dnspupprobe.Selection `json:"selection"`
-	Revision      int64                  `json:"revision"`
+	ID            uuid.UUID  `json:"id"`
+	SubjectKind   string     `json:"subject_kind"` // node / line_group
+	NodeID        *uuid.UUID `json:"node_id,omitempty"`
+	TenantScopeID *uuid.UUID `json:"tenant_scope_id,omitempty"`
+	LineGroupID   *uuid.UUID `json:"line_group_id,omitempty"`
+	SubjectName   string     `json:"subject_name"`
+	// SubjectDisplayID is the node's or line group's display ID;
+	// omitted when the subject no longer exists.
+	SubjectDisplayID *int64                 `json:"subject_display_id,omitempty"`
+	ProbeType        *string                `json:"probe_type"`
+	Selection        *dnspupprobe.Selection `json:"selection"`
+	Revision         int64                  `json:"revision"`
 }
 
 // readOverrides reads every override (runner and page).
@@ -37,7 +40,8 @@ func readOverrides(ctx context.Context, db interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }) ([]Override, error) {
 	rows, err := db.Query(ctx, `SELECT override.id,override.subject_kind,override.node_id,override.tenant_scope_id,
-		override.line_group_id,COALESCE(node.name,line_group.name,''),override.probe_type,override.selection,override.revision
+		override.line_group_id,COALESCE(node.name,line_group.name,''),COALESCE(node.display_id,line_group.display_id),
+		override.probe_type,override.selection,override.revision
 		FROM node_dnspup_probe_overrides override
 		LEFT JOIN nodes node ON node.id=override.node_id
 		LEFT JOIN node_line_groups line_group ON line_group.tenant_scope_id=override.tenant_scope_id
@@ -52,7 +56,7 @@ func readOverrides(ctx context.Context, db interface {
 		var item Override
 		var selection []byte
 		if err := rows.Scan(&item.ID, &item.SubjectKind, &item.NodeID, &item.TenantScopeID, &item.LineGroupID,
-			&item.SubjectName, &item.ProbeType, &selection, &item.Revision); err != nil {
+			&item.SubjectName, &item.SubjectDisplayID, &item.ProbeType, &selection, &item.Revision); err != nil {
 			return nil, err
 		}
 		if selection != nil {

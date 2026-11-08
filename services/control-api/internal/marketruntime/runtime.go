@@ -65,8 +65,8 @@ var ErrNotRegistered = errors.New("community installation is not registered with
 type Market interface {
 	Register(ctx context.Context, id marketclient.Identity, signedLease []byte, displayName string) (uuid.UUID, error)
 	RegisterCommunity(ctx context.Context, id marketclient.Identity, communityIdentity []byte, displayName string) (uuid.UUID, error)
-	// Grants also returns each grant's root subscriber member by grant ID.
-	Grants(ctx context.Context, self uuid.UUID) ([]grant.Grant, map[uuid.UUID]uuid.UUID, error)
+	// Grants also returns each grant's root subscriber member and offer name by grant ID.
+	Grants(ctx context.Context, self uuid.UUID) ([]grant.Grant, map[uuid.UUID]uuid.UUID, map[uuid.UUID]string, error)
 	Receive(ctx context.Context, self marketclient.Identity, cursor int64) ([]marketclient.Inbound, int64, []error)
 	Send(ctx context.Context, self marketclient.Identity, out marketclient.Outbound) (int64, error)
 	Ack(ctx context.Context, seq int64) error
@@ -75,7 +75,7 @@ type Market interface {
 
 // Supply is the subset of marketsupply.Service the runtime drives.
 type Supply interface {
-	Sync(ctx context.Context, grants []grant.Grant) ([]marketsupply.Outcome, error)
+	SyncNamed(ctx context.Context, grants []grant.Grant, offerNames map[uuid.UUID]string) ([]marketsupply.Outcome, error)
 	Handle(ctx context.Context, header envelope.Header, payload []byte) (siteconf.Reply, error)
 }
 
@@ -295,12 +295,12 @@ func (r *Runtime) grantLoop(ctx context.Context) {
 				lastRegister = time.Now()
 			}
 		}
-		grants, subscribers, err := r.market.Grants(ctx, r.identity().MemberID)
+		grants, subscribers, offerNames, err := r.market.Grants(ctx, r.identity().MemberID)
 		if err != nil {
 			r.log.Warn("market grant fetch failed", "err", err)
 		} else {
 			r.rememberSubscribers(grants, subscribers)
-			if outcomes, err := r.supply.Sync(ctx, grants); err != nil {
+			if outcomes, err := r.supply.SyncNamed(ctx, grants, offerNames); err != nil {
 				r.log.Warn("market grant sync failed", "err", err)
 			} else {
 				for _, o := range outcomes {

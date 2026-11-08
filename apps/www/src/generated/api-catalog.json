@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 667,
+ "total": 669,
  "api_key_count": 144,
  "groups": [
   {
@@ -6703,6 +6703,25 @@
    ]
   },
   {
+   "id": "platform",
+   "prefix": "/v1/platform",
+   "count": 1,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "POST",
+     "path": "/v1/platform/plugin-installations/{authorization_id}/resume",
+     "summary": "Resume a plugin this controller paused (disable) itself in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "resumePlatformPluginInstallation"
+    }
+   ]
+  },
+  {
    "id": "plugin-ui",
    "prefix": "/v1/plugin-ui",
    "count": 6,
@@ -8251,7 +8270,7 @@
   {
    "id": "tenant-scopes",
    "prefix": "/v1/tenant-scopes",
-   "count": 62,
+   "count": 63,
    "api_key_count": 0,
    "operations": [
     {
@@ -8952,6 +8971,17 @@
      "api_key": false,
      "source": "api/control-plugin-installations.openapi.yaml",
      "operation_id": "disablePluginInstallation"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume",
+     "summary": "Resume a plugin this controller paused (disable) itself",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "resumePluginInstallation"
     },
     {
      "method": "POST",

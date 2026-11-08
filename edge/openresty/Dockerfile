@@ -111,9 +111,9 @@ RUN set -eu; \
 	chmod 0555 /usr/local/share/cdnca /usr/local/share/cdnca/runtime /usr/local/share/cdnca/range /usr/local/share/cdnca/security /usr/local/share/cdnca/challenge /usr/local/share/cdnca/httppolicy /usr/local/share/cdnca/firewallaction /usr/local/share/cdnca/siteaccess /usr/local/share/cdnca/errorpage /usr/local/share/cdnca/originauth /usr/local/share/cdnca/dynroute /usr/local/share/cdnca/sched302 /opt/cdnca /opt/cdnca/l4geo; \
 	chmod 0555 /usr/local/openresty/site/lualib/resty; \
 	printf '%s  %s\n' d528c1309c2bfa0c9c48348185c1966d8a764a67164099cf6a522955667f7fdc /usr/local/share/cdnca/range/guard.lua | sha256sum -c -; \
-	 echo '9e8485ccf9a7616ca0b3f0511e57313737edb6bdd2fe57869970d27fe790077c  /usr/local/share/cdnca/security/cdnca_waf.lua' | sha256sum -c -; \
+	 echo 'd07c193c7eabc22c1b7783c42697ced0117be4fcb43c81edf7e0e4451ca0fc62  /usr/local/share/cdnca/security/cdnca_waf.lua' | sha256sum -c -; \
 		echo 'f319da5a0c9ea6cfb977261a8ddca63f57530336d28851dc5fcf80715f1dedb0  /usr/local/share/cdnca/security/cdnca_rule_interp.lua' | sha256sum -c -; \
-		echo 'dceec91b7bdc4aa56e23e33006fbd9b24d152baa45d5d4c5db9eff73922b2be3  /usr/local/share/cdnca/security/cdnca_banlist.lua' | sha256sum -c -; \
+		echo 'ac3bb86b0f0bde5fac47308a91213cedaab39e26dc827284a3aba31bbde58778  /usr/local/share/cdnca/security/cdnca_banlist.lua' | sha256sum -c -; \
 		echo '5011685413909ce4b8b2ff010e3d505378d3c9ac6797218afc16118c80b990c0  /usr/local/share/cdnca/dynroute/cdnca_site.lua' | sha256sum -c -; \
 		echo 'beba3171b3e53abacc031fe7c73dd7da081dc3e3e4276f1a3034972cd723cebe  /usr/local/share/cdnca/dynroute/cdnca_site_admin.lua' | sha256sum -c -; \
 		echo '66bc1559487b74f24cc5219df766ed46987e19785feb9b6cb4eeb8a8250c686f  /usr/local/share/cdnca/dynroute/cdnca_tls.lua' | sha256sum -c -; \
@@ -122,7 +122,7 @@ RUN set -eu; \
 		echo '3df863a8177361103a0deb58cc1a8291f636f5a85c9d4d47f5613dde4f7171f8  /usr/local/share/cdnca/dynroute/cdnca_originauth.lua' | sha256sum -c -; \
 		echo 'bc97c630cf2dab304e8af431bb7c4aebe3f0da78e0d446ef071603a28101e72a  /usr/local/share/cdnca/dynroute/cdnca_origintls.lua' | sha256sum -c -; \
 		echo '728800e18c96655628548037ac827e9fa93c383c2f5ab69e4035436a5998b639  /usr/local/share/cdnca/dynroute/cdnca_cache.lua' | sha256sum -c -; \
-		echo '8bae6752c81e23a54a05d51c3a2be566652afc365456b0bd3c2162659909f680  /usr/local/share/cdnca/dynroute/cdnca_security.lua' | sha256sum -c -; \
+		echo '5ab75a86117d3cb2f38a2c8eeac5941d5fb3f592a085b3c7aad1f6bf980ec65f  /usr/local/share/cdnca/dynroute/cdnca_security.lua' | sha256sum -c -; \
 		echo '8526a9029ec4f0438dd4823cb1ac427ec6c5155d2a73927ec38e902522de0d91  /usr/local/share/cdnca/dynroute/cdnca_managed_waf.lua' | sha256sum -c -; \
 		echo '88fa2f83ad725ec7facb984ddd6a58ce3e4c3138d29b37fe76b9e60a2a3412cb  /usr/local/share/cdnca/dynroute/cdnca_rule_plan.lua' | sha256sum -c -; \
 		echo '780a3da89e488a77dce21096b6640bb7ac0ebf67bd6675b79519442ad3f83cc6  /usr/local/share/cdnca/dynroute/cdnca_bot.lua' | sha256sum -c -; \
@@ -186,7 +186,7 @@ STOPSIGNAL SIGQUIT
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
 	  CMD test -f "$CDNCA_SECURITY_RUNTIME_READY_FILE" && \
 	      printf '%s  %s\n' d528c1309c2bfa0c9c48348185c1966d8a764a67164099cf6a522955667f7fdc /usr/local/share/cdnca/range/guard.lua | sha256sum -c - >/dev/null && \
-	      printf '%s  %s\n' 9e8485ccf9a7616ca0b3f0511e57313737edb6bdd2fe57869970d27fe790077c /usr/local/share/cdnca/security/cdnca_waf.lua | sha256sum -c - >/dev/null && \
+	      printf '%s  %s\n' d07c193c7eabc22c1b7783c42697ced0117be4fcb43c81edf7e0e4451ca0fc62 /usr/local/share/cdnca/security/cdnca_waf.lua | sha256sum -c - >/dev/null && \
 	      printf '%s  %s\n' fd561a8ad67cc91d0cc275494f64eb154c00316bed15badb60f64655bdfc4c0a /usr/local/share/cdnca/security/cc.lua | sha256sum -c - >/dev/null && \
 	      grep -F '"cc_api_version":2' "$CDNCA_SECURITY_RUNTIME_READY_FILE" >/dev/null && \
 	      printf '%s  %s\n' 38314497958285c1072e4e1ef7d4c0fbe41e3e03ed148807a008a6cb88e4cb21 /usr/local/share/cdnca/security/cc_adaptive.lua | sha256sum -c - >/dev/null && \

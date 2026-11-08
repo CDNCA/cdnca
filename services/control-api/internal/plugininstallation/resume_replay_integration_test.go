@@ -53,7 +53,7 @@ func TestResumeExactRetryReplaysPersistedReceipt(t *testing.T) {
 			if err != nil {
 				t.Fatalf("install: %v", err)
 			}
-			paused, err := repository.Apply(t.Context(), actor, protectiveCommand(installed.Installation, ActionDisable, "主动暂停", "resume-pause"), nil)
+			paused, err := repository.Apply(t.Context(), actor, protectiveCommand(installed.Installation, ActionDisable, "", "resume-pause"), nil)
 			if err != nil {
 				t.Fatalf("pause: %v", err)
 			}

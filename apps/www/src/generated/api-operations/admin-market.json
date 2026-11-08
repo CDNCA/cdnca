@@ -140,7 +140,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Takes the plugin's feature code (module.*, pack.*, theme.*) out of the lease's grant on this controller: the module API, its workers, menus and publication treat it as not licensed (entitlement_feature_denied), and sites mounting a rule pack that needs it are republished without that pack. The licence, the lease, billing and the plugin's configuration are untouched. A plugin already stopped keeps its first stop (same answer). Installable plugins (themes, market rule packs, page plugins) are paused through their platform installation record instead.",
+   "description": "Takes the plugin's feature code (module.*, pack.*, theme.*) out of the lease's grant on this controller: the module API, its workers, menus and publication treat it as not licensed (entitlement_feature_denied), and sites mounting a rule pack that needs it are republished without that pack. The licence, the lease, billing and the plugin's configuration are untouched. A plugin already stopped keeps its first stop (same answer). Installable plugins (themes, market rule packs, page plugins) are paused through their platform installation record instead. The feature code must be the one the market catalogue gives this plugin (looked up through the market relay before anything is written): any other code is 422 feature_code_mismatch, an unreachable catalogue 502.",
    "any_permissions": [
     "plugin_installations.platform.manage",
     "platform.admin"
@@ -221,8 +221,16 @@
      "description": "The Idempotency-Key was used with another request (idempotency_conflict)"
     },
     {
+     "status": "422",
+     "description": "The market catalogue does not give this plugin that feature code, or does not list it (feature_code_mismatch)"
+    },
+    {
      "status": "500",
      "description": "Local store failure (internal)"
+    },
+    {
+     "status": "502",
+     "description": "The market catalogue could not be read (market_unavailable); nothing was written"
     }
    ]
   },

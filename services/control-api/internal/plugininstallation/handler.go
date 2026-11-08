@@ -318,7 +318,7 @@ func (handler *Handler) mutate(response http.ResponseWriter, request *http.Reque
 		input.ApprovedScopes = append([]string{}, body.ApprovedScopes...)
 		input.SensitivePermissionsConfirmed = body.SensitivePermissionsConfirmed
 		input.NewPermissionsConfirmed = body.NewPermissionsConfirmed
-	case ActionDisable, ActionUninstall:
+	case ActionUninstall:
 		var body struct {
 			Reason string `json:"reason"`
 		}
@@ -327,8 +327,9 @@ func (handler *Handler) mutate(response http.ResponseWriter, request *http.Reque
 			return
 		}
 		input.Reason = body.Reason
-	case ActionResume:
-		// Resume carries no approval and no reason: it restores exactly the authorization this controller paused.
+	case ActionDisable, ActionResume:
+		// Pause and resume carry no approval and no reason; resume restores exactly the
+		// authorization this controller paused.
 		var body struct{}
 		if strictJSON(raw, &body) != nil {
 			writePluginInstallationError(response, http.StatusBadRequest, "invalid_request")

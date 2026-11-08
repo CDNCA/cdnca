@@ -31,17 +31,18 @@ export function headlinePlan(plans: MarketPricePlan[] | undefined): MarketPriceP
 //   purchase     no live licence of this controller (a free plan shows 获取);
 //   distributing licensed, this controller has no installation of it yet: the licence still
 //                travels market → license service (verification, authorization) → artifact sync.
-//                Taking the licence is not a download (F1, PLUG-USE 10-27): no 去启用 before it is here;
-//   enable       installed here, the administrator enables it where the plugin kind is managed;
+//                Taking the licence is not a download (F1, PLUG-USE 10-27): nothing to use before it is here;
 //   installed    an enabled installation: installed and usable. For a theme or rule pack this is not proof that a
 //                slot or site applies it (that lives on its own page), so it never reads as 使用中;
 //   enabled      the lease grants the official feature code (the function itself is on);
 //   activating   official entry licensed, the lease has not picked the feature code up yet;
 //   revoked      held here before but the licence ended or moved to another controller (授权失效).
 //   disabled     stopped on this controller (停用, can be enabled again): an official feature plugin through the local stop
-//                list (library locally_disabled), an installable one through its platform installation
-//                record (paused here or by the platform; only known to a session that reads those records).
-export type StoreState = 'purchase' | 'distributing' | 'enable' | 'installed' | 'enabled' | 'activating' | 'revoked' | 'disabled'
+//                list (library locally_disabled), an installable one paused here or by the platform. The
+//                library says that much to every session: installed && !enabled is a controller whose installations are
+//                all paused, since an installation head is enabled, disabled or uninstalled; the
+//                platform record (plugin_installations.platform.read) only adds who paused it.
+export type StoreState = 'purchase' | 'distributing' | 'installed' | 'enabled' | 'activating' | 'revoked' | 'disabled'
 
 // Kinds that only work once the controller's platform administrator confirmed an installation (user
 // 11-05): themes and rule packs for the controller, page plugins and external services for the tenants chosen.
@@ -61,11 +62,10 @@ export function storeState(plugin: MarketPlugin, licenses: MarketLicense[], libr
   const local = library.find((item) => item.plugin_id === plugin.plugin_id)
   if (!licensed) return local && (local.installed || local.withdrawn) ? 'revoked' : 'purchase'
   if (local?.locally_disabled) return 'disabled'
-  // The library only says installed and not enabled, which a pending confirmation is too; the record tells them apart.
   if (installation?.status === 'disabled') return 'disabled'
   if (plugin.feature_code && !installFirstKinds.has(plugin.kind)) return modules.includes(plugin.feature_code) ? 'enabled' : 'activating'
   if (local?.enabled) return 'installed'
-  if (local?.installed) return 'enable'
+  if (local?.installed) return 'disabled'
   return 'distributing'
 }
 
@@ -196,7 +196,7 @@ export function ownedRows(licenses: MarketLicense[], library: MarketLibraryItem[
       pluginID, plugin,
       state: state === 'distributing' && needsInstallConfirm(subject) ? installWait(pluginID, plugin, installations) : state as OwnedState,
       // 去配置只给已在本机可用的：授权生效中、同步中、待确认安装、已停用时对应页面还进不去。
-      path: plugin && (state === 'enabled' || state === 'installed' || state === 'enable') ? path(plugin) : null,
+      path: plugin && (state === 'enabled' || state === 'installed') ? path(plugin) : null,
       installation,
     }
   })

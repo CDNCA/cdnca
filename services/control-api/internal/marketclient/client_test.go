@@ -39,6 +39,7 @@ type fakeMarket struct {
 	members     map[uuid.UUID]card.Card
 	grants      []grant.Signed
 	subscribers map[uuid.UUID]uuid.UUID
+	offerNames  map[uuid.UUID]string
 	inbox       map[uuid.UUID][]json.RawMessage
 	seq         int64
 	sawClient   bool
@@ -76,7 +77,7 @@ func (f *fakeMarket) handler() http.Handler {
 		_ = json.NewEncoder(w).Encode(signed)
 	})
 	mux.HandleFunc("GET /v1/grants", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": f.grants, "subscribers": f.subscribers})
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": f.grants, "subscribers": f.subscribers, "offer_names": f.offerNames})
 	})
 	mux.HandleFunc("POST /v1/relay/messages", func(w http.ResponseWriter, r *http.Request) {
 		var raw json.RawMessage
@@ -184,20 +185,26 @@ func TestGrantsAreVerifiedAndScopedToSelf(t *testing.T) {
 	root := uuid.New()
 	ids := make([]uuid.UUID, 0, len(f.grants))
 	f.subscribers = map[uuid.UUID]uuid.UUID{}
+	f.offerNames = map[uuid.UUID]string{}
 	for _, s := range f.grants {
 		var g grant.Grant
 		raw, _ := base64.StdEncoding.DecodeString(s.Payload)
 		_ = json.Unmarshal(raw, &g)
 		ids = append(ids, g.GrantID)
 		f.subscribers[g.GrantID] = root
+		f.offerNames[g.GrantID] = "香港 BGP"
 	}
-	got, subscribers, err := client.Grants(context.Background(), self)
+	got, subscribers, names, err := client.Grants(context.Background(), self)
 	if err != nil || len(got) != 1 || got[0].LeafMemberID != self {
 		t.Fatalf("got %d grants, %v", len(got), err)
 	}
 	// Only grants that passed verification keep their root subscriber.
 	if len(subscribers) != 1 || subscribers[ids[0]] != root {
 		t.Fatalf("subscribers %v", subscribers)
+	}
+	// So do their offer names (display only, outside the signature).
+	if len(names) != 1 || names[ids[0]] != "香港 BGP" {
+		t.Fatalf("offer names %v", names)
 	}
 }
 

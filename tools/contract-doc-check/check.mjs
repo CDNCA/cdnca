@@ -38,8 +38,8 @@ export const CONTRACT_EXEMPTIONS = [
   },
   {
     rule: "error-body", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/admin/market/plugin-library/{plugin_id}/disable",
-    statuses: ["400", "401", "403", "409", "500"],
-    reason: "marketsubscribehttp writes {\"error\":\"<code>\"} for every route (401/403 from the shared Handler.handle gate); apps/web/src/api/market.ts call() reads error as a string, as for the other market routes."
+    statuses: ["400", "401", "403", "409", "422", "500", "502"],
+    reason: "marketsubscribehttp writes {\"error\":\"<code>\"} for every route (401/403 from the shared Handler.handle gate); apps/web/src/api/market.ts call() reads error as a string, as for the other market routes; 422/502 come from the market catalogue check of the plugin feature code."
   },
   {
     rule: "error-body", file: "api/openapi/v1/control.yaml", method: "post", path: "/v1/admin/market/plugin-library/{plugin_id}/enable",

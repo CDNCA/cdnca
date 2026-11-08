@@ -5,6 +5,7 @@ package artifactsync_test
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -220,11 +221,24 @@ func TestMarketDataPacksMaterialize(t *testing.T) {
 	if listed() {
 		t.Fatal("withdrawn market pack still listed")
 	}
+	// The sites already mounting it are republished at once
+	// (publication leaves a withdrawn market pack out); the first
+	// materialization republished nothing (no site could mount it yet).
+	if got := fmt.Sprint(f.recorder.marketPacks); got != "[["+marketPackID+"]]" {
+		t.Fatalf("withdraw republications = %s", got)
+	}
 	// Served again (authorization re-enabled): usable again.
 	f.license.Publish(packEntry, packBytes)
 	f.sync()
 	if !listed() {
 		t.Fatal("re-served market pack not listed")
+	}
+	if got := fmt.Sprint(f.recorder.marketPacks); got != "[["+marketPackID+"] ["+marketPackID+"]]" {
+		t.Fatalf("re-serve republications = %s", got)
+	}
+	f.sync()
+	if len(f.recorder.marketPacks) != 2 {
+		t.Fatalf("unchanged sync republished again: %v", f.recorder.marketPacks)
 	}
 }
 

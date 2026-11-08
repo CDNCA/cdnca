@@ -712,7 +712,7 @@ func (flow *marketLimitsFlow) balanceOf(buyer string) int64 {
 // the scenario reports the buckets itself and moves only the market's clock).
 func (flow *marketLimitsFlow) reportUsage(root uuid.UUID, items ...usage.Item) {
 	flow.t.Helper()
-	grants, _, err := flow.clients["leaf"].Grants(flow.t.Context(), flow.leaf.Identity().MemberID)
+	grants, _, _, err := flow.clients["leaf"].Grants(flow.t.Context(), flow.leaf.Identity().MemberID)
 	if err != nil {
 		flow.t.Fatal(err)
 	}

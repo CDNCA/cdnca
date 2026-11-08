@@ -28,7 +28,7 @@ func resumeFixture(t *testing.T) (Service, *memoryStore, Installation) {
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	paused, err := service.Apply(context.Background(), protectiveCommand(installed.Installation, ActionDisable, "租户主动暂停", "pause-1"))
+	paused, err := service.Apply(context.Background(), protectiveCommand(installed.Installation, ActionDisable, "", "pause-1"))
 	if err != nil || paused.Installation.Status != StatusDisabled {
 		t.Fatalf("pause=%+v err=%v", paused, err)
 	}
@@ -70,7 +70,7 @@ func TestServiceResumesOwnPauseSymmetrically(t *testing.T) {
 		t.Fatalf("stale resume err=%v", err)
 	}
 	// 恢复后可以再次暂停（对称）。
-	if _, err := service.Apply(context.Background(), protectiveCommand(result.Installation, ActionDisable, "再次暂停", "pause-2")); err != nil {
+	if _, err := service.Apply(context.Background(), protectiveCommand(result.Installation, ActionDisable, "", "pause-2")); err != nil {
 		t.Fatalf("pause after resume: %v", err)
 	}
 }

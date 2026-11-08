@@ -2,8 +2,10 @@ package marketsubscribehttp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"regexp"
 	"time"
 
@@ -174,7 +176,7 @@ func (h *Handler) WithBuyer(store BuyerStore, reporter AdvisoryReporter) *Handle
 			var body struct {
 				FeatureCode string `json:"feature_code"`
 			}
-			if !decode(w, r, &body) {
+			if !decode(w, r, &body) || !h.catalogFeatureCode(w, r, id, body.FeatureCode) {
 				return
 			}
 			item, err := switches.DisablePlugin(r.Context(), c, key,
@@ -195,6 +197,35 @@ func (h *Handler) WithBuyer(store BuyerStore, reporter AdvisoryReporter) *Handle
 		})
 	}
 	return h
+}
+
+// catalogFeatureCode answers whether the market catalogue gives pluginID the
+// feature code code; otherwise it has written 422
+// feature_code_mismatch, or 502 market_unavailable when the catalogue cannot
+// be read. The controller keeps no plugin to feature code map of its own.
+func (h *Handler) catalogFeatureCode(w http.ResponseWriter, r *http.Request, pluginID, code string) bool {
+	if h.catalog == nil {
+		writeError(w, http.StatusBadGateway, "market_unavailable")
+		return false
+	}
+	status, raw, err := h.catalog.Forward(r.Context(), http.MethodGet, "/v1/plugins?plugin_ids="+url.QueryEscape(pluginID), "", nil)
+	var page struct {
+		Items []struct {
+			PluginID    string  `json:"plugin_id"`
+			FeatureCode *string `json:"feature_code"`
+		} `json:"items"`
+	}
+	if err != nil || status != http.StatusOK || json.Unmarshal(raw, &page) != nil {
+		writeError(w, http.StatusBadGateway, "market_unavailable")
+		return false
+	}
+	for _, item := range page.Items {
+		if item.PluginID == pluginID && item.FeatureCode != nil && *item.FeatureCode == code && code != "" {
+			return true
+		}
+	}
+	writeError(w, http.StatusUnprocessableEntity, "feature_code_mismatch")
+	return false
 }
 
 func switchRequest(w http.ResponseWriter, r *http.Request) (string, string, bool) {

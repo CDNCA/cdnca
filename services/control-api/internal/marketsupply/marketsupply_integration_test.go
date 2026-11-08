@@ -97,6 +97,20 @@ func TestSyncProvisionsRenewsAndNeverCancels(t *testing.T) {
 	if user, _ := tenantName(); user != "市场订阅 · "+groupName+" · "+path[0].String()[:8] {
 		t.Fatalf("old name not corrected: %q", user)
 	}
+	// With the market's offer name of the grant (GET /v1/grants offer_names) the hidden tenant
+	// carries the name the seller gave the offer, the one the buyer sees, not the local group name; a market
+	// that sends none keeps the group name.
+	if out, err := svc.SyncNamed(ctx, []grant.Grant{first}, map[uuid.UUID]string{first.GrantID: "香港 BGP 精品"}); err != nil ||
+		out[0].Action == "failed" {
+		t.Fatalf("named sync: %+v %v", out, err)
+	}
+	if user, tenant := tenantName(); user != "市场订阅 · 香港 BGP 精品 · "+path[0].String()[:8] || tenant != user {
+		t.Fatalf("hidden tenant not named by the offer: %q / %q", user, tenant)
+	}
+	mustSync(t, svc, first)
+	if user, _ := tenantName(); user != "市场订阅 · "+groupName+" · "+path[0].String()[:8] {
+		t.Fatalf("no offer name must fall back to the group: %q", user)
+	}
 	// The tenant publishes automatically to the pool's serving node; an
 	// unchanged node set adds no policy revision.
 	var revisions int

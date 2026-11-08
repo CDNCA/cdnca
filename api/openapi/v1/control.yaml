@@ -300,6 +300,10 @@ paths:
     $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1tenant-scopes~1{tenant_scope_id}~1plugin-installations~1{authorization_id}~1upgrade'
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/disable:
     $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1tenant-scopes~1{tenant_scope_id}~1plugin-installations~1{authorization_id}~1disable'
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1tenant-scopes~1{tenant_scope_id}~1plugin-installations~1{authorization_id}~1resume'
+  /v1/platform/plugin-installations/{authorization_id}/resume:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}~1resume'
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall:
     $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1tenant-scopes~1{tenant_scope_id}~1plugin-installations~1{authorization_id}~1uninstall'
   /health/live:

@@ -3312,10 +3312,12 @@ function _M.gate(raw)
     -- automatic ban of the client on this site, or a manual one). Only a
     -- site the list has a ban of is looked up; listed(site, true)
     -- reads the list's generation every request, so a ban applies at once.
+    -- A site the request's D5 checkpoint already looked up is not looked up
+    -- again (cdnca_security.banlist sets cdnca_banlist_checked).
     local site = spec.scope:match("^site:(.+)$")
     if site then
         local ok, banlist = pcall(require, "cdnca_banlist")
-        if ok and banlist and banlist.listed(site, true) then
+        if ok and banlist and banlist.listed(site, true) and ngx.ctx.cdnca_banlist_checked ~= site then
             local remaining = banlist.banned(site, address)
             if remaining then return banlist.deny(remaining, telemetry_vars.block_page) end
         end

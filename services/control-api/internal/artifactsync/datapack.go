@@ -157,6 +157,7 @@ func (store *Store) materializeDataPacks(ctx context.Context, tx pgx.Tx, now tim
 		return 0, err
 	}
 	changed := 0
+	var republish []string // market rule packs withdrawn or usable again
 	for _, item := range candidates {
 		downloaded := item.entry
 		downloaded.Revision, downloaded.SHA256, downloaded.Size = uint64(item.revision), item.sha256, int64(len(item.content))
@@ -164,9 +165,13 @@ func (store *Store) materializeDataPacks(ctx context.Context, tx pgx.Tx, now tim
 		usable := item.status == "active" && item.installer != nil
 		if !usable {
 			if item.sourceStat != nil && *item.sourceStat == "active" {
-				if _, err := tx.Exec(ctx, `UPDATE market_data_pack_sources SET status='withdrawn',updated_at=$2
-					WHERE artifact_id=$1`, downloaded.ArtifactID, now); err != nil {
+				var name string
+				if err := tx.QueryRow(ctx, `UPDATE market_data_pack_sources SET status='withdrawn',updated_at=$2
+					WHERE artifact_id=$1 RETURNING local_name`, downloaded.ArtifactID, now).Scan(&name); err != nil {
 					return changed, err
+				}
+				if downloaded.Kind == artifactcatalog.KindMarketRulePack {
+					republish = append(republish, name)
 				}
 				if err := store.systemAudit(ctx, tx, "plugin.artifact.withdraw", "artifact", downloaded.ArtifactID, "success",
 					map[string]any{"kind": downloaded.Kind, "plugin_id": pluginID, "version": downloaded.Version,
@@ -220,7 +225,15 @@ func (store *Store) materializeDataPacks(ctx context.Context, tx pgx.Tx, now tim
 			pluginID, downloaded.Version, item.revision, item.sha256, name, now); err != nil {
 			return changed, err
 		}
+		if downloaded.Kind == artifactcatalog.KindMarketRulePack && item.sourceStat != nil && *item.sourceStat == "withdrawn" {
+			republish = append(republish, name)
+		}
 		changed++
+	}
+	if republisher, ok := store.republisher.(MarketRulePackRepublisher); ok && len(republish) > 0 {
+		if _, err := republisher.RepublishMarketRulePackChangeTx(ctx, tx, republish); err != nil {
+			return changed, err
+		}
 	}
 	return changed, nil
 }

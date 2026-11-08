@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"strings"
@@ -387,5 +388,43 @@ func TestDNSPupLineAlertsDiagnoseAndNodeOverride(t *testing.T) {
 	h.tick(t)
 	if got := h.count(t, `SELECT count(*) FROM notification_events WHERE event_type='node.dnspup.line_recovered'`); got != 2 {
 		t.Fatalf("line recovered alerts = %d", got)
+	}
+}
+
+// The overrides list names each subject by its display ID too (nodes.display_id,
+// node_line_groups.display_id), so the page shows "名称 (ID n)" instead of the UUID.
+func TestDNSPupOverridesCarryDisplayIDs(t *testing.T) {
+	h := newDNSPupHarness(t)
+	store, err := nodednspupprobe.NewStore(h.pool, grantedFeatures{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := h.addNode()
+	group, _ := h.lineGroup(map[uuid.UUID]string{node: "198.51.100.31"})
+	h.exec(`INSERT INTO node_dnspup_probe_overrides(id,subject_kind,node_id,probe_type,updated_at) VALUES($1,'node',$2,'ping',now())`,
+		uuid.New(), node)
+	h.exec(`INSERT INTO node_dnspup_probe_overrides(id,subject_kind,tenant_scope_id,line_group_id,probe_type,updated_at)
+		VALUES($1,'line_group',$2,$3,'ping',now())`, uuid.New(), h.scopeID, group)
+	admin := dnspupprobe.Actor{UserID: h.userID, ScopeID: h.scopeID, SessionID: h.Session()}
+	page, err := store.Overrides(h.ctx, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(page)
+	var body struct {
+		Items []struct {
+			SubjectKind      string `json:"subject_kind"`
+			SubjectDisplayID *int64 `json:"subject_display_id"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil || len(body.Items) != 2 {
+		t.Fatalf("overrides %s %v", raw, err)
+	}
+	want := map[string]int64{"node": int64(h.count(t, `SELECT display_id FROM nodes WHERE id=$1`, node)),
+		"line_group": int64(h.count(t, `SELECT display_id FROM node_line_groups WHERE id=$1`, group))}
+	for _, item := range body.Items {
+		if item.SubjectDisplayID == nil || *item.SubjectDisplayID != want[item.SubjectKind] {
+			t.Fatalf("%s display id %v, want %d (%s)", item.SubjectKind, item.SubjectDisplayID, want[item.SubjectKind], raw)
+		}
 	}
 }

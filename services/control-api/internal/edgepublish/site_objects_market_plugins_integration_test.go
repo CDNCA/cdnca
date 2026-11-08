@@ -3,6 +3,7 @@
 package edgepublish
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -153,6 +154,83 @@ func TestDynamicRoutingSiteObjectsWithholdLocallyDisabledPacks(t *testing.T) {
 	}
 	mustExecPublish(t, fixture, `DELETE FROM plugin_local_disables WHERE plugin_id='io.cdnca.selfwaf'`)
 	assertSiteMounts(t, publish("enabled-again")[site.String()].security, security)
+}
+
+// A plugin market rule pack (rule_pack_artifacts.source
+// market) whose platform installation was paused or lost its authorization is
+// withdrawn by materialization (market_data_pack_sources.status withdrawn).
+// The sites that already mount it must not get it again from a system
+// republication, on any tenant; site_security_mounts stays as published and
+// the pack returns once the source is active again.
+func TestDynamicRoutingSiteObjectsWithholdWithdrawnMarketPacks(t *testing.T) {
+	fixture := newPublishFixture(t)
+	seedDynamicRoutingNode(t, fixture, fixture.nodeID)
+	site := fixture.createSite(t, "market-pack.example.test", 8080, false).Site.ID
+
+	packs := rulepackcontrol.NewService(fixture.pool, func() time.Time { return publishTestClock })
+	platform := rulepackcontrol.Actor{UserID: fixture.platformUserID, ScopeID: fixture.platformScopeID, ScopeKind: "platform"}
+	tenant := rulepackcontrol.Actor{UserID: fixture.userID, ScopeID: fixture.scopeID, ScopeKind: "tenant"}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "libs", "rulepack", "testdata", "packs", "system-sqli.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	const packID = "dev/io.cdnca.examples/sqli-extra"
+	document["pack_id"], document["layer"] = packID, "developer"
+	content, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pack, err := packs.Import(t.Context(), platform, content)
+	if err != nil {
+		t.Fatalf("import pack: %v", err)
+	}
+	for _, input := range []rulepackcontrol.OverrideInput{
+		{Level: rulepack.LevelPlatform, PackID: pack.PackID, State: rulepack.StateDisabled, AllowLower: true},
+		{Level: rulepack.LevelSite, LevelObjectID: &site, PackID: pack.PackID, State: rulepack.StateEnabled},
+	} {
+		if _, _, err := packs.PutOverride(t.Context(), platform, input); err != nil {
+			t.Fatalf("override %+v: %v", input, err)
+		}
+	}
+	published, err := packs.PublishSite(t.Context(), tenant, site)
+	if err != nil || published.Published == nil {
+		t.Fatalf("publish mounts: %v", err)
+	}
+	security := published.Published.Security
+	applyRulePacks(t, fixture, security)
+	mount := security.Mounts[0]
+	mustExecPublish(t, fixture, `UPDATE rule_pack_artifacts SET source='market' WHERE pack_id=$1`, pack.PackID)
+	mustExecPublish(t, fixture, `INSERT INTO market_data_pack_sources(artifact_id,kind,plugin_id,version,revision,sha256,
+		local_name,status,materialized_at,updated_at) VALUES('market_rule_pack/io.cdnca.examples','market_rule_pack',
+		'io.cdnca.examples',$1,1,$2,$3,'active',now(),now())`, mount.Version, mount.SHA256, pack.PackID)
+
+	publish := func(name string) map[string]publishedSiteObject {
+		t.Helper()
+		(&SystemRepublishScope{Pool: fixture.pool, ScopeID: fixture.scopeID}).SettleDeployments(t)
+		mustExecPublish(t, fixture, `SELECT advance_edge_configuration_scope_revision($1)`, fixture.scopeID)
+		result, err := fixture.service.Publish(t.Context(), siteRuntimeV2PublishRequest(fixture, name, fixture.nodeID, siteRuntimeV2Schema))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return dynamicRoutingSiteObjects(t, fixture, result.ConfigVersionID)
+	}
+
+	assertSiteMounts(t, publish("active")[site.String()].security, security)
+	mustExecPublish(t, fixture, `UPDATE market_data_pack_sources SET status='withdrawn' WHERE local_name=$1`, pack.PackID)
+	if got := publish("withdrawn")[site.String()]; got.security["mounts"] != nil || got.security["resolved_sha256"] != nil {
+		t.Fatalf("withdrawn market pack still mounted: %s", got.raw)
+	}
+	var stored int
+	if err := fixture.pool.QueryRow(t.Context(), `SELECT jsonb_array_length(security->'mounts') FROM site_security_mounts
+		WHERE site_id=$1`, site).Scan(&stored); err != nil || stored != 1 {
+		t.Fatalf("published mounts changed: %d %v", stored, err)
+	}
+	mustExecPublish(t, fixture, `UPDATE market_data_pack_sources SET status='active' WHERE local_name=$1`, pack.PackID)
+	assertSiteMounts(t, publish("active-again")[site.String()].security, security)
 }
 
 func mustExecPublish(t *testing.T, fixture *publishFixture, sql string, args ...any) {

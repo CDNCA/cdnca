@@ -3984,7 +3984,7 @@ func (keyring *pluginWebhookKeyring) clear() {
 type natsRuntimeConnection interface {
 	IsConnected() bool
 	IsClosed() bool
-	Drain() error
+	FlushTimeout(time.Duration) error
 	Close()
 }
 
@@ -3994,7 +3994,6 @@ type edgeDeploymentRuntime struct {
 	connection      natsRuntimeConnection
 	status          closeableRuntimeWorker
 	workers         []runtimeWorker
-	closed          <-chan struct{}
 	shutdownTimeout time.Duration
 	ready           atomic.Bool
 	closeOnce       sync.Once
@@ -5464,8 +5463,8 @@ func openEdgeDeploymentRuntime(
 	}
 	runtime := &edgeDeploymentRuntime{
 		connection: connection, status: status,
-		workers: []runtimeWorker{publisher, nodeMonitoringPublisher, status, natsConnectionMonitor{closed: closed}},
-		closed:  closed, shutdownTimeout: cfg.ShutdownPeriod,
+		workers:         []runtimeWorker{publisher, nodeMonitoringPublisher, status, natsConnectionMonitor{closed: closed}},
+		shutdownTimeout: cfg.ShutdownPeriod,
 	}
 	runtime.ready.Store(true)
 	failed = false
@@ -5503,19 +5502,19 @@ func (r *edgeDeploymentRuntime) Close() error {
 		if r.connection == nil || r.connection.IsClosed() {
 			return
 		}
-		if err := r.connection.Drain(); err != nil && r.closeErr == nil {
-			r.closeErr = err
-		}
-		timer := time.NewTimer(r.shutdownTimeout)
-		defer timer.Stop()
-		select {
-		case <-r.closed:
-		case <-timer.C:
-			if r.closeErr == nil {
-				r.closeErr = errors.New("edge deployment NATS drain timed out")
+		// Flush and close, not Drain: the workers have stopped
+		// when Close runs, and every subscription on this connection is a
+		// JetStream pull consumer. A reply that reached one after its fetch
+		// loop ended stays pending with no reader, so Drain waited the whole
+		// drain timeout (ShutdownPeriod) and then failed the shutdown (exit 1).
+		// Nothing a stopped worker holds is lost: unacknowledged messages are
+		// redelivered after their AckWait.
+		if r.connection.IsConnected() {
+			if err := r.connection.FlushTimeout(r.shutdownTimeout); err != nil && r.closeErr == nil {
+				r.closeErr = fmt.Errorf("flush edge deployment NATS: %w", err)
 			}
-			r.connection.Close()
 		}
+		r.connection.Close()
 	})
 	return r.closeErr
 }

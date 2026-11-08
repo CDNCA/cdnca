@@ -62,10 +62,7 @@ function StateHint({ plugin, state, wait }: { plugin: MarketPlugin; state: Store
     }
     return <Alert type="info" showIcon message={t('state.distributing')} description={t('state.distributingHint')} />
   }
-  if (state !== 'enable') return null
-  const path = enablePath(plugin)
-  return path ? <Alert type="success" showIcon message={<>{t('state.enableHint')} <Link to={path}>{path}</Link></>} />
-    : <Alert type="success" showIcon message={t('state.enableTenant')} />
+  return null
 }
 
 // The card's way to the plugin once it is usable here: its configuration page, and what it still needs.
@@ -118,10 +115,6 @@ function StoreStatus({ plugin, state, canBuy, onBuy, onDownload, downloading, us
       return needsInstallConfirm(plugin)
         ? <Link to="/sys/plugin-store?tab=mine"><Button size="small">{t('state.goMine')}</Button></Link>
         : <Tag color="processing">{t('state.distributing')}</Tag>
-    case 'enable': {
-      const path = enablePath(plugin)
-      return path ? <Link to={path}><Button>{t('state.enable')}</Button></Link> : <Tag color="processing">{t('state.pendingConfirm')}</Tag>
-    }
     case 'installed': {
       // Installed and usable; whether a site actually uses it is decided on its own page.
       const path = usable.path ?? enablePath(plugin)

@@ -117,12 +117,12 @@ What each capability does, how to turn it on and what you can set: [docs/capabil
 | Official rule packs (OWASP CRS levels, advanced CC, in-house detection rules) | Bought on the plugin marketplace | Bought on the plugin marketplace (paid) |
 | Automatic defense | CC auto-switching and WAF auto-ban only | Learning, observing and alerts free; automatic mitigation paid |
 | Multi-CDN aggregated edge, cross-CDN scheduling, automatic fallback chain | ❌ | ✅ |
-| Attack auto-escalation, Cloudflare preferred IPs | ❌ | ✅ |
+| Attack auto-escalation, SDK Shield, Cloudflare preferred IPs | ❌ | ✅ |
 | Multi-tenant plans and billing, online payments, billing bridge, migration import | ❌ | ✅ |
 
 The full comparison is on the website: [Community and Plus compared](https://www.cdnca.com/en/docs/capabilities/#editions).
 
-The code for commercial capabilities is not in this repository. They include: intelligent automatic defense and adaptive WAF, automatic attack escalation, aggregated edge (third-party CDN integration) and the fallback chain, Cloudflare preferred IPs, migration import; plans, balances, top-ups, orders, traffic packages, reselling, online payments and accounting integrations; the public website frontend, extra themes and white-labeling; the license service, the marketplace seller side, and online upgrades. Official rule sets (advanced CC rule groups, OWASP CRS profiles, in-house detection rule sets) can be bought on the plugin marketplace by Community Edition users.
+The code for commercial capabilities is not in this repository. They include: intelligent automatic defense and adaptive WAF, automatic attack escalation, SDK Shield, aggregated edge (third-party CDN integration) and the fallback chain, Cloudflare preferred IPs, migration import; plans, balances, top-ups, orders, traffic packages, reselling, online payments and accounting integrations; the public website frontend, extra themes and white-labeling; the license service, the marketplace seller side, and online upgrades. Official rule sets (advanced CC rule groups, OWASP CRS profiles, in-house detection rule sets) can be bought on the plugin marketplace by Community Edition users.
 
 The Community Edition suits individuals, small teams and CDN providers who want to get running and self-host first. For contract support or commercial modules, see the website (terms are subject to the official documentation).
 

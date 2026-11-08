@@ -107,7 +107,7 @@ paths:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/RequestID'
-      requestBody: {$ref: '#/components/requestBodies/Reason'}
+      requestBody: {$ref: '#/components/requestBodies/Pause'}
       responses:
         '200': {$ref: '#/components/responses/Mutation'}
         '400': {$ref: '#/components/responses/Error'}
@@ -262,7 +262,7 @@ paths:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/RequestID'
-      requestBody: {$ref: '#/components/requestBodies/Reason'}
+      requestBody: {$ref: '#/components/requestBodies/Pause'}
       responses:
         '200': {$ref: '#/components/responses/Mutation'}
         '400': {$ref: '#/components/responses/Error'}
@@ -270,6 +270,31 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations/{authorization_id}/resume:
+    post:
+      operationId: resumePlatformPluginInstallation
+      summary: Resume a plugin this controller paused (disable) itself in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      description: >-
+        Same as the tenant resume, in the platform scope of the session: requires plugin_installations.platform.manage,
+        If-Match and Idempotency-Key, reads the signed license snapshot first, and only resumes a pause of this
+        controller (paused_by=installation). A platform pause returns 409 plugin_installation_platform_paused and an
+        unreachable license service 503; the plugin then stays paused.
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Resume'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
         '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/platform/plugin-installations/{authorization_id}/uninstall:
@@ -362,6 +387,14 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/PluginInstallationReason'}
+    Pause:
+      required: true
+      content:
+        application/json:
+          schema:
+            description: Empty object; a pause asks for no reason (uninstall still records one).
+            type: object
+            additionalProperties: false
     Resume:
       required: true
       content:
@@ -493,7 +526,9 @@ components:
           type: string
           enum: [installation, operator, service]
         paused_reason:
-          description: The reason recorded with that pause.
+          description: >-
+            The reason recorded with that pause. Omitted when the pause has none (a controller pause from 1.0.35 on
+            asks for no reason; operator and service pauses still record one).
           type: string
           minLength: 1
           maxLength: 500

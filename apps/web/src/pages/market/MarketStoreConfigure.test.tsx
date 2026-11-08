@@ -83,8 +83,9 @@ describe('store card model', () => {
   it('reads a disabled installation as 已停用 and only flags dnspup setup from its own status', () => {
     const lib = [{ plugin_id: 'bob.theme', installed: true, enabled: false, withdrawn: false }]
     expect(storeState(theme as never, [license('bob.theme')] as never, lib, [], installation({ status: 'disabled' }))).toBe('disabled')
-    // 待确认的安装记录不是停用：仍按本机插件状态判断。
-    expect(storeState(theme as never, [license('bob.theme')] as never, lib, [], installation({ status: 'pending_confirmation' }))).toBe('enable')
+    // 本机只有停用的安装（installed && !enabled）就是已停用，读不到记录或另有待确认的记录也一样。
+    expect(storeState(theme as never, [license('bob.theme')] as never, lib, [])).toBe('disabled')
+    expect(storeState(theme as never, [license('bob.theme')] as never, lib, [], installation({ status: 'pending_confirmation' }))).toBe('disabled')
     // 授权已失效优先于停用：本机仍有安装就是“授权失效”。
     expect(storeState(theme as never, [], lib, [], installation({ status: 'disabled' }))).toBe('revoked')
     // 判断依据：dnspup 状态接口的 secret_configured（服务端 Active = 已授权 && enabled && secret_configured && 未暂停）。
@@ -160,11 +161,12 @@ describe('可安装类停用与重新启用', () => {
     fireEvent.click(await within(c).findByRole('button', { name: '停用' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/购买的使用权和安装记录保留/)).toBeInTheDocument()
+    // 安装记录类插件停用不再填原因，确认即停用。
+    expect(within(dialog).queryByLabelText('停用原因')).toBeNull()
     const ok = within(dialog).getByRole('button', { name: '确认停用' })
-    expect(ok).toBeDisabled()
-    fireEvent.change(within(dialog).getByLabelText('停用原因'), { target: { value: '暂时不用' } })
+    expect(ok).toBeEnabled()
     fireEvent.click(ok)
-    await waitFor(() => expect(disable).toHaveBeenCalledWith('store-token', platformScope, authorizationID, 2, { reason: '暂时不用' },
+    await waitFor(() => expect(disable).toHaveBeenCalledWith('store-token', platformScope, authorizationID, 2,
       expect.stringMatching(/^plugin-installation-disable-/)))
     c = await card('bob.theme')
     expect(await within(c).findByText('已停用')).toBeInTheDocument()
@@ -211,7 +213,6 @@ describe('可安装类停用与重新启用', () => {
     expect(within(row).queryByRole('link', { name: '去配置' })).toBeNull()
     fireEvent.click(await within(row).findByRole('button', { name: '停用' }))
     const dialog = await screen.findByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('停用原因'), { target: { value: '换主题' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '确认停用' }))
     const after = (await within(owned).findByText('Bob 主题')).closest('tr')!
     expect(await within(after).findByText('已停用')).toBeInTheDocument()

@@ -507,7 +507,7 @@ func (flow *marketSupplierFlow) run() {
 	// A serves C's root through B's subscription: grant path [s2, s1]; A only learns a downstream number.
 	chain := []uuid.UUID{s2, s1}
 	localC, localB := flow.leafLocal(chain), flow.leafLocal([]uuid.UUID{s1})
-	grants, _, err := flow.clients["supplier_a"].Grants(t.Context(), a)
+	grants, _, _, err := flow.clients["supplier_a"].Grants(t.Context(), a)
 	if err != nil {
 		t.Fatal(err)
 	}

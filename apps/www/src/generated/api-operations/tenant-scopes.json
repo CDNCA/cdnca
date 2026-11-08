@@ -7708,7 +7708,7 @@
       {
        "name": "paused_reason",
        "type": "string",
-       "description": "The reason recorded with that pause."
+       "description": "The reason recorded with that pause. Omitted when the pause has none (a controller pause from 1.0.35 on asks for no reason; operator and service pauses still record one)."
       },
       {
        "name": "available_upgrade",
@@ -7910,14 +7910,7 @@
     "content_types": [
      "application/json"
     ],
-    "required": true,
-    "fields": [
-     {
-      "name": "reason",
-      "type": "string",
-      "required": true
-     }
-    ]
+    "required": true
    },
    "responses": [
     {
@@ -7949,6 +7942,99 @@
     },
     {
      "status": "409",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "503",
+     "description": "Stable localized-client error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "resumePluginInstallation",
+   "method": "POST",
+   "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume",
+   "summary": "Resume a plugin this controller paused (disable) itself",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires plugin_installations.manage, If-Match and Idempotency-Key. Before writing, the control plane reads the signed license snapshot: the authorization must still be the installed one (verification, version, digests and scopes unchanged, no new permission to approve) and paused by this controller (paused_by=installation). A platform pause (license operator, market delisting or security advisory) returns 409 plugin_installation_platform_paused and keeps the plugin paused; an unreachable license service returns 503 and keeps it paused. Resume rotates the runtime identity like disable.",
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "authorization_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Durable mutation snapshot; replay returns the original snapshot",
+     "fields": [
+      {
+       "name": "installation",
+       "type": "PluginInstallation",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "422",
      "description": "Stable localized-client error envelope"
     },
     {

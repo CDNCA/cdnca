@@ -33,10 +33,28 @@ import (
 // feature code this controller stopped (plugin_local_disables): the
 // pack returns when the plugin is enabled again (the stop and the enable
 // republish the scopes that mount it).
+//
+// Also on every scope, a plugin market pack whose source materialization
+// withdrew (market_data_pack_sources withdrawn: the platform installation was
+// paused or uninstalled, or the authorization ended; ADR 0007 §9) is left out;
+// it returns once the source is active again.
 func withholdMarketPluginMounts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, facts map[string]siteObjectV2Facts) error {
 	stopped, err := entitlementguard.LocallyDisabledCodes(ctx, tx)
 	if err != nil {
 		return fmt.Errorf("%w: load plugin local disables", ErrPersistence)
+	}
+	rows, err := tx.Query(ctx, `SELECT local_name FROM market_data_pack_sources
+		WHERE kind='market_rule_pack' AND status='withdrawn'`)
+	if err != nil {
+		return fmt.Errorf("%w: load withdrawn market packs", ErrPersistence)
+	}
+	names, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return fmt.Errorf("%w: load withdrawn market packs", ErrPersistence)
+	}
+	withdrawn := make(map[string]bool, len(names))
+	for _, name := range names {
+		withdrawn[name] = true
 	}
 	var plugins []string
 	market := true
@@ -46,7 +64,7 @@ func withholdMarketPluginMounts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUI
 	} else if err != nil {
 		return fmt.Errorf("%w: load market tenant plugins", ErrPersistence)
 	}
-	if !market && len(stopped) == 0 {
+	if !market && len(stopped) == 0 && len(withdrawn) == 0 {
 		return nil
 	}
 	needs := map[string]string{} // pack@version -> plugin it needs ("" = none)
@@ -79,7 +97,8 @@ func withholdMarketPluginMounts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUI
 	}
 	withheld := func(mount rulepack.Mount) bool {
 		plugin := needs[mount.PackID+"@"+mount.Version]
-		return plugin != "" && (stopped[plugin] || market && !slices.Contains(plugins, plugin))
+		return plugin != "" && (stopped[plugin] || market && !slices.Contains(plugins, plugin) ||
+			plugin == "rule_pack:"+mount.PackID && withdrawn[mount.PackID])
 	}
 	for siteID, value := range facts {
 		if value.Mounts == nil || len(value.Mounts.Mounts) == 0 {

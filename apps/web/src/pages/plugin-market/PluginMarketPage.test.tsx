@@ -333,7 +333,7 @@ describe('PluginMarketPage', () => {
         sensitive_permissions_confirmed: true, new_permissions_confirmed: true }), expect.any(String)))
   })
 
-  it('uses reasoned protective disable/uninstall and preserves an unknown write for exact retry', async () => {
+  it('pauses without a reason and preserves an unknown write for exact retry', async () => {
     mockApi()
     vi.mocked(pluginInstallationsApi.disable).mockRejectedValueOnce(new ApiError('unknown', 503, 'plugin_installation_result_unknown'))
     renderWithProviders(<PluginMarketPage />)
@@ -342,13 +342,16 @@ describe('PluginMarketPage', () => {
     const dialog = (await screen.findByText('暂停插件')).closest('[role="dialog"]')
     expect(dialog).not.toBeNull()
     if (!(dialog instanceof HTMLElement)) throw new Error('disable dialog missing')
-    await userEvent.type(within(dialog).getByLabelText('原因'), '安全响应')
+    // 暂停不再填原因，只提示影响；卸载仍要原因。
+    expect(within(dialog).queryByLabelText('原因')).toBeNull()
+    expect(within(dialog).getByText(/暂停后插件运行身份立即作废/)).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: '确认暂停' }))
+    expect(vi.mocked(pluginInstallationsApi.disable).mock.calls[0]?.slice(1, 4)).toEqual([scopeID, authorizationID, 4])
     expect(await screen.findByText('不确定操作是否成功', OUTCOME_BAR)).toBeInTheDocument()
-    const firstKey = vi.mocked(pluginInstallationsApi.disable).mock.calls[0]?.[5]
+    const firstKey = vi.mocked(pluginInstallationsApi.disable).mock.calls[0]?.[4]
     await userEvent.click(screen.getByRole('button', { name: '重新提交' }))
     await waitFor(() => expect(pluginInstallationsApi.disable).toHaveBeenCalledTimes(2))
-    expect(vi.mocked(pluginInstallationsApi.disable).mock.calls[1]?.[5]).toBe(firstKey)
+    expect(vi.mocked(pluginInstallationsApi.disable).mock.calls[1]?.[4]).toBe(firstKey)
   })
 
   // 报告 B：主动暂停后在详情里"恢复使用"；顺序为 状态/原因 → 主动作 → 详情 → 卸载。

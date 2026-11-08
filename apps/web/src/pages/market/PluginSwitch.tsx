@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Input, Modal, Typography } from 'antd'
+import { Alert, App, Button, Modal, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -14,14 +14,14 @@ import { resumable } from './marketModel'
 
 const managePermission = 'plugin_installations.platform.manage'
 
-interface Attempt { kind: 'disable' | 'resume'; reason: string; key: string }
+interface Attempt { kind: 'disable' | 'resume'; key: string }
 
 const unknownOutcome = (error: unknown) => !(error instanceof ApiError) || error.code === 'plugin_installation_result_unknown' ||
   error.status === 0 || error.status === 408 || error.status >= 500
 
 /**
  * 停用 / 重新启用 of a platform installation record (POST /v1/platform/plugin-installations/{id}/disable|resume, the
- * same calls as 安装记录 详情). Disable asks for a reason and says what it does; resume restores exactly what this
+ * same calls as 安装记录 详情). Disable says what it does and asks for no reason; resume restores exactly what this
  * controller paused. A platform pause cannot be resumed here. An unknown outcome keeps its Idempotency-Key, so
  * the retry replays it instead of acting twice.
  */
@@ -32,7 +32,6 @@ export function InstallationSwitch({ installation, name }: { installation: Plugi
   const canManage = useSessionStore((s) => s.principal?.scope_kind === 'platform' &&
     s.principal.permissions.includes(managePermission))
   const [confirming, setConfirming] = useState(false)
-  const [reason, setReason] = useState('')
   const [unsettled, setUnsettled] = useState<Attempt | null>(null)
   const mutation = useMutation({
     mutationFn: (attempt: Attempt) => {
@@ -40,7 +39,7 @@ export function InstallationSwitch({ installation, name }: { installation: Plugi
       if (!token) throw new ApiError('Permission denied', 403, 'permission_denied')
       const { authorization_id: id, revision, tenant_scope_id: scope } = installation
       return attempt.kind === 'disable'
-        ? platformPluginInstallationsApi.disable(token, scope, id, revision, { reason: attempt.reason }, attempt.key)
+        ? platformPluginInstallationsApi.disable(token, scope, id, revision, attempt.key)
         : platformPluginInstallationsApi.resume(token, scope, id, revision, attempt.key)
     },
     onSuccess: (_, attempt) => {
@@ -61,10 +60,9 @@ export function InstallationSwitch({ installation, name }: { installation: Plugi
       void message.error(unknown ? t('toggle.unknown') : t('toggle.failed', { code: error instanceof ApiError ? error.code : 'request_failed' }))
     },
   })
-  // The same action and reason after an unknown outcome is a retry: same key. Anything else is a new attempt.
-  const run = (kind: Attempt['kind'], text = '') => mutation.mutate(
-    unsettled && unsettled.kind === kind && unsettled.reason === text ? unsettled
-      : { kind, reason: text, key: newPluginInstallationIdempotencyKey(kind) })
+  // The same action after an unknown outcome is a retry: same key. Anything else is a new attempt.
+  const run = (kind: Attempt['kind']) => mutation.mutate(
+    unsettled && unsettled.kind === kind ? unsettled : { kind, key: newPluginInstallationIdempotencyKey(kind) })
 
   if (installation.status === 'disabled' && !resumable(installation)) {
     return <Typography.Text type="secondary">{t('toggle.platformPaused')}</Typography.Text>
@@ -74,17 +72,12 @@ export function InstallationSwitch({ installation, name }: { installation: Plugi
     return <Button size="small" type="primary" loading={mutation.isPending} onClick={() => run('resume')}>{t('toggle.resume')}</Button>
   }
   if (installation.status !== 'enabled') return null
-  const trimmed = reason.trim()
   return <>
-    <Button size="small" danger onClick={() => { setReason(unsettled?.reason ?? ''); setConfirming(true) }}>{t('toggle.disable')}</Button>
+    <Button size="small" danger onClick={() => setConfirming(true)}>{t('toggle.disable')}</Button>
     <Modal open={confirming} title={t('toggle.disableTitle', { name })} okText={t('toggle.confirmDisable')} cancelText={t('actions.cancel')}
-      okButtonProps={{ danger: true, disabled: !trimmed || [...trimmed].length > 500 }} confirmLoading={mutation.isPending}
-      onOk={() => run('disable', trimmed)} onCancel={() => !mutation.isPending && setConfirming(false)} destroyOnHidden>
-      <Alert type="warning" showIcon message={t('toggle.disableEffect')} style={{ marginBottom: 12 }} />
-      <label>{t('toggle.reason')}
-        <Input.TextArea aria-label={t('toggle.reason')} value={reason} maxLength={500} placeholder={t('toggle.reasonPlaceholder')}
-          onChange={(e) => setReason(e.target.value)} />
-      </label>
+      okButtonProps={{ danger: true }} confirmLoading={mutation.isPending}
+      onOk={() => run('disable')} onCancel={() => !mutation.isPending && setConfirming(false)} destroyOnHidden>
+      <Alert type="warning" showIcon message={t('toggle.disableEffect')} />
     </Modal>
   </>
 }
@@ -129,7 +122,7 @@ export function FeatureSwitch({ plugin, name, stopped, dependents }: {
   })
   const run = (kind: Attempt['kind']) => mutation.mutate(
     unsettled && unsettled.kind === kind ? unsettled
-      : { kind, reason: '', key: newIdempotencyKey(kind === 'disable' ? 'plugin-local-disable' : 'plugin-local-enable') })
+      : { kind, key: newIdempotencyKey(kind === 'disable' ? 'plugin-local-disable' : 'plugin-local-enable') })
 
   if (!canManage || !plugin.feature_code) return null
   if (stopped) {

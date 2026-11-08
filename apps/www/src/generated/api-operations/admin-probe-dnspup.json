@@ -428,6 +428,11 @@
        "required": true
       },
       {
+       "name": "subject_display_id",
+       "type": "integer",
+       "description": "The node's or line group's display ID; omitted when it no longer exists"
+      },
+      {
        "name": "probe_type",
        "type": "string: tcping / ping / http / null | null: tcping / ping / http / null"
       },

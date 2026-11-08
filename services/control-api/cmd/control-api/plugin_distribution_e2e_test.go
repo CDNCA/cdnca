@@ -184,7 +184,7 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		t.Fatal("tenant coverage after confirming for one tenant")
 	}
 	// A tenant cannot change what the platform installed for it.
-	client.refused(audit.AuthorizationID, "disable", installed.Revision, map[string]any{"reason": "租户试图停用"},
+	client.refused(audit.AuthorizationID, "disable", installed.Revision, map[string]any{},
 		http.StatusForbidden, "plugin_installation_platform_managed")
 
 	// 1b. The platform administrator widens the targets to every tenant, which also covers tenants created later.
@@ -242,6 +242,36 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		t.Fatalf("resumed plugin must receive events again: %+v", result)
 	}
 
+	// 3b. the platform administrator pauses without a reason and resumes it. The license
+	// service accepts the reasonless pause (license migration 158) and keeps a NULL receipt reason.
+	beforePause := platformClient.get(audit.AuthorizationID)
+	paused := platformClient.mutate(audit.AuthorizationID, "disable", beforePause.Revision, map[string]any{}, http.StatusOK)
+	if paused.Status != "disabled" {
+		t.Fatalf("controller pause=%+v", paused)
+	}
+	if result := deliver("controller paused"); result.Code != "runtime_authorization_denied" || receiver.count() != 2 {
+		t.Fatalf("controller-paused plugin must not receive events: %+v", result)
+	}
+	pausedLicense := licenseState(t, fixture, auditPluginID)
+	// Receipts in the same second have no reliable order: take the pause with the highest revision.
+	var pause *string
+	var pauseRevision uint64
+	for _, receipt := range pausedLicense.Receipts {
+		if receipt.Action == "disable" && receipt.ToRevision > pauseRevision {
+			pause, pauseRevision = receipt.Reason, receipt.ToRevision
+		}
+	}
+	if pausedLicense.Status != "disabled" || pauseRevision != pausedLicense.Revision || pause != nil {
+		t.Fatalf("license after controller pause status=%s revision=%d pause revision=%d reason=%v",
+			pausedLicense.Status, pausedLicense.Revision, pauseRevision, pause)
+	}
+	if resumed := platformClient.mutate(audit.AuthorizationID, "resume", paused.Revision, map[string]any{}, http.StatusOK); resumed.Status != "enabled" {
+		t.Fatalf("controller resume=%+v", resumed)
+	}
+	if result := deliver("controller resumed"); !result.Success || receiver.count() != 3 {
+		t.Fatalf("controller-resumed plugin must receive events again: %+v", result)
+	}
+
 	// 4. The license operator approves 1.1.0; the platform administrator applies it (the tenant may not).
 	if status := postOperator(fixture, "/upgrade", nil); status != http.StatusOK {
 		t.Fatalf("operator upgrade status=%d", status)
@@ -263,7 +293,7 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 		*upgraded.LKGVersion != "1.1.0" {
 		t.Fatalf("upgraded=%+v", upgraded)
 	}
-	if result := deliver("upgraded"); !result.Success || receiver.count() != 3 {
+	if result := deliver("upgraded"); !result.Success || receiver.count() != 4 {
 		t.Fatalf("upgraded plugin must keep receiving events: %+v", result)
 	}
 
@@ -280,7 +310,7 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 	if license.Status != "uninstalled" || license.Version != "1.1.0" {
 		t.Fatalf("license after uninstall=%+v", license)
 	}
-	if result := deliver("uninstalled"); result.Code != "runtime_authorization_denied" || receiver.count() != 3 {
+	if result := deliver("uninstalled"); result.Code != "runtime_authorization_denied" || receiver.count() != 4 {
 		t.Fatalf("uninstalled plugin must not receive events: %+v", result)
 	}
 	if available("chosen tenant after uninstall", token, auditPluginID) ||
@@ -297,7 +327,7 @@ func TestPluginDistributionControlAgainstLicenseProcess(t *testing.T) {
 	}
 	var heads int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM plugin_installation_receipts WHERE authorization_id=$1`,
-		audit.AuthorizationID).Scan(&heads); err != nil || heads != 3 {
+		audit.AuthorizationID).Scan(&heads); err != nil || heads != 5 {
 		t.Fatalf("control receipts=%d err=%v", heads, err)
 	}
 

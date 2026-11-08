@@ -244,7 +244,7 @@ function actionResult(
     case 'upgrade':
       return api.upgrade(accessToken, item.tenant_scope_id, item.authorization_id, item.revision, attempt.approval!, attempt.key)
     case 'disable':
-      return api.disable(accessToken, item.tenant_scope_id, item.authorization_id, item.revision, { reason: attempt.reason! }, attempt.key)
+      return api.disable(accessToken, item.tenant_scope_id, item.authorization_id, item.revision, attempt.key)
     case 'resume':
       return api.resume(accessToken, item.tenant_scope_id, item.authorization_id, item.revision, attempt.key)
     case 'uninstall':
@@ -452,7 +452,7 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     } : undefined
     mutation.mutate({
       ...action, ownerKey: owner, key: newPluginInstallationIdempotencyKey(action.kind),
-      ...(approval ? { approval } : { reason: reason.trim() }),
+      ...(approval ? { approval } : action.kind === 'uninstall' ? { reason: reason.trim() } : {}),
     })
   }
 
@@ -524,7 +524,8 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     (targetsRequired && !draftComplete(targetsDraft)))
   // The tenant console manages only its own pre-1.0.35 installations; the platform view everything it holds.
   const manageDetail = (item: PluginInstallation) => canManage && (platform || tenantWritable(item))
-  const reasonDisabled = Boolean(action && (action.kind === 'disable' || action.kind === 'uninstall') &&
+  // A pause asks for no reason; uninstall still does.
+  const reasonDisabled = Boolean(action && action.kind === 'uninstall' &&
     ([...reason.trim()].length < 1 || [...reason.trim()].length > 500))
 
   return <div className="plugin-market-page">
@@ -670,7 +671,8 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
           canSearch={canSearchTenants} disabled={mutation.isPending} /> : null}
         {platform && !tenantPlugin(action.installation) ? null : <UIPageDisclosure token={accessToken} pluginID={action.installation.plugin_id} version={action.installation.version}
           manifestSHA256={action.kind === 'upgrade' ? undefined : action.installation.manifest_sha256} />}
-      </> : action ? <label>{t('protective.reason')}<Input.TextArea aria-label={t('protective.reason')} value={reason} maxLength={500} placeholder={t('protective.reasonPlaceholder')} onChange={(event) => setReason(event.target.value)} /></label> : null}
+      </> : action?.kind === 'disable' ? <Alert type="warning" showIcon message={t('protective.disableEffect')} />
+      : action ? <label>{t('protective.reason')}<Input.TextArea aria-label={t('protective.reason')} value={reason} maxLength={500} placeholder={t('protective.reasonPlaceholder')} onChange={(event) => setReason(event.target.value)} /></label> : null}
     </Modal>
 
     <Modal open={Boolean(editingTargets)} title={t('targets.edit')} okText={t('targets.save')} cancelText={t('actions.cancel')}

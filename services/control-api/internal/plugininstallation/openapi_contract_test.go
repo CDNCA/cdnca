@@ -26,11 +26,13 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 		"/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume":    "post",
 		"/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall": "post",
 		// 报告 A：平台资源（主题、规则数据包）由主控平台管理员确认；作用域取自会话。
-		"/v1/platform/plugin-installations":                              "get",
-		"/v1/platform/plugin-installations/{authorization_id}":           "get",
-		"/v1/platform/plugin-installations/{authorization_id}/confirm":   "post",
-		"/v1/platform/plugin-installations/{authorization_id}/upgrade":   "post",
-		"/v1/platform/plugin-installations/{authorization_id}/disable":   "post",
+		"/v1/platform/plugin-installations":                            "get",
+		"/v1/platform/plugin-installations/{authorization_id}":         "get",
+		"/v1/platform/plugin-installations/{authorization_id}/confirm": "post",
+		"/v1/platform/plugin-installations/{authorization_id}/upgrade": "post",
+		"/v1/platform/plugin-installations/{authorization_id}/disable": "post",
+		// 平台恢复（handler 与前端已有）。
+		"/v1/platform/plugin-installations/{authorization_id}/resume":    "post",
 		"/v1/platform/plugin-installations/{authorization_id}/uninstall": "post",
 		// 平台管理员改租户插件装给哪些租户。
 		"/v1/platform/plugin-installations/{authorization_id}/targets": "put",
@@ -55,6 +57,19 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 			if _, found := operation.Responses["422"]; !found {
 				t.Errorf("%s %s does not declare 422", method, route)
 			}
+		}
+	}
+	// 暂停与恢复的请求体是空对象，卸载仍要原因。
+	for route, want := range map[string]string{
+		"/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/disable":   "#/components/requestBodies/Pause",
+		"/v1/platform/plugin-installations/{authorization_id}/disable":                          "#/components/requestBodies/Pause",
+		"/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume":    "#/components/requestBodies/Resume",
+		"/v1/platform/plugin-installations/{authorization_id}/resume":                           "#/components/requestBodies/Resume",
+		"/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall": "#/components/requestBodies/Reason",
+		"/v1/platform/plugin-installations/{authorization_id}/uninstall":                        "#/components/requestBodies/Reason",
+	} {
+		if got := document.Paths[route]["post"].RequestBody.Ref; got != want {
+			t.Errorf("%s requestBody=%q want %q", route, got, want)
 		}
 	}
 	requestID, found := document.Components.Parameters["RequestID"]
@@ -113,8 +128,9 @@ type pluginInstallationOpenAPI struct {
 }
 
 type pluginInstallationOpenAPIOperation struct {
-	Parameters []pluginInstallationOpenAPIParameterRef `yaml:"parameters"`
-	Responses  map[string]any                          `yaml:"responses"`
+	Parameters  []pluginInstallationOpenAPIParameterRef `yaml:"parameters"`
+	RequestBody pluginInstallationOpenAPIParameterRef   `yaml:"requestBody"`
+	Responses   map[string]any                          `yaml:"responses"`
 }
 
 type pluginInstallationOpenAPIParameterRef struct {

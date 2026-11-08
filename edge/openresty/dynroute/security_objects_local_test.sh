@@ -246,6 +246,11 @@ check "D5 WAF site without listed bans skips the lookup" 0 "$(lookups)"
 check "D5 WAF site refuses the listed client" 403 "$(code wafsite 198.51.100.7 /)"
 check "D5 WAF site X-Cdnca-Ban" listed "$(header wafsite 198.51.100.7 / X-Cdnca-Ban)"
 check "D5 WAF site other client" 200 "$(code wafsite 198.51.100.8 /)"
+# The checkpoint's lookup is the request's one; the WAF gate
+# does not repeat it (it did before: 2 per request)
+lookups >/dev/null
+check "D5 listed WAF site looks up once per request" 200 "$(code wafsite 198.51.100.8 /)"
+check "D5 listed WAF site lookups counted" 1 "$(lookups)"
 lookups >/dev/null
 check "D5 listed site still looks up" 403 "$(code plain 198.51.100.7 /)"
 check "D5 listed site lookups counted" 1 "$(lookups)"

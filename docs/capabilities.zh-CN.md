@@ -79,6 +79,7 @@ TCP/UDP 转发的防护规则：按首包内容、TLS 握手中的域名（SNI�
 
 - [多 CDN 聚合边缘](https://www.cdnca.com/docs/capabilities/multi-cdn/)、[跨 CDN 调度](https://www.cdnca.com/docs/capabilities/cdn-scheduling/)、[全自动保底链](https://www.cdnca.com/docs/capabilities/fallback-chain/)
 - [智能自动防御](https://www.cdnca.com/docs/capabilities/auto-defense/)（社区版只含 CC 自动切换与 WAF 自动封禁）、[攻击自动升级](https://www.cdnca.com/docs/capabilities/escalate/)
+- [SDK 游戏盾](https://www.cdnca.com/docs/capabilities/sdk-shield/)（游戏和 App 集成 SDK，首包令牌校验、隐藏源站）
 - [CF 优选节点](https://www.cdnca.com/docs/capabilities/cf-optimize/)
 - [在线收款](https://www.cdnca.com/docs/capabilities/payments/)、[财务系统对接](https://www.cdnca.com/docs/capabilities/billing-bridge/)、[迁移导入](https://www.cdnca.com/docs/capabilities/migrate-import/)、多租户套餐与计费
 

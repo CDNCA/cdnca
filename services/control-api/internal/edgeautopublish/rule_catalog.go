@@ -3,6 +3,7 @@ package edgeautopublish
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -76,6 +77,47 @@ func (RuleCatalogPublisher) RepublishCRSProfilePackChangeTx(
 		if _, err := RequestRepublicationTx(ctx, tx, RepublishRequest{
 			ScopeID: scopeID, Trigger: edgepublish.SystemTriggerRuleCatalog, SourceResourceID: sourceID,
 			SourceRequestID: "crs-profile." + sourceID.String(), Debounce: RuleCatalogRepublicationDebounce,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return scopes, nil
+}
+
+// MarketRulePackSourceID is the source resource of market rule pack
+// withdraw / restore republications.
+var MarketRulePackSourceID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("cdnca.market_data_pack_sources.rule_pack"))
+
+// RepublishMarketRulePackChangeTx runs in the materialization transaction that
+// withdrew plugin market rule packs (installation paused or uninstalled,
+// authorization ended) or made them usable again: every scope whose sites
+// mount one of packIDs is republished at once through the system channel, so
+// the pack leaves (or returns to) their site objects (edgepublish
+// withholdMarketPluginMounts). It returns the scopes asked, in scope order.
+func (RuleCatalogPublisher) RepublishMarketRulePackChangeTx(ctx context.Context, tx pgx.Tx, packIDs []string) ([]uuid.UUID, error) {
+	if ctx == nil || tx == nil {
+		return nil, ErrInvalidInput
+	}
+	if len(packIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT DISTINCT site.scope_id FROM site_security_mounts mount
+		JOIN sites site ON site.id=mount.site_id AND site.deleted_at IS NULL
+		CROSS JOIN LATERAL jsonb_array_elements(COALESCE(mount.security->'mounts','[]'::jsonb)) item
+		WHERE item->>'pack_id'=ANY($1::text[])
+		ORDER BY site.scope_id`, packIDs)
+	if err != nil {
+		return nil, fmt.Errorf("find scopes mounting market packs: %w", err)
+	}
+	scopes, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, fmt.Errorf("find scopes mounting market packs: %w", err)
+	}
+	stamp := time.Now().UnixNano()
+	for _, scopeID := range scopes {
+		if _, err := RequestRepublicationTx(ctx, tx, RepublishRequest{
+			ScopeID: scopeID, Trigger: edgepublish.SystemTriggerModuleEntitlement, SourceResourceID: MarketRulePackSourceID,
+			SourceRequestID: fmt.Sprintf("market-pack.%s.%d", scopeID, stamp), Immediate: true,
 		}); err != nil {
 			return nil, err
 		}

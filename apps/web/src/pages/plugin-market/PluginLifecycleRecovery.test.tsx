@@ -184,7 +184,7 @@ describe('自己暂停后的回读', () => {
     await screen.findByText(enabled.plugin_id)
     fireEvent.click(screen.getByRole('button', { name: '查看详情' }))
     fireEvent.click(await screen.findByRole('button', { name: '暂停' }))
-    fireEvent.change(screen.getByRole('textbox', { name: '原因' }), { target: { value: 'review own pause' } })
+    expect(screen.queryByRole('textbox', { name: '原因' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '确认暂停' }))
     await screen.findByText('暂停已完成，当前状态：已暂停')
   }

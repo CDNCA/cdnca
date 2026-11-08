@@ -43,8 +43,8 @@ func (f *fakeMarket) RegisterCommunity(ctx context.Context, id marketclient.Iden
 	f.community = append([]byte(nil), document...)
 	return f.Register(ctx, id, nil, name)
 }
-func (f *fakeMarket) Grants(context.Context, uuid.UUID) ([]grant.Grant, map[uuid.UUID]uuid.UUID, error) {
-	return f.grants, f.grantSubscribers, nil
+func (f *fakeMarket) Grants(context.Context, uuid.UUID) ([]grant.Grant, map[uuid.UUID]uuid.UUID, map[uuid.UUID]string, error) {
+	return f.grants, f.grantSubscribers, nil, nil
 }
 func (f *fakeMarket) Receive(ctx context.Context, _ marketclient.Identity, cursor int64) ([]marketclient.Inbound, int64, []error) {
 	f.mu.Lock()
@@ -87,7 +87,7 @@ func (f *fakeMarket) Ack(_ context.Context, seq int64) error {
 
 type fakeSupply struct{ handled []uuid.UUID }
 
-func (f *fakeSupply) Sync(context.Context, []grant.Grant) ([]marketsupply.Outcome, error) {
+func (f *fakeSupply) SyncNamed(context.Context, []grant.Grant, map[uuid.UUID]string) ([]marketsupply.Outcome, error) {
 	return nil, nil
 }
 func (f *fakeSupply) Handle(_ context.Context, h envelope.Header, _ []byte) (siteconf.Reply, error) {
@@ -236,7 +236,7 @@ type seqSupply struct {
 	seqs []int64
 }
 
-func (s *seqSupply) Sync(context.Context, []grant.Grant) ([]marketsupply.Outcome, error) {
+func (s *seqSupply) SyncNamed(context.Context, []grant.Grant, map[uuid.UUID]string) ([]marketsupply.Outcome, error) {
 	return nil, nil
 }
 func (s *seqSupply) Handle(ctx context.Context, h envelope.Header, _ []byte) (siteconf.Reply, error) {

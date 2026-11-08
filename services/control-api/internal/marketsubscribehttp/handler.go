@@ -116,6 +116,9 @@ type Handler struct {
 	mux          *http.ServeMux
 	// poolReports answers the supply group report route (WithPoolReports).
 	poolReports PoolReporter
+	// catalog is the market relay WithMember mounts; the local stop checks a
+	// plugin's feature code against it.
+	catalog Forwarder
 }
 
 // New serves the supply/site routes when svc is set; with a nil svc (node

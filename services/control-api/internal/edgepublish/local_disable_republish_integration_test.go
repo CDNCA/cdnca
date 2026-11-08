@@ -65,3 +65,42 @@ func TestRepublishLocalPluginChangeQueuesMountingScopes(t *testing.T) {
 		t.Fatalf("republication head = %v %s", triggers, state)
 	}
 }
+
+// A plugin market rule pack withdrawn (or usable again) asks
+// the system channel to republish every scope whose sites mount it, at once
+// (trigger module_entitlement); a pack no site mounts republishes nothing.
+func TestRepublishMarketRulePackChangeQueuesMountingScopes(t *testing.T) {
+	scope := edgepublish.NewSystemRepublishScope(t)
+	_, mounted := scope.MountRulePack(t)
+	packID, _, _ := strings.Cut(mounted, "@")
+	republish := func(packIDs ...string) []uuid.UUID {
+		t.Helper()
+		var scopes []uuid.UUID
+		if err := pgx.BeginFunc(t.Context(), scope.Pool, func(tx pgx.Tx) error {
+			var err error
+			scopes, err = edgeautopublish.RuleCatalogPublisher{}.RepublishMarketRulePackChangeTx(t.Context(), tx, packIDs)
+			return err
+		}); err != nil {
+			t.Fatalf("republish %v: %v", packIDs, err)
+		}
+		return scopes
+	}
+	if got := republish("dev/io.cdnca.examples/unmounted"); len(got) != 0 {
+		t.Fatalf("pack no site mounts republished %v", got)
+	}
+	if scope.Count(t, `SELECT count(*) FROM edge_system_republication_heads WHERE scope_id=$1`) != 0 {
+		t.Fatal("unmounted pack queued a republication")
+	}
+	if got := republish(packID); !slices.Equal(got, []uuid.UUID{scope.ScopeID}) {
+		t.Fatalf("republished scopes = %v, want %s", got, scope.ScopeID)
+	}
+	var triggers []string
+	var state string
+	if err := scope.Pool.QueryRow(t.Context(), `SELECT triggers,state FROM edge_system_republication_heads WHERE scope_id=$1`,
+		scope.ScopeID).Scan(&triggers, &state); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(triggers, edgepublish.SystemTriggerModuleEntitlement) || state != "pending" {
+		t.Fatalf("republication head = %v %s", triggers, state)
+	}
+}

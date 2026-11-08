@@ -42,7 +42,9 @@ paths:
         sites mounting a rule pack that needs it are republished without that pack. The licence, the lease, billing
         and the plugin's configuration are untouched. A plugin already stopped keeps its first stop (same answer).
         Installable plugins (themes, market rule packs, page plugins) are paused through their platform
-        installation record instead.
+        installation record instead. The feature code must be the one the market catalogue gives this plugin
+        (looked up through the market relay before anything is written): any other code is 422
+        feature_code_mismatch, an unreachable catalogue 502.
       x-required-any-permission: [plugin_installations.platform.manage, platform.admin]
       parameters:
         - {$ref: '#/components/parameters/PluginIDPath'}
@@ -62,7 +64,11 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/SwitchForbidden'}
         '409': {$ref: '#/components/responses/IdempotencyConflict'}
+        '422': {$ref: '#/components/responses/FeatureCodeMismatch'}
         '500': {$ref: '#/components/responses/Internal'}
+        '502':
+          description: 'The market catalogue could not be read (market_unavailable); nothing was written'
+          content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
   /v1/admin/market/plugin-library/{plugin_id}/enable:
     post:
       operationId: enableMarketPluginLocally
@@ -215,6 +221,9 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
     IdempotencyConflict:
       description: 'The Idempotency-Key was used with another request (idempotency_conflict)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    FeatureCodeMismatch:
+      description: 'The market catalogue does not give this plugin that feature code, or does not list it (feature_code_mismatch)'
       content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
     MarketError:
       description: 'Market error passed through (e.g. purchase_required, not_found)'

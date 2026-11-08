@@ -14,7 +14,9 @@ import (
 // A console opened with enable-gateway-access (or installed --mode control)
 // keeps its Gateway settings in systemd drop-ins, nftables units and a Redis
 // include directory. They must move with a migration, so the new host runs
-// with Gateway access without running enable-gateway-access again.
+// with Gateway access without running enable-gateway-access again. The same
+// holds for the control-api env drop-ins of converge-dns-runtime.py and
+// optional.env (their env files are under /etc/cdnca-control).
 func TestGatewayAccessFilesTravelWithConfigAndRuntime(t *testing.T) {
 	source := Layout{Root: t.TempDir()}
 	files := map[string]string{
@@ -24,7 +26,10 @@ func TestGatewayAccessFilesTravelWithConfigAndRuntime(t *testing.T) {
 		"etc/redis/cdnca-gateway/server.pem":                                      "pem",
 		"etc/redis/redis.conf":                                                    "port 6379\ninclude /etc/redis/cdnca-gateway/redis-gateway.conf\n",
 		"etc/systemd/system/cdnca-control-api.service.d/60-gateway-access.conf":   "[Service]\nEnvironmentFile=/etc/cdnca-control/gateway-access.env\n",
-		"etc/systemd/system/cdnca-control-api.service.d/50-dns-runtime.conf":      "[Service]\n",
+		"etc/cdnca-control/dns-runtime.env":                                       "DNS_RECONCILE_ENABLED=true\n",
+		"etc/systemd/system/cdnca-control-api.service.d/50-dns-runtime.conf":      "[Service]\nEnvironmentFile=/etc/cdnca-control/dns-runtime.env\n",
+		"etc/cdnca-control/optional.env":                                          "MARKET_RUNTIME_ENABLED=false\n",
+		"etc/systemd/system/cdnca-control-api.service.d/60-optional.conf":         "[Service]\nEnvironmentFile=/etc/cdnca-control/optional.env\n",
 		"etc/systemd/system/cdnca-agent-gateway.service.d/60-gateway-access.conf": "[Service]\nEnvironmentFile=/etc/cdnca-control/gateway-access-local.env\n",
 		"etc/systemd/system/cdnca-gateway-access.service":                         "[Unit]\n",
 		"etc/systemd/system/cdnca-gateway-access.path":                            "[Path]\n",
@@ -48,9 +53,9 @@ func TestGatewayAccessFilesTravelWithConfigAndRuntime(t *testing.T) {
 	for name, want := range files {
 		got, err := os.ReadFile(filepath.Join(target.Root, name))
 		switch name {
-		case "etc/redis/redis.conf", "etc/systemd/system/cdnca-control-api.service.d/50-dns-runtime.conf":
+		case "etc/redis/redis.conf":
 			// The distribution's Redis configuration belongs to the dependency
-			// installer on the target; the DNS drop-in is out of scope here.
+			// installer on the target.
 			if err == nil {
 				t.Errorf("%s must not be archived", name)
 			}

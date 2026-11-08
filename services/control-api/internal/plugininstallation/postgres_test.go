@@ -44,10 +44,10 @@ func TestProductionPluginInstallationDomainResolvesForwardAndKeepsProtectiveActi
 	repository.result = MutationResult{Installation: current.Installation, Receipt: Receipt{ID: uuid.New(),
 		TenantID: tenantID, AuthorizationID: authorizationID, Action: ActionDisable,
 		IdempotencyKey: "disable-1", RequestID: "request-1", FromRevision: 7, ToRevision: 8,
-		Result: ReceiptDisabled, Reason: "containment", Snapshot: current.Installation}}
+		Result: ReceiptDisabled, Snapshot: current.Installation}}
 	_, err = domain.Mutate(context.Background(), actor, MutationRequest{TenantID: tenantID,
 		AuthorizationID: authorizationID, Action: ActionDisable, ExpectedRevision: 7,
-		IdempotencyKey: "disable-1", RequestID: "request-1", Reason: "containment"})
+		IdempotencyKey: "disable-1", RequestID: "request-1"})
 	if err != nil || provider.resolveCalls != 1 || provider.reportCalls != 2 || repository.command.Action != ActionDisable || repository.verifier != nil {
 		t.Fatalf("protective mutation err=%v resolve=%d report=%d command=%+v", err,
 			provider.resolveCalls, provider.reportCalls, repository.command)

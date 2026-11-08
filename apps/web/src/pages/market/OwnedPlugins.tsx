@@ -11,7 +11,7 @@ import { useConfigPath, usePlatformInstallations } from './marketHooks'
 import { FeatureSwitch, InstallationSwitch } from './PluginSwitch'
 
 const stateColor: Record<OwnedState, string> = {
-  enabled: 'success', installed: 'success', activating: 'processing', enable: 'warning', distributing: 'processing',
+  enabled: 'success', installed: 'success', activating: 'processing', distributing: 'processing',
   pendingConfirm: 'gold', revoked: 'error', disabled: 'default', noVersion: 'default', awaitingSync: 'processing',
 }
 

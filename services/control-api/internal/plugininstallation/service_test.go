@@ -102,7 +102,7 @@ func TestServiceLifecycleConsentLKGProtectiveActionsAndReplay(t *testing.T) {
 	}
 
 	verificationCalls := verifier.calls
-	disable := protectiveCommand(upgraded.Installation, ActionDisable, "operator containment", "plugin-disable-1")
+	disable := protectiveCommand(upgraded.Installation, ActionDisable, "", "plugin-disable-1")
 	disabled, err := service.Apply(context.Background(), disable)
 	if err != nil || disabled.Installation.Status != StatusDisabled || disabled.Installation.Revision != 4 {
 		t.Fatalf("protective disable: result=%+v err=%v", disabled, err)
@@ -143,7 +143,7 @@ func TestServiceCrossTenantAndBindingFailClosed(t *testing.T) {
 		"version":      func(value *Command) { value.Candidate.Version = "1.2.1" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			candidate := protectiveCommand(installed.Installation, ActionDisable, "containment", "binding-"+name)
+			candidate := protectiveCommand(installed.Installation, ActionDisable, "", "binding-"+name)
 			mutate(&candidate)
 			if _, err := service.Apply(context.Background(), candidate); err == nil {
 				t.Fatal("binding mismatch accepted")

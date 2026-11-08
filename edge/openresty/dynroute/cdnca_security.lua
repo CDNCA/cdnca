@@ -361,8 +361,12 @@ end
 -- node's list has no ban of (cdnca_banlist.listed).
 local banlist
 
+-- A site it looked up is recorded (ngx.ctx.cdnca_banlist_checked = site
+-- id): the WAF gate of the same request does not look the client up again
+-- (it did, a second banned() per request of a listed WAF site).
 function _M.banlist(site)
-    if ngx.ctx.ccv2_banlist_checked then return end
+    local ctx = ngx.ctx
+    if ctx.ccv2_banlist_checked then return end
     if banlist == nil then
         local ok, module = pcall(require, "cdnca_banlist")
         banlist = ok and module or false
@@ -370,6 +374,7 @@ function _M.banlist(site)
     if not banlist or not banlist.listed(site.site_id) then return end
     local remaining = banlist.banned(site.site_id, ngx_var.remote_addr)
     if remaining then return banlist.deny(remaining, "cdnca_security_block_page") end
+    ctx.cdnca_banlist_checked = site.site_id
 end
 
 function _M.server_rewrite(site)

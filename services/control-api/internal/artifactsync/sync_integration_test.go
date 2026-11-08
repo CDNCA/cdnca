@@ -49,6 +49,13 @@ type recordingRepublisher struct {
 	packs     [][]string
 	crawlers  int
 	defaultOn [][]rulepackcontrol.DefaultOnScope
+	// marketPacks: the pack IDs of each market rule pack republication.
+	marketPacks [][]string
+}
+
+func (recorder *recordingRepublisher) RepublishMarketRulePackChangeTx(_ context.Context, _ pgx.Tx, packIDs []string) ([]uuid.UUID, error) {
+	recorder.marketPacks = append(recorder.marketPacks, slices.Clone(packIDs))
+	return nil, nil
 }
 
 func (recorder *recordingRepublisher) RepublishDefaultOnPackMountsTx(_ context.Context, _ pgx.Tx, _ uuid.UUID,

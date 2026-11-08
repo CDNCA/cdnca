@@ -178,8 +178,9 @@ describe('pluginInstallationsApi', () => {
     expect(confirm[1]?.headers).toMatchObject({ 'Idempotency-Key': 'plugin-install-confirm-1', 'If-Match': '"3"' })
     expect(new Headers(confirm[1]?.headers).get('X-Request-ID')).toBe('plugin-install-confirm-1')
 
-    await pluginInstallationsApi.disable('token', scopeID, authorizationID, 4, { reason: '不再使用' }, 'plugin-install-disable-1')
-    expect(fetchSpy.mock.calls[1]?.[1]?.body).toBe('{"reason":"不再使用"}')
+    // 暂停的请求体是空对象。
+    await pluginInstallationsApi.disable('token', scopeID, authorizationID, 4, 'plugin-install-disable-1')
+    expect(fetchSpy.mock.calls[1]?.[1]?.body).toBe('{}')
     expect(new Headers(fetchSpy.mock.calls[1]?.[1]?.headers).get('X-Request-ID')).toBe('plugin-install-disable-1')
   })
 

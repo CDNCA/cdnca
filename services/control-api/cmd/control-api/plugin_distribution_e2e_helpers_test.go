@@ -57,8 +57,10 @@ type licenseAuthorization struct {
 	Version  string `json:"version"`
 	Revision uint64 `json:"revision"`
 	Receipts []struct {
-		Action           string `json:"action"`
-		StableReasonCode string `json:"stable_reason_code"`
+		Action           string  `json:"action"`
+		StableReasonCode string  `json:"stable_reason_code"`
+		Reason           *string `json:"reason"`
+		ToRevision       uint64  `json:"to_revision"`
 	} `json:"transition_receipts"`
 }
 

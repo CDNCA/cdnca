@@ -120,7 +120,7 @@ func TestHandlerStrictMutationContractAndStableErrors(t *testing.T) {
 	assertHandlerError(t, conflictResponse, http.StatusConflict, "plugin_installation_idempotency_conflict")
 
 	domain.err = ErrResultUnknown
-	unknown := authenticatedHandlerRequest(http.MethodPost, path+"/disable", bytes.NewBufferString(`{"reason":"containment"}`))
+	unknown := authenticatedHandlerRequest(http.MethodPost, path+"/disable", bytes.NewBufferString(`{}`))
 	unknown.Header.Set("Content-Type", "application/json")
 	unknown.Header.Set("If-Match", `"7"`)
 	unknown.Header.Set("Idempotency-Key", "plugin-disable-unknown")
