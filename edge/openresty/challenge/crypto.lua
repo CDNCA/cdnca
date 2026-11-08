@@ -68,6 +68,18 @@ function _M.base64url_decode(value)
     return ngx.decode_base64(padded)
 end
 
+function _M.random_bytes(bytes, strong)
+    local value = random.bytes(bytes, strong)
+    if not value or #value ~= bytes then
+        return nil
+    end
+    return value
+end
+
+function _M.to_hex(value)
+    return resty_string.to_hex(value)
+end
+
 function _M.random_token(bytes)
     local value = random.bytes(bytes, true)
     if not value or #value ~= bytes then

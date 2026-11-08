@@ -22,7 +22,7 @@
 }
 
 .certificate-pem-pane .certificate-pem-text {
-  font-family: var(--cdnca-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   white-space: pre;
 }
@@ -33,7 +33,7 @@
   place-items: center;
   min-height: 160px;
   padding: 12px;
-  border: 1px dashed var(--cdnca-color-border, #d9d9d9);
+  border: 1px dashed var(--cdnca-color-border, #dcdee2);
   border-radius: 6px;
   color: var(--cdnca-color-text-secondary);
   text-align: center;

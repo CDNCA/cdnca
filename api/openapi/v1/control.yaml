@@ -306,6 +306,20 @@ paths:
     $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}~1resume'
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall:
     $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1tenant-scopes~1{tenant_scope_id}~1plugin-installations~1{authorization_id}~1uninstall'
+  /v1/platform/plugin-installations:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations'
+  /v1/platform/plugin-installations/{authorization_id}:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}'
+  /v1/platform/plugin-installations/{authorization_id}/confirm:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}~1confirm'
+  /v1/platform/plugin-installations/{authorization_id}/upgrade:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}~1upgrade'
+  /v1/platform/plugin-installations/{authorization_id}/disable:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}~1disable'
+  /v1/platform/plugin-installations/{authorization_id}/uninstall:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}~1uninstall'
+  /v1/platform/plugin-installations/{authorization_id}/targets:
+    $ref: '../../control-plugin-installations.openapi.yaml#/paths/~1v1~1platform~1plugin-installations~1{authorization_id}~1targets'
   /health/live:
     get:
       operationId: getLiveness

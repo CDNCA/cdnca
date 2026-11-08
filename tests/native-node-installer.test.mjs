@@ -49,7 +49,12 @@ const packagingData = [
   'packaging/tmpfiles/cdnca-edge-agent-root.conf', 'packaging/logrotate/cdnca-edge-agent',
   'packaging/config/agent.env', 'packaging/config/config.example.json', 'packaging/README.md',
 ]
-const agentSBOM = '{"spdxVersion":"SPDX-2.3"}\n'
+const packagingScriptBody = (path) => `#!/bin/sh\n# ${path}\n`
+// The release SBOM signs the packaged scripts (recipe.sh write_sbom).
+const agentSBOM = `${JSON.stringify({ spdxVersion: 'SPDX-2.3', files: packagingScripts.map((path) => ({
+  fileName: path, checksums: [{ algorithm: 'SHA256', checksumValue: hash(packagingScriptBody(path)) }],
+  annotations: [{ annotationType: 'OTHER', comment: `cdnca.packaging-script/v1 base64:${Buffer.from(packagingScriptBody(path)).toString('base64')}` }],
+})) })}\n`
 // Canonical manifest v2 for the fixture Agent and SBOM under a packaged key.
 const upgradeManifest = Buffer.from([
   'manifest_version=2', 'release_sequence=7', 'version=1.2.3', 'artifact_path=edge-agent',
@@ -95,7 +100,7 @@ function fixture(options = {}) {
     { path: 'runtime/bin/h3probe', body: probeElf, mode: 0o555 },
     { path: 'runtime/openresty/luajit/bin/luajit', body: elf, mode: 0o555 },
     { path: 'bin/cdnca-edge-agent-helper', body: helperElf, mode: 0o555 },
-    ...packagingScripts.map((path) => ({ path, body: `#!/bin/sh\n# ${path}\n`, mode: 0o555 })),
+    ...packagingScripts.map((path) => ({ path, body: packagingScriptBody(path), mode: 0o555 })),
     ...packagingData.map((path) => ({ path, body: `${path}\n`, mode: 0o444 })),
     { path: 'evidence/edge-agent.spdx.json', body: agentSBOM, mode: 0o444 },
     { path: 'upgrade/manifest', body: upgradeManifest, mode: 0o444 },

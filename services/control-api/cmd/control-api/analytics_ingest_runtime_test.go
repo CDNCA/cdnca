@@ -249,6 +249,9 @@ func TestAnalyticsIngestHealthTracksIndependentFailuresAndIgnoresLateCallbacks(t
 	}
 }
 
+// Close flushes and closes the NATS connection (no Drain):
+// the consumer's pull subscription is already gone, and Drain returned at once
+// and left the close to a background goroutine bounded only by DrainTimeout.
 func TestAnalyticsIngestRuntimeCloseOrdersResources(t *testing.T) {
 	var mu sync.Mutex
 	var operations []string
@@ -257,9 +260,10 @@ func TestAnalyticsIngestRuntimeCloseOrdersResources(t *testing.T) {
 		operations = append(operations, operation)
 		mu.Unlock()
 	}
+	connection := &orderedAnalyticsIngestConnection{connected: true, record: record}
 	runtime := &analyticsIngestProcessRuntime{
 		worker:     &orderedAnalyticsIngestWorker{close: func() error { record("consumer"); return nil }},
-		connection: &orderedAnalyticsIngestConnection{drain: func() error { record("nats"); return nil }},
+		connection: connection,
 		closeHTTP:  func() { record("http") }, health: newAnalyticsIngestHealth(true), shutdownTimeout: time.Second,
 	}
 	if err := runtime.Close(); err != nil {
@@ -271,67 +275,13 @@ func TestAnalyticsIngestRuntimeCloseOrdersResources(t *testing.T) {
 	mu.Lock()
 	got := strings.Join(operations, ",")
 	mu.Unlock()
-	if got != "consumer,nats,http" || runtime.Health().State != "stopped" {
-		t.Fatalf("shutdown operations=%q health=%#v", got, runtime.Health())
+	if got != "consumer,flush,close,http" || !connection.IsClosed() || runtime.Health().State != "stopped" {
+		t.Fatalf("shutdown operations=%q closed=%t health=%#v", got, connection.IsClosed(), runtime.Health())
 	}
 }
 
-func TestAnalyticsIngestRuntimeCloseWaitsForAsyncNATSClosed(t *testing.T) {
-	connection := newAsyncDrainAnalyticsIngestConnection()
-	runtime := &analyticsIngestProcessRuntime{
-		worker: &orderedAnalyticsIngestWorker{}, connection: connection,
-		health: newAnalyticsIngestHealth(true), shutdownTimeout: time.Second,
-	}
-	done := make(chan error, 1)
-	go func() { done <- runtime.Close() }()
-	select {
-	case <-connection.drainReturned:
-	case <-time.After(time.Second):
-		t.Fatal("NATS Drain was not called")
-	}
-	select {
-	case err := <-done:
-		t.Fatalf("Close returned before NATS reached CLOSED: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
-	if state := runtime.Health().State; state == "stopped" {
-		t.Fatalf("health reached stopped before NATS CLOSED: %#v", runtime.Health())
-	}
-	connection.closed.Store(true)
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("Close did not observe that NATS reached CLOSED")
-	}
-	if connection.closeCalls.Load() != 0 || runtime.Health().State != "stopped" {
-		t.Fatalf("async drain closeCalls=%d health=%#v", connection.closeCalls.Load(), runtime.Health())
-	}
-}
-
-func TestAnalyticsIngestRuntimeCloseBoundsAsyncNATSDrain(t *testing.T) {
-	connection := newAsyncDrainAnalyticsIngestConnection()
-	const shutdownTimeout = 20 * time.Millisecond
-	runtime := &analyticsIngestProcessRuntime{
-		worker: &orderedAnalyticsIngestWorker{}, connection: connection,
-		health: newAnalyticsIngestHealth(true), shutdownTimeout: shutdownTimeout,
-	}
-	started := time.Now()
-	err := runtime.Close()
-	if elapsed := time.Since(started); elapsed < shutdownTimeout {
-		t.Fatalf("Close returned before shutdown timeout: %s", elapsed)
-	}
-	if err == nil || err.Error() != "analytics ingest NATS drain timed out" || connection.closeCalls.Load() != 1 ||
-		!connection.IsClosed() || runtime.Health().State != "stopped" {
-		t.Fatalf("bounded Close() error=%v closeCalls=%d closed=%t health=%#v",
-			err, connection.closeCalls.Load(), connection.IsClosed(), runtime.Health())
-	}
-}
-
-func TestAnalyticsIngestRuntimeCloseContextUsesCallerDeadline(t *testing.T) {
-	connection := newAsyncDrainAnalyticsIngestConnection()
+func TestAnalyticsIngestRuntimeCloseBoundsFlushByCallerDeadline(t *testing.T) {
+	connection := &orderedAnalyticsIngestConnection{connected: true, blockFlush: true}
 	runtime := &analyticsIngestProcessRuntime{
 		worker: &orderedAnalyticsIngestWorker{}, connection: connection,
 		health: newAnalyticsIngestHealth(true), shutdownTimeout: time.Second,
@@ -340,14 +290,24 @@ func TestAnalyticsIngestRuntimeCloseContextUsesCallerDeadline(t *testing.T) {
 	defer cancel()
 	started := time.Now()
 	err := runtime.CloseContext(ctx)
-	elapsed := time.Since(started)
-	if elapsed < 10*time.Millisecond || elapsed > 250*time.Millisecond {
-		t.Fatalf("CloseContext elapsed %s, want caller deadline rather than runtime timeout", elapsed)
+	if elapsed := time.Since(started); elapsed < 10*time.Millisecond || elapsed > 250*time.Millisecond {
+		t.Fatalf("CloseContext elapsed %s, want the caller deadline", elapsed)
 	}
-	if err == nil || err.Error() != "analytics ingest NATS drain timed out" || connection.closeCalls.Load() != 1 ||
-		!connection.IsClosed() || runtime.Health().State != "stopped" {
-		t.Fatalf("CloseContext error=%v closeCalls=%d closed=%t health=%#v",
-			err, connection.closeCalls.Load(), connection.IsClosed(), runtime.Health())
+	if err == nil || err.Error() != "flush analytics ingest NATS connection" || !connection.IsClosed() ||
+		runtime.Health().State != "stopped" {
+		t.Fatalf("CloseContext error=%v closed=%t health=%#v", err, connection.IsClosed(), runtime.Health())
+	}
+}
+
+func TestAnalyticsIngestRuntimeCloseSkipsFlushWhenDisconnected(t *testing.T) {
+	var operations []string
+	connection := &orderedAnalyticsIngestConnection{record: func(operation string) { operations = append(operations, operation) }}
+	runtime := &analyticsIngestProcessRuntime{
+		worker: &orderedAnalyticsIngestWorker{}, connection: connection,
+		health: newAnalyticsIngestHealth(true), shutdownTimeout: time.Second,
+	}
+	if err := runtime.Close(); err != nil || strings.Join(operations, ",") != "close" || runtime.Health().State != "stopped" {
+		t.Fatalf("disconnected Close error=%v operations=%v health=%#v", err, operations, runtime.Health())
 	}
 }
 
@@ -452,97 +412,33 @@ func (worker *orderedAnalyticsIngestWorker) Close() error {
 }
 
 type orderedAnalyticsIngestConnection struct {
-	drain  func() error
-	close  func()
-	closed atomic.Bool
-	status chan nats.Status
+	connected  bool
+	blockFlush bool
+	record     func(string)
+	closed     atomic.Bool
 }
 
-func (connection *orderedAnalyticsIngestConnection) Drain() error {
-	err := connection.drain()
-	if err == nil {
-		connection.closed.Store(true)
-		if connection.status != nil {
-			connection.status <- nats.CLOSED
-		}
+func (connection *orderedAnalyticsIngestConnection) note(operation string) {
+	if connection.record != nil {
+		connection.record(operation)
 	}
-	return err
+}
+func (connection *orderedAnalyticsIngestConnection) IsConnected() bool {
+	return connection.connected && !connection.closed.Load()
+}
+func (connection *orderedAnalyticsIngestConnection) FlushWithContext(ctx context.Context) error {
+	connection.note("flush")
+	if connection.blockFlush {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return nil
 }
 func (connection *orderedAnalyticsIngestConnection) Close() {
-	if connection.close != nil {
-		connection.close()
-	}
+	connection.note("close")
 	connection.closed.Store(true)
 }
 func (connection *orderedAnalyticsIngestConnection) IsClosed() bool { return connection.closed.Load() }
-func (connection *orderedAnalyticsIngestConnection) StatusChanged(...nats.Status) chan nats.Status {
-	connection.status = make(chan nats.Status, 1)
-	return connection.status
-}
-func (*orderedAnalyticsIngestConnection) RemoveStatusListener(chan nats.Status) {}
-
-type asyncDrainAnalyticsIngestConnection struct {
-	mu            sync.Mutex
-	listeners     map[chan nats.Status]struct{}
-	drainReturned chan struct{}
-	drainOnce     sync.Once
-	closed        atomic.Bool
-	closeCalls    atomic.Int32
-}
-
-func newAsyncDrainAnalyticsIngestConnection() *asyncDrainAnalyticsIngestConnection {
-	return &asyncDrainAnalyticsIngestConnection{
-		listeners: make(map[chan nats.Status]struct{}), drainReturned: make(chan struct{}),
-	}
-}
-
-func (connection *asyncDrainAnalyticsIngestConnection) Drain() error {
-	connection.drainOnce.Do(func() { close(connection.drainReturned) })
-	return nil
-}
-
-func (connection *asyncDrainAnalyticsIngestConnection) Close() {
-	connection.closeCalls.Add(1)
-	connection.signalClosed()
-}
-
-func (connection *asyncDrainAnalyticsIngestConnection) IsClosed() bool {
-	return connection.closed.Load()
-}
-
-func (connection *asyncDrainAnalyticsIngestConnection) StatusChanged(...nats.Status) chan nats.Status {
-	listener := make(chan nats.Status, 1)
-	connection.mu.Lock()
-	connection.listeners[listener] = struct{}{}
-	closed := connection.closed.Load()
-	connection.mu.Unlock()
-	if closed {
-		listener <- nats.CLOSED
-	}
-	return listener
-}
-
-func (connection *asyncDrainAnalyticsIngestConnection) RemoveStatusListener(listener chan nats.Status) {
-	connection.mu.Lock()
-	delete(connection.listeners, listener)
-	connection.mu.Unlock()
-}
-
-func (connection *asyncDrainAnalyticsIngestConnection) signalClosed() {
-	connection.closed.Store(true)
-	connection.mu.Lock()
-	listeners := make([]chan nats.Status, 0, len(connection.listeners))
-	for listener := range connection.listeners {
-		listeners = append(listeners, listener)
-	}
-	connection.mu.Unlock()
-	for _, listener := range listeners {
-		select {
-		case listener <- nats.CLOSED:
-		default:
-		}
-	}
-}
 
 func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool) {
 	t.Helper()

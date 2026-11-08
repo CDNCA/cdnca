@@ -8,9 +8,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/cloudflare/circl/hpke"
@@ -23,6 +27,8 @@ type redeliverySourceStub struct {
 	generator string
 	snapshot  PublicationSnapshot
 	err       error
+	// unsupported is the node's capability refusal (RedeliveryFacts.Unsupported).
+	unsupported error
 }
 
 func (stub *redeliverySourceStub) LoadRedeliveryFactsTx(_ context.Context, _ pgx.Tx, item edgepublish.ChallengeRedelivery,
@@ -33,7 +39,8 @@ func (stub *redeliverySourceStub) LoadRedeliveryFactsTx(_ context.Context, _ pgx
 	snapshot := stub.snapshot
 	snapshot.PolicyID, snapshot.TenantScopeID, snapshot.SiteID, snapshot.Revision =
 		item.PolicyID, item.ScopeID, item.SiteID, item.PolicyVersion
-	return RedeliveryFacts{OriginSnapshot: bytes.Clone(stub.origin), OriginGenerator: stub.generator, Policy: snapshot}, nil
+	return RedeliveryFacts{OriginSnapshot: bytes.Clone(stub.origin), OriginGenerator: stub.generator, Policy: snapshot,
+		Unsupported: stub.unsupported}, nil
 }
 
 type redeliveryStoreStub struct {
@@ -164,5 +171,73 @@ func TestChallengeSecretRedeliveryRefusesWhatItCannotRebuild(t *testing.T) {
 	if _, err := redeliverer.RedeliverChallengeSecretTx(t.Context(), nil, item); err == nil ||
 		errors.Is(err, edgepublish.ErrChallengeRedeliveryUnrecoverable) {
 		t.Fatalf("store failure: %v", err)
+	}
+}
+
+// A policy with an explicit difficulty is redelivered
+// requiring CHALLENGE_POW; a node that does not declare it gets no rollout
+// and the redelivery fails at once (it starts over on the node's next session).
+func TestChallengeSecretRedeliveryGatesExplicitDifficultyOnChallengePoW(t *testing.T) {
+	withDifficulty := func(t *testing.T) (*ChallengeSecretRedeliverer, *redeliverySourceStub, *redeliveryStoreStub,
+		edgepublish.ChallengeRedelivery) {
+		redeliverer, source, store, keys, item := redeliveryFixture(t)
+		difficulty := 20
+		source.snapshot.PowDifficulty = &difficulty
+		snapshot := source.snapshot
+		snapshot.PolicyID, snapshot.TenantScopeID, snapshot.SiteID, snapshot.Revision =
+			item.PolicyID, item.ScopeID, item.SiteID, item.PolicyVersion
+		origin, err := PolicyDocument(snapshot, keys.keys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source.origin = origin
+		return redeliverer, source, store, item
+	}
+	redeliverer, _, store, item := withDifficulty(t)
+	if _, err := redeliverer.RedeliverChallengeSecretTx(t.Context(), nil, item); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.request.RequiredCapabilities; len(got) != 3 ||
+		got[2].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW || got[2].GetApiVersion() != 1 {
+		t.Fatalf("required capabilities = %v", got)
+	}
+
+	redeliverer, source, store, item := withDifficulty(t)
+	source.unsupported = &edgepublish.TargetCapabilityError{NodeID: item.NodeID,
+		Capability: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW, Required: 1}
+	_, err := redeliverer.RedeliverChallengeSecretTx(t.Context(), nil, item)
+	if !errors.Is(err, edgepublish.ErrChallengeRedeliveryUnrecoverable) || store.calls != 0 ||
+		!strings.Contains(err.Error(), "CAPABILITY_NAME_CHALLENGE_POW") || len(err.Error()) > 256 {
+		t.Fatalf("unsupported node: err=%v store calls=%d", err, store.calls)
+	}
+}
+
+func TestRequiredCapabilitiesAddChallengePoWOnlyForAnExplicitDifficulty(t *testing.T) {
+	if got := RequiredCapabilities(false); len(got) != 2 ||
+		got[0].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_ATOMIC_RELEASE ||
+		got[1].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_CONFIG_PRECHECK {
+		t.Fatalf("default difficulty: %v", got)
+	}
+	got := RequiredCapabilities(true)
+	if len(got) != 3 || got[2].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW || got[2].GetApiVersion() != 1 {
+		t.Fatalf("explicit difficulty: %v", got)
+	}
+}
+
+func TestSplitCapabilityRefusalSeparatesTheNodesItNames(t *testing.T) {
+	a, b, c := uuid.New(), uuid.New(), uuid.New()
+	nodes := []uuid.UUID{a, b, c}
+	capable, unsupported, err := SplitCapabilityRefusal(nodes, nil)
+	if err != nil || !slices.Equal(capable, nodes) || unsupported != nil {
+		t.Fatalf("no refusal: %v %v %v", capable, unsupported, err)
+	}
+	refusal := fmt.Errorf("wrapped: %w", &edgepublish.TargetCapabilityError{NodeID: c, OtherNodeIDs: []uuid.UUID{a},
+		Capability: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW, Required: 1})
+	capable, unsupported, err = SplitCapabilityRefusal(nodes, refusal)
+	if err != nil || !slices.Equal(capable, []uuid.UUID{b}) || !slices.Equal(unsupported, []uuid.UUID{a, c}) {
+		t.Fatalf("refusal: %v %v %v", capable, unsupported, err)
+	}
+	if _, _, err := SplitCapabilityRefusal(nodes, edgepublish.ErrPersistence); !errors.Is(err, edgepublish.ErrPersistence) {
+		t.Fatalf("other error: %v", err)
 	}
 }

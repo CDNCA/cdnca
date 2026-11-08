@@ -14,8 +14,9 @@ import (
 )
 
 type analyticsConnectionsProcessRuntime struct {
-	core       *analyticsconnections.Runtime
-	connection *nats.Conn
+	core         *analyticsconnections.Runtime
+	connection   *nats.Conn
+	flushTimeout time.Duration
 }
 
 const (
@@ -86,7 +87,7 @@ func openAnalyticsConnectionsRuntime(
 		return nil, err
 	}
 	failed = false
-	return &analyticsConnectionsProcessRuntime{core: core, connection: connection}, nil
+	return &analyticsConnectionsProcessRuntime{core: core, connection: connection, flushTimeout: runtimeConfig.OperationTimeout}, nil
 }
 
 func analyticsConnectionsNATSOptions(config analyticsconnections.RuntimeConfig) ([]nats.Option, error) {
@@ -254,8 +255,8 @@ func (runtime *analyticsConnectionsProcessRuntime) Close() error {
 		_ = runtime.core.Close()
 	}
 	if runtime.connection != nil {
-		runtime.connection.Drain()
-		runtime.connection.Close()
+		// Drain then Close cut the drain off at once; see closeNATSAfterFlush.
+		return closeNATSAfterFlush(runtime.connection, runtime.flushTimeout, "analytics connections")
 	}
 	return nil
 }

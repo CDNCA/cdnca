@@ -18,6 +18,13 @@ const (
 	maxCursorBytes = 1024
 )
 
+// Browser proof-of-work difficulty bounds shared with the edge agent and engine
+// (an unset difficulty means the engine default 18).
+const (
+	MinPoWDifficulty = 12
+	MaxPoWDifficulty = 24
+)
+
 var metadataPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 var keyReferencePattern = regexp.MustCompile(`^(keyref|vault|kms):[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$`)
 var appReferencePattern = regexp.MustCompile(`^appref:[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$`)
@@ -73,6 +80,10 @@ func normalizeConfig(config *Config) error {
 		return ErrValidation
 	}
 	if config.Mode == ModeDelay && config.ExternalProvider != nil {
+		return ErrValidation
+	}
+	if config.PowDifficulty != nil && (config.Mode == ModeExternal ||
+		*config.PowDifficulty < MinPoWDifficulty || *config.PowDifficulty > MaxPoWDifficulty) {
 		return ErrValidation
 	}
 	if config.ChallengeTTLSeconds <= config.MinDelaySeconds+config.ClockSkewSeconds ||

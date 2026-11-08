@@ -89,6 +89,8 @@ type Config struct {
 	BypassRoutes         []BypassRoute              `json:"bypass_routes"`
 	KeyReference         string                     `json:"key_reference"`
 	ExternalProvider     *ExternalProviderReference `json:"external_provider"`
+	// PowDifficulty nil means the node engine default 18.
+	PowDifficulty *int `json:"pow_difficulty,omitempty"`
 }
 
 type Policy struct {
@@ -108,6 +110,7 @@ type Policy struct {
 	IPBinding                  string        `json:"ip_binding"`
 	BindUserAgent              bool          `json:"bind_user_agent"`
 	BypassRoutes               []BypassRoute `json:"bypass_routes"`
+	PowDifficulty              *int          `json:"pow_difficulty,omitempty"`
 	KeyReferenceConfigured     bool          `json:"key_reference_configured"`
 	ExternalProviderConfigured bool          `json:"external_provider_configured"`
 	Enabled                    bool          `json:"enabled"`

@@ -26,6 +26,8 @@
 //     engine blocks; log only: both pass and each records its own hits);
 //   - bench:   request cost of no policy / all CRS sets PL1 / PL2 / PL3
 //     (one worker, 8 keep-alive clients in the same container);
+//   - scrape:  a page reader that never runs the page script and solves the
+//     proof of work itself fails every interactive mode (scrape.go).
 //   - serve:   serve the node until killed (headless browser run).
 package main
 
@@ -69,13 +71,18 @@ var (
 	modSecurity = flag.String("modsecurity", "/usr/local/openresty/modsecurity", "engine extension directory")
 	state       = flag.String("state", "/tmp/cc", "state directory")
 	workers     = flag.Int("workers", 1, "worker_processes")
-	only        = flag.String("only", "", "comma separated parts: cc,modes,params,rate,agg,engines,bench,serve")
+	only        = flag.String("only", "", "comma separated parts: cc,modes,scrape,params,rate,agg,engines,bench,serve")
 	benchN      = flag.Int("bench-requests", 4000, "bench requests per round")
 	benchC      = flag.Int("bench-concurrency", 8, "bench concurrent keep-alive connections")
 	benchRounds = flag.Int("bench-rounds", 3, "bench measured rounds (median)")
 	replay      = flag.String("replay", "", "cookie file: send it with -replay-ua to cc /article?id=7 from 127.0.0.1, print the status, exit")
 	replayUA    = flag.String("replay-ua", "", "User-Agent file of -replay")
+	scrapeWant  = flag.String("scrape-expect", "blocked", "scrape part: blocked (a page reader must fail) or bypass (it passes: the pre-fix proof)")
 )
+
+// answerPort serves the test-only answer of a pending challenge token (a
+// person reads it off the picture): GET /answer?token=<32 hex>.
+const answerPort = 18099
 
 const (
 	edge   = 8080 // the release's listener port
@@ -222,6 +229,27 @@ func startNode() error {
 		return err
 	}
 	conf = []byte(strings.Replace(string(conf), "worker_processes auto;\n", "worker_processes "+strconv.Itoa(*workers)+";\n", 1))
+	// Test only: the http block's last brace gets the answer server (the
+	// container is --network none, or published on the host's loopback).
+	end := strings.LastIndex(string(conf), "}")
+	conf = []byte(string(conf[:end]) + fmt.Sprintf(`  server {
+    listen %d;
+    location = /answer {
+      content_by_lua_block {
+        local token = ngx.var.arg_token or ""
+        local dict = ngx.shared.%s
+        for _, key in ipairs(dict:get_keys(0)) do
+          if key:sub(-#token - 6) == "nonce:" .. token then
+            local state = require("cjson.safe").decode(dict:get(key))
+            ngx.say(state and state.answer or "")
+            return
+          end
+        end
+        ngx.exit(404)
+      }
+    }
+  }
+`, answerPort, edgeskeleton.CCStateDictionary) + string(conf[end:]))
 	if err := os.WriteFile(filepath.Join(*state, "nginx.conf"), conf, 0o644); err != nil {
 		return err
 	}
@@ -649,6 +677,17 @@ func answerFor(mode, page string) string {
 	return ""
 }
 
+// testAnswer is the pending token's answer from the test-only endpoint.
+func testAnswer(page string) string {
+	result, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/answer?token=%s", answerPort, token(page)))
+	if err != nil {
+		return ""
+	}
+	defer result.Body.Close()
+	content, _ := io.ReadAll(result.Body)
+	return strings.TrimSpace(string(content))
+}
+
 func solve(id, name, want string) {
 	H := host(name)
 	visitor := newClient("127.0.0.1")
@@ -657,20 +696,31 @@ func solve(id, name, want string) {
 	mode := first.header.Get("X-Cdnca-Challenge")
 	check(id+"-nopow", 403, verify(newClient("127.0.0.1"), H, "token="+token(first.body)+"&answer=x").status, "不做工作量证明直接提交被拒绝")
 	page := visitor.get(H, "/p?x=1").body
-	body := "token=" + token(page) + "&answer=" + answerFor(mode, page) + "&pow=" + pagePoW(page)
+	answer := answerFor(mode, page)
+	if mode == "click" || mode == "rotate" || mode == "slider" || mode == "captcha" {
+		answer = testAnswer(page) // what a person reads off the picture
+	}
+	body := "token=" + token(page) + "&answer=" + answer + "&pow=" + pagePoW(page)
 	time.Sleep(600 * time.Millisecond)
 	result := verify(visitor, H, body)
-	if mode == "captcha" {
-		check(id+"-wrong", 403, result.status, "验证码答错被拒绝（字符只在 SVG 点阵里，脚本无法直接读出）")
-		return
-	}
 	check(id+"-verify", 303, result.status, "按页面要求作答后通过")
 	check(id+"-pass", 200, visitor.code(H, "/p?x=1"), "通过后放行")
+	if mode == "captcha" || mode == "click" {
+		c := newClient("127.0.0.41")
+		page := c.get(H, "/p?x=1").body
+		wrong := "WRONG"
+		if mode == "click" {
+			right, _ := strconv.Atoi(testAnswer(page))
+			wrong = strconv.Itoa(right%4 + 1)
+		}
+		time.Sleep(600 * time.Millisecond)
+		check(id+"-wrong", 403, verify(c, H, "token="+token(page)+"&answer="+wrong+"&pow="+pagePoW(page)).status, "答错被拒绝")
+	}
 	if mode == "slider" || mode == "rotate" {
 		// a wrong position is refused (tolerance 4 / 12)
 		c := newClient("127.0.0.40")
 		page := c.get(H, "/p?x=1").body
-		right, _ := strconv.Atoi(answerFor(mode, page))
+		right, _ := strconv.Atoi(testAnswer(page))
 		wrong := strconv.Itoa((right + 40) % 100)
 		if mode == "rotate" {
 			wrong = strconv.Itoa((right + 90) % 360)
@@ -1018,7 +1068,7 @@ func main() {
 	for _, part := range []struct {
 		name string
 		run  func()
-	}{{"cc", ccRun}, {"modes", modesRun}, {"params", paramsRun}, {"rate", rateRun}, {"agg", aggRun}, {"engines", enginesRun}, {"bench", benchRun}} {
+	}{{"cc", ccRun}, {"modes", modesRun}, {"scrape", scrapeRun}, {"params", paramsRun}, {"rate", rateRun}, {"agg", aggRun}, {"engines", enginesRun}, {"bench", benchRun}} {
 		if all && part.name == "bench" {
 			continue // explicit only: it measures, it does not check
 		}

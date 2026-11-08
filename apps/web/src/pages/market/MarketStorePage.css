@@ -31,22 +31,22 @@
 /* 可用插件的状态位直接去配置页，样式同标签、可点 */
 .market-store-goto { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid; border-radius: 4px; font-size: 12px; line-height: 20px;
   transition: transform 0.15s ease, box-shadow 0.15s ease; }
-.market-store-goto:hover { transform: translateY(-1px); box-shadow: 0 2px 6px var(--cdnca-color-shadow-soft, rgba(0, 0, 0, 0.08)); }
+.market-store-goto:hover { transform: translateY(-1px); box-shadow: 0 2px 6px color-mix(in srgb, var(--cdnca-color-neutral80, #000000) 8%, transparent); }
 .market-store-goto:active { transform: scale(0.97); }
 /* 原先读 --ant-color-success（未定义）回退到 --cdnca-color-green6，主题里那是 #edfbf3，和背景几乎同色，
    详情抽屉里只有悬停（链接变蓝）才看得见。改用共享成功色加深到正文对比度（约 5:1），悬停不换色；卡片与抽屉同一条规则。 */
 .market-store-goto.market-store-goto--ready,
 .market-store-goto.market-store-goto--ready:hover {
-  color: color-mix(in srgb, var(--cdnca-color-success) 65%, #000);
-  border-color: color-mix(in srgb, var(--cdnca-color-success) 45%, #fff);
+  color: color-mix(in srgb, var(--cdnca-color-success) 65%, var(--cdnca-color-neutral80, #000000));
+  border-color: color-mix(in srgb, var(--cdnca-color-success) 45%, var(--cdnca-color-bg-container, #ffffff));
   background: var(--cdnca-color-success-bg);
 }
 .market-store-goto.market-store-goto--unconfigured,
 .market-store-goto.market-store-goto--unconfigured:hover,
 .market-store-goto.market-store-goto--off,
 .market-store-goto.market-store-goto--off:hover {
-  color: color-mix(in srgb, var(--cdnca-color-warning) 55%, #000);
-  border-color: color-mix(in srgb, var(--cdnca-color-warning) 45%, #fff);
+  color: color-mix(in srgb, var(--cdnca-color-warning) 55%, var(--cdnca-color-neutral80, #000000));
+  border-color: color-mix(in srgb, var(--cdnca-color-warning) 45%, var(--cdnca-color-bg-container, #ffffff));
   background: var(--cdnca-color-warning-bg);
 }
 .market-store-details { padding-inline: 4px; height: auto; }

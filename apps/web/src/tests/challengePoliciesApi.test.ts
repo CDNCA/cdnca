@@ -288,6 +288,48 @@ describe('challengePoliciesApi', () => {
     }, 'create-key')).rejects.toMatchObject({ status: 502, code: 'invalid_response' })
   })
 
+  it('parses the optional proof-of-work difficulty and binds it to the submitted configuration', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch')
+    for (const value of [12, 24]) {
+      fetcher.mockResolvedValueOnce(json({ items: [{ ...policy, pow_difficulty: value }] }))
+      await expect(challengePoliciesApi.list('token', scopeID, { limit: 20 }))
+        .resolves.toMatchObject({ items: [{ pow_difficulty: value }] })
+    }
+    for (const invalid of [
+      { ...policy, pow_difficulty: 11 },
+      { ...policy, pow_difficulty: 25 },
+      { ...policy, pow_difficulty: 18.5 },
+      { ...policy, pow_difficulty: '18' },
+      { ...policy, pow_difficulty: null },
+      { ...policy, mode: 'external', external_provider_configured: true, pow_difficulty: 18 },
+    ]) {
+      fetcher.mockResolvedValueOnce(json({ items: [invalid] }))
+      await expect(challengePoliciesApi.list('token', scopeID, { limit: 20 }))
+        .rejects.toMatchObject({ status: 502, code: 'invalid_response' })
+    }
+
+    const created = { ...policy, revision: 1 }
+    const powConfig: ChallengePolicyConfig = { ...config, pow_difficulty: 20 }
+    fetcher.mockResolvedValueOnce(json({ ...created, pow_difficulty: 20 }, 201))
+    await expect(challengePoliciesApi.create('token', scopeID, {
+      site_id: siteID, host: policy.host, enabled: true, config: powConfig,
+    }, 'pow-create')).resolves.toMatchObject({ pow_difficulty: 20 })
+    expect(JSON.parse(String(fetcher.mock.calls.at(-1)?.[1]?.body)).config.pow_difficulty).toBe(20)
+    for (const mismatch of [created, { ...created, pow_difficulty: 21 }]) {
+      fetcher.mockResolvedValueOnce(json(mismatch, 201))
+      await expect(challengePoliciesApi.create('token', scopeID, {
+        site_id: siteID, host: policy.host, enabled: true, config: powConfig,
+      }, 'pow-create-mismatch')).rejects.toMatchObject({ status: 502, code: 'invalid_response' })
+    }
+    fetcher.mockResolvedValueOnce(json({ ...policy, pow_difficulty: 20, revision: 4 }))
+    await expect(challengePoliciesApi.update('token', scopeID, policyID, 3, config, true, 'pow-default'))
+      .rejects.toMatchObject({ status: 502, code: 'invalid_response' })
+    fetcher.mockResolvedValueOnce(json({ ...policy, revision: 4 }))
+    await expect(challengePoliciesApi.update('token', scopeID, policyID, 3, config, true, 'pow-default'))
+      .resolves.not.toHaveProperty('pow_difficulty')
+    expect(JSON.parse(String(fetcher.mock.calls.at(-1)?.[1]?.body)).config).not.toHaveProperty('pow_difficulty')
+  })
+
   it('supports every frozen challenge mode while keeping provider references write-only', async () => {
     const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
       const body = JSON.parse(String(init?.body)) as { config: ChallengePolicyConfig }

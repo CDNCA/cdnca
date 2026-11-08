@@ -46,7 +46,7 @@ describe('开放接口目录', () => {
     for (const o of c.groups.flatMap((g) => g.operations)) {
       expect(o.summary_zh, `${o.method} ${o.path}`).toMatch(/[一-鿿]/)
       // 只允许夹带代码标识符：去掉带 ._:=/<> 的标识符与大写开头的专名后，剩下的小写词只能是接口取值。
-      const values = new Set(['null', 'confirm', 'follow', 'user', 'release', 'bot', 'cc', 'scan', 'waf', 'scrypt', 'protect', 'repair', 'cleanup', 'disabled', 'active', 'resume'])
+      const values = new Set(['null', 'confirm', 'follow', 'user', 'release', 'bot', 'cc', 'scan', 'waf', 'scrypt', 'protect', 'repair', 'cleanup', 'disabled', 'active', 'resume', 'packages'])
       const rest = o.summary_zh!.replace(/[\w.-]*[._:=/<>][\w.<>-]*|\b[A-Z][\w-]*/g, '').match(/[a-z]{2,}/g) ?? []
       expect(rest.filter((w) => !values.has(w)), `${o.method} ${o.path}: ${o.summary_zh}`).toEqual([])
     }

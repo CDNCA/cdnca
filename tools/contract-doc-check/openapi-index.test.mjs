@@ -515,8 +515,9 @@ test("current YAML and external refs include all required operations", async () 
 	// 封禁名单 /v1[/admin]/security-bans 6 条；拨测插件用途、矩阵、覆盖、排障与插件拨测接口 12 条。
 	// 插件本机停用 / 重新启用 2 条（POST /v1/admin/market/plugin-library/{plugin_id}/disable|enable）。
 	// 插件安装恢复（平台与租户 resume）2 条：契约补上已实现的路由。
-	assert.equal(result.operations.length, 911);
-	assert.equal(result.distinctTupleCount, 885);
+	// 平台插件安装另 7 条（列表/详情/confirm/upgrade/disable/uninstall/targets）原只在子文件，汇总补引用。
+	assert.equal(result.operations.length, 918);
+	assert.equal(result.distinctTupleCount, 892);
 	assert.equal(result.overlaps.length, 26);
 	assert.equal(result.overlaps.length, 26);
   const operationIDs = new Set(result.operations.map(({operationId}) => operationId));
@@ -527,6 +528,9 @@ test("current YAML and external refs include all required operations", async () 
     'listAdminSiteGroups', 'getSiteGroup',     'reportInstallationEndpoints', 'getInstallationEndpoints',
     'archiveGlobalAnnouncement', 'restoreGlobalAnnouncement',
     'listL2Configs', 'createL2Config', 'getL2Config', 'updateL2Config', 'deleteL2Config',
+    'listPlatformPluginInstallations', 'getPlatformPluginInstallation', 'confirmPlatformPluginInstallation',
+    'upgradePlatformPluginInstallation', 'disablePlatformPluginInstallation', 'uninstallPlatformPluginInstallation',
+    'updatePlatformPluginInstallationTargets',
     'listL2Conditions', 'createL2Condition', 'updateL2Condition', 'deleteL2Condition',
     'listL2Nodes', 'addL2Nodes', 'updateL2Node', 'deleteL2Node',
     'registerNode', 'getNodeRegistrationCredential', 'resetNodeRegistrationCredential',

@@ -41,6 +41,7 @@ Feature plugins take effect once paid or claimed. Themes, rule packs, UI page pl
 A WAF rule library (platform and tenant rules), CC rule sets counting by client IP, network, domain, URI, JA4, UA, Referer, header or query parameter, JS challenges, quick block, JA4 blocking and access control; CC auto-switching moves to a stricter rule group during traffic spikes.
 
 - Where: admin console, Sites → WAF rules / CC rules / Rule packs, and the CC protection, WAF protection and Automatic defense tabs of a site.
+- Browser challenges (JS challenge and CC verification): the built-in delayed, click, slider and CAPTCHA modes all require the browser to run JavaScript and complete a proof of work; the node draws the click, slider and CAPTCHA images itself and never puts the answer in the page. Scripts that only read the page without running JavaScript cannot pass; real browser automation (headless browsers) can, so use external verification when you need more. Slider and CAPTCHA pages offer "Use wait verification instead" for screen reader users. The proof-of-work difficulty can be set per challenge policy from 12 to 24 (default 18, worst case about 0.4 s on a low-end phone); an explicit difficulty is sent only to nodes that support it.
 - Official rule packs (OWASP CRS levels, advanced CC rule groups, in-house detection rules) can be bought on the plugin marketplace.
 - Details: [WAF and CC protection](https://www.cdnca.com/en/docs/capabilities/waf-cc/)
 

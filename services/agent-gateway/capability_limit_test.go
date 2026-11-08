@@ -27,7 +27,7 @@ func TestHelloCapabilityLimitIsShared128(t *testing.T) {
 	hello := validHello(testNodeID, versionRange(1, 0), 1).GetHello()
 	hello.Capabilities.Features = allNamedCapabilities()
 	if err := gateway.validateHello(hello); err != nil && strings.Contains(err.Error(), sizeError) {
-		t.Fatalf("73 capabilities hit the size limit: %v", err)
+		t.Fatalf("74 capabilities hit the size limit: %v", err)
 	}
 	hello.Capabilities.Features = sequentialCapabilities(agentv1.MaxCapabilities + 1)
 	if err := gateway.validateHello(hello); err == nil || !strings.Contains(err.Error(), sizeError) {
@@ -39,8 +39,8 @@ func TestSessionFactsCapabilityLimit(t *testing.T) {
 	hello := validHello(testNodeID, versionRange(1, 0), 1).GetHello()
 	hello.Capabilities = &agentv1.AgentCapabilities{AgentVersion: "1.0.35", BuildId: "build", OperatingSystem: "linux", Architecture: "amd64", Features: allNamedCapabilities()}
 	selected := versionRange(1, 0).Maximum
-	if facts := newGatewaySessionFacts(nodeIdentity{NodeID: testNodeID, SerialNumber: "10"}, 1, selected, hello); facts == nil || len(facts.GetCapabilities().GetFeatures()) != 73 {
-		t.Fatal("73 capabilities did not produce session facts")
+	if facts := newGatewaySessionFacts(nodeIdentity{NodeID: testNodeID, SerialNumber: "10"}, 1, selected, hello); facts == nil || len(facts.GetCapabilities().GetFeatures()) != 74 {
+		t.Fatal("74 capabilities did not produce session facts")
 	}
 	hello.Capabilities.Features = sequentialCapabilities(agentv1.MaxCapabilities + 1)
 	if facts := newGatewaySessionFacts(nodeIdentity{NodeID: testNodeID, SerialNumber: "10"}, 1, selected, hello); facts != nil {
@@ -48,7 +48,7 @@ func TestSessionFactsCapabilityLimit(t *testing.T) {
 	}
 }
 
-// allNamedCapabilities lists every named capability; 1.0.35 nodes report all 73 (MARKET_ROLE 79).
+// allNamedCapabilities lists every named capability; 1.0.35 nodes report all 74 (CHALLENGE_POW 81).
 func allNamedCapabilities() []*agentv1.Capability {
 	names := make([]int, 0, len(agentv1.CapabilityName_name))
 	for name := range agentv1.CapabilityName_name {

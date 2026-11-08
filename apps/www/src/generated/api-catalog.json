@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 669,
+ "total": 676,
  "api_key_count": 144,
  "groups": [
   {
@@ -6705,19 +6705,104 @@
   {
    "id": "platform",
    "prefix": "/v1/platform",
-   "count": 1,
+   "count": 8,
    "api_key_count": 0,
    "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/platform/plugin-installations",
+     "summary": "List tenant plugin installation authorization state in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+     "summary_zh": "列出平台范围插件安装的授权状态（平台）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "listPlatformPluginInstallations"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/platform/plugin-installations/{authorization_id}",
+     "summary": "Read one tenant plugin installation authorization in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+     "summary_zh": "读取一条平台范围插件安装授权（平台）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "getPlatformPluginInstallation"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/platform/plugin-installations/{authorization_id}/confirm",
+     "summary": "Confirm declared and sensitive plugin scopes before installation in the platform scope of the session (exact plugin_installations.platform permissions). Themes and rule data packs install for the controller; tenant plugins (ui_page, external_https) require targets (all tenants or listed tenant scopes) and are then usable by those tenants without any tenant step. Targets on a platform resource, or a tenant plugin without them, is 422 plugin_installation_targets_invalid.",
+     "summary_zh": "主控平台管理员确认安装：主题、规则包装在平台；页面插件、外部服务须指定装给哪些租户（全部租户/指定租户），确认后这些租户直接可用",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "confirmPlatformPluginInstallation"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/platform/plugin-installations/{authorization_id}/disable",
+     "summary": "Protectively disable an installed plugin without consulting License in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+     "summary_zh": "不经授权服务，保护性停用已安装插件（平台）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "disablePlatformPluginInstallation"
+    },
     {
      "method": "POST",
      "path": "/v1/platform/plugin-installations/{authorization_id}/resume",
      "summary": "Resume a plugin this controller paused (disable) itself in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+     "summary_zh": "恢复本主控自行暂停的插件（平台）",
      "auth": [
       "bearer"
      ],
      "api_key": false,
      "source": "api/control-plugin-installations.openapi.yaml",
      "operation_id": "resumePlatformPluginInstallation"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/platform/plugin-installations/{authorization_id}/targets",
+     "summary": "Replace the tenants a platform-held tenant plugin is installed for (exact plugin_installations.platform.manage). If-Match is targets.revision; the same Idempotency-Key with the same body while it is the last change answers the current state again. Tenants removed from the targets lose the plugin's pages, identity keys, webhook subscriptions and events at once.",
+     "summary_zh": "改租户插件装给哪些租户（全部租户/指定租户）；If-Match 是 targets.revision",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "updatePlatformPluginInstallationTargets"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/platform/plugin-installations/{authorization_id}/uninstall",
+     "summary": "Revoke local plugin identity and record protective uninstall in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+     "summary_zh": "吊销本地插件身份并记录保护性卸载（平台）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "uninstallPlatformPluginInstallation"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/platform/plugin-installations/{authorization_id}/upgrade",
+     "summary": "Approve a compatible plugin upgrade and any newly declared scopes in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)",
+     "summary_zh": "批准兼容的插件升级及新声明的权限（平台）",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-plugin-installations.openapi.yaml",
+     "operation_id": "upgradePlatformPluginInstallation"
     }
    ]
   },
@@ -8976,6 +9061,7 @@
      "method": "POST",
      "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume",
      "summary": "Resume a plugin this controller paused (disable) itself",
+     "summary_zh": "恢复本主控自行暂停的插件",
      "auth": [
       "bearer"
      ],

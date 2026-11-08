@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,6 +116,59 @@ func TestCompileJSONRejectsUnsafePolicy(t *testing.T) {
 				t.Fatalf("CompileJSON() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestCompileJSONPoWDifficultyIsOptionalAndBounded(t *testing.T) {
+	keys := makeKeys(t)
+	canonical, compiled, err := CompileJSON(marshalPolicy(t, validPolicy(keys)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(canonical, []byte("pow_difficulty")) || compiled.Rules[0].PowDifficulty != nil {
+		t.Fatalf("default policy compiled with pow_difficulty: %s", canonical)
+	}
+	for _, value := range []uint32{MinPoWDifficulty, DefaultPoWDifficulty, MaxPoWDifficulty} {
+		policy := validPolicy(keys)
+		policy.Rules = []Rule{delayRule(), clickRule(), sliderRule(), captchaRule()}
+		for index := range policy.Rules {
+			policy.Rules[index].PowDifficulty = &value
+		}
+		canonical, compiled, err := CompileJSON(marshalPolicy(t, policy))
+		if err != nil {
+			t.Fatalf("pow_difficulty %d: %v", value, err)
+		}
+		want := []byte(fmt.Sprintf(`"bind_user_agent":true,"pow_difficulty":%d`, value))
+		if bytes.Count(canonical, want) != 4 || *compiled.Rules[3].PowDifficulty != value {
+			t.Fatalf("pow_difficulty %d not preserved: %s", value, canonical)
+		}
+	}
+	for _, value := range []uint32{0, MinPoWDifficulty - 1, MaxPoWDifficulty + 1} {
+		policy := validPolicy(keys)
+		policy.Rules[1].PowDifficulty = &value
+		if _, _, err := CompileJSON(marshalPolicy(t, policy)); !errors.Is(err, ErrInvalidPolicy) {
+			t.Fatalf("pow_difficulty %d error = %v", value, err)
+		}
+	}
+	external := validPolicy(keys)
+	rule := clickRule()
+	rule.Mode = ModeExternal
+	rule.ExternalProvider = &ExternalProviderConfig{Provider: ProviderTencent, AppID: "2060000000"}
+	external.Rules = []Rule{delayRule(), rule}
+	if _, _, err := CompileJSON(marshalPolicy(t, external)); err != nil {
+		t.Fatalf("external control policy: %v", err)
+	}
+	value := uint32(DefaultPoWDifficulty)
+	external.Rules[1].PowDifficulty = &value
+	if _, _, err := CompileJSON(marshalPolicy(t, external)); !errors.Is(err, ErrInvalidPolicy) {
+		t.Fatalf("external pow_difficulty error = %v", err)
+	}
+	raw := marshalPolicy(t, validPolicy(keys))
+	for _, replacement := range []string{`"pow_difficulty":null`, `"pow_difficulty":"18"`, `"pow_difficulty":18.5`} {
+		candidate := bytes.Replace(raw, []byte(`"bind_user_agent":true`), []byte(`"bind_user_agent":true,`+replacement), 1)
+		if _, _, err := CompileJSON(candidate); !errors.Is(err, ErrInvalidPolicy) {
+			t.Fatalf("%s error = %v", replacement, err)
+		}
 	}
 }
 

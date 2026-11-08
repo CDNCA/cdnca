@@ -67,6 +67,37 @@ func TestNormalizeConfigRejectsBoundaryAndReferenceViolations(t *testing.T) {
 	}
 }
 
+func TestNormalizeConfigPoWDifficulty(t *testing.T) {
+	difficulty := func(value int) *int { return &value }
+	for _, mode := range []string{ModeDelay, ModeClick, ModeSlider, ModeCaptcha, ModeExternal} {
+		config := validConfig(mode)
+		if err := normalizeConfig(&config); err != nil || config.PowDifficulty != nil {
+			t.Fatalf("%s without pow_difficulty: err=%v value=%v", mode, err, config.PowDifficulty)
+		}
+	}
+	for _, mode := range []string{ModeDelay, ModeClick, ModeSlider, ModeCaptcha} {
+		for _, value := range []int{12, 18, 24} {
+			config := validConfig(mode)
+			config.PowDifficulty = difficulty(value)
+			if err := normalizeConfig(&config); err != nil || *config.PowDifficulty != value {
+				t.Fatalf("%s pow_difficulty=%d: err=%v", mode, value, err)
+			}
+		}
+		for _, value := range []int{0, 11, 25} {
+			config := validConfig(mode)
+			config.PowDifficulty = difficulty(value)
+			if err := normalizeConfig(&config); !errors.Is(err, ErrValidation) {
+				t.Fatalf("%s pow_difficulty=%d error = %v, want ErrValidation", mode, value, err)
+			}
+		}
+	}
+	config := validConfig(ModeExternal)
+	config.PowDifficulty = difficulty(18)
+	if err := normalizeConfig(&config); !errors.Is(err, ErrValidation) {
+		t.Fatalf("external pow_difficulty error = %v, want ErrValidation", err)
+	}
+}
+
 func TestNormalizeHostAndBypassStrictASCII(t *testing.T) {
 	if host, err := normalizeHost("WWW.Example.Test."); err != nil || host != "www.example.test" {
 		t.Fatalf("normalizeHost() = (%q, %v)", host, err)

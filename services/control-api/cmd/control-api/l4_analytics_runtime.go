@@ -16,9 +16,10 @@ import (
 // facts to ClickHouse. It deliberately does not share the ordinary analytics
 // consumer because the two streams have different protobuf contracts.
 type l4AnalyticsRuntime struct {
-	connection *nats.Conn
-	ingestor   *l4analytics.NATSIngestor
-	closeOnce  bool
+	connection   *nats.Conn
+	ingestor     *l4analytics.NATSIngestor
+	flushTimeout time.Duration
+	closeOnce    bool
 }
 
 func openL4AnalyticsRuntime(
@@ -87,7 +88,7 @@ func openL4AnalyticsRuntime(
 	if err != nil {
 		return nil, runtimeStageError{stage: "build L4 analytics ingest runtime", err: err}
 	}
-	runtime := &l4AnalyticsRuntime{connection: connection, ingestor: ingestor}
+	runtime := &l4AnalyticsRuntime{connection: connection, ingestor: ingestor, flushTimeout: drainTimeout}
 	failed = false
 	return runtime, nil
 }
@@ -155,11 +156,10 @@ func (runtime *l4AnalyticsRuntime) Close() error {
 	if runtime.ingestor != nil {
 		closeErr = runtime.ingestor.Close()
 	}
-	if runtime.connection != nil && !runtime.connection.IsClosed() {
-		if err := runtime.connection.Drain(); err != nil {
-			closeErr = errors.Join(closeErr, err)
-			runtime.connection.Close()
-		}
+	if runtime.connection != nil {
+		// Drain returned at once and Close only ran on an error: this returned while the connection was still
+		// draining (closed 2s later with a pending reply). See closeNATSAfterFlush.
+		closeErr = errors.Join(closeErr, closeNATSAfterFlush(runtime.connection, runtime.flushTimeout, "L4 analytics"))
 	}
 	return closeErr
 }

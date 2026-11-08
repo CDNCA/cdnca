@@ -37,6 +37,14 @@ const (
 	MaxForwardedForHops      = 32
 )
 
+// pow_difficulty is the bit count of the browser proof-of-work secret
+// counter; an absent field means the engine default.
+const (
+	MinPoWDifficulty     = 12
+	MaxPoWDifficulty     = 24
+	DefaultPoWDifficulty = 18
+)
+
 var ErrInvalidPolicy = errors.New("invalid challenge policy")
 
 type Mode string
@@ -101,6 +109,7 @@ type Rule struct {
 	MaxFailuresPerWindow uint32                  `json:"max_failures_per_window"`
 	IPBinding            IPBinding               `json:"ip_binding"`
 	BindUserAgent        bool                    `json:"bind_user_agent"`
+	PowDifficulty        *uint32                 `json:"pow_difficulty,omitempty"`
 	ExternalProvider     *ExternalProviderConfig `json:"external_provider,omitempty"`
 }
 

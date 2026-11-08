@@ -303,3 +303,33 @@ func TestDistributorNotifiesAppliedReceipts(t *testing.T) {
 		t.Fatalf("receipts=%d notified=%d", len(store.receipts), notified)
 	}
 }
+
+// The node's enforced row is deleted (reset-node-host-delivery)
+// after it applied the revision; the next pass sends the bundle again at once.
+func TestDistributorRepublishesAfterTheNodeStateIsReset(t *testing.T) {
+	control := seededKey("control publisher")
+	store := &fakeDistributionStore{latest: Accepted{Revision: 2, Document: signedDocument(t, 2)}, enforced: map[string]uint64{}}
+	transport := &fakeTransport{published: map[string][]byte{}}
+	now := time.Date(2026, 11, 8, 7, 14, 0, 0, time.UTC)
+	distributor, err := NewDistributor(DistributorConfig{Store: store, Transport: transport, KeyID: "edge-publish",
+		Nodes:    func(context.Context) ([]NodeTarget, error) { return []NodeTarget{{ID: "node", Capable: true}}, nil },
+		Sign:     func(_ context.Context, payload []byte) ([]byte, error) { return ed25519.Sign(control, payload), nil },
+		Interval: time.Minute, RetryAfter: 10 * time.Minute, Logger: quietLogger(), Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := distributor.PublishOnce(t.Context()); err != nil || len(transport.published) != 1 {
+		t.Fatalf("first delivery: %v %v", keys(transport.published), err)
+	}
+	store.enforced["node"] = 2
+	now = now.Add(time.Minute)
+	transport.published = map[string][]byte{}
+	if err := distributor.PublishOnce(t.Context()); err != nil || len(transport.published) != 0 {
+		t.Fatalf("enforcing node got it again: %v", keys(transport.published))
+	}
+	delete(store.enforced, "node") // reset-node-host-delivery
+	now = now.Add(time.Minute)
+	if err := distributor.PublishOnce(t.Context()); err != nil || len(transport.published) != 1 {
+		t.Fatalf("after the reset: published %v, want the bundle again at once (%v)", keys(transport.published), err)
+	}
+}

@@ -109,7 +109,10 @@ func (store *Store) MarkRedelivered(ctx context.Context, refusal frozenRefusal, 
 		}
 		marked = true
 		return store.auditor.Append(ctx, tx, audit.Event{ScopeID: refusal.scopeID, Action: FrozenRedeliveryAuditAction,
+			// audit_events.request_id is required: without it every pass rolled
+			// back and nothing was ever redelivered.
 			ResourceType: "node", ResourceID: refusal.nodeID.String(), Result: "success",
+			RequestID: "node-serving/frozen-redeliver/" + refusal.nodeID.String() + "/" + refusal.scopeID.String(),
 			ActorKind: audit.ActorSystem, ActorRef: "job:node-serving",
 			Payload:    map[string]any{"node_id": refusal.nodeID.String(), "deployments": command.RowsAffected()},
 			OccurredAt: now})

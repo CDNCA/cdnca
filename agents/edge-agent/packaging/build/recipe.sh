@@ -92,8 +92,33 @@ read_contract() {
 }
 
 write_sbom() {
-  perl -MJSON::PP -e '
-    my ($output, $created, $namespace, $version, $artifact) = @ARGV;
+  perl -MJSON::PP -MMIME::Base64 -MDigest::SHA=sha256_hex -e '
+    my ($output, $created, $namespace, $version, $artifact, @toolset) = @ARGV;
+    # The packaging scripts the release signs through this SBOM; installed nodes
+    # refresh their /usr/libexec toolset from them after an upgrade. SPDX 2.3
+    # has no file content field and allows no extension properties, so each
+    # script rides base64 in one tool annotation of its file entry; production
+    # upgrade bundles carry no native package to take the bytes from.
+    my @toolset_files;
+    while (@toolset) {
+      my ($name, $digest, $path) = splice(@toolset, 0, 3);
+      exit 1 unless $name =~ /\A[a-z]+\z/ && defined($digest) && $digest =~ /\A[0-9a-f]{64}\z/ && defined($path);
+      open my $script, "<:raw", $path or exit 1;
+      my $content = do { local $/; <$script> };
+      close $script or exit 1;
+      exit 1 unless sha256_hex($content) eq $digest;
+      push @toolset_files, {
+        SPDXID => "SPDXRef-File-packaging-$name",
+        annotations => [{
+          annotationDate => $created,
+          annotationType => "OTHER",
+          annotator => "Tool: cdnca-edge-release-build-v1",
+          comment => "cdnca.packaging-script/v1 base64:" . encode_base64($content, ""),
+        }],
+        checksums => [{algorithm => "SHA256", checksumValue => $digest}],
+        fileName => "packaging/scripts/$name.sh",
+      };
+    }
     my $document = {
       SPDXID => "SPDXRef-DOCUMENT",
       creationInfo => {created => $created, creators => ["Tool: cdnca-edge-release-build-v1"]},
@@ -103,14 +128,14 @@ write_sbom() {
         SPDXID => "SPDXRef-File-edge-agent",
         checksums => [{algorithm => "SHA256", checksumValue => $artifact}],
         fileName => "edge-agent",
-      }],
+      }, @toolset_files],
       name => "cdnca-edge-agent-$version",
       spdxVersion => "SPDX-2.3",
     };
     open my $stream, ">:raw", $output or exit 1;
     print {$stream} JSON::PP->new->canonical(1)->utf8(1)->encode($document), "\n" or exit 1;
     close $stream or exit 1;
-  ' "$1" "$2" "$3" "$4" "$5"
+  ' "$@"
 }
 
 write_provenance() {
@@ -321,7 +346,12 @@ c_sha=$(sha256_file "${c_manifest}")
 created=$(perl -MPOSIX=strftime -e 'print strftime("%Y-%m-%dT%H:%M:%SZ", gmtime(shift))' "${source_date_epoch}")
 namespace="https://cdnca.invalid/spdx/edge-agent/${source_sha}/${version}/${arch}"
 sbom="${publish}/edge-agent.spdx.json"
-write_sbom "${sbom}" "${created}" "${namespace}" "${version}" "${artifact_sha}" || fail 'write SPDX SBOM'
+toolset_digests=()
+for toolset_name in lib install preflight rollback uninstall upgrade; do
+  toolset_path=${source_root}/agents/edge-agent/packaging/scripts/${toolset_name}.sh
+  toolset_digests+=("${toolset_name}" "$(sha256_file "${toolset_path}")" "${toolset_path}")
+done
+write_sbom "${sbom}" "${created}" "${namespace}" "${version}" "${artifact_sha}" "${toolset_digests[@]}" || fail 'write SPDX SBOM'
 sbom_sha=$(sha256_file "${sbom}")
 provenance="${publish}/edge-agent.provenance.json"
 write_provenance "${provenance}" "${arch}" "${artifact_sha}" "${artifact_size}" "${build_id}" \

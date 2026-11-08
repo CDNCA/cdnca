@@ -14,6 +14,10 @@ import (
 
 const ChallengeArtifactMediaType = "application/vnd.cdnca.edge-challenge-bundle+json;version=1"
 
+// challengePoWAPIVersion is CAPABILITY_NAME_CHALLENGE_POW v1: rule field
+// pow_difficulty (challenge.MinPoWDifficulty..MaxPoWDifficulty).
+const challengePoWAPIVersion = 1
+
 var ErrInvalidChallengeArtifact = errors.New("invalid challenge artifact")
 
 type ChallengeConsumer interface {

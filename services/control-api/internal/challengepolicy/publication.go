@@ -28,6 +28,7 @@ type PublicationSnapshot struct {
 	BypassRoutes                              []BypassRoute
 	KeyReference                              string
 	ExternalProvider                          *ExternalProviderReference
+	PowDifficulty                             *int
 }
 
 type PublicationConsumer func(context.Context, pgx.Tx, PublicationSnapshot) error
@@ -108,6 +109,10 @@ func publicationSnapshot(item storedPolicy, expectedRevision int64) (Publication
 	if item.External != nil {
 		provider := *item.External
 		result.ExternalProvider = &provider
+	}
+	if item.PowDifficulty != nil {
+		value := *item.PowDifficulty
+		result.PowDifficulty = &value
 	}
 	return result, nil
 }

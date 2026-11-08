@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net/url"
@@ -164,8 +165,8 @@ func (s *Signer) SignNodeCertificate(ctx context.Context, request nodeidentity.S
 	}
 
 	now := s.clock().UTC()
-	if now.Before(request.NotBefore) || !now.Before(request.NotAfter) || !chainCovers(s.chain, request.NotBefore, request.NotAfter) {
-		return nodeidentity.SignedCertificate{}, ErrInvalidRequest
+	if err := validityRefusal(s.chain, now, request.NotBefore, request.NotAfter); err != nil {
+		return nodeidentity.SignedCertificate{}, err
 	}
 
 	serialData := make([]byte, serialBytes)
@@ -325,13 +326,26 @@ func verifyLeafChain(leaf *x509.Certificate, chain []*x509.Certificate, notBefor
 	return nil
 }
 
-func chainCovers(chain []*x509.Certificate, notBefore, notAfter time.Time) bool {
+// validityRefusal explains why the requested lifetime cannot be signed now:
+// it is not current, or a chain certificate does not cover it. Only times and
+// certificate subjects are reported, never key or CSR material.
+func validityRefusal(chain []*x509.Certificate, now, notBefore, notAfter time.Time) error {
+	if now.Before(notBefore) {
+		return fmt.Errorf("%w: requested lifetime %s..%s is not yet valid at %s", ErrInvalidRequest,
+			notBefore.UTC().Format(time.RFC3339), notAfter.UTC().Format(time.RFC3339), now.Format(time.RFC3339))
+	}
+	if !now.Before(notAfter) {
+		return fmt.Errorf("%w: requested lifetime %s..%s is already expired at %s", ErrInvalidRequest,
+			notBefore.UTC().Format(time.RFC3339), notAfter.UTC().Format(time.RFC3339), now.Format(time.RFC3339))
+	}
 	for _, certificate := range chain {
 		if certificate.NotBefore.After(notBefore) || certificate.NotAfter.Before(notAfter) {
-			return false
+			return fmt.Errorf("%w: chain certificate %q (valid %s..%s) does not cover the requested lifetime %s..%s", ErrInvalidRequest,
+				certificate.Subject.String(), certificate.NotBefore.UTC().Format(time.RFC3339), certificate.NotAfter.UTC().Format(time.RFC3339),
+				notBefore.UTC().Format(time.RFC3339), notAfter.UTC().Format(time.RFC3339))
 		}
 	}
-	return true
+	return nil
 }
 
 func cloneCertificate(certificate *x509.Certificate) (*x509.Certificate, error) {

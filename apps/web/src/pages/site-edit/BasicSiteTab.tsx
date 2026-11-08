@@ -262,7 +262,7 @@ export default function BasicSiteTab({
             <strong>{dateText(detail.updated_at, language, t('values.placeholder'))}</strong>
           </div>
           <div className="site-basic-fact">
-            <span>{t('edit.basic.fields.group')}<Tooltip title={t('edit.basic.help.group')}><span className="site-form-row-tip" role="img" tabIndex={0} aria-label={t('edit.basic.help.group')}><CircleHelp size={14} aria-hidden="true" /></span></Tooltip></span>
+            <span>{t('edit.basic.fields.group')}<Tooltip title={t('edit.basic.help.group')}><span className="site-basic-fact-tip site-form-row-tip" role="img" tabIndex={0} aria-label={t('edit.basic.help.group')}><CircleHelp size={14} aria-hidden="true" /></span></Tooltip></span>
             {selectScopeID ? (
               <SiteGroupSelect accessToken={accessToken} platform={role === 'admin'} scopeID={selectScopeID} ownerID={detail.owner?.id ?? ''}
                 ownerName={detail.owner?.display_name} value={value} readOnly={readOnly} onChange={onChange} />

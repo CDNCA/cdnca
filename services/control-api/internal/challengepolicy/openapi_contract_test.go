@@ -38,7 +38,7 @@ func TestChallengePolicyOpenAPIOperationContract(t *testing.T) {
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/disable", OperationID: "disableChallengePolicy", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "503"}},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications", OperationID: "publishChallengePolicy", Statuses: []string{"202", "400", "401", "403", "404", "405", "409", "412", "422", "503"}},
 		{Method: "get", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}", OperationID: "getChallengePolicyPublication", Statuses: []string{"200", "400", "401", "403", "404", "405", "503"}},
-		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote", OperationID: "promoteChallengePolicyPublication", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "503"}},
+		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote", OperationID: "promoteChallengePolicyPublication", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "422", "503"}},
 	}
 	if got := parseChallengeOpenAPIOperations(t, source); !reflect.DeepEqual(got, want) {
 		t.Fatalf("operations = %#v, want %#v", got, want)

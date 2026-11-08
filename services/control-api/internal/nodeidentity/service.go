@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -340,7 +341,10 @@ func (s *Service) sign(ctx context.Context, nodeID uuid.UUID, csrDER []byte, kin
 		CertificateSigningRequestDER: append([]byte(nil), csrDER...), URISAN: NodeSPIFFEPrefix + nodeID.String(),
 		NotBefore: notBefore, NotAfter: notAfter, IssuanceKind: kind})
 	if err != nil {
-		return SignedCertificate{}, ErrSigningFailed
+		// The cause goes into the text for the internal log (controlinternal
+		// logFailure) but not into the chain: a signer context error must not
+		// change the RPC code callers get for a signing failure.
+		return SignedCertificate{}, fmt.Errorf("%w: %v", ErrSigningFailed, err)
 	}
 	return result, nil
 }

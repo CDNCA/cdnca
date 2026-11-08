@@ -61,7 +61,7 @@
   color: var(--cdnca-color-text-secondary);
   background: none;
   border: 0;
-  border-radius: var(--cdnca-border-radius-sm, 4px);
+  border-radius: 4px;
   cursor: pointer;
 }
 

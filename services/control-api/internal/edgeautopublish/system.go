@@ -3,11 +3,13 @@ package edgeautopublish
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -617,4 +619,76 @@ func (retrier *NodeSyncRetrier) RetryNodeSync(ctx context.Context, nodeID, scope
 		return err
 	})
 	return queued, err
+}
+
+// withdrawalNodeIDs is the nodes outside targets that still run a release of
+// scopeID with a website or forward in it (node_config_state): deleting the
+// scope's last site or forward, or taking a node out of its line group, must
+// reach them with the release that no longer has it. Only
+// online, active nodes the scope may publish to, holding no reconciliation
+// and able to take the scope beside any other: a dead node out of the group
+// does not hold the scope's publications; it is withdrawn from on the next
+// publication after it is back.
+func withdrawalNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, targets []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := tx.Query(ctx, `SELECT state.node_id,version.canonical_snapshot,
+		EXISTS(SELECT 1 FROM node_config_state other WHERE other.node_id=state.node_id
+		  AND other.configuration_scope_id<>$1)
+		FROM node_config_state state
+		JOIN config_versions version ON version.configuration_scope_id=state.configuration_scope_id
+		 AND version.id=state.current_config_version_id
+		JOIN nodes node ON node.id=state.node_id AND node.admin_state='active'
+		JOIN access_scopes node_scope ON node_scope.id=node.scope_id
+		JOIN node_presence presence ON presence.node_id=node.id AND presence.status='online'
+		WHERE state.configuration_scope_id=$1 AND NOT state.reconciliation_required
+		  AND NOT state.node_id=ANY($2::uuid[])
+		  AND (node.scope_id=$1 OR node_scope.kind='platform')
+		ORDER BY state.node_id`, scopeID, targets)
+	if err != nil {
+		return nil, err
+	}
+	type held struct {
+		nodeID   uuid.UUID
+		snapshot []byte
+		shared   bool
+	}
+	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (held, error) {
+		var item held
+		return item, row.Scan(&item.nodeID, &item.snapshot, &item.shared)
+	})
+	if err != nil {
+		return nil, err
+	}
+	var nodes []uuid.UUID
+	for _, item := range items {
+		if !snapshotServesSomething(item.snapshot) {
+			continue
+		}
+		if item.shared {
+			several, err := edgedeployment.NodeServesSeveralScopes(ctx, tx, item.nodeID)
+			if err != nil {
+				return nil, err
+			}
+			if !several {
+				continue
+			}
+		}
+		nodes = append(nodes, item.nodeID)
+	}
+	return nodes, nil
+}
+
+// snapshotServesSomething: a site runtime v2 release with a website or a
+// forward. Anything else (an older or unreadable release) is taken as serving.
+func snapshotServesSomething(snapshot []byte) bool {
+	var document struct {
+		Schema  string            `json:"schema"`
+		Sites   []json.RawMessage `json:"sites"`
+		Streams *struct {
+			StreamsV2 []json.RawMessage `json:"streams_v2"`
+		} `json:"streams"`
+	}
+	if json.Unmarshal(snapshot, &document) != nil || document.Schema != edgepublish.DefaultSiteRuntimeSchema {
+		return true
+	}
+	return len(document.Sites) > 0 || document.Streams != nil && len(document.Streams.StreamsV2) > 0
 }

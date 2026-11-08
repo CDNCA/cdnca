@@ -120,6 +120,7 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume:
     post:
       operationId: resumePluginInstallation
+      x-summary-zh: "恢复本主控自行暂停的插件"
       summary: Resume a plugin this controller paused (disable) itself
       description: >-
         Requires plugin_installations.manage, If-Match and Idempotency-Key. Before writing, the control plane reads
@@ -169,6 +170,7 @@ paths:
   /v1/platform/plugin-installations:
     get:
       operationId: listPlatformPluginInstallations
+      x-summary-zh: "列出平台范围插件安装的授权状态（平台）"
       summary: List tenant plugin installation authorization state in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
       parameters:
         - $ref: '#/components/parameters/RequestID'
@@ -197,6 +199,7 @@ paths:
   /v1/platform/plugin-installations/{authorization_id}:
     get:
       operationId: getPlatformPluginInstallation
+      x-summary-zh: "读取一条平台范围插件安装授权（平台）"
       summary: Read one tenant plugin installation authorization in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
       parameters:
         - $ref: '#/components/parameters/AuthorizationID'
@@ -210,7 +213,7 @@ paths:
   /v1/platform/plugin-installations/{authorization_id}/confirm:
     post:
       operationId: confirmPlatformPluginInstallation
-      x-summary-zh: "主控平台管理员确认安装：主题、规则包装在平台；页面插件、外部服务须带 targets（全部租户/指定租户），确认后这些租户直接可用"
+      x-summary-zh: "主控平台管理员确认安装：主题、规则包装在平台；页面插件、外部服务须指定装给哪些租户（全部租户/指定租户），确认后这些租户直接可用"
       summary: >-
         Confirm declared and sensitive plugin scopes before installation in the platform scope of the session (exact
         plugin_installations.platform permissions). Themes and rule data packs install for the controller; tenant
@@ -236,6 +239,7 @@ paths:
   /v1/platform/plugin-installations/{authorization_id}/upgrade:
     post:
       operationId: upgradePlatformPluginInstallation
+      x-summary-zh: "批准兼容的插件升级及新声明的权限（平台）"
       summary: Approve a compatible plugin upgrade and any newly declared scopes in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
       parameters:
         - $ref: '#/components/parameters/AuthorizationID'
@@ -256,6 +260,7 @@ paths:
   /v1/platform/plugin-installations/{authorization_id}/disable:
     post:
       operationId: disablePlatformPluginInstallation
+      x-summary-zh: "不经授权服务，保护性停用已安装插件（平台）"
       summary: Protectively disable an installed plugin without consulting License in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
       parameters:
         - $ref: '#/components/parameters/AuthorizationID'
@@ -275,6 +280,7 @@ paths:
   /v1/platform/plugin-installations/{authorization_id}/resume:
     post:
       operationId: resumePlatformPluginInstallation
+      x-summary-zh: "恢复本主控自行暂停的插件（平台）"
       summary: Resume a plugin this controller paused (disable) itself in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
       description: >-
         Same as the tenant resume, in the platform scope of the session: requires plugin_installations.platform.manage,
@@ -300,6 +306,7 @@ paths:
   /v1/platform/plugin-installations/{authorization_id}/uninstall:
     post:
       operationId: uninstallPlatformPluginInstallation
+      x-summary-zh: "吊销本地插件身份并记录保护性卸载（平台）"
       summary: Revoke local plugin identity and record protective uninstall in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
       parameters:
         - $ref: '#/components/parameters/AuthorizationID'

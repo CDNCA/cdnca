@@ -521,5 +521,9 @@ export const intentionalRemovals = [
   { file: 'apps/web/src/pages/site-edit/CacheSiteTab.css', selector: '.cache-policy-rule .ant-input-number, .cache-policy-form-grid .ant-input-number, .cache-policy-rule .ant-select, .cache-policy-form-grid .ant-select {' },
   { file: 'apps/web/src/pages/site-edit/CacheSiteTab.css', selector: '@media (max-width: 720px) >> .cache-policy-rule, .cache-policy-form-grid, .cache-policy-comparison {' },
   { file: 'apps/web/src/pages/site-edit/CacheSiteTab.css', selector: '@media (max-width: 720px) >> .cache-policy-form-grid > h3 {' },
+  // 线路组名称列被挤成竖排，改单行省略（全名见 Tooltip）；名称/地址合写的换行规则拆开，地址列原三条声明单独保留。
+  { file: 'apps/web/src/pages/NodeL2TopologyDetailPage.css', selector: '.node-line-resolution-detail-page .node-line-resolution-table-scroll td.node-line-resolution-name, .node-line-resolution-detail-page .node-line-resolution-table-scroll td.node-line-resolution-address {' },
+  // 插件商店：卡片不再用 antd Card actions，操作条 .market-store-action 换成贴底的 .market-store-footer，源码已无该类。
+  { file: 'apps/web/src/pages/market/MarketStorePage.css', selector: '.market-store-action {' },
 ]
 export const removedOnPurpose = (file, line) => intentionalRemovals.some((entry) => entry.file === file && line.startsWith(entry.selector))

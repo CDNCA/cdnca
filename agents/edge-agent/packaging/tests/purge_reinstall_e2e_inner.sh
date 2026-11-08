@@ -100,8 +100,25 @@ step 'installed node is refused by the first-install gate'
 if blank_host_gate 2>"${work}/gate-installed.err"; then fail 'installed node passed the blank-host gate'; fi
 cat "${work}/gate-installed.err"
 
-step 'uninstall.sh --purge'
+step 'unsafe state is refused while the agent keeps running'
+active_state=/var/lib/cdnca-edge-agent-backups/active-state
+ln -s /etc/passwd "${active_state}/unsafe-link"
+if /usr/libexec/cdnca-edge-agent/uninstall.sh --purge --non-interactive \
+  --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE 2>"${work}/unsafe.err"; then
+  fail 'purge accepted an unsafe state link'
+fi
+cat "${work}/unsafe.err"
+systemctl is-active --quiet cdnca-edge-agent.service || fail 'refused purge stopped the agent'
+systemctl is-enabled --quiet cdnca-edge-agent.service || fail 'refused purge disabled the agent'
+rm -f -- "${active_state}/unsafe-link"
+
+step 'uninstall.sh --purge with the L4 runtime pointer the agent writes'
+l4_version=dynroute-l4-none-$(printf '%064d' 0)
+install -d -m 0700 "${active_state}/l4-runtime" "${active_state}/l4-runtime/versions"
+install -d -m 0500 "${active_state}/l4-runtime/versions/${l4_version}"
+ln -s "versions/${l4_version}" "${active_state}/l4-runtime/current"
 /usr/libexec/cdnca-edge-agent/uninstall.sh --purge --non-interactive --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE
+[ ! -e /var/lib/cdnca-edge-agent-backups ] || fail 'state backups left after purge'
 for unit in cdnca-edge-agent.service cdnca-edge-agent-helper.service cdnca-edge-agent-helper.socket; do
   [ "$(systemctl show "${unit}" --property=LoadState --value)" = not-found ] || fail "${unit} still loaded after purge"
   [ ! -e "/etc/systemd/system/${unit}.d" ] || fail "${unit} drop-in directory left"

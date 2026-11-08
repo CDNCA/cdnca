@@ -2945,6 +2945,14 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_SSH_ACCESS, ApiVersion: contractsshaccess.APIVersion,
 		})
 	}
+	// The challenge consumer installs policies whose rules
+	// may carry pow_difficulty (challenge.Rule). Control reads the session
+	// capability snapshot and sends such a policy only to nodes declaring it.
+	if c.challenge != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW) {
+		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW, ApiVersion: challengePoWAPIVersion,
+		})
+	}
 	if c.siteDrop != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_SITE_DROP) {
 		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_SITE_DROP, ApiVersion: siteDropAPIVersion,

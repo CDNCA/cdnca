@@ -170,6 +170,8 @@ printf 'module example.invalid/rulepack\ngo 1.27.0\n' >"${fixture}/libs/rulepack
 printf 'module example.invalid/proto\ngo 1.27.0\n' >"${fixture}/proto/gen/go/go.mod"
 cp "${CONTRACT}" "${fixture}/agents/edge-agent/packaging/build/contract.json"
 cp "${RECIPE}" "${fixture}/agents/edge-agent/packaging/build/recipe.sh"
+# The release SBOM signs the packaging scripts of the same source tree.
+cp -R "$(dirname -- "${RECIPE}")/../scripts" "${fixture}/agents/edge-agent/packaging/scripts"
 
 source_manifest="${workdir}/source.sha256"
 c_manifest="${workdir}/c.sha256"
@@ -321,10 +323,20 @@ perl -0777 -e '
   ++$count while ($position = index($raw, $build_id, $position + 1)) >= 0;
   exit 1 unless $count == 1;
 ' "${workdir}/one/edge-agent" 1.2.3 edge-1.2.3-build.7 || fail 'embedded binary identity'
-jq -e --arg artifact "$(sha256_file "${workdir}/one/edge-agent")" '
+# The base64 of lib.sh exceeds one argument (MAX_ARG_STRLEN); pass files.
+: >"${workdir}/toolset-files.jsonl"
+for toolset_name in lib install preflight rollback uninstall upgrade; do
+  base64 <"${fixture}/agents/edge-agent/packaging/scripts/${toolset_name}.sh" | tr -d '\n' >"${workdir}/toolset-content.b64"
+  jq -cn --arg name "${toolset_name}" \
+    --arg digest "$(sha256_file "${fixture}/agents/edge-agent/packaging/scripts/${toolset_name}.sh")" \
+    --rawfile content "${workdir}/toolset-content.b64" \
+    '{"SPDXID":("SPDXRef-File-packaging-" + $name),"annotations":[{"annotationDate":"2026-07-01T00:00:00Z","annotationType":"OTHER","annotator":"Tool: cdnca-edge-release-build-v1","comment":("cdnca.packaging-script/v1 base64:" + $content)}],"checksums":[{"algorithm":"SHA256","checksumValue":$digest}],"fileName":("packaging/scripts/" + $name + ".sh")}' \
+    >>"${workdir}/toolset-files.jsonl"
+done
+jq -e --arg artifact "$(sha256_file "${workdir}/one/edge-agent")" --slurpfile toolset "${workdir}/toolset-files.jsonl" '
   .spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and .SPDXID == "SPDXRef-DOCUMENT" and
   .creationInfo.created == "2026-07-01T00:00:00Z" and
-  .files == [{"SPDXID":"SPDXRef-File-edge-agent","checksums":[{"algorithm":"SHA256","checksumValue":$artifact}],"fileName":"edge-agent"}]
+  .files == [{"SPDXID":"SPDXRef-File-edge-agent","checksums":[{"algorithm":"SHA256","checksumValue":$artifact}],"fileName":"edge-agent"}] + $toolset
 ' "${workdir}/one/edge-agent.spdx.json" >/dev/null || fail 'SPDX 2.3 output'
 jq -e --arg source "$(sha256_file "${source_manifest}")" --arg c "$(sha256_file "${c_manifest}")" --arg arch "${fixture_arch}" '
   .schema == "cdnca.edge.release-provenance/v1" and .version == "1.2.3" and

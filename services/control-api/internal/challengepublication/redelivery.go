@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 
-	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/google/uuid"
@@ -26,6 +25,10 @@ type RedeliveryFacts struct {
 	OriginSnapshot  []byte
 	OriginGenerator string
 	Policy          PublicationSnapshot
+	// Unsupported is the node's refusal (edgepublish.TargetCapabilityError)
+	// when the policy has an explicit pow_difficulty and the node's latest
+	// session does not declare CHALLENGE_POW.
+	Unsupported error
 }
 
 type RedeliveryFactSource interface {
@@ -82,6 +85,12 @@ func (redeliverer *ChallengeSecretRedeliverer) RedeliverChallengeSecretTx(
 	if facts.OriginGenerator != edgepublish.ChallengeSecretGeneratorName {
 		return uuid.Nil, fmt.Errorf("%w: origin is not a challenge secret", edgepublish.ErrChallengeRedeliveryUnrecoverable)
 	}
+	// The node keeps the policy it has; its next session starts over.
+	var refusal *edgepublish.TargetCapabilityError
+	if errors.As(facts.Unsupported, &refusal) {
+		return uuid.Nil, fmt.Errorf("%w: the node does not declare %s v%d (pow_difficulty)",
+			edgepublish.ErrChallengeRedeliveryUnrecoverable, refusal.Capability, refusal.Required)
+	}
 	// Key facts are read through their own pool: an unavailable key is
 	// retried (bounded), a key that resolves to another document is not.
 	keys, err := redeliverer.keys.ResolveChallengeKeys(ctx, facts.Policy)
@@ -110,11 +119,7 @@ func (redeliverer *ChallengeSecretRedeliverer) RedeliverChallengeSecretTx(
 	result, err := redeliverer.store.CreateSystemSecretRolloutTx(ctx, tx, edgedeployment.SystemSecretRolloutRequest{
 		ConfigurationScopeID: item.ScopeID, AccountableUserID: item.AccountableUserID, NodeIDs: []uuid.UUID{item.NodeID},
 		CanonicalSnapshot: document, GeneratorName: edgepublish.ChallengeSecretGeneratorName, GeneratorVersion: "1.0.0",
-		PayloadDigest: sha256.Sum256(document),
-		RequiredCapabilities: []*agentv1.Capability{
-			{Name: agentv1.CapabilityName_CAPABILITY_NAME_ATOMIC_RELEASE, ApiVersion: 1},
-			{Name: agentv1.CapabilityName_CAPABILITY_NAME_CONFIG_PRECHECK, ApiVersion: 1},
-		},
+		PayloadDigest: sha256.Sum256(document), RequiredCapabilities: RequiredCapabilities(facts.Policy.PowDifficulty != nil),
 		HealthCheck: redeliverer.policy.HealthCheck, Deadline: item.Deadline, IdempotencyKey: item.IdempotencyKey,
 		RequestID: uuid.NewString(), CorrelationID: uuid.NewString(), Reason: "challenge_redelivery",
 	}, builder)
@@ -161,13 +166,13 @@ func (PostgresRedeliveryFactSource) LoadRedeliveryFactsTx(
 	err = tx.QueryRow(ctx, `SELECT policy_id,tenant_scope_id,tenant_id,site_id,host,revision,priority,mode,
 		min_delay_seconds,challenge_ttl_seconds,pass_ttl_seconds,clock_skew_seconds,attempts_per_nonce,
 		failure_window_seconds,max_failures_per_window,ip_binding,bind_user_agent,bypass_routes,key_reference,
-		external_provider,external_app_reference
+		external_provider,external_app_reference,pow_difficulty
 		FROM challenge_policy_revisions WHERE policy_id=$1 AND revision=$2 AND tenant_scope_id=$3 AND site_id=$4`,
 		item.PolicyID, item.PolicyVersion, item.ScopeID, item.SiteID).Scan(&policy.PolicyID, &policy.TenantScopeID,
 		&policy.TenantID, &policy.SiteID, &policy.Host, &policy.Revision, &policy.Priority, &policy.Mode,
 		&policy.MinDelaySeconds, &policy.ChallengeTTLSeconds, &policy.PassTTLSeconds, &policy.ClockSkewSeconds,
 		&policy.AttemptsPerNonce, &policy.FailureWindowSeconds, &policy.MaxFailuresPerWindow, &policy.IPBinding,
-		&policy.BindUserAgent, &routes, &policy.KeyReference, &provider, &appReference)
+		&policy.BindUserAgent, &routes, &policy.KeyReference, &provider, &appReference, &policy.PowDifficulty)
 	if errors.Is(err, pgx.ErrNoRows) {
 		zeroBytes(facts.OriginSnapshot)
 		return RedeliveryFacts{}, ErrRedeliveryOriginMissing
@@ -185,6 +190,14 @@ func (PostgresRedeliveryFactSource) LoadRedeliveryFactsTx(
 	}
 	if provider != nil {
 		policy.ExternalProvider = &ExternalProviderReference{Provider: *provider, AppReference: *appReference}
+	}
+	if policy.PowDifficulty != nil {
+		facts.Unsupported = edgepublish.ValidateFeatureCapabilityTargets(ctx, tx, []uuid.UUID{item.NodeID},
+			RequiredCapabilities(true))
+		if facts.Unsupported != nil && !errors.As(facts.Unsupported, new(*edgepublish.TargetCapabilityError)) {
+			zeroBytes(facts.OriginSnapshot)
+			return RedeliveryFacts{}, facts.Unsupported
+		}
 	}
 	return facts, nil
 }

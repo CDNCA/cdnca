@@ -337,6 +337,13 @@ const (
 	// probe-only whatever is assigned. Control assigns roles only to nodes
 	// that declare it.
 	CapabilityName_CAPABILITY_NAME_MARKET_ROLE CapabilityName = 79
+	// CHALLENGE_POW v1 (80 is left unused): the node's JS challenge engine
+	// accepts the policy rule field pow_difficulty (12..24) and runs the bounded
+	// proof of work it sets. Older agents decode challenge policies strictly and
+	// refuse a policy carrying the field. Control sends a policy with an
+	// explicit pow_difficulty only to nodes that declare it; the others keep
+	// their previous policy.
+	CapabilityName_CAPABILITY_NAME_CHALLENGE_POW CapabilityName = 81
 )
 
 // Enum value maps for CapabilityName.
@@ -416,6 +423,7 @@ var (
 		77: "CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY",
 		78: "CAPABILITY_NAME_SSH_ACCESS",
 		79: "CAPABILITY_NAME_MARKET_ROLE",
+		81: "CAPABILITY_NAME_CHALLENGE_POW",
 	}
 	CapabilityName_value = map[string]int32{
 		"CAPABILITY_NAME_UNSPECIFIED":                     0,
@@ -492,6 +500,7 @@ var (
 		"CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY":            77,
 		"CAPABILITY_NAME_SSH_ACCESS":                      78,
 		"CAPABILITY_NAME_MARKET_ROLE":                     79,
+		"CAPABILITY_NAME_CHALLENGE_POW":                   81,
 	}
 )
 
@@ -15730,7 +15739,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x10total_size_bytes\x18\x05 \x01(\x04R\x0etotalSizeBytes\x12\"\n" +
 	"\rend_of_object\x18\x06 \x01(\bR\vendOfObject\"K\n" +
 	"\x18FetchSiteObjectsResponse\x12/\n" +
-	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\xb9\x15\n" +
+	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\xdc\x15\n" +
 	"\x0eCapabilityName\x12\x1f\n" +
 	"\x1bCAPABILITY_NAME_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CAPABILITY_NAME_HTTP_1_1\x10\x01\x12\x1a\n" +
@@ -15806,7 +15815,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"&CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE\x10L\x12(\n" +
 	"$CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY\x10M\x12\x1e\n" +
 	"\x1aCAPABILITY_NAME_SSH_ACCESS\x10N\x12\x1f\n" +
-	"\x1bCAPABILITY_NAME_MARKET_ROLE\x10O\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
+	"\x1bCAPABILITY_NAME_MARKET_ROLE\x10O\x12!\n" +
+	"\x1dCAPABILITY_NAME_CHALLENGE_POW\x10Q\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
 	"\x1aActiveConfigIdentitySchema\x12-\n" +
 	")ACTIVE_CONFIG_IDENTITY_SCHEMA_UNSPECIFIED\x10\x00\x12$\n" +
 	" ACTIVE_CONFIG_IDENTITY_SCHEMA_V1\x10\x01*\x9a\x04\n" +

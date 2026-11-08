@@ -28,6 +28,8 @@ export interface ChallengePolicyConfig {
   bypass_routes: ChallengeBypassRoute[]
   key_reference: string
   external_provider?: ExternalProviderReference
+  /** Browser proof-of-work bits (12..24); omitted means the edge default 18. Not allowed for external. */
+  pow_difficulty?: number
 }
 
 export interface ChallengePolicy {
@@ -47,6 +49,7 @@ export interface ChallengePolicy {
   ip_binding: IPBinding
   bind_user_agent: boolean
   bypass_routes: ChallengeBypassRoute[]
+  pow_difficulty?: number
   key_reference_configured: boolean
   external_provider_configured: boolean
   enabled: boolean
@@ -55,6 +58,8 @@ export interface ChallengePolicy {
   created_at: string
   updated_at: string
 }
+
+export const powDifficultyRange = { min: 12, max: 24 } as const
 
 export interface ChallengePolicyPage {
   items: ChallengePolicy[]
@@ -153,7 +158,9 @@ function validBypassRoute(value: unknown): value is ChallengeBypassRoute {
 }
 
 function parsePolicy(value: unknown): ChallengePolicy {
-  if (!record(value) || !exactKeys(value, [...responseKeys]) ||
+  if (!record(value) || !exactKeys(value, [...responseKeys], ['pow_difficulty']) ||
+    ('pow_difficulty' in value && (value.mode === 'external' ||
+      !integer(value.pow_difficulty, powDifficultyRange.min, powDifficultyRange.max))) ||
     typeof value.id !== 'string' || !uuidPattern.test(value.id) ||
     typeof value.tenant_scope_id !== 'string' || !uuidPattern.test(value.tenant_scope_id) ||
     typeof value.site_id !== 'string' || !uuidPattern.test(value.site_id) ||
@@ -284,6 +291,7 @@ function matchesConfig(policy: ChallengePolicy, config: ChallengePolicyConfig, e
       route.path === config.bypass_routes[index]?.path) &&
     policy.key_reference_configured &&
     policy.external_provider_configured === Boolean(config.external_provider) &&
+    policy.pow_difficulty === config.pow_difficulty &&
     policy.enabled === enabled
 }
 

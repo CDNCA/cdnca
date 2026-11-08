@@ -213,7 +213,7 @@ describe('详情抽屉状态标签', () => {
     // 根因：--ant-color-success 未定义时回退到 --cdnca-color-green6（主题里是 #edfbf3，和背景几乎同色）。
     const css = storeCSS.replace(/\/\*[\s\S]*?\*\//g, '')
     const ready = css.match(/\.market-store-goto\.market-store-goto--ready[^{]*\{([^}]*)\}/)?.[1] ?? ''
-    expect(ready).toMatch(/color: color-mix\(in srgb, var\(--cdnca-color-success\) \d+%, #000\)/)
+    expect(ready).toMatch(/color: color-mix\(in srgb, var\(--cdnca-color-success\) \d+%, var\(--cdnca-color-neutral80, #000000\)\)/)
     expect(ready).toMatch(/background: var\(--cdnca-color-success-bg\)/)
     expect(css).not.toMatch(/--ant-color-success|--cdnca-color-green6/)
     expect(css).not.toMatch(/market-store-goto[^{]*\{[^}]*opacity/)

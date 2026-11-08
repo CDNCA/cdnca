@@ -704,12 +704,15 @@
     padding-inline: 14px;
   }
 
-  .certificate-default-field,
-  .certificate-default-panel .certificate-default-field {
+  .certificate-default-field {
     grid-template-columns: 1fr;
     align-items: stretch;
     gap: 6px;
     padding: 8px 0;
+  }
+
+  .certificate-default-panel .certificate-default-field {
+    grid-template-columns: 1fr;
   }
 
   .certificate-default-field > label {

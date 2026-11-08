@@ -251,3 +251,30 @@ func TestDistributorWaitsForTheNodeSignerTrust(t *testing.T) {
 		t.Fatalf("not published once signer trust applied: %v", commands.published)
 	}
 }
+
+// Reset-node-host-delivery deletes the
+// node's delivery row after the node applied the revision. The running
+// distributor must send it again on its next pass, not wait out RetryAfter on
+// its in-memory record of the first send.
+func TestDistributorRepublishesAfterTheNodeDeliveryRowIsReset(t *testing.T) {
+	store := &fakeDeliveryStore{state: State{Ticket: []byte(`ticket-bytes`), TicketBody: &contract.ServiceTicket{Revision: 6}},
+		deliveries: map[string]NodeDelivery{}}
+	commands := &fakeCommands{}
+	now := testNow
+	distributor := &Distributor{Store: store, Commands: commands, Interval: time.Minute, Now: func() time.Time { return now },
+		Nodes: func(context.Context) ([]NodeTarget, error) { return []NodeTarget{{ID: "node", Capable: true}}, nil }}
+	if err := distributor.PublishOnce(t.Context()); err != nil || len(commands.published) != 1 {
+		t.Fatalf("first delivery: %d, %v", len(commands.published), err)
+	}
+	distributor.HandleReceipt(t.Context(), &fakeReceipt{receipt: &agentv1.InstallationBanReceipt{
+		NodeId: "node", Revision: 6, Applied: true, Status: "serving"}})
+	now = now.Add(time.Minute)
+	if err := distributor.PublishOnce(t.Context()); err != nil || len(commands.published) != 1 {
+		t.Fatalf("applied node got it again: %d, %v", len(commands.published), err)
+	}
+	delete(store.deliveries, "node") // reset-node-host-delivery
+	now = now.Add(time.Minute)
+	if err := distributor.PublishOnce(t.Context()); err != nil || len(commands.published) != 2 {
+		t.Fatalf("after the reset: published %d, want the revision again at once (%v)", len(commands.published), err)
+	}
+}

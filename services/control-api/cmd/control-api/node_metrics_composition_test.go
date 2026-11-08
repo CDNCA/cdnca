@@ -26,7 +26,7 @@ func TestNODE07NodeMetricsProductionComposition(t *testing.T) {
 		"nodemetrics.NewPostgresStore(pool)",
 		"nodemetrics.NewPostgresReader(pool)",
 		"runtime.processor.Process(ctx, delivery)",
-		"runtime.connection.Drain()",
+		"closeNATSAfterFlush(runtime.connection, runtime.flushTimeout, \"node metrics\")",
 	} {
 		if !strings.Contains(runtimeSource, required) {
 			t.Errorf("node metrics runtime composition missing %q", required)

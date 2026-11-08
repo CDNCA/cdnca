@@ -21,8 +21,8 @@ function Sparkline({ series }: { series: DBPoolSample[] }) {
   const points = series.map((s, i) => `${x(i).toFixed(1)},${y(s.in_use).toFixed(1)}`).join(' ')
   const limit = y(series[series.length - 1].max_conns)
   return <svg role="img" aria-hidden="true" width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block' }}>
-    <line x1={0} x2={width} y1={limit} y2={limit} stroke="var(--cdnca-color-error, #d4380d)" strokeDasharray="3 3" strokeWidth={1} />
-    <polyline points={points} fill="none" stroke="var(--cdnca-color-primary, #1677ff)" strokeWidth={1.5} />
+    <line x1={0} x2={width} y1={limit} y2={limit} stroke="var(--cdnca-color-error)" strokeDasharray="3 3" strokeWidth={1} />
+    <polyline points={points} fill="none" stroke="var(--cdnca-color-primary)" strokeWidth={1.5} />
   </svg>
 }
 

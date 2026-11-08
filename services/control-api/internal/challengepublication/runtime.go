@@ -61,6 +61,7 @@ type PublicationSnapshot struct {
 	BypassRoutes                              []BypassRoute
 	KeyReference                              string
 	ExternalProvider                          *ExternalProviderReference
+	PowDifficulty                             *int
 }
 
 type ResolvedKeys struct {
@@ -408,6 +409,10 @@ func buildArtifactMaterial(snapshot PublicationSnapshot, keys ResolvedKeys) Arti
 			MaxFailuresPerWindow: uint32(snapshot.MaxFailuresPerWindow), IPBinding: snapshot.IPBinding,
 			BindUserAgent: snapshot.BindUserAgent,
 		}},
+	}
+	if snapshot.PowDifficulty != nil {
+		difficulty := uint32(*snapshot.PowDifficulty)
+		policy.Rules[0].PowDifficulty = &difficulty
 	}
 	result := ArtifactMaterial{PolicyID: snapshot.PolicyID, TenantID: snapshot.TenantID, Policy: policy,
 		Keys: []ArtifactSecret{{KeyID: keys.Current.KeyID, Secret: slices.Clone(keys.Current.Secret)}}}

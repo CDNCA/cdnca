@@ -28,6 +28,15 @@ const zhCN = {
     bypassPlaceholder: '每行一条，例如：prefix /health/', keyReference: '密钥引用',
     keyPlaceholder: 'keyref:、vault: 或 kms: 引用', provider: '外部提供商', appReference: '应用引用',
     appPlaceholder: 'appref: 引用', attempts: '每个随机数尝试次数固定为 1',
+    powDifficulty: '工作量证明难度', powDefault: '默认（18，中低端手机最坏约 0.4 秒）',
+    powOption: '{{bits}}（中低端手机最坏约 {{time}}）', powMilliseconds: '{{n}} 毫秒', powSeconds: '{{n}} 秒',
+    powHint: '浏览器要在本机找出服务端选定的计数器，最坏要算 2^难度 次哈希，每加 1 耗时翻倍；耗时按中低端手机每秒约 60 万次估算。选默认时不向节点下发该字段；显式选择的难度需要节点升级到支持该字段的版本，旧版本节点会拒收新策略并继续使用原策略。',
+  },
+  strength: {
+    builtin: '延迟验证、点击验证、滑块验证和验证码都要求浏览器执行 JavaScript 完成工作量证明：能挡住普通脚本和只读取页面、不执行 JavaScript 的脚本，挡不住真实浏览器自动化（无头浏览器）。需要更强的防护请用第三方验证（腾讯云验证码、极验），或之后上线的 cdnca 人机验证。',
+    noscript: '不支持 JavaScript 的客户端无法通过任何内置模式。',
+    screenReader: '滑块验证和验证码页面提供“改用等待验证”（等待约 5 秒并完成工作量证明），供读屏用户使用。',
+    external: '外部验证交给腾讯云验证码或极验判断，防护强度取决于所选服务，不使用节点的工作量证明。',
   },
   validation: {
     required: '此字段不能为空', uuid: '请输入有效的小写 UUID', host: '请输入规范的小写主机名',
@@ -75,6 +84,15 @@ const enUS = {
     bypassPlaceholder: 'One per line, for example: prefix /health/', keyReference: 'Key reference',
     keyPlaceholder: 'keyref:, vault:, or kms: reference', provider: 'External provider', appReference: 'Application reference',
     appPlaceholder: 'appref: reference', attempts: 'Attempts per nonce are fixed at 1',
+    powDifficulty: 'Proof-of-work difficulty', powDefault: 'Default (18, worst case about 0.4 s on a low-end phone)',
+    powOption: '{{bits}} (worst case about {{time}} on a low-end phone)', powMilliseconds: '{{n}} ms', powSeconds: '{{n}} s',
+    powHint: 'The browser must find a counter chosen by the server, up to 2^difficulty hashes in the worst case; each step doubles the time. Times assume about 600,000 hashes per second on a low-end phone. Default sends nothing to nodes; an explicit difficulty needs nodes that support the field, and older nodes reject the new policy and keep the previous one.',
+  },
+  strength: {
+    builtin: 'Delayed, click, slider and CAPTCHA verification all require the browser to run JavaScript and complete a proof of work. They stop ordinary scripts and scripts that only read the page without running JavaScript, but not real browser automation (headless browsers). For stronger protection use third-party verification (Tencent Cloud CAPTCHA, GeeTest) or the upcoming cdnca human verification.',
+    noscript: 'Clients without JavaScript cannot pass any built-in mode.',
+    screenReader: 'Slider and CAPTCHA pages offer "Use wait verification instead" (wait about 5 seconds and complete the proof of work) for screen reader users.',
+    external: 'External verification is decided by Tencent Cloud CAPTCHA or GeeTest; its strength depends on that service and it does not use the edge proof of work.',
   },
   validation: {
     required: 'This field is required', uuid: 'Enter a valid lowercase UUID', host: 'Enter a canonical lowercase host',

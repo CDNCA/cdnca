@@ -984,9 +984,9 @@ func TestCloseCacheControlProductionResourcesOrdersOwnedLifecycle(t *testing.T) 
 		},
 	})
 	connection := cacheControlCloseRecorder{close: func() {
-		operations = append(operations, "unexpected fallback close")
-	}, drain: func() error {
-		operations = append(operations, "cache connection")
+		operations = append(operations, "cache connection close")
+	}, flush: func() error {
+		operations = append(operations, "cache connection flush")
 		return nil
 	}}
 	if err := closeCacheControlProductionResources(runtime, connection); err != nil {
@@ -994,27 +994,40 @@ func TestCloseCacheControlProductionResourcesOrdersOwnedLifecycle(t *testing.T) 
 	}
 	dependencies.Pool.Close()
 	operations = append(operations, "PG")
-	if got := strings.Join(operations, ","); got != "worker,local consumer,cache connection,PG" {
+	// Flush then Close, not Drain (Drain returned at once and only closed on an error).
+	if got := strings.Join(operations, ","); got != "worker,local consumer,cache connection flush,cache connection close,PG" {
 		t.Fatalf("cache control close order = %q", got)
 	}
 }
 
-func TestCloseCacheControlProductionResourcesFallsBackAfterDrainFailure(t *testing.T) {
-	sentinel := errors.New("drain failed")
+func TestCloseCacheControlProductionResourcesClosesAfterFlushFailure(t *testing.T) {
+	sentinel := errors.New("flush failed")
 	operations := make([]string, 0, 2)
 	connection := cacheControlCloseRecorder{
-		drain: func() error {
-			operations = append(operations, "drain")
+		flush: func() error {
+			operations = append(operations, "flush")
 			return sentinel
 		},
 		close: func() { operations = append(operations, "close") },
 	}
-	err := closeCacheControlProductionResources(nil, connection)
-	if !errors.Is(err, sentinel) || err.Error() != "drain cache control NATS" {
-		t.Fatalf("cache control drain error = %v", err)
+	for _, closeFn := range []func() error{
+		func() error { return closeCacheControlProductionResources(nil, connection) },
+		func() error { return closeCacheControlProductionResourcesContext(t.Context(), nil, connection) },
+	} {
+		operations = operations[:0]
+		err := closeFn()
+		if !errors.Is(err, sentinel) || err.Error() != "flush cache control NATS" {
+			t.Fatalf("cache control flush error = %v", err)
+		}
+		if got := strings.Join(operations, ","); got != "flush,close" {
+			t.Fatalf("cache control flush then close = %q", got)
+		}
 	}
-	if got := strings.Join(operations, ","); got != "drain,close" {
-		t.Fatalf("cache control drain fallback = %q", got)
+	operations = operations[:0]
+	connection.disconnected = true
+	if err := closeCacheControlProductionResourcesContext(t.Context(), nil, connection); err != nil ||
+		strings.Join(operations, ",") != "close" {
+		t.Fatalf("disconnected cache control close error=%v operations=%v", err, operations)
 	}
 }
 
@@ -1351,13 +1364,19 @@ type fakeReadinessProbe struct {
 	err error
 }
 
+// cacheControlCloseRecorder: flush (with or without a context) and close; disconnected skips the flush.
 type cacheControlCloseRecorder struct {
-	drain func() error
-	close func()
+	disconnected bool
+	flush        func() error
+	close        func()
 }
 
-func (recorder cacheControlCloseRecorder) Drain() error { return recorder.drain() }
-func (recorder cacheControlCloseRecorder) Close()       { recorder.close() }
+func (recorder cacheControlCloseRecorder) IsConnected() bool { return !recorder.disconnected }
+func (recorder cacheControlCloseRecorder) FlushWithContext(context.Context) error {
+	return recorder.flush()
+}
+func (recorder cacheControlCloseRecorder) FlushTimeout(time.Duration) error { return recorder.flush() }
+func (recorder cacheControlCloseRecorder) Close()                           { recorder.close() }
 
 func (p *fakeReadinessProbe) Ready() error { return p.err }
 

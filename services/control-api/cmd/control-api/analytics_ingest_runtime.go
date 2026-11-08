@@ -41,11 +41,10 @@ type analyticsIngestWorker interface {
 }
 
 type analyticsIngestConnection interface {
-	Drain() error
+	IsConnected() bool
+	FlushWithContext(context.Context) error
 	Close()
 	IsClosed() bool
-	StatusChanged(...nats.Status) chan nats.Status
-	RemoveStatusListener(chan nats.Status)
 }
 
 type analyticsIngestHealth struct {
@@ -296,39 +295,21 @@ func (runtime *analyticsIngestProcessRuntime) CloseContext(ctx context.Context) 
 			runtime.closeErr = errors.New("close analytics ingest consumer")
 		}
 		connectionClosed := runtime.connection == nil
+		if runtime.connection != nil && !runtime.connection.IsClosed() {
+			// Flush and close, not Drain:
+			// the consumer's pull subscription is gone once worker.Close returns,
+			// so Drain only handed the close to a background goroutine bounded by
+			// DrainTimeout, spending the shared shutdown budget when a reply was
+			// left pending. Unacknowledged messages are redelivered after AckWait.
+			if runtime.connection.IsConnected() {
+				if err := runtime.connection.FlushWithContext(closeCtx); err != nil && runtime.closeErr == nil {
+					runtime.closeErr = errors.New("flush analytics ingest NATS connection")
+				}
+			}
+			runtime.connection.Close()
+		}
 		if runtime.connection != nil {
-			closedStatuses := runtime.connection.StatusChanged(nats.CLOSED)
-			defer runtime.connection.RemoveStatusListener(closedStatuses)
 			connectionClosed = runtime.connection.IsClosed()
-			if !connectionClosed {
-				if err := runtime.connection.Drain(); err != nil {
-					if runtime.closeErr == nil {
-						runtime.closeErr = errors.New("drain analytics ingest NATS connection")
-					}
-					runtime.connection.Close()
-					connectionClosed = runtime.connection.IsClosed()
-				}
-			}
-			if !connectionClosed {
-				poll := time.NewTicker(10 * time.Millisecond)
-				defer poll.Stop()
-			waitForClose:
-				for !connectionClosed {
-					select {
-					case status := <-closedStatuses:
-						connectionClosed = status == nats.CLOSED
-					case <-poll.C:
-						connectionClosed = runtime.connection.IsClosed()
-					case <-closeCtx.Done():
-						runtime.connection.Close()
-						connectionClosed = runtime.connection.IsClosed()
-						if runtime.closeErr == nil {
-							runtime.closeErr = errors.New("analytics ingest NATS drain timed out")
-						}
-						break waitForClose
-					}
-				}
-			}
 			if !connectionClosed && runtime.closeErr == nil {
 				runtime.closeErr = errors.New("close analytics ingest NATS connection")
 			}

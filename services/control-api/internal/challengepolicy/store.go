@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/sitelock"
 	"github.com/google/uuid"
@@ -76,6 +77,7 @@ type revisionDocument struct {
 	BypassRoutes         []BypassRoute              `json:"bypass_routes"`
 	KeyReference         string                     `json:"key_reference"`
 	ExternalProvider     *ExternalProviderReference `json:"external_provider"`
+	PowDifficulty        *int                       `json:"pow_difficulty,omitempty"`
 	Enabled              bool                       `json:"enabled"`
 	Deleted              bool                       `json:"deleted"`
 }
@@ -522,7 +524,7 @@ func insertRevision(ctx context.Context, tx pgx.Tx, actor Actor, item storedPoli
 		ClockSkewSeconds: item.ClockSkewSeconds, AttemptsPerNonce: item.AttemptsPerNonce,
 		FailureWindowSeconds: item.FailureWindowSeconds, MaxFailuresPerWindow: item.MaxFailuresPerWindow,
 		IPBinding: item.IPBinding, BindUserAgent: item.BindUserAgent, BypassRoutes: item.BypassRoutes,
-		KeyReference: item.KeyReference, ExternalProvider: item.External,
+		KeyReference: item.KeyReference, ExternalProvider: item.External, PowDifficulty: item.PowDifficulty,
 		Enabled: item.Enabled, Deleted: item.Deleted,
 	}
 	encodedRoutes, err := json.Marshal(item.BypassRoutes)
@@ -545,17 +547,17 @@ func insertRevision(ctx context.Context, tx pgx.Tx, actor Actor, item storedPoli
 			clock_skew_seconds, attempts_per_nonce, failure_window_seconds, max_failures_per_window,
 			ip_binding, bind_user_agent, bypass_routes, key_reference, external_provider,
 			external_app_reference, enabled, deleted, document, created_by_scope_id,
-			created_by_user_id, request_id, trace_id, created_at
+			created_by_user_id, request_id, trace_id, created_at, pow_difficulty
 		) VALUES (
 			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-			$21,$22,$23,$24,$25,$26,$27,$28,$29,$30
+			$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31
 		)`,
 		item.ID, item.TenantScopeID, item.TenantID, item.SiteID, item.Host, item.Revision, action,
 		item.Priority, item.Mode, item.MinDelaySeconds, item.ChallengeTTLSeconds, item.PassTTLSeconds,
 		item.ClockSkewSeconds, item.AttemptsPerNonce, item.FailureWindowSeconds, item.MaxFailuresPerWindow,
 		item.IPBinding, item.BindUserAgent, encodedRoutes, item.KeyReference, provider, appReference,
 		item.Enabled, item.Deleted, encodedDocument, actor.ScopeID, actor.UserID,
-		metadata.RequestID, metadata.TraceID, item.UpdatedAt,
+		metadata.RequestID, metadata.TraceID, item.UpdatedAt, item.PowDifficulty,
 	)
 	return err
 }
@@ -568,7 +570,8 @@ const selectPolicySQL = `
 	       revision.max_failures_per_window, revision.ip_binding, revision.bind_user_agent,
 	       revision.bypass_routes, revision.key_reference, revision.external_provider,
 	       revision.external_app_reference, policy.current_enabled, policy.current_deleted,
-	       policy.current_revision, policy.created_by_user_id, policy.created_at, policy.updated_at
+	       policy.current_revision, policy.created_by_user_id, policy.created_at, policy.updated_at,
+	       revision.pow_difficulty
 	FROM challenge_policies policy
 	JOIN challenge_policy_revisions revision
 	  ON revision.policy_id = policy.id AND revision.revision = policy.current_revision`
@@ -615,7 +618,7 @@ func scanStoredPolicy(row rowScanner) (storedPolicy, error) {
 		&item.FailureWindowSeconds, &item.MaxFailuresPerWindow, &item.IPBinding,
 		&item.BindUserAgent, &routes, &item.KeyReference, &provider, &appReference,
 		&item.Enabled, &item.Deleted, &item.Revision, &item.CreatedByUserID,
-		&item.CreatedAt, &item.UpdatedAt,
+		&item.CreatedAt, &item.UpdatedAt, &item.PowDifficulty,
 	)
 	if err != nil {
 		return storedPolicy{}, err
@@ -646,6 +649,11 @@ func applyConfig(item *storedPolicy, config Config) {
 	item.BindUserAgent = config.BindUserAgent
 	item.BypassRoutes = append([]BypassRoute(nil), config.BypassRoutes...)
 	item.KeyReference = config.KeyReference
+	item.PowDifficulty = nil
+	if config.PowDifficulty != nil {
+		value := *config.PowDifficulty
+		item.PowDifficulty = &value
+	}
 	if config.ExternalProvider == nil {
 		item.External = nil
 	} else {
@@ -768,6 +776,11 @@ func normalizeStoreError(err error) error {
 		if errors.Is(err, known) {
 			return known
 		}
+	}
+	// The publication planner's refusal keeps its nodes.
+	var capability *edgepublish.TargetCapabilityError
+	if errors.As(err, &capability) {
+		return capability
 	}
 	var postgresError *pgconn.PgError
 	if errors.As(err, &postgresError) && postgresError.Code == "23505" {

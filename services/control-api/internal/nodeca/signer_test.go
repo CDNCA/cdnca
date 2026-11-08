@@ -620,3 +620,43 @@ func (reader *countingReader) Read(value []byte) (int, error) {
 	reader.reads.Add(1)
 	return reader.reader.Read(value)
 }
+
+// 有效期类拒绝要说明具体原因（哪张链证书不覆盖、请求窗口与当前时间），
+// 仍然 errors.Is(ErrInvalidRequest)。
+func TestSignerValidityRefusalsNameTheReason(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	fixture := newCAFixture(t, now)
+	signer, err := newSigner(fixture.issuerKey, fixture.issuer, fixture.chain(), rand.Reader, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrDER, _ := newCSR(t, "ecdsa", nil)
+	base := validRequest(now, uuid.New(), csrDER)
+	tests := []struct {
+		name   string
+		mutate func(*nodeidentity.SignRequest)
+		want   []string
+	}{
+		{name: "ends after issuer", mutate: func(request *nodeidentity.SignRequest) { request.NotAfter = fixture.issuer.NotAfter.Add(time.Second) },
+			want: []string{"does not cover", "node identity issuing CA", fixture.issuer.NotAfter.UTC().Format(time.RFC3339)}},
+		{name: "future lifetime", mutate: func(request *nodeidentity.SignRequest) { request.NotBefore = now.Add(time.Second) },
+			want: []string{"not yet valid", now.Format(time.RFC3339)}},
+		{name: "expired lifetime", mutate: func(request *nodeidentity.SignRequest) { request.NotAfter = now },
+			want: []string{"already expired", now.Format(time.RFC3339)}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := base
+			test.mutate(&request)
+			_, err := signer.SignNodeCertificate(context.Background(), request)
+			if !errors.Is(err, ErrInvalidRequest) {
+				t.Fatalf("error = %v, want ErrInvalidRequest", err)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error %q does not mention %q", err, want)
+				}
+			}
+		})
+	}
+}

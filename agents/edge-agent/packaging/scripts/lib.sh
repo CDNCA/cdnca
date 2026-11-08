@@ -941,6 +941,116 @@ install_atomic_metadata() {
   durable_sync "${metadata_parent}"
 }
 
+# Packaging scripts covered by the release signature: the signed manifest pins
+# the SBOM digest, and the release build lists these scripts in the SBOM files
+# with their SHA256 and their bytes as base64 in one tool annotation
+# (agents/edge-agent/packaging/build/recipe.sh write_sbom). Upgrade bundles
+# (full v1 and Agent-rebuilt delta) carry the SBOM but no native package, so
+# the bytes come from the signed SBOM; only bytes matching the signed digests
+# are installed.
+PACKAGING_TOOLSET_SCRIPTS='lib install preflight rollback uninstall upgrade'
+PACKAGING_SCRIPT_ANNOTATION='cdnca.packaging-script/v1 base64:'
+
+sbom_carries_toolset() {
+  jq -e --arg prefix "${PACKAGING_SCRIPT_ANNOTATION}" \
+    '[.files[]? | select((.fileName // "") | startswith("packaging/scripts/")) | .annotations[]? |
+      select((.comment // "") | startswith($prefix))] | length > 0' "$1" >/dev/null 2>&1
+}
+
+remove_toolset_staging() {
+  for toolset_left in "$(root_path /var/lib/cdnca-edge-agent-packaging)"/.toolset-staging.*; do
+    [ -d "${toolset_left}" ] && [ ! -L "${toolset_left}" ] || continue
+    find "${toolset_left}" -mindepth 1 -maxdepth 1 -type f -delete
+    rmdir -- "${toolset_left}" 2>/dev/null || true
+  done
+}
+
+# install_toolset_from_sbom SBOM SIGNED_SHA256: the caller verified that
+# SIGNED_SHA256 is the SBOM digest in a manifest signed by the pinned key.
+install_toolset_from_sbom() {
+  toolset_libexec=$(root_path /usr/libexec/cdnca-edge-agent)
+  command -v base64 >/dev/null 2>&1 || die "base64 is required to refresh the packaging toolset"
+  # The helper unit (ProtectSystem=strict) can write only its ReadWritePaths.
+  toolset_staging=$(mktemp -d "$(root_path /var/lib/cdnca-edge-agent-packaging)/.toolset-staging.XXXXXX")
+  # Read only a private copy whose digest is the signed one.
+  cp -- "$1" "${toolset_staging}/sbom.json"
+  [ "$(sha256_file "${toolset_staging}/sbom.json")" = "$2" ] || die "release SBOM differs from the signed manifest"
+  for toolset_name in ${PACKAGING_TOOLSET_SCRIPTS}; do
+    toolset_member=packaging/scripts/${toolset_name}.sh
+    toolset_digest=$(jq -er --arg name "${toolset_member}" \
+      '[.files[]? | select(.fileName == $name) | .checksums[]? | select(.algorithm == "SHA256") | .checksumValue] |
+        if length == 1 then .[0] else error("ambiguous") end' "${toolset_staging}/sbom.json" 2>/dev/null) ||
+      die "signed SBOM does not list ${toolset_member}"
+    case "${toolset_digest}" in *[!0-9a-f]*|'') die "signed SBOM digest for ${toolset_member} is invalid" ;; esac
+    [ "${#toolset_digest}" -eq 64 ] || die "signed SBOM digest for ${toolset_member} is invalid"
+    jq -jer --arg name "${toolset_member}" --arg prefix "${PACKAGING_SCRIPT_ANNOTATION}" \
+      '[.files[]? | select(.fileName == $name) | .annotations[]? | .comment // "" | select(startswith($prefix)) |
+        .[($prefix | length):]] | if length == 1 then .[0] else error("ambiguous") end' \
+      "${toolset_staging}/sbom.json" >"${toolset_staging}/${toolset_name}.b64" 2>/dev/null ||
+      die "signed SBOM does not carry ${toolset_member}"
+    base64 -d "${toolset_staging}/${toolset_name}.b64" >"${toolset_staging}/${toolset_name}.sh" 2>/dev/null ||
+      die "signed SBOM content of ${toolset_member} is not base64"
+    [ "$(sha256_file "${toolset_staging}/${toolset_name}.sh")" = "${toolset_digest}" ] ||
+      die "${toolset_member} differs from the signed SBOM"
+  done
+  for toolset_name in ${PACKAGING_TOOLSET_SCRIPTS}; do
+    install_atomic_metadata "${toolset_staging}/${toolset_name}.sh" "${toolset_libexec}/${toolset_name}.sh" 0555
+  done
+  find "${toolset_staging}" -mindepth 1 -maxdepth 1 -type f -delete
+  rmdir -- "${toolset_staging}"
+}
+
+refresh_toolset_from_release() {
+  toolset_release=$1
+  toolset_key=$(root_path /etc/cdnca-edge-agent/package-signing.pem)
+  assert_regular_file "${toolset_release}/manifest" "release manifest"
+  assert_regular_file "${toolset_release}/manifest.sig" "release manifest signature"
+  assert_regular_file "${toolset_release}/edge-agent.spdx.json" "release SBOM"
+  assert_regular_file "${toolset_key}" "pinned package public key"
+  if ed25519_tool_trusted; then
+    "${ED25519_TOOL_PATH}" verify "${toolset_key}" "${toolset_release}/manifest" "${toolset_release}/manifest.sig" >/dev/null 2>&1 ||
+      die "release manifest signature verification failed"
+  else
+    openssl pkeyutl -verify -pubin -inkey "${toolset_key}" -rawin -in "${toolset_release}/manifest" \
+      -sigfile "${toolset_release}/manifest.sig" >/dev/null 2>&1 || die "release manifest signature verification failed"
+  fi
+  install_toolset_from_sbom "${toolset_release}/edge-agent.spdx.json" \
+    "$(manifest_value "${toolset_release}/manifest" 8 sbom_sha256)"
+}
+
+# After an upgrade committed: make the installed toolset the one the new
+# release signed. Never fails the upgrade; the outcome is kept in
+# toolset-refresh for the operator and the next upgrade retries.
+refresh_toolset_after_upgrade() {
+  toolset_release=$1
+  toolset_error=$(root_path /var/lib/cdnca-edge-agent-packaging)/.toolset-refresh.err.$$
+  toolset_record=$(root_path /var/lib/cdnca-edge-agent-packaging/toolset-refresh)
+  if ! sbom_carries_toolset "${toolset_release}/edge-agent.spdx.json"; then
+    # Releases built before the SBOM carried the scripts.
+    printf 'status=skipped\nversion=%s\nreason=signed SBOM carries no packaging scripts\n' \
+      "$(basename -- "${toolset_release}")" >"${toolset_record}.$$"
+    chmod 0600 "${toolset_record}.$$"
+    mv -f "${toolset_record}.$$" "${toolset_record}"
+    return 0
+  fi
+  set +e
+  (set -e; refresh_toolset_from_release "${toolset_release}") 2>"${toolset_error}"
+  toolset_status=$?
+  set -e
+  if [ "${toolset_status}" -eq 0 ]; then
+    printf 'status=ok\nversion=%s\n' "$(basename -- "${toolset_release}")" >"${toolset_record}.$$"
+  else
+    printf 'status=failed\nversion=%s\nreason=%s\n' "$(basename -- "${toolset_release}")" \
+      "$(tail -n 1 "${toolset_error}" | tr -cd '[:print:]' | cut -c1-200)" >"${toolset_record}.$$"
+    printf 'cdnca-edge-agent packaging: toolset refresh failed; the upgrade stands and the next upgrade retries\n' >&2
+    remove_toolset_staging
+  fi
+  rm -f -- "${toolset_error}"
+  chmod 0600 "${toolset_record}.$$"
+  mv -f "${toolset_record}.$$" "${toolset_record}"
+  return 0
+}
+
 cleanup_metadata_install_staging() {
   metadata_pid=$1
   validate_uint "${metadata_pid}" "metadata staging pid"
@@ -1658,6 +1768,26 @@ wait_for_health() {
   done
 }
 
+# The only symbolic links the Agent writes into its state are version pointers:
+# l4runtime and http3runtime "current" (switchCurrent, staged as current.new)
+# and certstore "current"/"lkg" (setPointer, staged as .<name>-<version>.tmp).
+# Each is relative, names one entry of the sibling versions directory, and that
+# entry is a real directory. Any other link, an absolute or escaping target,
+# or a dangling one is refused.
+validate_state_pointers() {
+  # GNU find only: hosts may carry perl-base without File::Find. Every other
+  # entry is a non-link, so "-xtype d" resolves inside the tree.
+  unsafe_state_link=$(cd -- "$1" && find . -type l ! \( \
+    \( -path ./l4-runtime/current -o -path ./l4-runtime/current.new \
+      -o -path ./http3-runtime/current -o -path ./http3-runtime/current.new \
+      -o -path ./certificates/current -o -path ./certificates/lkg \
+      -o \( \( -path './certificates/.current-*.tmp' -o -path './certificates/.lkg-*.tmp' \) \
+        ! -path './certificates/*/*' \) \) \
+    -lname 'versions/[A-Za-z0-9]*' ! -lname '*/*/*' ! -lname '*[!A-Za-z0-9._/-]*' \
+    -xtype d \) -print -quit) || return 1
+  [ -z "${unsafe_state_link}" ]
+}
+
 validate_state_tree() {
   state_tree=$1
   state_label=$2
@@ -1665,11 +1795,13 @@ validate_state_tree() {
   state_device=$(stat -c '%d' "${state_tree}")
   foreign_state_device=$(find "${state_tree}" -printf '%D %p\n' | awk -v expected="${state_device}" '$1 != expected { sub(/^[^ ]+ /, ""); print; exit }')
   [ -z "${foreign_state_device}" ] || die "${state_label} crosses a filesystem boundary"
-  unsafe_state_path=$(find "${state_tree}" \( -type l -o \( ! -type d -a ! -type f \) \) -print -quit)
+  unsafe_state_path=$(find "${state_tree}" ! -type d ! -type f ! -type l -print -quit)
   [ -z "${unsafe_state_path}" ] || die "${state_label} contains a symbolic link or special file"
+  validate_state_pointers "${state_tree}" || die "${state_label} contains a symbolic link or special file"
   linked_state_path=$(find "${state_tree}" -type f -links +1 -print -quit)
   [ -z "${linked_state_path}" ] || die "${state_label} contains a hard-linked file"
-  writable_state_path=$(find "${state_tree}" -perm /0022 -print -quit)
+  # A symbolic link's own mode is always 0777 and grants nothing.
+  writable_state_path=$(find "${state_tree}" ! -type l -perm /0022 -print -quit)
   [ -z "${writable_state_path}" ] || die "${state_label} contains group/world-writable state"
   privileged_state_path=$(find "${state_tree}" -perm /7000 -print -quit)
   [ -z "${privileged_state_path}" ] || die "${state_label} contains setuid, setgid, or sticky state"
@@ -1705,13 +1837,19 @@ state_tree_sha256() {
       my $path = "$root/$relative";
       my @stat = lstat($path);
       die "cannot stat state tree\n" unless @stat;
-      my $kind = -d _ ? "d" : -f _ ? "f" : die "unsafe state tree entry\n";
+      my $kind = -l _ ? "l" : -d _ ? "d" : -f _ ? "f" : die "unsafe state tree entry\n";
       for my $field ($relative, $kind, sprintf("%o", $stat[2] & 07777),
           $stat[4], $stat[5], $stat[7]) {
         $field = "$field";
         $hash->add(pack("N", length($field)), $field);
       }
       next if $kind eq "d";
+      if ($kind eq "l") {
+        my $target = readlink($path);
+        die "cannot read state link\n" unless defined $target;
+        $hash->add(pack("N", length($target)), $target);
+        next;
+      }
       open my $file, "<:raw", $path or die "cannot open state file\n";
       my $buffer;
       while (read($file, $buffer, 65536)) { $hash->add($buffer); }

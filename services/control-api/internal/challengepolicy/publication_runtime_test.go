@@ -3,9 +3,11 @@ package challengepolicy
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
+	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/challengepublication"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/google/uuid"
@@ -207,5 +209,60 @@ func TestPublicationStatusCarriesIgnoredOldRelease(t *testing.T) {
 		Total: 3, Healthy: 2, Superseded: 1}, nil)
 	if view.Superseded != 1 || view.Failed != 0 || !validPublicationStatus(view) {
 		t.Fatalf("publicationStatusView() = %+v valid=%v", view, validPublicationStatus(view))
+	}
+}
+
+// The planner leaves nodes without CHALLENGE_POW out of
+// the rollout (UnsupportedNodeIDs); promotion defers them like offline
+// nodes (held, redelivered once they declare it), so they keep their previous
+// policy and do not fail the promotion.
+func TestPublicationCoordinatorDefersNodesWithoutChallengePoW(t *testing.T) {
+	snapshot := testPublicationSnapshot()
+	rolloutID, configVersionID := uuid.New(), uuid.New()
+	capable, unsupported := uuid.New(), uuid.New()
+	status := challengepublication.RolloutStatus{RolloutID: rolloutID, ConfigVersionID: configVersionID,
+		Revision: 1, State: challengepublication.StateHealthy, Total: 1, Healthy: 1}
+	runtime := &publicationRuntimeStub{
+		secret: challengepublication.SecretPublication{RolloutID: rolloutID, ConfigVersionID: configVersionID, Revision: 1},
+		status: status,
+		promotion: challengepublication.PromotionStatus{RolloutStatus: status,
+			ConfigPublication: &challengepublication.ConfigPublication{PublicationID: uuid.New(), Revision: 9}},
+	}
+	planner := &publicationPlannerStub{plan: PublicationPlan{NodeIDs: []uuid.UUID{capable},
+		UnsupportedNodeIDs:   []uuid.UUID{unsupported},
+		RequiredCapabilities: challengepublication.RequiredCapabilities(true),
+		HealthCheck: edgedeployment.HealthCheckPolicy{ActivationTimeout: time.Second,
+			ObservationWindow: time.Second, RequiredConsecutiveSuccesses: 1}, Deadline: time.Now().Add(time.Minute)}}
+	verifier := &publicationVerifierStub{nodes: []uuid.UUID{capable}}
+	coordinator, err := NewPublicationCoordinator(&publicationPolicySourceStub{snapshot: snapshot}, runtime, planner, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := testPublicationCommand(snapshot)
+	request.RolloutID = rolloutID
+	if _, err := coordinator.Promote(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	promoted := runtime.promoted
+	if !slices.Equal(promoted.NodeIDs, []uuid.UUID{capable, unsupported}) ||
+		!slices.Equal(promoted.Readiness.Ready, []uuid.UUID{capable}) ||
+		!slices.Equal(promoted.Readiness.Deferred, []uuid.UUID{unsupported}) ||
+		len(promoted.RequiredCapabilities) != 3 ||
+		promoted.RequiredCapabilities[2].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW {
+		t.Fatalf("promote request nodes=%v readiness=%+v capabilities=%v", promoted.NodeIDs, promoted.Readiness,
+			promoted.RequiredCapabilities)
+	}
+	// A rollout node that no longer declares it (a downgrade) is in the
+	// request once.
+	other := uuid.New()
+	verifier.nodes = []uuid.UUID{capable, other}
+	planner.plan.NodeIDs, planner.plan.UnsupportedNodeIDs = []uuid.UUID{other}, []uuid.UUID{capable}
+	verifier.readiness = challengepublication.NodeReadiness{Ready: []uuid.UUID{other}, Deferred: []uuid.UUID{capable}}
+	if _, err := coordinator.Promote(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if promoted := runtime.promoted; !slices.Equal(promoted.NodeIDs, []uuid.UUID{capable, other}) ||
+		!slices.Equal(verifier.planned, []uuid.UUID{other}) {
+		t.Fatalf("downgraded: nodes=%v planned=%v", promoted.NodeIDs, verifier.planned)
 	}
 }

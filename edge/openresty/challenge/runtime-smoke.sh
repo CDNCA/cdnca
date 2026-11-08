@@ -6,8 +6,8 @@ repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)"
 # shellcheck disable=SC1091
 . "${repo_root}/edge/openresty/runtime.env"
 
-engine_sha256="81da1037bb0cf85e17949b271026e08733b80fdb4f00f6bab1ea471865bcd7ee"
-crypto_sha256="f3198f31e12cb5700d78a80ca4f038e97db949e847f3e8d27e228b4263dc0367"
+engine_sha256="360e01b6b537ce9e357626a8b0fe1f3209bbd534189fdbc5a5946204f20e88d5"
+crypto_sha256="e7a47383132d27e7d8599c27499516a0e8c77b36a75f2adff583526ca514e87e"
 ip_sha256="02372567c92ceea47959291959b2381e13836a2011a4819c52805f8f57324631"
 runtime_root="/usr/local/share/cdnca/challenge"
 tmp_base="${TMPDIR:-/tmp}"

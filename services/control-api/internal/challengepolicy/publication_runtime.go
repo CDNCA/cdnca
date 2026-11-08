@@ -31,7 +31,12 @@ type publicationRuntime interface {
 }
 
 type PublicationPlan struct {
-	NodeIDs              []uuid.UUID
+	NodeIDs []uuid.UUID
+	// UnsupportedNodeIDs are the scope's nodes left out of NodeIDs because
+	// the policy has an explicit pow_difficulty and their latest session does
+	// not declare CHALLENGE_POW. They keep their previous
+	// policy; promotion defers them like offline nodes.
+	UnsupportedNodeIDs   []uuid.UUID
 	RequiredCapabilities []*agentv1.Capability
 	HealthCheck          edgedeployment.HealthCheckPolicy
 	Deadline             time.Time
@@ -174,6 +179,15 @@ func (coordinator *PublicationCoordinator) Promote(ctx context.Context, request 
 			if err != nil {
 				return err
 			}
+			// Nodes without CHALLENGE_POW that are not in the rollout are
+			// deferred too: the binding is held for them and the redeliverer
+			// gives them the policy once they declare it.
+			for _, nodeID := range plan.UnsupportedNodeIDs {
+				if !slices.Contains(nodeIDs, nodeID) {
+					nodeIDs = append(nodeIDs, nodeID)
+					readiness.Deferred = append(readiness.Deferred, nodeID)
+				}
+			}
 			promotion, err := coordinator.runtime.Promote(ctx, challengepublication.PromoteRequest{
 				PublishRequest: challengepublication.PublishRequest{
 					Policy: publicationRuntimeSnapshot(snapshot), Actor: actor, EdgeActor: edgeActor,
@@ -241,6 +255,10 @@ func publicationRuntimeSnapshot(snapshot PublicationSnapshot) challengepublicati
 		result.ExternalProvider = &challengepublication.ExternalProviderReference{
 			Provider: snapshot.ExternalProvider.Provider, AppReference: snapshot.ExternalProvider.AppReference,
 		}
+	}
+	if snapshot.PowDifficulty != nil {
+		value := *snapshot.PowDifficulty
+		result.PowDifficulty = &value
 	}
 	return result
 }
@@ -328,12 +346,23 @@ func (planner *PostgresPublicationPlanner) Plan(ctx context.Context, tx pgx.Tx, 
 	if rows.Err() != nil || len(nodeIDs) == 0 || len(nodeIDs) > 10000 {
 		return PublicationPlan{}, ErrUnavailable
 	}
+	rows.Close()
+	required := challengepublication.RequiredCapabilities(snapshot.PowDifficulty != nil)
+	var unsupported []uuid.UUID
+	if snapshot.PowDifficulty != nil {
+		// Older agents refuse the field; they are left
+		// out (keep their previous policy). No node can take it: refused,
+		// naming the nodes.
+		refusal := edgepublish.ValidateFeatureCapabilityTargets(ctx, tx, nodeIDs, required)
+		if nodeIDs, unsupported, err = challengepublication.SplitCapabilityRefusal(nodeIDs, refusal); err != nil {
+			return PublicationPlan{}, ErrUnavailable
+		}
+		if len(nodeIDs) == 0 {
+			return PublicationPlan{}, refusal
+		}
+	}
 	return PublicationPlan{
-		NodeIDs: nodeIDs,
-		RequiredCapabilities: []*agentv1.Capability{
-			{Name: agentv1.CapabilityName_CAPABILITY_NAME_ATOMIC_RELEASE, ApiVersion: 1},
-			{Name: agentv1.CapabilityName_CAPABILITY_NAME_CONFIG_PRECHECK, ApiVersion: 1},
-		},
+		NodeIDs: nodeIDs, UnsupportedNodeIDs: unsupported, RequiredCapabilities: required,
 		HealthCheck: edgedeployment.HealthCheckPolicy{
 			ActivationTimeout: planner.config.ActivationTimeout, ObservationWindow: planner.config.ObservationWindow,
 			RequiredConsecutiveSuccesses: planner.config.RequiredConsecutiveSuccesses,

@@ -110,7 +110,7 @@ run_containers() {
         apt-get install -y -qq openssl systemd systemd-sysv coreutils jq gcc libc6-dev perl util-linux logrotate gpgv >/dev/null
         agents/edge-agent/packaging/tests/packaging_test.sh
         agents/edge-agent/packaging/tests/packaging_root_test.sh
-        for regression in metadata restore-staging rollback-interrupt disable-failure; do
+        for regression in metadata restore-staging rollback-interrupt disable-failure agent-pointers; do
           CDNCA_REGRESSION_ONLY=\${regression} agents/edge-agent/packaging/tests/packaging_test.sh
         done
         arch=\$(dpkg --print-architecture)

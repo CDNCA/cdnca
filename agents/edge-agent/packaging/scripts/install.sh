@@ -74,7 +74,7 @@ fi
 . "${script_dir}/lib.sh"
 
 usage() {
-  printf 'usage: %s --artifact PATH --sbom PATH --manifest PATH --signature PATH --public-key PATH [--destdir PATH] [--upgrade] [--runtime-identity cdnca-edge|root] [--service-driver PATH] [--health-timeout SECONDS] [--health-stable SECONDS] [--native PATH]\n' "$0" >&2
+  printf 'usage: %s --artifact PATH --sbom PATH --manifest PATH --signature PATH --public-key PATH [--destdir PATH] [--upgrade] [--runtime-identity cdnca-edge|root] [--service-driver PATH] [--health-timeout SECONDS] [--health-stable SECONDS] [--native PATH] [--refresh-toolset]\n' "$0" >&2
   exit 64
 }
 
@@ -89,6 +89,7 @@ public_key=
 # native.tar.gz; the Agent verifies and switches /opt/cdnca-node at start.
 native_package=
 upgrade=false
+refresh_toolset=false
 requested_runtime_identity=
 health_timeout=30
 health_stable=5
@@ -112,6 +113,7 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --upgrade) upgrade=true; shift ;;
+    --refresh-toolset) refresh_toolset=true; shift ;;
     *) usage ;;
   esac
 done
@@ -166,6 +168,39 @@ if [ -n "${native_package}" ]; then
 fi
 verify_bundle "${artifact}" "${sbom}" "${manifest}" "${signature}" "${public_key}"
 assert_bundle_fingerprints "${artifact}" "${sbom}" "${manifest}" "${signature}" "${public_key}"
+if [ "${refresh_toolset}" = true ]; then
+  # One-time transition for installed nodes: the helper always runs the
+  # installed /usr/libexec toolset and an upgrade copies that toolset onto
+  # itself, so a packaging fix never reaches a node through an upgrade. Run
+  # from a release whose native package the operator verified
+  # (install-node.sh --verify-native-package), this replaces only the scripts,
+  # with the bytes the signed SBOM carries; release, service, state and replay
+  # records are untouched.
+  [ "${upgrade}" = false ] && [ -z "${native_package}" ] && [ -z "${requested_runtime_identity}" ] || \
+    usage_error "--refresh-toolset takes only the signed bundle inputs"
+  # Never older than the accepted release: a refresh cannot bring back a
+  # toolset an earlier fix replaced.
+  check_release_replay
+  pinned_key=$(root_path /etc/cdnca-edge-agent/package-signing.pem)
+  assert_safe_tree "${pinned_key}"
+  assert_regular_file "${pinned_key}" "pinned package public key"
+  cmp -s "${public_key}" "${pinned_key}" || die "package public key differs from the pinned key"
+  [ -L "$(root_path /usr/lib/cdnca-edge-agent/current)" ] || die "toolset refresh requires an installed release"
+  for toolset_script in lib.sh install.sh preflight.sh rollback.sh uninstall.sh upgrade.sh; do
+    [ "${script_dir}/${toolset_script}" != "$(root_path "/usr/libexec/cdnca-edge-agent/${toolset_script}")" ] ||
+      die "toolset refresh must run from a new release"
+  done
+  sbom_carries_toolset "${sbom}" || die "signed SBOM carries no packaging scripts; toolset was not refreshed"
+  acquire_lock
+  trap 'remove_toolset_staging; release_lock' EXIT
+  trap 'exit 1' HUP INT TERM
+  ! state_layout_migration_pending || die "a state layout migration is pending; toolset was not refreshed"
+  install_toolset_from_sbom "${sbom}" "${BUNDLE_SBOM_SHA256}"
+  release_lock
+  trap - EXIT HUP INT TERM
+  printf 'refreshed cdnca-edge-agent packaging toolset from %s\n' "${VERIFIED_VERSION}"
+  exit 0
+fi
 check_release_replay
 
 package_root=$(root_path /usr/lib/cdnca-edge-agent)
@@ -395,6 +430,8 @@ record_transaction_commit
 publish_accepted_manifest
 commit_state_layout_migration
 clear_package_transaction
+refresh_toolset_after_upgrade "${package_root}/versions/${VERIFIED_VERSION}" || \
+  printf 'cdnca-edge-agent packaging: toolset refresh could not be recorded\n' >&2
 release_lock
 trap - EXIT HUP INT TERM
 printf 'upgraded cdnca-edge-agent from %s to %s; state backup: %s\n' "${old_version}" "${VERIFIED_VERSION}" "${STATE_BACKUP}"

@@ -143,10 +143,28 @@ if [ "${package_recovery_only}" = true ]; then
   trap - EXIT HUP INT TERM
   exit 0
 fi
+# Refuse unsafe state while the Agent still runs, so a refusal never takes the
+# node offline. The check is repeated once the Agent has stopped writing; if
+# that one fails the Agent is started again before anything is removed.
+validate_retained_state_layout
+agent_was_active=false
+if service_action is-active >/dev/null 2>&1; then
+  agent_was_active=true
+fi
 service_action stop >/dev/null 2>&1 || die "failed to stop cdnca-edge-agent; package was not removed"
+# Run outside a condition so errexit still applies inside the check.
+set +e
+(set -e; validate_retained_state_layout)
+stopped_state_status=$?
+set -e
+if [ "${stopped_state_status}" -ne 0 ]; then
+  if [ "${agent_was_active}" = true ]; then
+    service_action restart >/dev/null 2>&1 || die "agent state is unsafe and cdnca-edge-agent did not restart; package was not removed"
+  fi
+  die "agent state is unsafe; package was not removed"
+fi
 stop_agent_leftovers || die "failed to stop OpenResty left by cdnca-edge-agent; package was not removed"
 service_action disable >/dev/null 2>&1 || die "failed to disable cdnca-edge-agent; package was not removed"
-validate_retained_state_layout
 
 remove_tree "$(root_path /usr/lib/cdnca-edge-agent)"
 remove_tree "$(root_path /usr/libexec/cdnca-edge-agent)"
@@ -226,6 +244,9 @@ if [ "${purge}" = true ]; then
   remove_tree "$(root_path /var/lib/cdnca-edge)"
   remove_tree "$(root_path /var/lib/cdnca-edge-agent-backups)"
   remove_tree "$(root_path /var/log/cdnca-edge-agent)"
+  toolset_record=$(root_path /var/lib/cdnca-edge-agent-packaging/toolset-refresh)
+  [ ! -L "${toolset_record}" ] || die "toolset refresh record is a symbolic link"
+  rm -f -- "${toolset_record}"
   accepted_manifest=$(root_path /var/lib/cdnca-edge-agent-packaging/accepted-manifest)
   assert_safe_tree "${accepted_manifest}"
   [ ! -L "${accepted_manifest}" ] || die "accepted manifest is a symbolic link"

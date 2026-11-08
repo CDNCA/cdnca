@@ -561,7 +561,9 @@ type cacheControlRuntimeHealthSnapshot struct {
 }
 
 type cacheControlNATSCloser interface {
-	Drain() error
+	IsConnected() bool
+	FlushWithContext(context.Context) error
+	FlushTimeout(time.Duration) error
 	Close()
 }
 
@@ -659,10 +661,13 @@ func closeCacheControlProductionResources(
 		result = runtime.Close()
 	}
 	if !isNilCacheControlNATSCloser(connection) {
-		if err := connection.Drain(); err != nil {
-			connection.Close()
-			result = errors.Join(result, runtimeStageError{stage: "drain cache control NATS", err: err})
+		// Flush and close, not Drain: see the context variant.
+		if connection.IsConnected() {
+			if err := connection.FlushTimeout(10 * time.Second); err != nil {
+				result = errors.Join(result, runtimeStageError{stage: "flush cache control NATS", err: err})
+			}
 		}
+		connection.Close()
 	}
 	return result
 }
@@ -684,20 +689,19 @@ func closeCacheControlProductionResourcesContext(
 	}
 	if err := ctx.Err(); err != nil {
 		connection.Close()
-		return errors.Join(result, runtimeStageError{stage: "drain cache control NATS", err: err})
+		return errors.Join(result, runtimeStageError{stage: "flush cache control NATS", err: err})
 	}
-	drained := make(chan error, 1)
-	go func() { drained <- connection.Drain() }()
-	select {
-	case err := <-drained:
-		if err != nil {
-			connection.Close()
-			result = errors.Join(result, runtimeStageError{stage: "drain cache control NATS", err: err})
+	// Flush and close, not Drain: Drain returned at once and
+	// Close only ran on an error, so this returned while the connection was still draining (a real nats:2.10
+	// probe closed it 2s later with a pending reply, "draining connection timed out"). The cache worker's
+	// JetStream pull subscription is gone once runtime.CloseContext returns; unacknowledged messages are
+	// redelivered after AckWait. Both callers pass a context with a deadline (FlushWithContext needs one).
+	if connection.IsConnected() {
+		if err := connection.FlushWithContext(ctx); err != nil {
+			result = errors.Join(result, runtimeStageError{stage: "flush cache control NATS", err: err})
 		}
-	case <-ctx.Done():
-		connection.Close()
-		result = errors.Join(result, runtimeStageError{stage: "drain cache control NATS", err: ctx.Err()})
 	}
+	connection.Close()
 	return result
 }
 
@@ -3989,6 +3993,25 @@ type natsRuntimeConnection interface {
 }
 
 type natsConnector func(string, ...nats.Option) (*nats.Conn, error)
+
+// closeNATSAfterFlush flushes a still connected connection (bounded by timeout) and closes it. Use it, not
+// Drain, when every subscription on the connection is a JetStream pull consumer already unsubscribed by its
+// worker: Drain returns at once and closes in the
+// background up to DrainTimeout, so a Close right after it cuts it off, and returning without one exits mid
+// drain. Unacknowledged messages are redelivered after AckWait.
+func closeNATSAfterFlush(connection natsRuntimeConnection, timeout time.Duration, name string) error {
+	if connection.IsClosed() {
+		return nil
+	}
+	var err error
+	if connection.IsConnected() {
+		if flushErr := connection.FlushTimeout(timeout); flushErr != nil {
+			err = fmt.Errorf("flush %s NATS: %w", name, flushErr)
+		}
+	}
+	connection.Close()
+	return err
+}
 
 type edgeDeploymentRuntime struct {
 	connection      natsRuntimeConnection

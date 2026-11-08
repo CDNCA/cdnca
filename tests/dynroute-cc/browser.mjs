@@ -4,11 +4,20 @@
 // the way a visitor does: runs the proof of work, waits, clicks, drags; its
 // pass cookie must then open the site. Replaces the retired
 // scripts/security/cc-browser-e2e.mjs (v7 release).
-//   node browser.mjs <playwright-core dir> <base url> <cookie out file>
+// The click / rotate / slider / captcha answers are only in the picture; a
+// person reads it, the test takes the token's answer from cdnca-cc-check's
+// test-only answer server instead (the 4th argument).
+//   node browser.mjs <playwright-core dir> <base url> <cookie out file> <answer url>
 import { createRequire } from 'node:module'
 import { writeFileSync } from 'node:fs'
 
-const [playwrightDir, base, cookieFile] = process.argv.slice(2)
+const [playwrightDir, base, cookieFile, answerBase] = process.argv.slice(2)
+const answerOf = async (page) => {
+  const token = await page.locator('input[name="token"]').getAttribute('value')
+  return (await (await fetch(`${answerBase}/answer?token=${token}`)).text()).trim()
+}
+// The picture must load in the page (same origin, bound to this browser).
+const pictureLoaded = (page) => page.locator('img.pic').evaluate((img) => img.complete && img.naturalWidth > 0)
 const { chromium } = createRequire(import.meta.url)(playwrightDir)
 let failed = 0
 const check = (id, expected, actual, note) => {
@@ -63,16 +72,18 @@ try {
   })
   check('BROWSER-CLICK', 200, click.again, '“点击继续访问”由真人点击后放行')
 
-  const shapes = { 圆形: 0, 方形: 1, 三角形: 2, 菱形: 3 }
+  let shown = true
   const shape = await visit('g10000', async (page) => {
-    const name = await page.locator('strong').first().innerText()
-    await page.locator('.shape').nth(shapes[name]).click()
+    shown = shown && await pictureLoaded(page)
+    if (process.env.CC_BROWSER_SHOTS) await page.screenshot({ path: `${process.env.CC_BROWSER_SHOTS}/click.png` })
+    await page.locator(`.shape[data-id="${await answerOf(page)}"]`).click()
   })
   check('BROWSER-SHAPE', 200, shape.again, '点击页面要求的图形后放行')
 
   const slider = await visit('g2', async (page) => {
-    const label = await page.locator('label[for="range"]').innerText()
-    await page.locator('#range').fill(String(Number(/(\d+)%/.exec(label)?.[1])))
+    shown = shown && await pictureLoaded(page)
+    await page.locator('#range').fill(await answerOf(page))
+    if (process.env.CC_BROWSER_SHOTS) await page.screenshot({ path: `${process.env.CC_BROWSER_SHOTS}/slider.png` })
     await page.getByRole('button', { name: '提交' }).click()
   })
   check('BROWSER-SLIDER', 200, slider.again, '滑块拖到页面要求的位置后放行')
@@ -84,11 +95,27 @@ try {
   check('BROWSER-EASY-SLIDER', 200, easySlider.again, '简单滑块拖到最右侧后放行')
 
   const rotate = await visit('g10003', async (page) => {
-    const angle = Number(await page.locator('#arrow').getAttribute('data-base'))
-    await page.locator('#range').fill(String(360 - angle))
+    shown = shown && await pictureLoaded(page)
+    await page.locator('#range').fill(await answerOf(page))
+    if (process.env.CC_BROWSER_SHOTS) await page.screenshot({ path: `${process.env.CC_BROWSER_SHOTS}/rotate.png` })
     await page.getByRole('button', { name: '提交' }).click()
   })
   check('BROWSER-ROTATE', 200, rotate.again, '旋转箭头到朝上后放行')
+
+  const captcha = await visit('g4', async (page) => {
+    shown = shown && await pictureLoaded(page)
+    if (process.env.CC_BROWSER_SHOTS) await page.screenshot({ path: `${process.env.CC_BROWSER_SHOTS}/captcha.png` })
+    await page.locator('#code').fill((await answerOf(page)).toLowerCase())
+    await page.getByRole('button', { name: '提交' }).click()
+  })
+  check('BROWSER-CAPTCHA', 200, captcha.again, '输入图中字符（小写）后放行')
+  check('BROWSER-PICTURE', true, shown, '点击/滑块/旋转/验证码的图片都在页面里加载成功')
+
+  const wait = await visit('g10003', async (page) => {
+    await page.getByRole('button', { name: /改用等待验证/ }).click()
+  })
+  check('BROWSER-WAIT', true, wait.again === 200 && wait.elapsed >= 5,
+    `读屏替代路径：改用等待验证后等满 5 秒放行（用时 ${wait.elapsed.toFixed(1)} 秒）`)
 } finally {
   await browser.close()
 }

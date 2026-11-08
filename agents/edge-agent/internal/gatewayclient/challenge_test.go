@@ -145,6 +145,55 @@ func TestClientAutomaticallyUsesDeploymentStateRootForChallengeArtifacts(t *test
 	}
 }
 
+// A node with the challenge consumer declares CHALLENGE_POW
+// v1 (its engine runs pow_difficulty); one without the consumer does not.
+func TestHelloDeclaresChallengePoWWithTheChallengeConsumer(t *testing.T) {
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust, err := NewTrustStore(map[string]crypto.PublicKey{"test-signing-key": publicKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := func(manager DeploymentManager) uint32 {
+		root := secureTempDir(t)
+		stateRoot := filepath.Join(root, "state")
+		if err := os.Mkdir(stateRoot, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if withRoot, ok := manager.(stateRootManager); ok {
+			withRoot.root = stateRoot
+			manager = withRoot
+		}
+		client, err := New(testClientConfig(filepath.Join(root, "journal")), &failingDialer{}, manager, trust)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+		hello, err := client.agentHello()
+		if err != nil {
+			t.Fatal(err)
+		}
+		version := uint32(0)
+		for _, capability := range hello.Capabilities.Features {
+			if capability.Name == agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW {
+				if version != 0 {
+					t.Fatal("CHALLENGE_POW declared twice")
+				}
+				version = capability.ApiVersion
+			}
+		}
+		return version
+	}
+	if got := declared(stateRootManager{}); got != 1 {
+		t.Fatalf("with the challenge consumer CHALLENGE_POW=%d, want 1", got)
+	}
+	if got := declared(noOpManager{}); got != 0 {
+		t.Fatalf("without the challenge consumer CHALLENGE_POW=%d, want 0", got)
+	}
+}
+
 type stateRootManager struct {
 	noOpManager
 	root string

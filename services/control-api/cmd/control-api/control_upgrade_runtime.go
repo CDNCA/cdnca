@@ -166,7 +166,7 @@ type controlUpgradeEd25519Signer struct {
 }
 
 type controlUpgradeProductionRuntime struct {
-	connection          *nats.Conn
+	connection          natsRuntimeConnection
 	dispatcher          *controlupgrade.OutboxDispatcher
 	receiptDispatcher   *controlupgrade.LicenseReceiptDispatcher
 	status              *controlupgrade.StatusProcessor
@@ -896,26 +896,17 @@ func (runtime *controlUpgradeProductionRuntime) Close() error {
 			runtime.closeErr = runtime.status.Close()
 		}
 		if runtime.connection != nil && !runtime.connection.IsClosed() {
-			drained := make(chan error, 1)
-			go func() { drained <- runtime.connection.Drain() }()
-			timer := time.NewTimer(runtime.shutdownTimeout)
-			select {
-			case err := <-drained:
-				if err != nil {
-					runtime.closeErr = errors.Join(runtime.closeErr, err)
-					runtime.connection.Close()
-				}
-			case <-timer.C:
-				runtime.closeErr = errors.Join(runtime.closeErr,
-					errors.New("control upgrade NATS drain timed out"))
-				runtime.connection.Close()
-			}
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
+			// Flush and close, not Drain:
+			// Drain returned at once and Close returned while the connection was
+			// still draining, so the timeout below it never ran. The status pull
+			// subscription is gone once status.Close returns; unacknowledged
+			// messages are redelivered after AckWait.
+			if runtime.connection.IsConnected() {
+				if err := runtime.connection.FlushTimeout(runtime.shutdownTimeout); err != nil {
+					runtime.closeErr = errors.Join(runtime.closeErr, fmt.Errorf("flush control upgrade NATS: %w", err))
 				}
 			}
+			runtime.connection.Close()
 		}
 		runtime.license.Close()
 		if runtime.controlSigner != nil {

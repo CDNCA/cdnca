@@ -24,10 +24,13 @@ const required = [
   'lua/share/cdnca/security/cdnca_iplib.lua', 'lua/l4geo/cdnca_iplib.lua',
   'lua/share/cdnca/httppolicy/engine.lua', 'lua/share/cdnca/firewallaction/engine.lua', 'lua/share/cdnca/siteaccess/engine.lua', 'lua/share/cdnca/errorpage/handler.lua', 'lua/share/cdnca/originauth/engine.lua', 'lua/share/cdnca/originauth/crypto.lua', 'lua/share/cdnca/dynroute/cdnca_dynroute.lua', 'lua/share/cdnca/sched302/cdnca_sched302.lua', 'lua/share/cdnca/dynroute/cdnca_telemetry.lua', 'lua/share/cdnca/dynroute/cdnca_webp.lua', 'lua/share/cdnca/dynroute/cdnca_webp_codec.lua', 'lua/share/cdnca/dynroute/cdnca_security.lua', 'lua/share/cdnca/dynroute/cdnca_managed_waf.lua', 'lua/share/cdnca/dynroute/cdnca_rule_plan.lua', 'lua/share/cdnca/dynroute/cdnca_bot.lua',
 ]
+// The packaging scripts the release signs through the SBOM (recipe.sh
+// write_sbom); installed nodes refresh their toolset from exactly these bytes.
+const toolsetScripts = ['install', 'lib', 'preflight', 'rollback', 'uninstall', 'upgrade'].map((name) => `packaging/scripts/${name}.sh`)
 // Members that let the root packaging helper upgrade a native node in place.
 const upgradeRequired = [
   'bin/cdnca-edge-agent-helper',
-  ...['install', 'lib', 'preflight', 'rollback', 'uninstall', 'upgrade'].map((name) => `packaging/scripts/${name}.sh`),
+  ...toolsetScripts,
   'packaging/systemd/cdnca-edge-agent.service', 'packaging/systemd/cdnca-edge-agent-root.service',
   'packaging/systemd/cdnca-edge-agent-helper.service', 'packaging/systemd/cdnca-edge-agent-helper.socket',
   'packaging/sysusers/cdnca-edge-agent.conf', 'packaging/tmpfiles/cdnca-edge-agent.conf',
@@ -66,6 +69,38 @@ function verifyUpgradeInputs(root, files) {
     throw new Error('upgrade manifest signature does not verify under the packaged release key')
   }
   return value
+}
+
+// The signed SBOM must list each packaging script once with the SHA256 and the
+// base64 bytes (one tool annotation, recipe.sh write_sbom) of the exact script
+// packaged here: nodes refresh their toolset from the SBOM, which upgrade
+// bundles carry without a native package.
+const toolsetAnnotation = 'cdnca.packaging-script/v1 base64:'
+function verifyToolsetSBOM(root, files) {
+  let sbom
+  try {
+    sbom = JSON.parse(fs.readFileSync(path.join(root, 'evidence/edge-agent.spdx.json'), 'utf8'))
+  } catch {
+    throw new Error('release SBOM is not JSON; it cannot sign the packaging scripts')
+  }
+  for (const name of toolsetScripts) {
+    const listed = (Array.isArray(sbom?.files) ? sbom.files : []).filter((file) => file?.fileName === name)
+    const checksums = listed.flatMap((file) => (Array.isArray(file.checksums) ? file.checksums : [])
+      .filter((checksum) => checksum?.algorithm === 'SHA256').map((checksum) => checksum.checksumValue))
+    if (listed.length !== 1 || checksums.length !== 1 || !digest.test(checksums[0] ?? '')) {
+      throw new Error(`release SBOM does not sign packaging script ${name}`)
+    }
+    if (files.find((file) => file.path === name)?.sha256 !== checksums[0]) {
+      throw new Error(`packaging script ${name} differs from the signed release SBOM`)
+    }
+    const carried = (Array.isArray(listed[0].annotations) ? listed[0].annotations : [])
+      .map((annotation) => annotation?.comment).filter((comment) => typeof comment === 'string' && comment.startsWith(toolsetAnnotation))
+    const encoded = carried.length === 1 ? carried[0].slice(toolsetAnnotation.length) : ''
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0 ||
+        createHash('sha256').update(Buffer.from(encoded, 'base64')).digest('hex') !== checksums[0]) {
+      throw new Error(`release SBOM does not carry packaging script ${name}`)
+    }
+  }
 }
 
 // Every payload member (no links, immutable modes, allowed paths), sorted by path.
@@ -116,6 +151,7 @@ export function createNativeNodeManifest(directory, metadata) {
     }
   }
   verifyUpgradeInputs(root, files)
+  verifyToolsetSBOM(root, files)
   if (files.find((file) => file.path === 'runtime/openresty/bin/openresty').sha256 !==
       files.find((file) => file.path === 'runtime/openresty/nginx/sbin/nginx').sha256) throw new Error('OpenResty aliases differ')
   return { schema, version: metadata.version, key_id: metadata.key_id,

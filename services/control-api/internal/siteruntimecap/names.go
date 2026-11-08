@@ -111,6 +111,9 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// MARKET_ROLE gates the node-market role assignment, a
 	// probe command feature.
 	agentv1.CapabilityName_CAPABILITY_NAME_MARKET_ROLE: true,
+	// CHALLENGE_POW gates JS challenge policies with an explicit
+	// pow_difficulty, a challenge secret rollout feature.
+	agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW: true,
 }
 
 // Name maps a document capability name to its Agent capability.

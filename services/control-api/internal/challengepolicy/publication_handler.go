@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/challengepublication"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/google/uuid"
 )
 
@@ -177,7 +178,17 @@ func (handler *PublicationHandler) writeResult(response http.ResponseWriter, req
 }
 
 func (handler *PublicationHandler) writeError(response http.ResponseWriter, request *http.Request, err error) {
+	var capability *edgepublish.TargetCapabilityError
 	switch {
+	case errors.As(err, &capability):
+		// No target node declares CHALLENGE_POW.
+		details := &capabilityErrorDetails{NodeID: capability.NodeID.String(), Capability: capability.Capability.String(),
+			RequiredVersion: capability.Required, OtherNodeIDs: make([]string, len(capability.OtherNodeIDs))}
+		for index, nodeID := range capability.OtherNodeIDs {
+			details.OtherNodeIDs[index] = nodeID.String()
+		}
+		handler.base.writeAPIErrorWith(response, request, http.StatusUnprocessableEntity, "node_capability_unavailable",
+			"no target node supports the policy's proof-of-work difficulty", details)
 	case errors.Is(err, challengepublication.ErrExternalAdapterUnavailable):
 		handler.base.writeAPIError(response, request, http.StatusUnprocessableEntity,
 			"challenge_external_adapter_unavailable", "external challenge adapter is unavailable")

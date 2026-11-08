@@ -140,6 +140,12 @@ func (distributor *Distributor) PublishOnce(ctx context.Context) error {
 	for _, node := range nodes {
 		nodeID := node.ID
 		if enforced[nodeID] >= latest.Revision {
+			// Enforced: forget the send, so a reset of the node's state
+			// (reset-node-host-delivery, reinstall) is resent at once, not
+			// after RetryAfter. The service ticket waits for it.
+			distributor.mu.Lock()
+			delete(distributor.published, nodeID)
+			distributor.mu.Unlock()
 			continue
 		}
 		if !node.Capable {

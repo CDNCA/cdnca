@@ -139,6 +139,71 @@ func TestArtifactProducerCarriesExternalCredentialOnlyForExactRuleScope(t *testi
 	}
 }
 
+// pow_difficulty is optional on the node: absent means the engine default,
+// so a policy without it stays byte-identical to what older agents accept.
+func TestPolicyDocumentCarriesPoWDifficultyOnlyWhenSet(t *testing.T) {
+	snapshot := validRuntimePublishRequest(uuid.New(), uuid.New(), uuid.New(), uuid.New()).Policy
+	keys := ResolvedKeys{Current: ArtifactSecret{KeyID: "challenge-current", Secret: bytes.Repeat([]byte{7}, 32)}}
+	document, err := PolicyDocument(snapshot, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(document, []byte("pow_difficulty")) {
+		t.Fatalf("default policy document carries pow_difficulty: %s", document)
+	}
+	difficulty := 20
+	snapshot.PowDifficulty = &difficulty
+	document, err = PolicyDocument(snapshot, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(document, []byte(`"bind_user_agent":false,"pow_difficulty":20`)) {
+		t.Fatalf("policy document lost pow_difficulty: %s", document)
+	}
+}
+
+func TestArtifactProducerRejectsPoWDifficultyOutOfRangeOrOnExternal(t *testing.T) {
+	producer, err := newArtifactProducer(artifactTestSigner{id: "challenge-signing-v1",
+		private: ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x31}, ed25519.SeedSize))},
+		bytes.NewReader(bytes.Repeat([]byte{0x42}, 1024)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, _, err := hpke.KEM_X25519_HKDF_SHA256.Scheme().GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicBytes, _ := public.MarshalBinary()
+	digest := sha256.Sum256(publicBytes)
+	request := testArtifactBuildRequest(publicBytes, "x25519:"+hex.EncodeToString(digest[:]))
+	for _, value := range []uint32{12, 24} {
+		material := testArtifactMaterial()
+		material.Policy.Rules[0].PowDifficulty = &value
+		if _, err := producer.Build(t.Context(), request, material); err != nil {
+			t.Fatalf("pow_difficulty %d rejected: %v", value, err)
+		}
+	}
+	for _, value := range []uint32{11, 25} {
+		material := testArtifactMaterial()
+		material.Policy.Rules[0].PowDifficulty = &value
+		if _, err := producer.Build(t.Context(), request, material); err == nil {
+			t.Fatalf("pow_difficulty %d accepted", value)
+		}
+	}
+	material := testArtifactMaterial()
+	value := uint32(18)
+	material.Policy.Rules[0].Mode = "external"
+	material.Policy.Rules[0].PowDifficulty = &value
+	material.Policy.Rules[0].ExternalProvider = &ExternalProvider{Provider: "tencent", AppID: "2060000000"}
+	material.ExternalCredentials = []ExternalCredential{{
+		TenantID: material.TenantID.String(), SiteID: material.Policy.Rules[0].SiteID,
+		Provider: "tencent", AppID: "2060000000", Secret: []byte("tencent-controlled-secret-0001"), Environment: "production",
+	}}
+	if _, err := producer.Build(t.Context(), request, material); err == nil {
+		t.Fatal("external rule with pow_difficulty accepted")
+	}
+}
+
 func testArtifactBuildRequest(publicKey []byte, recipientID string) ArtifactBuildRequest {
 	return ArtifactBuildRequest{
 		EventID: uuid.MustParse("01990000-0000-7000-8000-000000000001"), DeploymentID: uuid.MustParse("01990000-0000-7000-8000-000000000002"),

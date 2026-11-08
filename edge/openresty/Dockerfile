@@ -118,7 +118,7 @@ RUN set -eu; \
 		echo 'beba3171b3e53abacc031fe7c73dd7da081dc3e3e4276f1a3034972cd723cebe  /usr/local/share/cdnca/dynroute/cdnca_site_admin.lua' | sha256sum -c -; \
 		echo '66bc1559487b74f24cc5219df766ed46987e19785feb9b6cb4eeb8a8250c686f  /usr/local/share/cdnca/dynroute/cdnca_tls.lua' | sha256sum -c -; \
 		echo '95b2185b927cdf68e8d83287080d678fafb93f90509899d1276827078684fe58  /usr/local/share/cdnca/dynroute/cdnca_origin.lua' | sha256sum -c -; \
-		echo 'fd561a8ad67cc91d0cc275494f64eb154c00316bed15badb60f64655bdfc4c0a  /usr/local/share/cdnca/security/cc.lua' | sha256sum -c -; \
+		echo 'd242995eb076f4ac206271f6f3d0ee47b2c4d0089be9db41596ee904e2d6859a  /usr/local/share/cdnca/security/cc.lua' | sha256sum -c -; \
 		echo '3df863a8177361103a0deb58cc1a8291f636f5a85c9d4d47f5613dde4f7171f8  /usr/local/share/cdnca/dynroute/cdnca_originauth.lua' | sha256sum -c -; \
 		echo 'bc97c630cf2dab304e8af431bb7c4aebe3f0da78e0d446ef071603a28101e72a  /usr/local/share/cdnca/dynroute/cdnca_origintls.lua' | sha256sum -c -; \
 		echo '728800e18c96655628548037ac827e9fa93c383c2f5ab69e4035436a5998b639  /usr/local/share/cdnca/dynroute/cdnca_cache.lua' | sha256sum -c -; \
@@ -135,8 +135,8 @@ RUN set -eu; \
 		echo 'd1d4089ff06a88f39f298556cc7acac33ed9a4b1a9295788201ba804bbeaaeaf  /usr/local/share/cdnca/siteaccess/engine.lua' | sha256sum -c -; \
 		echo '1c40f52bed3f85964bfa4c2ff686d11ed12643c08caf0addfb74e3996bf6bd0a  /usr/local/openresty/site/lualib/resty/ipmatcher.lua' | sha256sum -c -; \
 		su nobody -s /bin/sh -c "/usr/local/openresty/bin/resty -e 'local m = assert(require([[resty.ipmatcher]]).new({ [[192.0.2.0/24]], [[2001:db8::/32]] })); assert(m:match([[192.0.2.9]]) and m:match([[2001:db8::1]]) and not m:match([[198.51.100.1]]))'"; \
-		echo 'a6dbe6c1bc19e5732802d2c4e5ea0c9670752a01b57ac0ddd52c93b67d440f31  /usr/local/share/cdnca/challenge/engine.lua' | sha256sum -c -; \
-		echo 'f3198f31e12cb5700d78a80ca4f038e97db949e847f3e8d27e228b4263dc0367  /usr/local/share/cdnca/challenge/crypto.lua' | sha256sum -c -; \
+		echo '360e01b6b537ce9e357626a8b0fe1f3209bbd534189fdbc5a5946204f20e88d5  /usr/local/share/cdnca/challenge/engine.lua' | sha256sum -c -; \
+		echo 'e7a47383132d27e7d8599c27499516a0e8c77b36a75f2adff583526ca514e87e  /usr/local/share/cdnca/challenge/crypto.lua' | sha256sum -c -; \
 		echo '02372567c92ceea47959291959b2381e13836a2011a4819c52805f8f57324631  /usr/local/share/cdnca/challenge/ip.lua' | sha256sum -c -; \
 		echo '9925161ff580e70b28ea54139c163a1ee309d4e9baff42c5a008323022a88555  /usr/local/share/cdnca/errorpage/handler.lua' | sha256sum -c -; \
 		echo '4a5bd07cdd59f794e623ad439155db118e6998caf3e044bb7d42a668b279f540  /usr/local/share/cdnca/originauth/engine.lua' | sha256sum -c -; \
@@ -187,12 +187,12 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
 	  CMD test -f "$CDNCA_SECURITY_RUNTIME_READY_FILE" && \
 	      printf '%s  %s\n' d528c1309c2bfa0c9c48348185c1966d8a764a67164099cf6a522955667f7fdc /usr/local/share/cdnca/range/guard.lua | sha256sum -c - >/dev/null && \
 	      printf '%s  %s\n' d07c193c7eabc22c1b7783c42697ced0117be4fcb43c81edf7e0e4451ca0fc62 /usr/local/share/cdnca/security/cdnca_waf.lua | sha256sum -c - >/dev/null && \
-	      printf '%s  %s\n' fd561a8ad67cc91d0cc275494f64eb154c00316bed15badb60f64655bdfc4c0a /usr/local/share/cdnca/security/cc.lua | sha256sum -c - >/dev/null && \
+	      printf '%s  %s\n' d242995eb076f4ac206271f6f3d0ee47b2c4d0089be9db41596ee904e2d6859a /usr/local/share/cdnca/security/cc.lua | sha256sum -c - >/dev/null && \
 	      grep -F '"cc_api_version":2' "$CDNCA_SECURITY_RUNTIME_READY_FILE" >/dev/null && \
 	      printf '%s  %s\n' 38314497958285c1072e4e1ef7d4c0fbe41e3e03ed148807a008a6cb88e4cb21 /usr/local/share/cdnca/security/cc_adaptive.lua | sha256sum -c - >/dev/null && \
 		      printf '%s  %s\n' 93405cdcf5e2a7edef1198cc3e09c6f1584cca6bd351e8561cb1c96c0aaa0bcc /usr/local/share/cdnca/security/url_auth.lua | sha256sum -c - >/dev/null && \
-	      printf '%s  %s\n' a6dbe6c1bc19e5732802d2c4e5ea0c9670752a01b57ac0ddd52c93b67d440f31 /usr/local/share/cdnca/challenge/engine.lua | sha256sum -c - >/dev/null && \
-	      printf '%s  %s\n' f3198f31e12cb5700d78a80ca4f038e97db949e847f3e8d27e228b4263dc0367 /usr/local/share/cdnca/challenge/crypto.lua | sha256sum -c - >/dev/null && \
+	      printf '%s  %s\n' 360e01b6b537ce9e357626a8b0fe1f3209bbd534189fdbc5a5946204f20e88d5 /usr/local/share/cdnca/challenge/engine.lua | sha256sum -c - >/dev/null && \
+	      printf '%s  %s\n' e7a47383132d27e7d8599c27499516a0e8c77b36a75f2adff583526ca514e87e /usr/local/share/cdnca/challenge/crypto.lua | sha256sum -c - >/dev/null && \
 	      printf '%s  %s\n' 02372567c92ceea47959291959b2381e13836a2011a4819c52805f8f57324631 /usr/local/share/cdnca/challenge/ip.lua | sha256sum -c - >/dev/null && \
 	      printf '%s  %s\n' bcdfe6e102c44a6ed80af1e4b9fc36a59ece59fd3ae6808ba8c3a2e08711d3e5 /opt/cdnca/l4geo/engine.lua | sha256sum -c - >/dev/null && \
 	      printf '%s  %s\n' 2eca890fb7c2845541cba744cf76b9a2ad880068e3e2f1961377f32ffaa19dad /opt/cdnca/l4geo/cdnca_l4_geo.lua | sha256sum -c - >/dev/null && \

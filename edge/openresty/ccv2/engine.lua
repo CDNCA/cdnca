@@ -1744,7 +1744,7 @@ local POW_SCRIPT = "const K=[];for(let i=0,n=2;i<64;n++){let p=1;for(let d=2;d*d
 local function safe_target()
     local target = ngx.var.request_uri or "/"
     if target:sub(1, 1) ~= "/" or target:sub(1, 2) == "//"
-        or #target > MAX_TARGET_BYTES or target:find("[%c\\]") or target:sub(1, #GUARD_VERIFY) == GUARD_VERIFY then
+        or #target > MAX_TARGET_BYTES or target:find("[%c\\]") or target:sub(1, #"/_guard/") == "/_guard/" then
         return "/"
     end
     return target
@@ -1776,33 +1776,181 @@ local GLYPHS = {
     ["4"] = { "00010", "00110", "01010", "10010", "11111", "00010", "00010" },
 }
 
-local function captcha_svg(text)
-    local parts = { '<svg viewBox="0 0 200 70" width="200" height="70" role="img" aria-label="验证码图片">' }
-    for index = 1, #text do
-        local glyph = GLYPHS[text:sub(index, index)]
-        local x0, y0 = 14 + (index - 1) * 46 + random_int(0, 6), 10 + random_int(0, 8)
-        for row = 1, 7 do
-            for column = 1, 5 do
-                if glyph[row]:sub(column, column) == "1" then
-                    parts[#parts + 1] = string.format('<rect x="%d" y="%d" width="6" height="6" fill="#%02x%02x%02x"/>',
-                        x0 + (column - 1) * 6 + random_int(0, 2), y0 + (row - 1) * 7 + random_int(0, 2),
-                        random_int(20, 90), random_int(20, 90), random_int(60, 140))
+-- picture: the interactive pages' pictures (one table: this chunk is near
+-- LuaJIT's 200 locals). path is the picture URI (drawn from the token's
+-- pending state, so the answer of click / rotate / slider / captcha is never
+-- page markup); wait is the screen-reader path's server-timed wait ("wait"
+-- answer plus the proof of work).
+local picture = { path = "/_guard/picture", wait = 5,
+    interactive = { click = true, rotate = true, slider = true, captcha = true } }
+do
+    local ffi = require("ffi")
+    -- Pictures are 1-bit palette PNGs (one stored deflate block) drawn into one
+    -- reused per-worker buffer (drawn and encoded without yielding); each row
+    -- starts with its PNG filter byte. Noise is xorshift32 from the token's seed,
+    -- so a reload of the picture is the same picture.
+    local PICTURE_BYTES = 61 * 81
+    local picture_buffer = ffi.new("uint8_t[?]", 11 + PICTURE_BYTES + 4)
+    local pixels = picture_buffer + 11
+    ffi.copy(picture_buffer, "IDAT\120\1\1", 7)
+    if not pcall(function() return ffi.C.crc32 end) then
+        pcall(ffi.cdef, [[
+    unsigned long crc32(unsigned long crc, const unsigned char *buf, unsigned int len);
+    unsigned long adler32(unsigned long adler, const unsigned char *buf, unsigned int len);
+    ]])
+    end
+    local zlib = pcall(function() return ffi.C.crc32, ffi.C.adler32 end) and ffi.C or nil
+
+    local function crc32(data)
+        return zlib and tonumber(zlib.crc32(0, data, #data)) or ngx.crc32_long(data)
+    end
+
+    local function be32(value)
+        return string.char(bit.band(bit.rshift(value, 24), 255), bit.band(bit.rshift(value, 16), 255),
+            bit.band(bit.rshift(value, 8), 255), bit.band(value, 255))
+    end
+
+    local function png_chunk(kind, data)
+        return be32(#data) .. kind .. data .. be32(crc32(kind .. data))
+    end
+
+    function picture.noise_source(seed)
+        local value = seed
+        return function()
+            value = bit.bxor(value, bit.lshift(value, 13))
+            value = bit.bxor(value, bit.rshift(value, 17))
+            value = bit.bxor(value, bit.lshift(value, 5))
+            return bit.band(value, 255)
+        end
+    end
+
+    -- canvas: width, height, stride (bytes per row incl. the filter byte)
+    local function canvas(width, height)
+        local stride = math.ceil(width / 8) + 1
+        ffi.fill(pixels, stride * height)
+        return { width = width, height = height, stride = stride }
+    end
+
+    local function ink(c, x, y, flip)
+        if x < 0 or y < 0 or x >= c.width or y >= c.height then return end
+        local index = y * c.stride + 1 + bit.rshift(x, 3)
+        local mask = bit.rshift(0x80, bit.band(x, 7))
+        pixels[index] = flip and bit.bxor(pixels[index], mask) or bit.bor(pixels[index], mask)
+    end
+
+    local function speckle(c, byte, count)
+        for _ = 1, count do ink(c, (byte() * 256 + byte()) % c.width, byte() % c.height, true) end
+    end
+
+    local function encode_png(c, palette)
+        local length = c.stride * c.height
+        local a, b
+        if zlib then
+            local adler = tonumber(zlib.adler32(1, pixels, length))
+            a, b = adler % 65536, math.floor(adler / 65536)
+        else
+            a, b = 1, 0
+            for index = 0, length - 1 do a = a + pixels[index]; b = b + a end
+            a, b = a % 65521, b % 65521
+        end
+        picture_buffer[7], picture_buffer[8] = bit.band(length, 255), bit.rshift(length, 8)
+        picture_buffer[9], picture_buffer[10] = bit.band(bit.bnot(length), 255), bit.band(bit.rshift(bit.bnot(length), 8), 255)
+        pixels[length], pixels[length + 1] = bit.rshift(b, 8), bit.band(b, 255)
+        pixels[length + 2], pixels[length + 3] = bit.rshift(a, 8), bit.band(a, 255)
+        local body = ffi.string(picture_buffer, 11 + length + 4)
+        return "\137PNG\r\n\26\n" .. png_chunk("IHDR", be32(c.width) .. be32(c.height) .. "\1\3\0\0\0")
+            .. png_chunk("PLTE", palette) .. be32(#body - 4) .. body .. be32(crc32(body)) .. png_chunk("IEND", "")
+    end
+
+    local PALETTE = "\255\255\255\31\35\41"
+
+    -- 4 glyphs scaled 4x (offset, slant +-1), two thin strokes over them,
+    -- flipped speckles. 200x60.
+    function picture.captcha_png(text, byte)
+        local c = canvas(200, 60)
+        for index = 1, #text do
+            local glyph = GLYPHS[text:sub(index, index)]
+            local left, top, slant = 14 + (index - 1) * 46 + byte() % 6, 8 + byte() % 18, byte() % 3 - 1
+            for row = 1, 7 do
+                local shift = math.floor((4 - row) * slant / 2)
+                for column = 1, 5 do
+                    if glyph[row]:byte(column) == 49 then
+                        for dy = 0, 3 do
+                            for dx = 0, 3 do ink(c, left + (column - 1) * 4 + shift + dx, top + (row - 1) * 4 + dy) end
+                        end
+                    end
                 end
             end
         end
+        for _ = 1, 2 do
+            local y1, y2 = byte() % 60, byte() % 60
+            for x = 0, 199 do ink(c, x, y1 + math.floor((y2 - y1) * x / 199)) end
+        end
+        speckle(c, byte, 160)
+        return encode_png(c, PALETTE)
     end
-    for _ = 1, 6 do
-        parts[#parts + 1] = string.format('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#889" stroke-width="2"/>',
-            random_int(0, 200), random_int(0, 70), random_int(0, 200), random_int(0, 70))
-    end
-    parts[#parts + 1] = "</svg>"
-    return table.concat(parts)
-end
 
-local function shape_svg(index)
-    local body = ({ '<circle cx="24" cy="24" r="18"/>', '<rect x="7" y="7" width="34" height="34"/>',
-        '<polygon points="24,5 44,42 4,42"/>', '<polygon points="24,3 45,24 24,45 3,24"/>' })[index]
-    return '<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" fill="#3a5bd9">' .. body .. "</svg>"
+    -- The four shapes in the order of the page's buttons 1..4 (order[i] = the
+    -- shape at position i), each in its 50x50 cell. 200x50.
+    local SHAPE_INSIDE = {
+        function(x, y) return x * x + y * y <= 324 end,                        -- 圆形 r 18
+        function(x, y) return math.abs(x) <= 16 and math.abs(y) <= 16 end,     -- 方形
+        function(x, y) return y <= 18 and y >= -18 and math.abs(x) * 2 <= y + 18 end, -- 三角形
+        function(x, y) return math.abs(x) + math.abs(y) <= 20 end,             -- 菱形
+    }
+
+    function picture.shapes_png(order, byte)
+        local c = canvas(200, 50)
+        for position = 1, 4 do
+            local inside = SHAPE_INSIDE[order[position]]
+            local cx, cy = (position - 1) * 50 + 25 + byte() % 5 - 2, 25 + byte() % 5 - 2
+            for y = -21, 21 do
+                for x = -21, 21 do
+                    if inside(x, y) then ink(c, cx + x, cy + y) end
+                end
+            end
+        end
+        speckle(c, byte, 120)
+        return encode_png(c, PALETTE)
+    end
+
+    -- The arrow (pointing up when turned by 0) turned clockwise by angle. 80x80.
+    function picture.rotate_png(angle, byte)
+        local c = canvas(80, 80)
+        local radians = math.rad(angle)
+        local cosine, sine = math.cos(radians), math.sin(radians)
+        for y = 0, 79 do
+            for x = 0, 79 do
+                local dx, dy = x - 40, y - 40
+                local ux, uy = dx * cosine + dy * sine, -dx * sine + dy * cosine
+                local head = uy >= -34 and uy <= 0 and math.abs(ux) * 34 <= (uy + 34) * 20
+                local shaft = uy > 0 and uy <= 34 and math.abs(ux) <= 6
+                if head or shaft then ink(c, x, y) end
+            end
+        end
+        speckle(c, byte, 90)
+        return encode_png(c, PALETTE)
+    end
+
+    -- The track with the mark at target % (the range input below it). 200x16.
+    function picture.slider_png(target, byte)
+        local c = canvas(200, 16)
+        for x = 0, 199 do ink(c, x, 7); ink(c, x, 8) end
+        local mark = math.floor(target * 2 + 0.5)
+        for y = 0, 15 do
+            for x = mark - 2, mark + 1 do ink(c, x, y) end
+        end
+        speckle(c, byte, 70)
+        return encode_png(c, PALETTE)
+    end
+
+    function picture.shape_buttons()
+        local buttons = {}
+        for position = 1, 4 do
+            buttons[position] = '<button type="button" class="shape" data-id="' .. position .. '" aria-label="第 ' .. position .. ' 个">' .. position .. "</button>"
+        end
+        return '<div class="shapes">' .. table.concat(buttons) .. "</div>"
+    end
 end
 
 local PAGE_TITLES = {
@@ -1815,8 +1963,9 @@ local PAGE_TITLES = {
 -- Each widget returns body, script and the expected answer. The script calls
 -- send() when the visitor is done; the page submits once the proof of work
 -- (render_challenge) is also solved. 5秒盾 / 无感验证 have no visible answer:
--- the proof of work is the check (and the 5 s wait for 5秒盾).
-local function challenge_widget(mode, delay_seconds)
+-- the proof of work is the check (and the 5 s wait for 5秒盾). The answer of
+-- click / rotate / slider / captcha is only in picture.path's picture.
+local function challenge_widget(mode, delay_seconds, token)
     if mode == "delay" or mode == "js" then
         local wait = mode == "delay" and delay_seconds or 0
         return '<p id="status" role="status" aria-live="polite">' ..
@@ -1831,30 +1980,31 @@ local function challenge_widget(mode, delay_seconds)
             "const g=document.getElementById('go');g.addEventListener('click',()=>{document.getElementById('answer').value=g.dataset.a;send();});",
             { answer = answer, not_before = MIN_HUMAN_SECONDS }
     end
+    local src = picture.path .. "?token=" .. token
     if mode == "click" then
-        local target = random_int(1, 4)
-        local ids, buttons = {}, {}
-        for index = 1, 4 do
-            ids[index] = random_hex(4) or tostring(index)
-            buttons[#buttons + 1] = '<button type="button" class="shape" data-id="' .. ids[index] .. '" aria-label="图形 ' ..
-                index .. '">' .. shape_svg(index) .. "</button>"
+        local order = { 1, 2, 3, 4 }
+        for index = 4, 2, -1 do
+            local other = random_int(1, index)
+            order[index], order[other] = order[other], order[index]
         end
-        return "<p>请点击 <strong>" .. SHAPES[target] .. "</strong>。</p><div class=\"shapes\">" .. table.concat(buttons) .. "</div>",
+        local target, position = random_int(1, 4), 1
+        while order[position] ~= target do position = position + 1 end
+        return "<p>请点击图中 <strong>" .. SHAPES[target] .. "</strong> 下方的按钮。</p>" ..
+            '<img class="pic" src="' .. src .. '" width="200" height="50" alt="四个图形，从左到右对应下方 1 到 4 号按钮。无法查看图片请使用“改用等待验证”。">' ..
+            picture.shape_buttons(),
             "document.querySelectorAll('.shape').forEach(b=>b.addEventListener('click',()=>{document.getElementById('answer').value=b.dataset.id;send();}));",
-            { answer = ids[target], not_before = MIN_HUMAN_SECONDS }
+            { answer = tostring(position), not_before = MIN_HUMAN_SECONDS, order = order }
     end
     if mode == "slider" or mode == "easy_slider" or mode == "rotate" then
         local target = mode == "slider" and random_int(20, 80) or 100
         local label, extra, expected = "滑块位置", "", { answer = tostring(target), tolerance = mode == "slider" and 4 or 3, not_before = MIN_HUMAN_SECONDS }
         if mode == "slider" then
-            label = "把滑块拖到 " .. target .. "% 的位置"
-            extra = '<svg viewBox="0 0 100 8" width="100%" height="8" aria-hidden="true"><rect width="100" height="8" fill="#ccd"/><rect x="' ..
-                (target - 1) .. '" width="2" height="8" fill="#d33"/></svg>'
+            label = "把滑块拖到图中竖线的位置"
+            extra = '<img class="pic track" src="' .. src .. '" width="200" height="16" alt="滑道上的竖线标记。无法查看图片请使用“改用等待验证”。">'
         elseif mode == "rotate" then
             local angle = random_int(40, 320)
             label = "拖动滑块旋转箭头，直到箭头朝上"
-            extra = '<svg viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="箭头"><polygon id="arrow" data-base="' ..
-                angle .. '" transform="rotate(' .. angle .. ' 40 40)" points="40,6 60,40 46,40 46,74 34,74 34,40 20,40" fill="#3a5bd9"/></svg>'
+            extra = '<img id="arrow" class="pic" src="' .. src .. '" width="80" height="80" alt="一个箭头。无法查看图片请使用“改用等待验证”。">'
             expected = { answer = tostring(360 - angle), tolerance = 12, not_before = MIN_HUMAN_SECONDS, angle = angle }
         else
             label = "把滑块拖到最右侧"
@@ -1863,7 +2013,7 @@ local function challenge_widget(mode, delay_seconds)
         return extra .. '<label for="range">' .. label .. '</label><input id="range" type="range" min="0" max="' .. maximum ..
             '" value="0"><button type="button" id="go">提交</button>',
             "const r=document.getElementById('range');const ar=document.getElementById('arrow');" ..
-            "if(ar){const base=Number(ar.dataset.base);r.addEventListener('input',()=>{ar.setAttribute('transform','rotate('+(base+Number(r.value))+' 40 40)');});}" ..
+            "if(ar){r.addEventListener('input',()=>{ar.style.transform='rotate('+Number(r.value)+'deg)';});}" ..
             "document.getElementById('go').addEventListener('click',()=>{document.getElementById('answer').value=r.value;send();});",
             expected
     end
@@ -1873,11 +2023,21 @@ local function challenge_widget(mode, delay_seconds)
         text[index] = CAPTCHA_ALPHABET:sub(position, position)
     end
     text = table.concat(text)
-    return captcha_svg(text) .. '<label for="code">输入上图中的 4 个字符（不区分大小写）</label>' ..
+    return '<img class="pic" src="' .. src .. '" width="200" height="60" alt="验证码图片。无法查看图片请使用“改用等待验证”。">' ..
+        '<label for="code">输入上图中的 4 个字符（不区分大小写）</label>' ..
         '<input id="code" autocomplete="off" maxlength="8"><button type="button" id="go">提交</button>',
         "document.getElementById('go').addEventListener('click',()=>{document.getElementById('answer').value=document.getElementById('code').value;send();});",
         { answer = text, not_before = MIN_HUMAN_SECONDS, text = true }
 end
+
+-- The screen-reader path of the interactive pages: answer "wait", submitted
+-- once the proof of work is solved and picture.wait seconds have passed.
+picture.alternative_body = '<p><button type="button" id="alt">改用等待验证（约 ' .. picture.wait ..
+    ' 秒，适合读屏或无法查看图片）</button></p><p id="altst" role="status" aria-live="polite"></p>'
+picture.alternative_script = "document.getElementById('alt').addEventListener('click',e=>{e.target.disabled=true;" ..
+    "document.querySelectorAll('#go,.shape,#range,#code').forEach(x=>x.disabled=true);document.getElementById('answer').value='wait';" ..
+    "let left=" .. picture.wait .. ";const st=document.getElementById('altst');" ..
+    "const tick=()=>{if(left>0){st.textContent='请稍候 '+left+' 秒';left--;setTimeout(tick,1000);return;}st.textContent='正在完成验证';send();};tick();});"
 
 local function send_page(status, title, body, script, headers)
     local nonce = random_hex(12) or "0"
@@ -1885,14 +2045,16 @@ local function send_page(status, title, body, script, headers)
     ngx.header["Content-Type"] = "text/html; charset=utf-8"
     ngx.header["Cache-Control"] = "no-store"
     ngx.header["X-Content-Type-Options"] = "nosniff"
-    ngx.header["Content-Security-Policy"] = "default-src 'none'; img-src data:; style-src 'nonce-" .. nonce ..
+    ngx.header["Content-Security-Policy"] = "default-src 'none'; img-src 'self' data:; style-src 'nonce-" .. nonce ..
         "'; script-src 'nonce-" .. nonce .. "'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
     for name, value in pairs(headers or {}) do ngx.header[name] = value end
-    ngx.print('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>',
-        title, '</title><style nonce="', nonce, '">body{font-family:system-ui,sans-serif;background:#f5f6f8;color:#1f2329;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}main{background:#fff;padding:32px;border-radius:8px;max-width:420px;width:90%;box-shadow:0 2px 12px rgba(0,0,0,.08)}h1{font-size:20px;margin:0 0 16px}button{font-size:16px;padding:8px 16px;margin:8px 4px 0 0;cursor:pointer}input[type=range]{width:100%}.shapes{display:flex;gap:8px}.shape{padding:4px}label{display:block;margin:12px 0 4px}</style></head><body><main><h1>',
-        title, "</h1>", body, "</main>")
-    if script then ngx.print('<script nonce="', nonce, '">', script, "</script>") end
-    ngx.print("</body></html>")
+    -- one write with a Content-Length (separate prints become separate writev
+    -- calls and a chunked trailer)
+    local page = table.concat({ '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>',
+        title, '</title><style nonce="', nonce, '">body{font-family:system-ui,sans-serif;background:#f5f6f8;color:#1f2329;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}main{background:#fff;padding:32px;border-radius:8px;max-width:420px;width:90%;box-shadow:0 2px 12px rgba(0,0,0,.08)}h1{font-size:20px;margin:0 0 16px}button{font-size:16px;padding:8px 16px;margin:8px 4px 0 0;cursor:pointer}input[type=range]{width:100%}.shapes{display:flex;width:200px}.shape{flex:1;margin:4px 2px 0;padding:6px 0}.pic{display:block;max-width:100%}.track,.track+label+input[type=range]{width:200px}#arrow{margin:8px auto}label{display:block;margin:12px 0 4px}</style></head><body><main><h1>',
+        title, "</h1>", body, "</main>", script and ('<script nonce="' .. nonce .. '">' .. script .. "</script>") or "", "</body></html>" })
+    ngx.header["Content-Length"] = #page
+    ngx.print(page)
     return block_exit(status)
 end
 
@@ -1963,14 +2125,23 @@ local function render_challenge(entry, rule, peer, dict)
         ngx.header["Location"] = target
         return block_exit(redirect_status())
     end
-    local body, script, expected = challenge_widget(challenge.mode, challenge.delay_seconds or 0)
     local token, salt = random_hex(16), random_hex(16)
+    if not token or not salt then return block_exit(ngx.HTTP_SERVICE_UNAVAILABLE) end
+    local body, script, expected = challenge_widget(challenge.mode, challenge.delay_seconds or 0, token)
     local state = { rule_id = rule.rule_id, policy_version = entry.config.policy_version, mode = challenge.mode,
         ip = peer.text, ua = user_agent_digest(), not_before = ngx.now() + expected.not_before,
         answer = expected.answer, tolerance = expected.tolerance, text = expected.text, target = target,
         pow_salt = salt, pow_bits = challenge.pow_bits }
+    if picture.interactive[challenge.mode] then
+        -- the picture's noise seed and what it shows; "wait" opens after
+        -- picture.wait
+        state.seed = random_int(1, 4294967295)
+        state.order, state.angle = expected.order, expected.angle
+        state.wait_after = ngx.now() + picture.wait
+        body, script = body .. picture.alternative_body, script .. picture.alternative_script
+    end
     if is_scoped(entry) then state.site_id = entry.config.site_id end
-    if not token or not salt or not dict:set(scoped(entry, "nonce:" .. token), cjson.encode(state), challenge.challenge_seconds) then
+    if not dict:set(scoped(entry, "nonce:" .. token), cjson.encode(state), challenge.challenge_seconds) then
         return block_exit(ngx.HTTP_SERVICE_UNAVAILABLE)
     end
     body = '<form id="f" method="post" action="' .. GUARD_VERIFY .. '"><input type="hidden" name="token" value="' .. token ..
@@ -1989,6 +2160,7 @@ end
 
 local function answer_ok(state, answer)
     if state.answer == nil then return true end -- 5秒盾 / 无感验证: proof of work only
+    if answer == "wait" and type(state.wait_after) == "number" then return ngx.now() >= state.wait_after end
     if type(answer) ~= "string" or #answer == 0 or #answer > 64 then return false end
     if state.tolerance then
         local value, expected = tonumber(answer), tonumber(state.answer)
@@ -2003,6 +2175,46 @@ end
 
 -- verify's result when the page belongs to another CC policy of the request.
 local DEFERRED = {}
+
+-- The picture of a pending interactive token, for the client it was issued
+-- to (site, IP, User-Agent). Fetching does not consume the token; nothing is
+-- drawn for clients that never load it.
+function picture.serve(entry, peer, dict)
+    if ngx.req.get_method() ~= "GET" and ngx.req.get_method() ~= "HEAD" then
+        ngx.header["Allow"] = "GET, HEAD"
+        return block_exit(ngx.HTTP_NOT_ALLOWED)
+    end
+    local token = ngx.var.arg_token or ""
+    local raw = #token == 32 and token:match("^%x+$") and dict:get(scoped(entry, "nonce:" .. token))
+    local state = raw and cjson.decode(raw)
+    if type(state) ~= "table" then
+        if ngx.ctx.ccv2_more then return DEFERRED end
+        return block_exit(ngx.HTTP_FORBIDDEN)
+    end
+    if (is_scoped(entry) and state.site_id ~= entry.config.site_id) or state.ip ~= peer.text
+        or state.ua ~= user_agent_digest() or type(state.seed) ~= "number" then
+        return block_exit(ngx.HTTP_FORBIDDEN)
+    end
+    local byte = picture.noise_source(state.seed)
+    local image
+    if state.mode == "click" and type(state.order) == "table" then
+        image = picture.shapes_png(state.order, byte)
+    elseif state.mode == "rotate" and type(state.angle) == "number" then
+        image = picture.rotate_png(state.angle, byte)
+    elseif state.mode == "slider" then
+        image = picture.slider_png(tonumber(state.answer) or 50, byte)
+    elseif state.mode == "captcha" and type(state.answer) == "string" then
+        image = picture.captcha_png(state.answer, byte)
+    end
+    if not image then return block_exit(ngx.HTTP_FORBIDDEN) end
+    ngx.status = ngx.HTTP_OK
+    ngx.header["Content-Type"] = "image/png"
+    ngx.header["Cache-Control"] = "no-store, private, max-age=0"
+    ngx.header["X-Content-Type-Options"] = "nosniff"
+    ngx.header["Content-Length"] = #image
+    ngx.print(image)
+    return block_exit(ngx.HTTP_OK)
+end
 
 local function verify(entry, policy, peer, dict)
     if ngx.req.get_method() ~= "POST" then
@@ -2737,10 +2949,11 @@ run = function(entry, policy, reload_error, lkg_usable)
             acted(entry, "", "blocked", peer)
             return send_ban(entry, peer, dict)
         end
-        if ngx.var.uri == GUARD_VERIFY then
-            local verified = verify(entry, policy, peer, dict)
+        local uri = ngx.var.uri
+        if uri == GUARD_VERIFY or uri == picture.path then
+            local verified = uri == GUARD_VERIFY and verify(entry, policy, peer, dict) or picture.serve(entry, peer, dict)
             -- another policy's page: no rule of this one runs on the
-            -- engine's own verification URI
+            -- engine's own verification URIs
             if verified == DEFERRED then return end
             return verified
         end

@@ -33,6 +33,7 @@ import {
   type ChallengePublicationStatus,
   type CreateChallengePolicyInput,
   type IPBinding,
+  powDifficultyRange,
 } from '../../api/challengePolicies'
 import { useSessionStore } from '../../auth/session'
 import { localizedUnknownApiError } from '../../i18n/apiError'
@@ -62,6 +63,8 @@ interface PolicyForm {
   key_reference: string
   provider?: 'tencent' | 'geetest-v4'
   app_reference?: string
+  /** 0 = edge default (field omitted). */
+  pow_difficulty: number
 }
 
 type WriteAttempt =
@@ -138,8 +141,21 @@ function initialForm(item: ChallengePolicy | null, intent?: SiteIntent | null): 
     key_reference: '',
     provider: undefined,
     app_reference: '',
+    pow_difficulty: item?.pow_difficulty ?? 0,
   }
 }
+
+// Worst-case browser proof-of-work time: 2^bits hashes at about 600k hashes/s on a low-end phone.
+function powWorstCase(bits: number, t: TFunction<'challengePolicies'>): string {
+  const seconds = 2 ** bits / 600_000
+  return seconds < 1
+    ? t('editor.powMilliseconds', { n: Math.max(1, Math.round(seconds * 1000)) })
+    : t('editor.powSeconds', { n: Number(seconds.toFixed(1)) })
+}
+
+const powDifficulties = Array.from(
+  { length: powDifficultyRange.max - powDifficultyRange.min + 1 }, (_, index) => powDifficultyRange.min + index,
+)
 
 function configFromForm(values: PolicyForm): ChallengePolicyConfig {
   const minDelay = values.mode === 'delay' ? values.min_delay_seconds : 0
@@ -168,6 +184,7 @@ function configFromForm(values: PolicyForm): ChallengePolicyConfig {
     ...(values.mode === 'external' ? {
       external_provider: { provider: values.provider!, app_reference: values.app_reference! },
     } : {}),
+    ...(values.mode !== 'external' && values.pow_difficulty ? { pow_difficulty: values.pow_difficulty } : {}),
   }
 }
 
@@ -230,6 +247,12 @@ function PolicyEditor({
               } },
             ]}
           ><InputNumber min={10} max={300} precision={0} /></Form.Item>
+          {mode !== 'external' ? <Form.Item name="pow_difficulty" label={t('editor.powDifficulty')} rules={[{ required: true }]}>
+            <Select style={{ width: 300 }} options={[
+              { value: 0, label: t('editor.powDefault') },
+              ...powDifficulties.map((bits) => ({ value: bits, label: t('editor.powOption', { bits, time: powWorstCase(bits, t) }) })),
+            ]} />
+          </Form.Item> : null}
           <Form.Item name="pass_ttl_seconds" label={t('editor.passTTL')} rules={[{ required: true, type: 'number', min: 1, max: 3600 }]}><InputNumber min={1} max={3600} precision={0} /></Form.Item>
           <Form.Item name="clock_skew_seconds" label={t('editor.clockSkew')} rules={[{ required: true, type: 'number', min: 0, max: 30 }]}><InputNumber min={0} max={30} precision={0} /></Form.Item>
         </Space>
@@ -239,6 +262,18 @@ function PolicyEditor({
           <Form.Item name="ip_binding" label={t('editor.ipBinding')} rules={[{ required: true }]}><Select style={{ width: 130 }} options={[{ value: 'none', label: t('bindings.none') }, { value: 'exact', label: t('bindings.ip') }]} /></Form.Item>
           <Form.Item name="bind_user_agent" label={t('editor.bindUA')} valuePropName="checked"><Switch /></Form.Item>
         </Space>
+        <Alert
+          type={mode === 'external' ? 'info' : 'warning'}
+          showIcon
+          data-testid="challenge-mode-strength"
+          message={mode === 'external' ? t('strength.external') : t('strength.builtin')}
+          description={mode === 'external' ? undefined : <>
+            <div>{t('strength.noscript')}</div>
+            {mode === 'slider' || mode === 'captcha' ? <div>{t('strength.screenReader')}</div> : null}
+            <div>{t('editor.powHint')}</div>
+          </>}
+          style={{ marginBottom: 16 }}
+        />
         <Alert type="info" showIcon message={t('editor.attempts')} style={{ marginBottom: 16 }} />
         <Form.Item
           name="bypass_routes"

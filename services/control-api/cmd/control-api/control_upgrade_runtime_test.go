@@ -360,6 +360,28 @@ func TestControlUpgradeRuntimeCloseClearsBothOwnedSigningKeys(t *testing.T) {
 	}
 }
 
+// Close flushes (bounded by the shutdown timeout) and closes
+// the NATS connection before returning. With Drain it returned while the
+// connection was still draining in the background (real NATS: closed at
+// return = false in every case), and its drain timeout branch never ran.
+func TestControlUpgradeRuntimeCloseFlushesThenClosesNATS(t *testing.T) {
+	var operations []string
+	connection := &fakeOrderedNATSConnection{connected: true,
+		onFlush: func(timeout time.Duration) { operations = append(operations, "flush "+timeout.String()) },
+		onClose: func() { operations = append(operations, "close") }}
+	runtime := &controlUpgradeProductionRuntime{connection: connection, shutdownTimeout: 3 * time.Second}
+	if err := runtime.Close(); err != nil || !connection.IsClosed() || strings.Join(operations, ",") != "flush 3s,close" {
+		t.Fatalf("Close error=%v closed=%t operations=%v", err, connection.IsClosed(), operations)
+	}
+	operations = nil
+	disconnected := &fakeOrderedNATSConnection{onFlush: func(time.Duration) { operations = append(operations, "flush") },
+		onClose: func() { operations = append(operations, "close") }}
+	runtime = &controlUpgradeProductionRuntime{connection: disconnected, shutdownTimeout: time.Second}
+	if err := runtime.Close(); err != nil || strings.Join(operations, ",") != "close" {
+		t.Fatalf("disconnected Close error=%v operations=%v", err, operations)
+	}
+}
+
 type controlUpgradeReceiptHealthStore struct {
 	failed bool
 	err    error

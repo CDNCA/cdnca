@@ -59,6 +59,59 @@ function writeUpgradeInputs(payload, overrides = {}) {
   replace('upgrade/package-signing.pem', releaseKey.publicKey.export({ type: 'spki', format: 'pem' }))
 }
 
+const toolsetScripts = ['install', 'lib', 'preflight', 'rollback', 'uninstall', 'upgrade'].map((name) => `packaging/scripts/${name}.sh`)
+
+// The release SBOM (recipe.sh write_sbom) signs the packaged scripts' SHA256
+// and carries their bytes (base64) in one tool annotation.
+function writeToolsetSBOM(payload, overrides = {}, carried = {}) {
+  const files = toolsetScripts.filter((name) => overrides[name] !== null).map((name) => ({
+    SPDXID: `SPDXRef-File-${path.basename(name, '.sh')}`, fileName: name,
+    checksums: [{ algorithm: 'SHA256', checksumValue: overrides[name] ?? sha(fs.readFileSync(path.join(payload, name))) }],
+    annotations: carried[name] === null ? [] : [{ annotationType: 'OTHER',
+      comment: `cdnca.packaging-script/v1 base64:${(carried[name] ?? fs.readFileSync(path.join(payload, name))).toString('base64')}` }],
+  }))
+  const target = path.join(payload, 'evidence/edge-agent.spdx.json')
+  fs.chmodSync(target, 0o644)
+  fs.writeFileSync(target, JSON.stringify({ spdxVersion: 'SPDX-2.3', SPDXID: 'SPDXRef-DOCUMENT', files }))
+  fs.chmodSync(target, 0o444)
+}
+
+for (const name of toolsetScripts) {
+  test(`prepare refuses a packaged ${name} that differs from the signed SBOM`, (t) => {
+    const { payload } = fixture(t)
+    const target = path.join(payload, name)
+    fs.chmodSync(target, 0o755); fs.appendFileSync(target, '# changed after the release build\n'); fs.chmodSync(target, 0o555)
+    assert.throws(() => createNativeNodeManifest(payload, metadata), new RegExp(`packaging script ${name.replace(/[.]/g, '\\.')} differs from the signed release SBOM`))
+  })
+}
+
+for (const [label, overrides] of [['unlisted', { 'packaging/scripts/lib.sh': null }], ['malformed', { 'packaging/scripts/upgrade.sh': 'x' }]]) {
+  test(`prepare refuses an SBOM with an ${label} packaging script`, (t) => {
+    const { payload } = fixture(t)
+    writeToolsetSBOM(payload, overrides)
+    writeUpgradeInputs(payload)
+    assert.throws(() => createNativeNodeManifest(payload, metadata), /release SBOM does not sign packaging script/)
+  })
+}
+
+for (const [label, carried] of [['without the content of', { 'packaging/scripts/rollback.sh': null }],
+  ['with other content for', { 'packaging/scripts/install.sh': Buffer.from('#!/bin/sh\nexit 0\n') }]]) {
+  test(`prepare refuses an SBOM ${label} a packaging script`, (t) => {
+    const { payload } = fixture(t)
+    writeToolsetSBOM(payload, {}, carried)
+    writeUpgradeInputs(payload)
+    assert.throws(() => createNativeNodeManifest(payload, metadata), /release SBOM does not carry packaging script/)
+  })
+}
+
+test('prepare refuses an SBOM that is not JSON', (t) => {
+  const { payload } = fixture(t)
+  const target = path.join(payload, 'evidence/edge-agent.spdx.json')
+  fs.chmodSync(target, 0o644); fs.writeFileSync(target, 'not json\n'); fs.chmodSync(target, 0o444)
+  writeUpgradeInputs(payload)
+  assert.throws(() => createNativeNodeManifest(payload, metadata), /release SBOM is not JSON/)
+})
+
 for (const failure of ['none', 'unbound source lock', 'wrong runtime version', 'changed runtime', 'unlisted runtime', 'reused acceptance', 'no h3probe acceptance']) {
   test(`prepare binds runtime evidence to pushed sources and exact payload: ${failure}`, (t) => {
     const { directory, payload } = fixture(t)
@@ -119,6 +172,7 @@ function fixture(t) {
     fs.mkdirSync(path.dirname(path.join(payload, name)), { recursive: true })
     fs.writeFileSync(path.join(payload, name), 'test fixture only\n', { mode: executable(name) ? 0o555 : 0o444 })
   }
+  writeToolsetSBOM(payload)
   writeUpgradeInputs(payload)
   return { directory, payload }
 }

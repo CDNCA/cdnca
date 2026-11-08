@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -559,6 +560,19 @@ func (s *Store) PrepareAutomaticPublication(
 		publishRequest.NodeIDs, err = publicationNodeIDs(ctx, tx, request.TargetScopeID, policy.NodeIDs)
 		if err != nil {
 			return edgepublish.PreparedAutomaticPublication{}, err
+		}
+		// Nodes that still run something of the scope get the release
+		// that no longer has it (last site/forward deleted, node left the group).
+		withdrawals, err := withdrawalNodeIDs(ctx, tx, request.TargetScopeID, publishRequest.NodeIDs)
+		if err != nil {
+			return edgepublish.PreparedAutomaticPublication{}, err
+		}
+		if len(withdrawals) > 0 {
+			publishRequest.NodeIDs = append(publishRequest.NodeIDs, withdrawals...)
+			slices.SortFunc(publishRequest.NodeIDs, func(left, right uuid.UUID) int { return bytes.Compare(left[:], right[:]) })
+			if len(publishRequest.NodeIDs) > maxPolicyTargets {
+				return edgepublish.PreparedAutomaticPublication{}, ErrInvalidInput
+			}
 		}
 		if len(publishRequest.NodeIDs) == 0 {
 			return edgepublish.PreparedAutomaticPublication{}, ErrNoTargetNodes

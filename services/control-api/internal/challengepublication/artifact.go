@@ -80,6 +80,7 @@ type Rule struct {
 	MaxFailuresPerWindow uint32            `json:"max_failures_per_window"`
 	IPBinding            string            `json:"ip_binding"`
 	BindUserAgent        bool              `json:"bind_user_agent"`
+	PowDifficulty        *uint32           `json:"pow_difficulty,omitempty"`
 	ExternalProvider     *ExternalProvider `json:"external_provider,omitempty"`
 }
 
@@ -275,7 +276,8 @@ func normalizeArtifactDocument(request ArtifactBuildRequest, material ArtifactMa
 		externalByScope[scope] = credentials[index]
 	}
 	for _, rule := range material.Policy.Rules {
-		if !canonicalUUID(rule.RuleID) || !canonicalUUID(rule.SiteID) || rule.TenantID != material.TenantID.String() {
+		if !canonicalUUID(rule.RuleID) || !canonicalUUID(rule.SiteID) || rule.TenantID != material.TenantID.String() ||
+			rule.PowDifficulty != nil && (rule.Mode == "external" || *rule.PowDifficulty < 12 || *rule.PowDifficulty > 24) {
 			clearArtifactSecrets(keys)
 			clearExternalCredentials(credentials)
 			return ArtifactDocument{}, ErrInvalidInput

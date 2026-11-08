@@ -255,7 +255,10 @@ paths:
         re-authorized and locked before resolving its opaque key reference.
         The immutable artifact is signed and HPKE-encrypted separately for each
         eligible node. Missing key material or an unconfigured external adapter
-        fails closed and does not change the active Edge configuration.
+        fails closed and does not change the active Edge configuration. A
+        revision with an explicit pow_difficulty targets only nodes declaring
+        CHALLENGE_POW; when no node of the scope declares it the publication is
+        refused with 422 node_capability_unavailable naming the nodes.
       x-required-permissions: [challenge_policies.manage]
       requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
       responses:
@@ -316,7 +319,9 @@ paths:
         idempotent. Only a fully healthy rollout whose immutable artifact binds
         the same tenant, policy, and revision can advance the signed Edge
         configuration. Partial, failed, stale, forged, or cross-policy rollouts
-        preserve the current configuration and LKG.
+        preserve the current configuration and LKG. Nodes left out for lacking
+        CHALLENGE_POW are deferred like offline nodes: they keep their previous
+        policy and binding until they declare it.
       x-required-permissions: [challenge_policies.manage]
       requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
       responses:
@@ -328,6 +333,7 @@ paths:
         '405': {$ref: '#/components/responses/MethodNotAllowed'}
         '409': {$ref: '#/components/responses/Conflict'}
         '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
 components:
   securitySchemes:
@@ -534,7 +540,9 @@ components:
       description: If-Match does not equal the current revision.
       $ref: '#/components/responses/ErrorResponse'
     UnprocessableEntity:
-      description: A syntactically valid field violates policy or site/host rules.
+      description: >-
+        A syntactically valid field violates policy or site/host rules, or no
+        target node supports the revision (node_capability_unavailable).
       $ref: '#/components/responses/ErrorResponse'
     ServiceUnavailable:
       description: >-
@@ -630,6 +638,20 @@ components:
           description: Opaque secret-manager reference. Plain HMAC material is never accepted.
         external_provider:
           $ref: '#/components/schemas/ExternalProviderReference'
+        pow_difficulty:
+          type: [integer, 'null']
+          minimum: 12
+          maximum: 24
+          description: >-
+            Browser proof-of-work difficulty in bits for delay, click, slider and
+            captcha. The challenge page searches for a server-chosen counter in
+            [0, 2^pow_difficulty); worst-case work doubles with each bit (18 is
+            at most about 0.4 s on a low-end phone at 600k hashes per second). Omitted or
+            null uses the edge default 18 and is not sent to nodes, so older edge
+            agents keep accepting the policy. A policy with an explicit value is
+            published only to nodes that declare capability CHALLENGE_POW; older
+            nodes keep their previous policy and receive this one once they
+            declare it. Not allowed for external.
       allOf:
         - if:
             properties:
@@ -637,6 +659,8 @@ components:
             required: [mode]
           then:
             required: [external_provider]
+            properties:
+              pow_difficulty: {type: 'null'}
           else:
             properties:
               external_provider: false
@@ -723,6 +747,11 @@ components:
           type: array
           maxItems: 32
           items: {$ref: '#/components/schemas/BypassRoute'}
+        pow_difficulty:
+          type: integer
+          minimum: 12
+          maximum: 24
+          description: Present only when set explicitly; absent means the edge default 18.
         key_reference_configured: {type: boolean}
         external_provider_configured: {type: boolean}
         enabled: {type: boolean}
@@ -823,6 +852,22 @@ components:
                 - method_not_allowed
                 - challenge_external_adapter_unavailable
                 - challenge_publication_not_ready
+                - node_capability_unavailable
             message: {type: string, minLength: 1, maxLength: 256}
             request_id: {$ref: '#/components/schemas/MetadataID'}
             trace_id: {$ref: '#/components/schemas/MetadataID'}
+            capability:
+              description: >-
+                Present only with node_capability_unavailable: the first
+                refused node, the capability it lacks and the other refused nodes.
+              type: object
+              additionalProperties: false
+              required: [node_id, capability, required_version, other_node_ids]
+              properties:
+                node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+                capability: {type: string, pattern: '^CAPABILITY_NAME_[A-Z0-9_]{1,64}$'}
+                required_version: {type: integer, minimum: 1}
+                other_node_ids:
+                  type: array
+                  maxItems: 10000
+                  items: {$ref: '#/components/schemas/CanonicalUUID'}

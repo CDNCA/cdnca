@@ -293,7 +293,10 @@ local prefix = scratch .. "/process/"
 local base = 20000 + math.floor(ngx.now() * 1000) % 20000
 local port1, port2, backend = base, base + 1, base + 2
 local stream2 = "33333333-3333-4333-8333-000000000002"
-assert(os.execute("mkdir -p '" .. prefix .. "logs'"))
+-- Run as root, nginx drops the workers to nobody: the scratch directory
+-- (mktemp -d makes it 0700) must be traversable and the prefix readable, or a
+-- worker cannot open config.json and every connection is guard_config_invalid.
+assert(os.execute("mkdir -p '" .. prefix .. "logs' && chmod a+x '" .. scratch .. "' && chmod 755 '" .. prefix .. "'"))
 local function listener(id, rules)
     return { id = id, tenant_id = tenant, site_id = site, stream_id = id, guard = rules,
         geo = { enabled = false, tenant_id = tenant, site_id = site, stream_id = id, revision = 1,

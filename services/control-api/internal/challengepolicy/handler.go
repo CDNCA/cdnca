@@ -45,7 +45,17 @@ type errorEnvelope struct {
 		Message   string `json:"message"`
 		RequestID string `json:"request_id"`
 		TraceID   string `json:"trace_id"`
+		// Capability names, for node_capability_unavailable, the nodes a
+		// publication was refused for.
+		Capability *capabilityErrorDetails `json:"capability,omitempty"`
 	} `json:"error"`
+}
+
+type capabilityErrorDetails struct {
+	NodeID          string   `json:"node_id"`
+	Capability      string   `json:"capability"`
+	RequiredVersion uint32   `json:"required_version"`
+	OtherNodeIDs    []string `json:"other_node_ids"`
 }
 
 type createBody struct {
@@ -608,6 +618,11 @@ func (handler *Handler) writeError(response http.ResponseWriter, request *http.R
 }
 
 func (handler *Handler) writeAPIError(response http.ResponseWriter, request *http.Request, status int, code, message string) {
+	handler.writeAPIErrorWith(response, request, status, code, message, nil)
+}
+
+func (handler *Handler) writeAPIErrorWith(response http.ResponseWriter, request *http.Request, status int, code, message string,
+	capability *capabilityErrorDetails) {
 	requestID := safeResponseMetadata(request.Header.Get("X-Request-ID"))
 	traceID := safeResponseMetadata(request.Header.Get("X-Trace-ID"))
 	response.Header().Set("X-Request-ID", requestID)
@@ -617,6 +632,7 @@ func (handler *Handler) writeAPIError(response http.ResponseWriter, request *htt
 	envelope.Error.Message = message
 	envelope.Error.RequestID = requestID
 	envelope.Error.TraceID = traceID
+	envelope.Error.Capability = capability
 	handler.writeJSON(response, request, status, envelope)
 }
 

@@ -169,6 +169,11 @@ func compileRule(input Rule) (Rule, error) {
 	} else if input.ExternalProvider != nil {
 		return Rule{}, fmt.Errorf("external_provider is only valid for external mode")
 	}
+	if input.PowDifficulty != nil && (input.Mode == ModeExternal ||
+		*input.PowDifficulty < MinPoWDifficulty || *input.PowDifficulty > MaxPoWDifficulty) {
+		return Rule{}, fmt.Errorf("pow_difficulty must be between %d and %d and is not valid for external mode",
+			MinPoWDifficulty, MaxPoWDifficulty)
+	}
 	if input.ChallengeTTLSeconds < MinChallengeTTLSeconds || input.ChallengeTTLSeconds > MaxChallengeTTLSeconds ||
 		input.ChallengeTTLSeconds <= input.MinDelaySeconds+input.ClockSkewSeconds {
 		return Rule{}, fmt.Errorf("challenge_ttl_seconds must be within bounds and exceed delay plus clock skew")
@@ -516,6 +521,9 @@ func requireFields(raw []byte) error {
 			if _, exists := rule[field]; !exists {
 				return invalid("rule %d required field %q is missing", index, field)
 			}
+		}
+		if value, exists := rule["pow_difficulty"]; exists && bytes.Equal(value, []byte("null")) {
+			return invalid("rule %d pow_difficulty must be omitted rather than null", index)
 		}
 	}
 	return nil

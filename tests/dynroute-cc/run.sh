@@ -17,6 +17,7 @@
 #   tests/dynroute-cc/run.sh                 cc, modes, params, rate, engines
 #   ONLY=bench tests/dynroute-cc/run.sh      request cost (no checks)
 #   ONLY=cc,rate ...                         some parts
+#   ONLY=scrape CC_SCRAPE_EXPECT=bypass ...   the page reader passes (pre-fix proof)
 #   BROWSER=1 tests/dynroute-cc/run.sh       headless Chromium solves the pages (browser.mjs)
 #   CDNCA_CC_IMAGE        node runtime image (default cdnca-native-runtime:edge-golden)
 #   MODSECURITY_RUNTIME   engine extension (default scripts/security/modsecurity-runtime.sh)
@@ -53,17 +54,20 @@ grep -E '^COPY edge/openresty/[^ ]+ /usr/local/share/cdnca/' "${repo_root}/edge/
 	done
 chmod -R a+rX "${work}"
 args="-lua /cc/lua -objects /cc/objects -bench-requests ${BENCH_REQUESTS:-4000} -bench-concurrency ${BENCH_CONCURRENCY:-8} -bench-rounds ${BENCH_ROUNDS:-3}"
+# CC_SCRAPE_EXPECT=bypass: the scrape part expects the page reader to pass (pre-fix proof).
+args="${args} -scrape-expect ${CC_SCRAPE_EXPECT:-blocked}"
 if [ "${BROWSER:-0}" = 1 ]; then
 	playwright=${PLAYWRIGHT_CORE:-${repo_root}/node_modules/playwright-core}
 	[ -f "${playwright}/package.json" ] || { echo "BLOCKED: no playwright-core at ${playwright}" >&2; exit 69; }
 	port=${CC_BROWSER_PORT:-18093}
+	answer_port=${CC_BROWSER_ANSWER_PORT:-18094}
 	# The browser runs on the host: the node is published on loopback only.
 	# shellcheck disable=SC2086
-	${CDNCA_CC_WRAP:-} docker run -d --rm --init --name "${container}" -p "127.0.0.1:${port}:8080" -v "${work}:/cc:ro" \
+	${CDNCA_CC_WRAP:-} docker run -d --rm --init --name "${container}" -p "127.0.0.1:${port}:8080" -p "127.0.0.1:${answer_port}:18099" -v "${work}:/cc:ro" \
 		-v "${runtime}:/usr/local/openresty/modsecurity:ro" --entrypoint /cc/check "${image}" ${args} -only serve >/dev/null
 	for _ in $(seq 1 100); do docker logs "${container}" 2>&1 | grep -q READY && break; sleep 0.2; done
 	status=0
-	node "${here}/browser.mjs" "${playwright}" "http://127.0.0.1:${port}" "${work}/pass.cookie" || status=1
+	node "${here}/browser.mjs" "${playwright}" "http://127.0.0.1:${port}" "${work}/pass.cookie" "http://127.0.0.1:${answer_port}" || status=1
 	# The browser's pass cookie from another network (the container's own
 	# loopback is not the browser's Docker gateway /24) must be refused.
 	other=$(docker exec "${container}" /cc/check -replay /cc/pass.cookie -replay-ua /cc/pass.cookie.ua 2>&1 || true)

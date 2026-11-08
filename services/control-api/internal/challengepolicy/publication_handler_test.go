@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/challengepublication"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/google/uuid"
 )
 
@@ -18,12 +21,13 @@ type publicationDomainStub struct {
 	statusCalls  int
 	promoteCalls int
 	request      PublicationRequest
+	err          error
 }
 
 func (stub *publicationDomainStub) Publish(_ context.Context, request PublicationRequest) (PublicationStatus, error) {
 	stub.publishCalls++
 	stub.request = request
-	return stub.result, nil
+	return stub.result, stub.err
 }
 
 func (stub *publicationDomainStub) Status(_ context.Context, request PublicationRequest) (PublicationStatus, error) {
@@ -141,5 +145,46 @@ func assertPublicationHTTPResponse(t *testing.T, response *httptest.ResponseReco
 	var body PublicationStatus
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.PolicyID != policyID || body.RolloutID != rolloutID {
 		t.Fatalf("response=%+v err=%v body=%s", body, err, response.Body.String())
+	}
+}
+
+// A publication no target node can take (every node lacks
+// CHALLENGE_POW) is refused with node_capability_unavailable and the nodes,
+// which the console shows (publishRefusalText).
+func TestPublicationHandlerNamesNodesWithoutChallengePoW(t *testing.T) {
+	tenantScopeID, policyID := uuid.New(), uuid.New()
+	first, other := uuid.New(), uuid.New()
+	domain := &publicationDomainStub{err: normalizeStoreError(fmt.Errorf("plan: %w", &edgepublish.TargetCapabilityError{
+		NodeID: first, OtherNodeIDs: []uuid.UUID{other}, Feature: "pow",
+		Capability: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW, Required: 1}))}
+	actor := Actor{UserID: uuid.New(), ScopeID: tenantScopeID, ScopeKind: "tenant",
+		Permissions: []string{PermissionManage}, Credential: CredentialReference{Kind: CredentialKindSession, ID: uuid.New()}}
+	handler, err := NewPublicationHandler(AuthenticatorFunc(func(*http.Request) (Actor, error) { return actor, nil }), domain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := "/v1/tenant-scopes/" + tenantScopeID.String() + "/challenge-policies/" + policyID.String() + "/publications"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, publicationRequest(t, http.MethodPost, base, true))
+	var body struct {
+		Error struct {
+			Code       string `json:"code"`
+			Message    string `json:"message"`
+			Capability struct {
+				NodeID          string   `json:"node_id"`
+				Capability      string   `json:"capability"`
+				RequiredVersion uint32   `json:"required_version"`
+				OtherNodeIDs    []string `json:"other_node_ids"`
+			} `json:"capability"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusUnprocessableEntity || body.Error.Code != "node_capability_unavailable" ||
+		body.Error.Capability.NodeID != first.String() || body.Error.Capability.Capability != "CAPABILITY_NAME_CHALLENGE_POW" ||
+		body.Error.Capability.RequiredVersion != 1 || len(body.Error.Capability.OtherNodeIDs) != 1 ||
+		body.Error.Capability.OtherNodeIDs[0] != other.String() || len(body.Error.Message) > 256 {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

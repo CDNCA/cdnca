@@ -185,6 +185,9 @@ func gatedFeature(capability *agentv1.Capability) (string, bool) {
 	case (capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_TCP_PROXY ||
 		capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_UDP_PROXY) && capability.GetApiVersion() >= 3:
 		return "L4 additional listeners", true
+	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW:
+		// Only JS challenge secret rollouts require it.
+		return "a JS challenge policy with an explicit proof-of-work difficulty (挑战策略设置了工作量证明难度，需要节点支持 CHALLENGE_POW；未升级的节点不下发，保留上一份策略；请升级节点或把难度改回默认)", true
 	}
 	return "", false
 }

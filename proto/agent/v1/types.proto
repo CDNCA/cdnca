@@ -321,6 +321,13 @@ enum CapabilityName {
   // probe-only whatever is assigned. Control assigns roles only to nodes
   // that declare it.
   CAPABILITY_NAME_MARKET_ROLE = 79;
+  // CHALLENGE_POW v1 (80 is left unused): the node's JS challenge engine
+  // accepts the policy rule field pow_difficulty (12..24) and runs the bounded
+  // proof of work it sets. Older agents decode challenge policies strictly and
+  // refuse a policy carrying the field. Control sends a policy with an
+  // explicit pow_difficulty only to nodes that declare it; the others keep
+  // their previous policy.
+  CAPABILITY_NAME_CHALLENGE_POW = 81;
 }
 
 // Capability advertises the highest implementation version for one feature.

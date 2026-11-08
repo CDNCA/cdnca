@@ -248,6 +248,20 @@ http {
         location = /client {
             content_by_lua_block { ngx.say(require("engine").resolve_client_ip() or "invalid") }
         }
+        # Test-only: the puzzle answer of a pending nonce (a human reads the picture).
+        location = /answer {
+            content_by_lua_block {
+                local digest = require("crypto").sha256_hex(ngx.var.arg_nonce or "")
+                local dict = ngx.shared.cdnca_challenge_state
+                for _, key in ipairs(dict:get_keys(0)) do
+                    if key:sub(-#digest - 9) == ":pending:" .. digest then
+                        ngx.say(require("cjson.safe").decode(dict:get(key)).answer)
+                        return
+                    end
+                end
+                ngx.exit(404)
+            }
+        }
         location = /clear {
             content_by_lua_block {
                 local dict = ngx.shared.cdnca_challenge_state
@@ -485,17 +499,16 @@ nonce_from_last_body() {
   sed -n 's/.*name="nonce" value="\([^"]*\)".*/\1/p' "${workdir}/last.body"
 }
 
+# delay/click submit their mode name; the slider gap and captcha text are only
+# in the picture, so the smoke reads them from the test-only admin endpoint.
 response_from_last_body() {
   response_mode="$1"
   case "${response_mode}" in
     delay|click)
       sed -n 's/.*name="response" value="\([^"]*\)".*/\1/p' "${workdir}/last.body"
       ;;
-    slider)
-      sed -n 's/.*目标位置：\([0-9][0-9]*\)%.*/\1/p' "${workdir}/last.body"
-      ;;
-    captcha)
-      sed -n 's/.*class="captcha"[^>]*>\([0-9A-F][0-9A-F]*\)<\/div>.*/\1/p' "${workdir}/last.body"
+    slider|captcha)
+      curl --noproxy '*' --fail --silent --show-error "${admin_url}/answer?nonce=$(nonce_from_last_body)"
       ;;
     *) fail "unknown response mode ${response_mode}" ;;
   esac
@@ -513,6 +526,9 @@ get_nonce() {
   expect_status 200 "${nonce_host}" "${nonce_path}" "$@"
   nonce_value="$(nonce_from_last_body)"
   [ "${#nonce_value}" -eq 32 ] || fail "challenge page did not contain a bounded nonce"
+  # The page script's proof of work, kept per nonce for submit_nonce.
+  python3 -I "${repo_root}/scripts/edge-challenge-scraper.py" --pow "${workdir}/last.body" \
+    >"${workdir}/pow-${nonce_value}" || fail "challenge page did not carry a solvable proof of work"
   printf '%s' "${nonce_value}"
 }
 
@@ -524,7 +540,13 @@ submit_nonce() {
   request_status "${submit_host}" '/.cdnca/challenge/verify' \
     --request POST \
     --header 'Content-Type: application/x-www-form-urlencoded' \
-    --data "nonce=${submit_nonce_value}&response=${submit_response}" "$@"
+    --data "nonce=${submit_nonce_value}&response=${submit_response}$(pow_field "${submit_nonce_value}")" "$@"
+}
+
+pow_field() {
+  if [ -f "${workdir}/pow-$1" ]; then
+    printf '&pow=%s' "$(cat "${workdir}/pow-$1")"
+  fi
 }
 
 solve_click() {
@@ -603,14 +625,19 @@ grep -Fi 'Cache-Control: no-store' "${workdir}/last.headers" >/dev/null || fail 
 grep -F "Content-Security-Policy: default-src 'none'" "${workdir}/last.headers" >/dev/null || fail "missing strict CSP"
 grep -F "script-src 'nonce-" "${workdir}/last.headers" >/dev/null || fail "delay CSP lacks script nonce"
 grep -F '<style nonce="' "${workdir}/last.body" >/dev/null || fail "style nonce is malformed"
-delay_manual_count="$(grep -Fo '<noscript><button id="manual-continue" type="submit" form="challenge-form">' \
-  "${workdir}/last.body" | wc -l | tr -d '[:space:]')"
-[ "${delay_manual_count}" = 1 ] || fail "delay page exposed ${delay_manual_count} no-JS manual submits, want exactly one"
-grep -F '<form id="challenge-form" method="post" action="/.cdnca/challenge/verify">' \
-  "${workdir}/last.body" >/dev/null || fail "delay manual submit is not bound to the challenge form"
+# No-JS clients get a notice, not a submit they could use without the proof of work.
+if grep -F 'manual-continue' "${workdir}/last.body" >/dev/null; then
+  fail "delay page exposed a no-JS manual submit"
+fi
+grep -F '<noscript><p class="error">此安全检查需要启用 JavaScript' "${workdir}/last.body" >/dev/null \
+  || fail "delay page lacks the no-JS notice"
+grep -F '<form id="challenge-form" method="post" action="/.cdnca/challenge/verify" data-mode="delay"' \
+  "${workdir}/last.body" >/dev/null || fail "delay page lacks the proof-of-work form"
+grep -F "worker-src blob:; img-src 'self'" "${workdir}/last.headers" >/dev/null || fail "delay CSP lacks the worker source"
+grep -F 'src="/.cdnca/challenge/solver.js?v=' "${workdir}/last.body" >/dev/null || fail "delay page lacks the page script"
 grep -F '<button id="continue" type="submit" disabled>' "${workdir}/last.body" >/dev/null \
   || fail "delay enhanced submit is not initially disabled"
-if grep -Ei 'https?://|<script[^>]+src=|<(link|img|iframe|object|embed)[^>]+(href|src|data)=' \
+if grep -Ei 'https?://|<script[^>]+src="[^/]|<(link|img|iframe|object|embed)[^>]+(href|src|data)=' \
   "${workdir}/last.body" >/dev/null; then
   fail "delay page depends on an external resource"
 fi
@@ -683,7 +710,7 @@ while [ "${concurrent_index}" -le 2 ]; do
     --write-out '%{http_code}' \
     --request POST \
     --header 'Content-Type: application/x-www-form-urlencoded' \
-    --data "nonce=${click_nonce}&response=${click_response}" \
+    --data "nonce=${click_nonce}&response=${click_response}$(pow_field "${click_nonce}")" \
     "https://edge-b.test:${edge_port}/.cdnca/challenge/verify" \
     >"${workdir}/concurrent-${concurrent_index}.status" &
   concurrent_pids="${concurrent_pids} $!"
@@ -921,16 +948,23 @@ assert_hits 23
 slider_nonce="$(get_nonce edge-d.test '/slider?x=%3Cscript%3Ealert(1)%3C/script%3E')"
 slider_target="$(response_from_last_body slider)"
 grep -F 'type="range"' "${workdir}/last.body" >/dev/null || fail "slider control is missing"
-grep -F 'aria-describedby="slider-value"' "${workdir}/last.body" >/dev/null || fail "slider accessibility binding is missing"
+grep -F '<img src="/.cdnca/challenge/picture?nonce=' "${workdir}/last.body" >/dev/null || fail "slider gap picture is missing"
+grep -F 'id="alt-start"' "${workdir}/last.body" >/dev/null || fail "slider lacks the screen-reader alternative"
 grep -F "script-src 'nonce-" "${workdir}/last.headers" >/dev/null || fail "slider CSP lacks script nonce"
-slider_manual_count="$(grep -Fo '<noscript><button id="manual-continue" type="submit" form="challenge-form">' \
-  "${workdir}/last.body" | wc -l | tr -d '[:space:]')"
-[ "${slider_manual_count}" = 1 ] || fail "slider page exposed ${slider_manual_count} no-JS manual submits, want exactly one"
-grep -F '<form id="challenge-form" method="post" action="/.cdnca/challenge/verify">' \
-  "${workdir}/last.body" >/dev/null || fail "slider manual submit is not bound to the challenge form"
+if grep -F 'manual-continue' "${workdir}/last.body" >/dev/null; then
+  fail "slider page exposed a no-JS manual submit"
+fi
+# Fixed markup numbers (picture size, slider range, data-pow-*/delay/wait,
+# CSS) and random tokens (nonces, the solver URL digest) can contain the gap's
+# digits by chance; the page text must not carry it.
+if sed -E 's/<style[^>]*>.*<\/style>//; s/<script[^>]*>[^<]*<\/script>//g;
+    s/ (width|height|min|max|value|step|src|nonce|data-[a-z-]+)="[^"]*"//g' "${workdir}/last.body" \
+  | grep -E "(^|[^0-9])${slider_target}([^0-9]|$)" >/dev/null; then
+  fail "slider gap position is readable from the page"
+fi
 grep -F '<button id="continue" type="submit" disabled>' "${workdir}/last.body" >/dev/null \
   || fail "slider enhanced submit is not initially disabled"
-if grep -Ei 'https?://|<script[^>]+src=|<(link|img|iframe|object|embed)[^>]+(href|src|data)=' \
+if grep -Ei 'https?://|<script[^>]+src="[^/]|<(link|iframe|object|embed)[^>]+(href|src|data)=|<img [^>]*src="[^/]' \
   "${workdir}/last.body" >/dev/null; then
   fail "slider page depends on an external resource"
 fi
@@ -938,7 +972,7 @@ if grep -F '<script>alert(1)</script>' "${workdir}/last.body" >/dev/null; then
   fail "request query was reflected into challenge HTML"
 fi
 sleep 0.25
-[ "$(submit_nonce edge-d.test "${slider_nonce}" "$((slider_target - 1))")" = 403 ] || fail "wrong slider answer was accepted"
+[ "$(submit_nonce edge-d.test "${slider_nonce}" "$((slider_target + 10))")" = 403 ] || fail "wrong slider answer was accepted"
 assert_last_decision block proof_invalid_or_too_early 403 9 site-d-slider active -
 assert_hits 23
 slider_nonce="$(get_nonce edge-d.test /slider-valid)"
@@ -953,20 +987,23 @@ assert_hits 24
 
 captcha_nonce="$(get_nonce edge-e.test /captcha-wrong)"
 captcha_answer="$(response_from_last_body captcha)"
-grep -F 'role="img" aria-label="验证码 ' "${workdir}/last.body" >/dev/null || fail "captcha accessible text is missing"
+grep -F 'class="captcha-image" src="/.cdnca/challenge/picture?nonce=' "${workdir}/last.body" >/dev/null || fail "captcha picture is missing"
 grep -F 'for="captcha-response"' "${workdir}/last.body" >/dev/null || fail "captcha label is missing"
-grep -F "script-src 'none'" "${workdir}/last.headers" >/dev/null || fail "captcha unexpectedly enabled script"
-if grep -E 'https?://|<script[^>]+src=' "${workdir}/last.body" >/dev/null; then
+grep -F 'id="alt-start"' "${workdir}/last.body" >/dev/null || fail "captcha lacks the screen-reader alternative"
+if grep -Fi -- "${captcha_answer}" "${workdir}/last.body" >/dev/null; then
+  fail "captcha text is readable from the page"
+fi
+if grep -E 'https?://|<script[^>]+src="[^/]' "${workdir}/last.body" >/dev/null; then
   fail "challenge page loaded a third-party resource"
 fi
 captcha_first="$(printf '%s' "${captcha_answer}" | cut -c 1)"
-if [ "${captcha_first}" = 0 ]; then captcha_replacement=1; else captcha_replacement=0; fi
+if [ "${captcha_first}" = 2 ]; then captcha_replacement=3; else captcha_replacement=2; fi
 captcha_wrong="${captcha_replacement}$(printf '%s' "${captcha_answer}" | cut -c 2-)"
 sleep 0.25
 [ "$(submit_nonce edge-e.test "${captcha_nonce}" "${captcha_wrong}")" = 403 ] || fail "wrong captcha answer was accepted"
 captcha_nonce="$(get_nonce edge-e.test /captcha-valid)"
 captcha_answer="$(response_from_last_body captcha)"
-captcha_lower="$(printf '%s' "${captcha_answer}" | tr 'A-F' 'a-f')"
+captcha_lower="$(printf '%s' "${captcha_answer}" | tr 'A-Z' 'a-z')"
 sleep 0.25
 [ "$(submit_nonce edge-e.test "${captcha_nonce}" "${captcha_lower}")" = 303 ] || fail "valid captcha answer was rejected"
 captcha_cookie="$(cookie_from_last_headers)"
@@ -1026,7 +1063,7 @@ printf '%s\n' \
   "trusted_proxy_ipv4_ipv6=true" \
   "browser_machine_bypass=true" \
   "machine_guard_preserved=true" \
-  "nojs_manual_delay_slider=true" \
+  "nojs_submit_requires_pow=true" \
   "shared_dict_capacity_fail_closed=true" \
   "lkg_retained=true" \
   "origin_hits=25"

@@ -228,6 +228,31 @@ make_bundle() {
   openssl pkeyutl -sign -inkey "${private_key}" -rawin -in "${bundle}/manifest" -out "${bundle}/manifest.sig"
 }
 
+# carry_toolset BUNDLE MODE: the SBOM signs this tree's packaging scripts as
+# recipe.sh write_sbom does (carried: SHA256 and base64 bytes; digests: SHA256
+# only; mismatch: rollback.sh bytes that differ from its SHA256).
+carry_toolset() {
+  : >"${workdir}/carry-files.jsonl"
+  for carry_name in lib install preflight rollback uninstall upgrade; do
+    carry_source=${packaging_root}/scripts/${carry_name}.sh
+    if [ "$2" = mismatch ] && [ "${carry_name}" = rollback ]; then
+      { cat "${carry_source}"; printf '# not the signed bytes\n'; } | base64 -w0 >"${workdir}/carry-content.b64"
+    else
+      base64 -w0 "${carry_source}" >"${workdir}/carry-content.b64"
+    fi
+    jq -cn --arg name "${carry_name}" --arg digest "$(sha256_file "${carry_source}")" --arg mode "$2" \
+      --rawfile content "${workdir}/carry-content.b64" \
+      '{SPDXID:("SPDXRef-File-packaging-" + $name),checksums:[{algorithm:"SHA256",checksumValue:$digest}],
+        fileName:("packaging/scripts/" + $name + ".sh")} + (if $mode == "digests" then {} else {annotations:[{
+        annotationDate:"2026-07-22T00:00:00Z",annotationType:"OTHER",annotator:"Tool: cdnca-packaging-smoke",
+        comment:("cdnca.packaging-script/v1 base64:" + $content)}]} end)' >>"${workdir}/carry-files.jsonl"
+  done
+  jq -c --slurpfile files "${workdir}/carry-files.jsonl" '.files = $files' "$1/edge-agent.spdx.json" >"${workdir}/carry-sbom.json"
+  cat "${workdir}/carry-sbom.json" >"$1/edge-agent.spdx.json"
+  rm -f -- "${workdir}/carry-files.jsonl" "${workdir}/carry-content.b64" "${workdir}/carry-sbom.json"
+  refresh_sbom_manifest "$1"
+}
+
 resign_bundle() {
   bundle=$1
   openssl pkeyutl -sign -inkey "${private_key}" -rawin -in "${bundle}/manifest" -out "${bundle}/manifest.sig"
@@ -288,7 +313,7 @@ esac
 
 regression_case=${CDNCA_REGRESSION_ONLY:-}
 case "${regression_case}" in
-  ''|metadata|restore-staging|rollback-interrupt|disable-failure|layout-migration|mounted-subtree) ;;
+  ''|metadata|restore-staging|rollback-interrupt|disable-failure|layout-migration|mounted-subtree|agent-pointers) ;;
   *) fail "unknown isolated regression case: ${regression_case}" ;;
 esac
 
@@ -307,6 +332,12 @@ make_bundle "${workdir}/vtransaction" vtransaction 3
 make_bundle "${workdir}/vcurrent-fail" vcurrent-fail 3
 make_bundle "${workdir}/vaccepted-fail" vaccepted-fail 3
 make_bundle "${workdir}/v3layout" v3layout 3
+make_bundle "${workdir}/vpointers" vpointers 4
+make_bundle "${workdir}/vpointerslegacy" vpointerslegacy 5
+for carry_mode in carried digests mismatch; do
+  make_bundle "${workdir}/vtoolset-${carry_mode}" vtoolset 6
+  carry_toolset "${workdir}/vtoolset-${carry_mode}" "${carry_mode}"
+done
 make_bundle "${workdir}/protocol-control" protocol-control 3 2.0 1.0
 make_bundle "${workdir}/protocol-agent" protocol-agent 3 1.0 2.0
 make_bundle "${workdir}/same-sequence" same-sequence 2
@@ -384,6 +415,9 @@ case "\$1" in
     ;;
   stop)
     [ ! -f "${workdir}/service-stop-fail" ] || exit 5
+    if [ -f "${workdir}/stop-plants-link" ]; then
+      ln -s /etc/passwd "${root}/var/lib/cdnca-edge-agent-backups/active-state/planted-at-stop"
+    fi
     rm -f "${workdir}/service-active"
     ;;
   restart)
@@ -1005,6 +1039,185 @@ case "${regression_case}" in
     assert_absent "${root}/usr/lib/cdnca-edge-agent"
     assert_file "${root}/var/lib/cdnca-edge-agent/state.txt"
     assert_absent "${root}/var/lib/cdnca-edge-agent-backups/active-state"
+    ;;
+  agent-pointers)
+    # The Agent publishes runtime versions through relative symlinks inside its
+    # own state (l4runtime/http3runtime "current", certstore "current"/"lkg").
+    # Those links are state: uninstall, upgrade backup, rollback restore and the
+    # legacy layout migration accept and preserve them; any other link or
+    # special file is still rejected before the service is touched.
+    pointer_digest=$(printf '%064d' 0)
+    pointer_digest_next=$(printf '%064d' 1)
+    active=${root}/var/lib/cdnca-edge-agent-backups/active-state
+    plant_pointer() {
+      pointer_link=$1
+      pointer_target=$2
+      ln -sfn "${pointer_target}" "${pointer_link}"
+      chown -h "${staged_uid}:${staged_gid}" "${pointer_link}"
+    }
+    plant_version() {
+      install -d -m 0700 -o "${staged_uid}" -g "${staged_gid}" "$1" "$1/versions"
+      install -d -m 0500 -o "${staged_uid}" -g "${staged_gid}" "$1/versions/$2"
+    }
+    plant_agent_pointers() {
+      for pointer_runtime in l4-runtime http3-runtime; do
+        plant_version "$1/${pointer_runtime}" "dynroute-l4-none-${pointer_digest}"
+        plant_pointer "$1/${pointer_runtime}/current" "versions/dynroute-l4-none-${pointer_digest}"
+      done
+      plant_version "$1/certificates" "cert-v1-${pointer_digest}"
+      plant_pointer "$1/certificates/current" "versions/cert-v1-${pointer_digest}"
+      plant_pointer "$1/certificates/lkg" "versions/cert-v1-${pointer_digest}"
+    }
+    assert_pointer() {
+      [ -L "$1" ] || fail "agent pointer is not a symbolic link: $1"
+      [ "$(readlink "$1")" = "$2" ] || fail "agent pointer target changed: $1"
+    }
+    plant_agent_pointers "${active}"
+    l4_target=versions/dynroute-l4-none-${pointer_digest}
+
+    # Unsafe links and special files are refused before any service action.
+    for unsafe_case in absolute escape dangling unknown fifo; do
+      case "${unsafe_case}" in
+        absolute) plant_pointer "${active}/l4-runtime/current" /etc ;;
+        escape) plant_pointer "${active}/l4-runtime/current" ../../../../../../../etc ;;
+        dangling) plant_pointer "${active}/l4-runtime/current" "versions/missing-${pointer_digest}" ;;
+        unknown) plant_pointer "${active}/l4-runtime/extra" "${l4_target}" ;;
+        fifo)
+          mkfifo -m 0600 "${active}/l4-runtime/fifo"
+          chown "${staged_uid}:${staged_gid}" "${active}/l4-runtime/fifo"
+          ;;
+      esac
+      : >"${workdir}/service-active"
+      service_actions_before=$(wc -l <"${workdir}/service-actions" | tr -d ' ')
+      if "${root}/usr/libexec/cdnca-edge-agent/uninstall.sh" \
+        --destdir "${root}" --service-driver "${service_driver}" \
+        --purge --non-interactive --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE \
+        >"${workdir}/pointer-${unsafe_case}.out" 2>&1; then
+        fail "uninstall accepted unsafe agent state: ${unsafe_case}"
+      fi
+      grep -F 'contains a symbolic link or special file' "${workdir}/pointer-${unsafe_case}.out" >/dev/null || \
+        fail "unsafe agent state ${unsafe_case} was not rejected as an unsafe link"
+      [ "$(wc -l <"${workdir}/service-actions" | tr -d ' ')" = "${service_actions_before}" ] || \
+        fail "unsafe agent state ${unsafe_case} touched the service before rejection"
+      assert_file "${workdir}/service-active"
+      assert_file "${root}/usr/lib/cdnca-edge-agent/versions/v2/edge-agent"
+      assert_file "${root}/etc/cdnca-edge-agent/config.json"
+      case "${unsafe_case}" in
+        absolute|escape|dangling) plant_pointer "${active}/l4-runtime/current" "${l4_target}" ;;
+        unknown) rm -f -- "${active}/l4-runtime/extra" ;;
+        fifo) rm -f -- "${active}/l4-runtime/fifo" ;;
+      esac
+      assert_package_lock_idle
+    done
+
+    # Unsafe state that appears while the service stops restores the service.
+    : >"${workdir}/stop-plants-link"
+    service_actions_before=$(wc -l <"${workdir}/service-actions" | tr -d ' ')
+    if "${root}/usr/libexec/cdnca-edge-agent/uninstall.sh" \
+      --destdir "${root}" --service-driver "${service_driver}" \
+      --purge --non-interactive --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE >/dev/null 2>&1; then
+      fail "uninstall accepted state made unsafe during stop"
+    fi
+    rm -f -- "${workdir}/stop-plants-link" "${active}/planted-at-stop"
+    [ "$(tail -n +"$((service_actions_before + 1))" "${workdir}/service-actions" | tr '\n' ' ')" = \
+      'is-active stop restart ' ] || fail "stop-time unsafe state did not restore the running service"
+    assert_file "${workdir}/service-active"
+    assert_file "${root}/usr/lib/cdnca-edge-agent/versions/v2/edge-agent"
+    assert_file "${root}/etc/cdnca-edge-agent/config.json"
+    assert_package_lock_idle
+
+    # Upgrade backup keeps the pointers as links; rollback restores them.
+    upgrade_bundle "${workdir}/vpointers" >/dev/null
+    [ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/vpointers ] || \
+      fail "upgrade with agent pointers did not select vpointers"
+    pointer_backup=${root}/var/lib/cdnca-edge-agent-backups/$(readlink "${root}/var/lib/cdnca-edge-agent-backups/last-upgrade")
+    assert_pointer "${pointer_backup}/state/l4-runtime/current" "${l4_target}"
+    assert_pointer "${pointer_backup}/state/http3-runtime/current" "${l4_target}"
+    assert_pointer "${pointer_backup}/state/certificates/lkg" "versions/cert-v1-${pointer_digest}"
+    assert_pointer "${active}/l4-runtime/current" "${l4_target}"
+    install -d -m 0500 -o "${staged_uid}" -g "${staged_gid}" \
+      "${active}/l4-runtime/versions/dynroute-l4-none-${pointer_digest_next}"
+    plant_pointer "${active}/l4-runtime/current" "versions/dynroute-l4-none-${pointer_digest_next}"
+    "${root}/usr/libexec/cdnca-edge-agent/rollback.sh" \
+      --version v2 --destdir "${root}" --service-driver "${service_driver}" \
+      --health-timeout 2 --health-stable 0 >/dev/null
+    [ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/v2 ] || \
+      fail "rollback with agent pointers did not select v2"
+    assert_pointer "${active}/l4-runtime/current" "${l4_target}"
+    assert_pointer "${active}/certificates/current" "versions/cert-v1-${pointer_digest}"
+    guard_backup=$(find "${root}/var/lib/cdnca-edge-agent-backups" -mindepth 1 -maxdepth 1 -name '*-rollback-guard' -print -quit)
+    [ -n "${guard_backup}" ] || fail "rollback with agent pointers left no guard backup"
+    assert_pointer "${guard_backup}/state/l4-runtime/current" "versions/dynroute-l4-none-${pointer_digest_next}"
+    assert_package_lock_idle
+
+    # The legacy layout migration hashes and moves a tree holding the pointers.
+    rm -rf -- "${root}/var/lib/cdnca-edge-agent"
+    mv "${active}" "${root}/var/lib/cdnca-edge-agent"
+    sed '/^BindPaths=\/var\/lib\/cdnca-edge-agent-backups\/active-state:/d' \
+      "${root}/usr/lib/systemd/system/cdnca-edge-agent.service" >"${workdir}/pointer-legacy-unit"
+    install -m 0644 "${workdir}/pointer-legacy-unit" "${root}/usr/lib/systemd/system/cdnca-edge-agent.service"
+    : >"${workdir}/service-active"
+    upgrade_bundle "${workdir}/vpointerslegacy" >/dev/null
+    assert_completed_state_layout
+    assert_pointer "${active}/l4-runtime/current" "${l4_target}"
+    assert_pointer "${active}/certificates/lkg" "versions/cert-v1-${pointer_digest}"
+
+    # The one-time toolset refresh replaces only the installed scripts with the
+    # bytes the SBOM of a new release carries, signed by the pinned key and not
+    # older than the accepted one.
+    installed_libexec=${root}/usr/libexec/cdnca-edge-agent
+    printf '%s\n' '# stale toolset marker' >>"${installed_libexec}/rollback.sh"
+    refresh_current=$(readlink "${root}/usr/lib/cdnca-edge-agent/current")
+    refresh_accepted=$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")
+    for refresh_case in older-release other-key installed-copy uncarried digests-only mismatched; do
+      refresh_script=${packaging_root}/scripts/install.sh; refresh_key=${public_key}
+      case "${refresh_case}" in
+        older-release) refresh_bundle=${workdir}/v2; refresh_reason='release manifest replay or downgrade rejected' ;;
+        other-key) refresh_bundle=${workdir}/toctou-replacement; refresh_key=${alternate_public_key}
+          refresh_reason='package public key differs from the pinned key' ;;
+        installed-copy) refresh_script=${installed_libexec}/install.sh; refresh_bundle=${workdir}/vtoolset-carried
+          refresh_reason='toolset refresh must run from a new release' ;;
+        uncarried) refresh_bundle=${workdir}/vpointerslegacy; refresh_reason='signed SBOM carries no packaging scripts' ;;
+        digests-only) refresh_bundle=${workdir}/vtoolset-digests; refresh_reason='signed SBOM carries no packaging scripts' ;;
+        mismatched) refresh_bundle=${workdir}/vtoolset-mismatch; refresh_reason='packaging/scripts/rollback.sh differs from the signed SBOM' ;;
+      esac
+      if "${refresh_script}" --refresh-toolset --destdir "${root}" \
+        --artifact "${refresh_bundle}/edge-agent" --sbom "${refresh_bundle}/edge-agent.spdx.json" \
+        --manifest "${refresh_bundle}/manifest" --signature "${refresh_bundle}/manifest.sig" \
+        --public-key "${refresh_key}" >/dev/null 2>"${workdir}/refresh.err"; then
+        fail "toolset refresh accepted ${refresh_case}"
+      fi
+      grep -F "${refresh_reason}" "${workdir}/refresh.err" >/dev/null || \
+        fail "toolset refresh ${refresh_case} was rejected for another reason: $(tail -n 1 "${workdir}/refresh.err")"
+      grep -Fx '# stale toolset marker' "${installed_libexec}/rollback.sh" >/dev/null || \
+        fail "rejected toolset refresh ${refresh_case} changed the installed scripts"
+      [ -z "$(find "${root}/var/lib/cdnca-edge-agent-packaging" -maxdepth 1 -name '.toolset-staging.*')" ] || \
+        fail "rejected toolset refresh ${refresh_case} left its staging"
+    done
+    "${packaging_root}/scripts/install.sh" --refresh-toolset --destdir "${root}" \
+      --artifact "${workdir}/vtoolset-carried/edge-agent" --sbom "${workdir}/vtoolset-carried/edge-agent.spdx.json" \
+      --manifest "${workdir}/vtoolset-carried/manifest" --signature "${workdir}/vtoolset-carried/manifest.sig" \
+      --public-key "${public_key}" >/dev/null
+    for refresh_name in lib install preflight rollback uninstall upgrade; do
+      cmp -s "${installed_libexec}/${refresh_name}.sh" "${packaging_root}/scripts/${refresh_name}.sh" || \
+        fail "toolset refresh did not install ${refresh_name}.sh"
+      [ "$(stat -c '%u:%g:%a:%h' "${installed_libexec}/${refresh_name}.sh")" = 0:0:555:1 ] || \
+        fail "toolset refresh ${refresh_name}.sh policy"
+    done
+    [ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = "${refresh_current}" ] || fail "toolset refresh changed current"
+    [ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${refresh_accepted}" ] || \
+      fail "toolset refresh changed replay state"
+    assert_pointer "${active}/l4-runtime/current" "${l4_target}"
+    assert_package_lock_idle
+
+    # Purge removes a state tree that holds the pointers.
+    "${root}/usr/libexec/cdnca-edge-agent/uninstall.sh" \
+      --destdir "${root}" --service-driver "${service_driver}" \
+      --purge --non-interactive --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE >/dev/null
+    assert_absent "${root}/etc/cdnca-edge-agent"
+    assert_absent "${root}/var/lib/cdnca-edge-agent"
+    assert_absent "${root}/var/lib/cdnca-edge-agent-backups"
+    assert_absent "${root}/var/lib/cdnca-edge-agent-packaging"
     ;;
 esac
 if [ -n "${regression_case}" ]; then

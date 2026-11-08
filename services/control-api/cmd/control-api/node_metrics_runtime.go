@@ -14,10 +14,11 @@ import (
 )
 
 type nodeMetricsRuntime struct {
-	connection *nats.Conn
-	consumer   *nodemetrics.NATSConsumer
-	processor  *nodemetrics.Processor
-	reader     *nodemetrics.PostgresReader
+	connection   *nats.Conn
+	flushTimeout time.Duration
+	consumer     *nodemetrics.NATSConsumer
+	processor    *nodemetrics.Processor
+	reader       *nodemetrics.PostgresReader
 }
 
 func openNodeMetricsRuntime(
@@ -84,10 +85,11 @@ func openNodeMetricsRuntime(
 	}
 	failed = false
 	return &nodeMetricsRuntime{
-		connection: connection,
-		consumer:   consumer,
-		processor:  processor,
-		reader:     reader,
+		connection:   connection,
+		flushTimeout: consumerConfig.OperationTimeout,
+		consumer:     consumer,
+		processor:    processor,
+		reader:       reader,
 	}, nil
 }
 
@@ -118,10 +120,8 @@ func (runtime *nodeMetricsRuntime) Close() error {
 		result = runtime.consumer.Close()
 	}
 	if runtime.connection != nil {
-		if err := runtime.connection.Drain(); err != nil {
-			result = errors.Join(result, err)
-		}
-		runtime.connection.Close()
+		// Drain then Close cut the drain off at once; see closeNATSAfterFlush.
+		result = errors.Join(result, closeNATSAfterFlush(runtime.connection, runtime.flushTimeout, "node metrics"))
 	}
 	return result
 }

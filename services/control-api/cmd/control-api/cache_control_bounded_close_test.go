@@ -40,8 +40,8 @@ func TestCacheControlProductionCloseIsBoundedOrderedAndIdempotent(t *testing.T) 
 	<-started
 
 	connection := cacheControlCloseRecorder{
-		drain: func() error {
-			operations = append(operations, "unexpected drain")
+		flush: func() error {
+			operations = append(operations, "unexpected flush")
 			return nil
 		},
 		close: func() { operations = append(operations, "nats") },

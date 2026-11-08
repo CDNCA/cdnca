@@ -1058,6 +1058,11 @@
        "required": true
       },
       {
+       "name": "pow_difficulty",
+       "type": "integer",
+       "description": "Present only when set explicitly; absent means the edge default 18."
+      },
+      {
        "name": "key_reference_configured",
        "type": "boolean",
        "required": true
@@ -1255,6 +1260,11 @@
        "name": "bypass_routes",
        "type": "array<BypassRoute>",
        "required": true
+      },
+      {
+       "name": "pow_difficulty",
+       "type": "integer",
+       "description": "Present only when set explicitly; absent means the edge default 18."
       },
       {
        "name": "key_reference_configured",
@@ -1476,6 +1486,11 @@
        "required": true
       },
       {
+       "name": "pow_difficulty",
+       "type": "integer",
+       "description": "Present only when set explicitly; absent means the edge default 18."
+      },
+      {
        "name": "key_reference_configured",
        "type": "boolean",
        "required": true
@@ -1691,6 +1706,11 @@
        "name": "bypass_routes",
        "type": "array<BypassRoute>",
        "required": true
+      },
+      {
+       "name": "pow_difficulty",
+       "type": "integer",
+       "description": "Present only when set explicitly; absent means the edge default 18."
       },
       {
        "name": "key_reference_configured",
@@ -1911,6 +1931,11 @@
        "required": true
       },
       {
+       "name": "pow_difficulty",
+       "type": "integer",
+       "description": "Present only when set explicitly; absent means the edge default 18."
+      },
+      {
        "name": "key_reference_configured",
        "type": "boolean",
        "required": true
@@ -2129,6 +2154,11 @@
        "required": true
       },
       {
+       "name": "pow_difficulty",
+       "type": "integer",
+       "description": "Present only when set explicitly; absent means the edge default 18."
+      },
+      {
        "name": "key_reference_configured",
        "type": "boolean",
        "required": true
@@ -2208,7 +2238,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires challenge_policies.manage. The current policy revision is re-authorized and locked before resolving its opaque key reference. The immutable artifact is signed and HPKE-encrypted separately for each eligible node. Missing key material or an unconfigured external adapter fails closed and does not change the active Edge configuration.",
+   "description": "Requires challenge_policies.manage. The current policy revision is re-authorized and locked before resolving its opaque key reference. The immutable artifact is signed and HPKE-encrypted separately for each eligible node. Missing key material or an unconfigured external adapter fails closed and does not change the active Edge configuration. A revision with an explicit pow_difficulty targets only nodes declaring CHALLENGE_POW; when no node of the scope declares it the publication is refused with 422 node_capability_unavailable naming the nodes.",
    "permissions": [
     "challenge_policies.manage"
    ],
@@ -2535,7 +2565,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires challenge_policies.manage. Promotion is revision-CAS and idempotent. Only a fully healthy rollout whose immutable artifact binds the same tenant, policy, and revision can advance the signed Edge configuration. Partial, failed, stale, forged, or cross-policy rollouts preserve the current configuration and LKG.",
+   "description": "Requires challenge_policies.manage. Promotion is revision-CAS and idempotent. Only a fully healthy rollout whose immutable artifact binds the same tenant, policy, and revision can advance the signed Edge configuration. Partial, failed, stale, forged, or cross-policy rollouts preserve the current configuration and LKG. Nodes left out for lacking CHALLENGE_POW are deferred like offline nodes: they keep their previous policy and binding until they declare it.",
    "permissions": [
     "challenge_policies.manage"
    ],
@@ -2696,6 +2726,10 @@
     },
     {
      "status": "412",
+     "description": "Stable error envelope without SQL, internal errors, key references, or provider details."
+    },
+    {
+     "status": "422",
      "description": "Stable error envelope without SQL, internal errors, key references, or provider details."
     },
     {
@@ -7959,6 +7993,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume",
    "summary": "Resume a plugin this controller paused (disable) itself",
+   "summary_zh": "恢复本主控自行暂停的插件",
    "auth": [
     "bearer"
    ],
