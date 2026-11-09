@@ -10,6 +10,12 @@
 #   agents/edge-agent/packaging/tests/root_helper_refresh_e2e.sh [IMAGE] [OLD_REF]
 #
 # IMAGE: Ubuntu 24.04 with systemd, openssl, perl, python3 (jq is installed if missing).
+# Run it on an image with dbus (dnspup-systemd-test:ubuntu24) and on one
+# without: the helper must be replaced through /run/systemd/private when there
+# is no system bus. A no-dbus image:
+#   docker run --name nodbus ubuntu:24.04 sh -c 'apt-get update && DEBIAN_FRONTEND=noninteractive
+#     apt-get install -y --no-install-recommends systemd systemd-sysv openssl perl python3 jq'
+#   docker commit -c 'CMD ["/sbin/init"]' nodbus cdnca-nodbus:ubuntu24 && docker rm nodbus
 set -eu
 agent_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
 repo_root=$(CDPATH='' cd -- "${agent_root}/../.." && pwd -P)

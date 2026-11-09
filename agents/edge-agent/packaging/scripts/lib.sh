@@ -1093,11 +1093,17 @@ install_helper_from_sbom() {
     # Inside the helper unit (ProtectSystem=strict) /usr/libexec is read-only;
     # its ReadWritePaths already let it write systemd units, so a transient
     # root unit runs the same fixed, root-owned install.sh mode instead.
+    # No --wait/--pipe: those need the D-Bus system bus, which minimal systems
+    # lack. Without them systemd-run as root talks to /run/systemd/private and
+    # still waits for the start job, which for Type=oneshot ends with the
+    # process and fails when it exits non-zero (systemd 249-255 verified).
     command -v systemd-run >/dev/null 2>&1 || die "systemd-run is required to replace the packaging helper"
-    systemd-run --quiet --wait --collect -p Type=oneshot \
+    if ! transient_output=$(systemd-run --quiet --collect -p Type=oneshot \
       "$(root_path /usr/libexec/cdnca-edge-agent/install.sh)" --install-staged-helper \
-      "${helper_staging}/cdnca-edge-agent-helper" "${helper_digest}" >/dev/null 2>&1 ||
-      die "transient unit could not replace the packaging helper"
+      "${helper_staging}/cdnca-edge-agent-helper" "${helper_digest}" 2>&1); then
+      transient_reason=$(printf '%s\n' "${transient_output}" | tail -n 1 | tr -cd '[:print:]' | cut -c1-120)
+      die "transient unit could not replace the packaging helper${transient_reason:+: ${transient_reason}}"
+    fi
     cmp -s "${helper_installed}" "${helper_staging}/cdnca-edge-agent-helper" ||
       die "packaging helper was not replaced"
     helper_result=ok

@@ -13,6 +13,7 @@ fail() { printf 'helper refresh e2e failed: %s\n' "$*" >&2; exit 1; }
 step() { printf '== %s\n' "$*"; }
 command -v jq >/dev/null || { apt-get update -qq >/dev/null && apt-get install -y -qq jq >/dev/null; } || fail 'jq is required'
 
+if [ -S /run/dbus/system_bus_socket ]; then printf '== D-Bus system bus: present\n'; else printf '== D-Bus system bus: absent\n'; fi
 arch=$(dpkg --print-architecture)
 cp -a "${bin}/old/agents/edge-agent/packaging" "${work}/old-packaging"
 cp -a "${repo}/agents/edge-agent/packaging" "${work}/packaging"
