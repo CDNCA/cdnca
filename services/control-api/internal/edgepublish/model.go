@@ -342,6 +342,23 @@ type PublishResult struct {
 	NodeCount               int
 	CreatedAt               time.Time
 	Replayed                bool
+	// SiteSelectionUnsupportedNodeIDs are the target nodes
+	// that serve none of the line groups of some website of the release but
+	// do not declare SITE_SELECTION: they still receive and serve every
+	// website of the scope. Sorted; nil when none. Recorded in the
+	// publication audit (site_selection_unsupported_nodes) and on the
+	// publication (migration 649), so replays and reads carry it.
+	SiteSelectionUnsupportedNodeIDs []uuid.UUID
+	// KeyEnvelopeOversizedNodeIDs are the requested nodes
+	// left out of this release: their Agent predates SITE_SELECTION and
+	// its key envelope is larger than the 4096 bytes such an Agent takes.
+	// They get no deployment and keep their previous configuration, so
+	// websites withheld and forwards deleted by this release still serve
+	// there until they upgrade. Sorted; nil when none. Recorded in the
+	// publication audit (key_envelope_oversized_nodes), as a capability hold
+	// and on the publication (migration 649), so replays and reads carry it.
+	KeyEnvelopeOversizedNodeIDs []uuid.UUID
+	keyEnvelopeOversized        []oversizedKeyEnvelope
 }
 
 type RollbackRequest struct {

@@ -83,22 +83,26 @@ function verifyToolsetSBOM(root, files) {
   } catch {
     throw new Error('release SBOM is not JSON; it cannot sign the packaging scripts')
   }
-  for (const name of toolsetScripts) {
-    const listed = (Array.isArray(sbom?.files) ? sbom.files : []).filter((file) => file?.fileName === name)
+  // The root packaging helper rides the SBOM the same way (packaging/bin/... in
+  // the SBOM, bin/cdnca-edge-agent-helper in this package).
+  const signed = [...toolsetScripts.map((name) => [name, name, toolsetAnnotation, 'packaging script']),
+    ['bin/cdnca-edge-agent-helper', 'packaging/bin/cdnca-edge-agent-helper', 'cdnca.packaging-helper/v1 base64:', 'packaging helper']]
+  for (const [name, sbomName, annotation, what] of signed) {
+    const listed = (Array.isArray(sbom?.files) ? sbom.files : []).filter((file) => file?.fileName === sbomName)
     const checksums = listed.flatMap((file) => (Array.isArray(file.checksums) ? file.checksums : [])
       .filter((checksum) => checksum?.algorithm === 'SHA256').map((checksum) => checksum.checksumValue))
     if (listed.length !== 1 || checksums.length !== 1 || !digest.test(checksums[0] ?? '')) {
-      throw new Error(`release SBOM does not sign packaging script ${name}`)
+      throw new Error(`release SBOM does not sign ${what} ${name}`)
     }
     if (files.find((file) => file.path === name)?.sha256 !== checksums[0]) {
-      throw new Error(`packaging script ${name} differs from the signed release SBOM`)
+      throw new Error(`${what} ${name} differs from the signed release SBOM`)
     }
     const carried = (Array.isArray(listed[0].annotations) ? listed[0].annotations : [])
-      .map((annotation) => annotation?.comment).filter((comment) => typeof comment === 'string' && comment.startsWith(toolsetAnnotation))
-    const encoded = carried.length === 1 ? carried[0].slice(toolsetAnnotation.length) : ''
+      .map((entry) => entry?.comment).filter((comment) => typeof comment === 'string' && comment.startsWith(annotation))
+    const encoded = carried.length === 1 ? carried[0].slice(annotation.length) : ''
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0 ||
         createHash('sha256').update(Buffer.from(encoded, 'base64')).digest('hex') !== checksums[0]) {
-      throw new Error(`release SBOM does not carry packaging script ${name}`)
+      throw new Error(`release SBOM does not carry ${what} ${name}`)
     }
   }
 }

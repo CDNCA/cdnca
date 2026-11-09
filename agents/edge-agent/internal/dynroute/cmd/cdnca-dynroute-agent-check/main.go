@@ -28,6 +28,9 @@
 //   - per-node L4 (L4_STREAM_SELECTION): two nodes of
 //     one release on different line groups, each listening only on its
 //     group's forward (key document l4_withheld_streams);
+//   - per-node websites (SITE_SELECTION): a withheld plain and
+//     TLS website answer like an unknown host / SNI, their certificate
+//     leaves the pool, the node's other websites keep 200 (sitesel.go);
 //   - error.log: counts and recent lines, the reuseport reload noise
 //     filtered.
 package main
@@ -937,6 +940,9 @@ func main() {
 
 	// -------------------------------------------------------- L4 (D13-c0)
 	again = checkStreams(h, config, again, roots)
+
+	// -------------------------------------------- per-node websites
+	checkSiteSelection(h, ca, store, roots, objectsSites(h.input.Objects)...)
 
 	// -------------------------------------------- node locations (D13-c0)
 	again = checkNodeLocations(h, config, again)

@@ -1477,6 +1477,13 @@ func bundleErrorCode(err error) protocol.ErrorCode {
 }
 
 func Serve(ctx context.Context, listener *Listener, service *Service) error {
+	return ServeUntil(ctx, listener, service, nil)
+}
+
+// ServeUntil is Serve that also returns nil after an exchange once stop
+// reports true (the helper binary was replaced; socket activation starts the
+// new file for the next connection).
+func ServeUntil(ctx context.Context, listener *Listener, service *Service, stop func() bool) error {
 	if listener == nil || service == nil {
 		return fmt.Errorf("helper service is unavailable")
 	}
@@ -1494,6 +1501,9 @@ func Serve(ctx context.Context, listener *Listener, service *Service) error {
 		response := service.Handle(exchange.Context, exchange.Packet, exchange.Request, exchange.Artifact)
 		respondErr := exchange.Respond(exchange.Context, response)
 		closeErr := exchange.Close()
+		if stop != nil && stop() {
+			return nil
+		}
 		if respondErr != nil && !errors.Is(respondErr, context.Canceled) && !errors.Is(respondErr, context.DeadlineExceeded) {
 			continue
 		}
@@ -1501,4 +1511,11 @@ func Serve(ctx context.Context, listener *Listener, service *Service) error {
 			continue
 		}
 	}
+}
+
+// BinaryReplaced reports whether path no longer names the file started (the
+// same device and inode). An unreadable path is not a replacement.
+func BinaryReplaced(path string, started os.FileInfo) bool {
+	current, err := os.Stat(path)
+	return err == nil && started != nil && current.Mode().IsRegular() && !os.SameFile(started, current)
 }

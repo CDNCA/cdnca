@@ -174,7 +174,8 @@ func (domain *iamReadDomain) ListPublications(
 const publicationSelect = `
 	SELECT id,source_revision,canonical_snapshot_sha256,artifact_sha256,
 	       config_version_id,rollout_id,node_count,created_at,target_kind,
-	       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256
+	       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256,
+	       key_envelope_oversized_node_ids,site_selection_unsupported_node_ids
 	FROM edge_config_publications `
 
 func scanRuntimePublication(row interface{ Scan(...any) error }, scopeID uuid.UUID) (edgepublish.PublishResult, error) {
@@ -186,9 +187,12 @@ func scanRuntimePublication(row interface{ Scan(...any) error }, scopeID uuid.UU
 		&result.PublicationID, &result.SourceRevision, &snapshotDigest, &artifactDigest,
 		&result.ConfigVersionID, &result.RolloutID, &result.NodeCount, &result.CreatedAt, &result.TargetKind,
 		&targetID, &targetRevision, &resolverDigest, &targetDigest,
+		&result.KeyEnvelopeOversizedNodeIDs, &result.SiteSelectionUnsupportedNodeIDs,
 	); err != nil {
 		return edgepublish.PublishResult{}, err
 	}
+	result.KeyEnvelopeOversizedNodeIDs = edgepublish.LeftOutNodeIDs(result.KeyEnvelopeOversizedNodeIDs)
+	result.SiteSelectionUnsupportedNodeIDs = edgepublish.LeftOutNodeIDs(result.SiteSelectionUnsupportedNodeIDs)
 	if len(snapshotDigest) != 32 || len(artifactDigest) != 32 || len(targetDigest) != 32 {
 		return edgepublish.PublishResult{}, errors.New("invalid publication digest")
 	}

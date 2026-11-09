@@ -748,6 +748,40 @@ describe('SitePublicationsPage', () => {
     expect(within(deployments).queryByText(nodeID)).not.toBeInTheDocument()
   })
 
+  // A publication that left older nodes on the old
+  // configuration (any channel; migration 649 keeps the list) says so in its
+  // row and its detail; one that reached every node says nothing.
+  it.each([
+    ['left-out nodes', { key_envelope_oversized_node_ids: [nodeID, otherNodeID] }, true],
+    ['none', {}, false],
+  ])('marks a publication that left nodes on the old configuration (%s)', async (_name, extra, marked) => {
+    setPlatform(['edge_publications.read'])
+    const publication = { ...adminPublication, ...extra }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.startsWith(`/v1/admin/site-publications/${publicationID}`)) return json(publication)
+      return json(publicationPage(true, { items: [publication] }))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<SitePublicationsPage />, [`/site/publications?target_scope_id=${scopeID}`])
+
+    const row = (await screen.findByText(publicationID)).closest('tr') as HTMLElement
+    if (marked) expect(within(row).getByText('2 台仍用旧配置')).toHaveClass('ant-tag-warning')
+    else expect(within(row).queryByText(/仍用旧配置/)).not.toBeInTheDocument()
+
+    await user.click(within(row).getByRole('button', { name: '查看发布详情' }))
+    const detail = await screen.findByRole('dialog', { name: '发布详情' })
+    await within(detail).findByText(configVersionID)
+    const alert = within(detail).queryByTestId('site-publication-left-out-nodes')
+    if (marked) {
+      expect(alert).toHaveTextContent('2 台节点仍在用旧配置，本次新屏蔽的站点、删除的转发在这些节点上仍然生效')
+      expect(alert).toHaveTextContent(nodeID)
+      expect(alert).toHaveTextContent(otherNodeID)
+    } else {
+      expect(alert).not.toBeInTheDocument()
+    }
+  })
+
   // A node that already runs a newer release ignored this
   // one; it reads as such, not as a failure.
   it('shows a node that ignored an old release as ignored, not failed', async () => {

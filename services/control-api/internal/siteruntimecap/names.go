@@ -84,6 +84,9 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// L4_STREAM_SELECTION is declared per node; the per-node site object key
 	// document names the forwards it withholds (per-node-dist).
 	agentv1.CapabilityName_CAPABILITY_NAME_L4_STREAM_SELECTION: true,
+	// SITE_SELECTION is declared per node; the per-node site object key
+	// document names the websites it withholds.
+	agentv1.CapabilityName_CAPABILITY_NAME_SITE_SELECTION: true,
 	// CACHE_CONTROL_CANCEL is checked per node by cachecontrol Cancel before
 	// a cancel is sent to the node (fz-x3, CACHE-ADD-07).
 	agentv1.CapabilityName_CAPABILITY_NAME_CACHE_CONTROL_CANCEL: true,
@@ -114,6 +117,9 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// CHALLENGE_POW gates JS challenge policies with an explicit
 	// pow_difficulty, a challenge secret rollout feature.
 	agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW: true,
+	// PACKAGING_TOOLSET_REPORT marks the heartbeat packaging toolset report,
+	// node status only.
+	agentv1.CapabilityName_CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT: true,
 }
 
 // Name maps a document capability name to its Agent capability.

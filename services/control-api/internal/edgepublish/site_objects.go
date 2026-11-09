@@ -47,6 +47,11 @@ type siteObjectRelease struct {
 	artifacts []edgedeployment.ArtifactInput
 	// stored counts objects sealed and inserted by this release.
 	stored int
+	// siteSelectionUnsupported are the target nodes that do not declare
+	// SITE_SELECTION but serve none of the line groups of some of the
+	// release's websites: they receive (and serve) every website, as
+	// before. Sorted.
+	siteSelectionUnsupported []uuid.UUID
 }
 
 // buildSiteObjectRelease stores bundle's new objects and builds the root and
@@ -105,6 +110,14 @@ func (s *Service) buildSiteObjectRelease(
 	if err != nil {
 		return nil, err
 	}
+	siteIDs := make([]string, len(source.Sites))
+	for index, site := range source.Sites {
+		siteIDs[index] = site.Runtime.ID
+	}
+	siteNodes, err := siteServingNodes(ctx, tx, scopeID, siteIDs)
+	if err != nil {
+		return nil, err
+	}
 	regionCodes, err := loadNodeRegionCodes(ctx, tx, nodeIDs)
 	if err != nil {
 		return nil, err
@@ -135,16 +148,22 @@ func (s *Service) buildSiteObjectRelease(
 	release.bindings = make([]edgedeployment.NodeArtifactBinding, len(recipients))
 	release.artifacts = make([]edgedeployment.ArtifactInput, 0, len(recipients)+1)
 	release.artifacts = append(release.artifacts, release.root)
+	var oversized []oversizedKeyEnvelope
 	for index, recipient := range recipients {
 		binding := edgedeployment.NodeArtifactBinding{
 			NodeID: recipient.NodeID, DeploymentID: uuid.New(), EventID: uuid.New(), Attempt: 1,
 			ConfigVersionID: configID, ArtifactID: uuid.New(), RecipientKeyID: recipient.KeyID,
+		}
+		withheldSites, unsupported := withheldSitesFor(advertised[recipient.NodeID], recipient.NodeID, siteIDs, siteNodes)
+		if unsupported {
+			release.siteSelectionUnsupported = append(release.siteSelectionUnsupported, recipient.NodeID)
 		}
 		plaintext, err := siteobject.Encode(siteobject.KeyDocument{
 			Schema: siteobject.KeySchema, ConfigurationScopeID: scopeID.String(), ConfigVersionID: configID.String(),
 			RootSHA256: publication.RootSHA256, KeyEpoch: siteObjectKeyEpoch, ContentKey: contentKey,
 			TrafficStopStreams: trafficStopFor(advertised[recipient.NodeID], trafficStopped),
 			L4WithheldStreams:  withheldStreamsFor(advertised[recipient.NodeID], recipient.NodeID, source.Streams, streamNodes),
+			WithheldSites:      siteobject.NewSiteBitmap(siteIDs, withheldSet(withheldSites)),
 			NodeRegion:         nodeRegionFor(advertised[recipient.NodeID], regionCodes[recipient.NodeID]),
 			NodeStorage: func() *siteobject.NodeStorage {
 				storage, set := nodeStorage[recipient.NodeID]
@@ -159,8 +178,21 @@ func (s *Service) buildSiteObjectRelease(
 		if buildErr != nil {
 			return nil, buildErr
 		}
+		if err := keyEnvelopeFits(recipient.NodeID, advertised[recipient.NodeID], envelope.SizeBytes); err != nil {
+			var refusal *TargetCapabilityError
+			if !errors.As(err, &refusal) {
+				return nil, err
+			}
+			// An older Agent the envelope does not fit is left out of this
+			// release (publishRoundTx) instead of refusing every node.
+			oversized = append(oversized, oversizedKeyEnvelope{refusal: refusal, sizeBytes: envelope.SizeBytes})
+			continue
+		}
 		release.bindings[index] = binding
 		release.artifacts = append(release.artifacts, envelope)
+	}
+	if len(oversized) > 0 {
+		return nil, &KeyEnvelopeOversizedError{Nodes: oversized}
 	}
 	return release, nil
 }

@@ -640,6 +640,13 @@ func publicationView(item edgepublish.PublishResult, audience string) (Publicati
 			result.Target.SnapshotID, result.Target.Revision, result.Target.ResolverSHA256 =
 				&snapshotID, &revision, &resolverDigest
 		}
+		for _, nodes := range [][]uuid.UUID{item.KeyEnvelopeOversizedNodeIDs, item.SiteSelectionUnsupportedNodeIDs} {
+			if len(nodes) > 10000 || slices.Contains(nodes, uuid.Nil) {
+				return PublicationView{}, ErrInvalidResponse
+			}
+		}
+		result.KeyEnvelopeOversizedNodeIDs = slices.Clone(item.KeyEnvelopeOversizedNodeIDs)
+		result.SiteSelectionUnsupportedNodeIDs = slices.Clone(item.SiteSelectionUnsupportedNodeIDs)
 	}
 	return result, nil
 }

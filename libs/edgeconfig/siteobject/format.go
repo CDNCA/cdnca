@@ -127,6 +127,12 @@ type KeyDocument struct {
 	// not serve: none of their line groups has it. The node leaves them out
 	// of its L4 runtime. Sorted, unique; omitted when none.
 	L4WithheldStreams []string `json:"l4_withheld_streams,omitempty"`
+	// WithheldSites (SITE_SELECTION v1, per node: only a node that declares
+	// it gets the field) marks the root's websites this node does not serve
+	// (none of their line groups or L2 configurations has it), one bit per
+	// website (SiteBitmap). The node leaves them out of its runtime as if
+	// the root did not carry them. Omitted when none.
+	WithheldSites *SiteBitmap `json:"withheld_sites,omitempty"`
 	// NodeRegion (NODE_REGION v1, per node: only a node that declares it
 	// gets the field) is the code of the node's region in the region catalog
 	// (region_catalog.code, lower-case ASCII; omitted when the node has
@@ -156,6 +162,36 @@ const L4StreamSelectionAPIVersion uint32 = 1
 // MaxL4WithheldStreams bounds KeyDocument.L4WithheldStreams (a scope's v2
 // release carries at most 1000 forwards, edgeconfig.normalize).
 const MaxL4WithheldStreams = 1000
+
+// SiteSelectionAPIVersion is the CAPABILITY_NAME_SITE_SELECTION version an
+// Agent declares and control needs to write KeyDocument.WithheldSites. An
+// Agent declaring it also takes a key document up to MaxKeyDocumentBytes.
+const SiteSelectionAPIVersion uint32 = 1
+
+// Key document bounds, shared by control (refuses a release whose key
+// document for a node is larger than that node takes) and the Agent
+// (refuses a key envelope larger than its bound before fetching it).
+const (
+	// MaxKeyDocumentBytes bounds a key document's plaintext for an Agent
+	// declaring SITE_SELECTION v1. The largest valid document fits: the
+	// fixed fields, MaxTrafficStopStreams and MaxL4WithheldStreams IDs and
+	// a WithheldSites bitmap of MaxWithheldSitesBitmapSites websites
+	// (TestKeyDocumentLargestFitsTheBound).
+	MaxKeyDocumentBytes = 512 << 10
+	// LegacyMaxKeyEnvelopeBytes is the key envelope bound of an Agent
+	// before SITE_SELECTION (gatewayclient validateSiteObjectCommand since
+	// g8c-node): a key document of a few hundred bytes plus the HPKE
+	// encapsulated key and tag.
+	LegacyMaxKeyEnvelopeBytes = 4096
+	// MaxKeyEnvelopeBytes is the key envelope (HPKE X25519 encapsulated key
+	// of 32 bytes, the document, AES-256-GCM tag of 16 bytes) of an Agent
+	// declaring SITE_SELECTION v1: control refuses a larger one for such a
+	// node, the Agent refuses one before fetching it.
+	MaxKeyEnvelopeBytes = MaxKeyDocumentBytes + 32 + 16
+	// MaxWithheldSitesBitmapSites bounds SiteBitmap.Sites: the root index
+	// bound (MaxRootIndexBytes, about 115,000 websites) with headroom.
+	MaxWithheldSitesBitmapSites = 1 << 18
+)
 
 // Encode is the object encoding: encoding/json of the struct, compact, no
 // HTML escaping, no trailing newline. A decoder only needs the digest; the
@@ -288,7 +324,7 @@ func validFileRefs(files []FileRef) bool {
 
 func ParseKeyDocument(raw []byte) (KeyDocument, error) {
 	var document KeyDocument
-	if err := decodeStrict(raw, 4096+MaxTrafficStopStreams*40+MaxL4WithheldStreams*40, &document); err != nil {
+	if err := decodeStrict(raw, MaxKeyDocumentBytes, &document); err != nil {
 		return KeyDocument{}, err
 	}
 	if !validStreamIDList(document.TrafficStopStreams, MaxTrafficStopStreams) {
@@ -296,6 +332,9 @@ func ParseKeyDocument(raw []byte) (KeyDocument, error) {
 	}
 	if !validStreamIDList(document.L4WithheldStreams, MaxL4WithheldStreams) {
 		return KeyDocument{}, fmt.Errorf("%w: key document L4 withheld streams", ErrInvalid)
+	}
+	if err := document.WithheldSites.validate(); err != nil {
+		return KeyDocument{}, err
 	}
 	if document.NodeRegion != "" && !NodeRegionPattern.MatchString(document.NodeRegion) {
 		return KeyDocument{}, fmt.Errorf("%w: key document node region", ErrInvalid)

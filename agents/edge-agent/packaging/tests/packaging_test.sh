@@ -247,6 +247,17 @@ carry_toolset() {
         annotationDate:"2026-07-22T00:00:00Z",annotationType:"OTHER",annotator:"Tool: cdnca-packaging-smoke",
         comment:("cdnca.packaging-script/v1 base64:" + $content)}]} end)' >>"${workdir}/carry-files.jsonl"
   done
+  if [ "$2" = carried ]; then
+    # And a packaging helper, as recipe.sh carries the one it built.
+    printf '\177ELF fixture packaging helper %s\n' "$1" >"${workdir}/carry-helper"
+    base64 -w0 "${workdir}/carry-helper" >"${workdir}/carry-content.b64"
+    jq -cn --arg digest "$(sha256_file "${workdir}/carry-helper")" --rawfile content "${workdir}/carry-content.b64" \
+      '{SPDXID:"SPDXRef-File-packaging-helper",checksums:[{algorithm:"SHA256",checksumValue:$digest}],
+        fileName:"packaging/bin/cdnca-edge-agent-helper",annotations:[{annotationDate:"2026-07-22T00:00:00Z",
+        annotationType:"OTHER",annotator:"Tool: cdnca-packaging-smoke",comment:("cdnca.packaging-helper/v1 base64:" + $content)}]}' \
+      >>"${workdir}/carry-files.jsonl"
+    cp "${workdir}/carry-helper" "$1/carried-helper"
+  fi
   jq -c --slurpfile files "${workdir}/carry-files.jsonl" '.files = $files' "$1/edge-agent.spdx.json" >"${workdir}/carry-sbom.json"
   cat "${workdir}/carry-sbom.json" >"$1/edge-agent.spdx.json"
   rm -f -- "${workdir}/carry-files.jsonl" "${workdir}/carry-content.b64" "${workdir}/carry-sbom.json"
@@ -1204,6 +1215,22 @@ case "${regression_case}" in
       [ "$(stat -c '%u:%g:%a:%h' "${installed_libexec}/${refresh_name}.sh")" = 0:0:555:1 ] || \
         fail "toolset refresh ${refresh_name}.sh policy"
     done
+    cmp -s "${root}/usr/libexec/cdnca-edge-agent-helper" "${workdir}/vtoolset-carried/carried-helper" || \
+      fail "toolset refresh did not install the packaging helper"
+    [ "$(stat -c '%u:%g:%a:%h' "${root}/usr/libexec/cdnca-edge-agent-helper")" = 0:0:555:1 ] || fail "packaging helper policy"
+    refresh_record=${root}/var/lib/cdnca-edge-agent-packaging/toolset-refresh
+    for refresh_line in status=ok version=vtoolset helper_status=ok; do
+      grep -Fx "${refresh_line}" "${refresh_record}" >/dev/null || fail "toolset refresh record lacks ${refresh_line}"
+    done
+    grep -Eq '^time=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "${refresh_record}" || fail "toolset refresh record time"
+    [ "$(stat -c '%u:%g:%a' "${refresh_record}")" = 0:0:600 ] || fail "toolset refresh record policy"
+    "${packaging_root}/scripts/install.sh" --refresh-toolset --destdir "${root}" \
+      --artifact "${workdir}/vtoolset-carried/edge-agent" --sbom "${workdir}/vtoolset-carried/edge-agent.spdx.json" \
+      --manifest "${workdir}/vtoolset-carried/manifest" --signature "${workdir}/vtoolset-carried/manifest.sig" \
+      --public-key "${public_key}" >/dev/null
+    grep -Fx helper_status=unchanged "${refresh_record}" >/dev/null || fail "an identical packaging helper was not left unchanged"
+    [ -z "$(find "${root}/var/lib/cdnca-edge-agent-packaging" "${root}/usr/libexec" -maxdepth 1 -name '.toolset-staging.*' -o -maxdepth 1 -name '.cdnca-edge-agent-helper.*')" ] || \
+      fail "toolset refresh left helper staging"
     [ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = "${refresh_current}" ] || fail "toolset refresh changed current"
     [ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${refresh_accepted}" ] || \
       fail "toolset refresh changed replay state"

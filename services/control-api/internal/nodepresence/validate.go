@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cdnca/cdnca/libs/edgeconfig/packagingtoolset"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
 	"github.com/google/uuid"
@@ -100,6 +101,11 @@ func (v *Validator) validateHeartbeat(heartbeat *agentv1.Heartbeat) error {
 	}
 	if !validNativeRuntime(heartbeat.Runtime.NativeRuntime) {
 		return fmt.Errorf("%w: native runtime", ErrInvalidHeartbeat)
+	}
+	if toolset := heartbeat.Runtime.PackagingToolset; toolset != nil && !packagingtoolset.Valid(toolset.RefreshStatus,
+		toolset.RefreshVersion, toolset.RefreshReason, toolset.RefreshTime != nil, toolset.HelperStatus, toolset.HelperReason,
+		toolset.ScriptsSha256, toolset.HelperSha256) {
+		return fmt.Errorf("%w: packaging toolset", ErrInvalidHeartbeat)
 	}
 	if !validTelemetryHealth(heartbeat.Runtime.Telemetry) {
 		return fmt.Errorf("%w: telemetry health", ErrInvalidHeartbeat)
@@ -514,4 +520,36 @@ func validSubjectPrefix(value string) bool {
 		}
 	}
 	return true
+}
+
+// PackagingToolset is the stored node_presence.toolset_* of a heartbeat
+// (migration 647): all nil when the Agent did not report it.
+// Empty strings are stored as NULL.
+type PackagingToolset struct {
+	RefreshStatus, RefreshVersion, RefreshReason *string
+	RefreshedAt                                  *time.Time
+	HelperStatus, HelperReason                   *string
+	ScriptsSHA256, HelperSHA256                  *string
+}
+
+func packagingToolsetColumns(status *agentv1.PackagingToolsetStatus) PackagingToolset {
+	if status == nil {
+		return PackagingToolset{}
+	}
+	text := func(value string) *string {
+		if value == "" {
+			return nil
+		}
+		return &value
+	}
+	columns := PackagingToolset{
+		RefreshStatus: text(status.RefreshStatus), RefreshVersion: text(status.RefreshVersion),
+		RefreshReason: text(status.RefreshReason), HelperStatus: text(status.HelperStatus),
+		HelperReason: text(status.HelperReason), ScriptsSHA256: text(status.ScriptsSha256), HelperSHA256: text(status.HelperSha256),
+	}
+	if status.RefreshTime != nil {
+		at := status.RefreshTime.AsTime().UTC()
+		columns.RefreshedAt = &at
+	}
+	return columns
 }

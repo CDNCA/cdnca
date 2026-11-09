@@ -1018,36 +1018,155 @@ refresh_toolset_from_release() {
     "$(manifest_value "${toolset_release}/manifest" 8 sbom_sha256)"
 }
 
-# After an upgrade committed: make the installed toolset the one the new
-# release signed. Never fails the upgrade; the outcome is kept in
-# toolset-refresh for the operator and the next upgrade retries.
+PACKAGING_HELPER_MEMBER=packaging/bin/cdnca-edge-agent-helper
+PACKAGING_HELPER_ANNOTATION='cdnca.packaging-helper/v1 base64:'
+PACKAGING_HELPER_BINARY=/usr/libexec/cdnca-edge-agent-helper
+
+sbom_carries_helper() {
+  jq -e --arg name "${PACKAGING_HELPER_MEMBER}" --arg prefix "${PACKAGING_HELPER_ANNOTATION}" \
+    '[.files[]? | select(.fileName == $name) | .annotations[]? | select((.comment // "") | startswith($prefix))] | length > 0' \
+    "$1" >/dev/null 2>&1
+}
+
+# install_staged_helper STAGED DIGEST: atomically replace the root packaging
+# helper with STAGED (a private staging copy whose SHA256 is DIGEST). A running
+# helper keeps its open inode; systemd starts the new file next time.
+install_staged_helper() {
+  helper_staged=$1
+  helper_digest=$2
+  case "${helper_digest}" in *[!0-9a-f]*|'') die "packaging helper digest is invalid" ;; esac
+  [ "${#helper_digest}" -eq 64 ] || die "packaging helper digest is invalid"
+  case "${helper_staged}" in
+    "$(root_path /var/lib/cdnca-edge-agent-packaging)"/.toolset-staging.*/cdnca-edge-agent-helper) ;;
+    *) die "packaging helper staging path is unsafe" ;;
+  esac
+  assert_regular_file "${helper_staged}" "staged packaging helper"
+  [ "$(sha256_file "${helper_staged}")" = "${helper_digest}" ] || die "staged packaging helper differs from the signed SBOM"
+  helper_target=$(root_path "${PACKAGING_HELPER_BINARY}")
+  helper_parent=$(dirname -- "${helper_target}")
+  helper_temporary=${helper_parent}/.cdnca-edge-agent-helper.package-install-$$
+  assert_safe_tree "${helper_parent}"
+  [ ! -L "${helper_target}" ] || die "packaging helper target is a symbolic link"
+  rm -f -- "${helper_temporary}"
+  install -m 0555 "${helper_staged}" "${helper_temporary}"
+  [ "$(stat -c '%u:%g:%a:%h' "${helper_temporary}")" = 0:0:555:1 ] || \
+    die "packaging helper staging ownership, mode, or link count is unsafe"
+  [ "$(sha256_file "${helper_temporary}")" = "${helper_digest}" ] || die "packaging helper copy differs from the signed SBOM"
+  durable_sync "${helper_temporary}"
+  mv -Tf "${helper_temporary}" "${helper_target}"
+  durable_sync "${helper_parent}"
+}
+
+# install_helper_from_sbom SBOM SIGNED_SHA256: prints ok, unchanged or
+# skipped; dies with the reason otherwise. The caller verified SIGNED_SHA256 is
+# the SBOM digest of a manifest signed by the pinned key.
+install_helper_from_sbom() {
+  if ! sbom_carries_helper "$1"; then
+    printf 'skipped\n'
+    return 0
+  fi
+  command -v base64 >/dev/null 2>&1 || die "base64 is required to refresh the packaging helper"
+  helper_staging=$(mktemp -d "$(root_path /var/lib/cdnca-edge-agent-packaging)/.toolset-staging.XXXXXX")
+  cp -- "$1" "${helper_staging}/sbom.json"
+  [ "$(sha256_file "${helper_staging}/sbom.json")" = "$2" ] || die "release SBOM differs from the signed manifest"
+  helper_digest=$(jq -er --arg name "${PACKAGING_HELPER_MEMBER}" \
+    '[.files[]? | select(.fileName == $name) | .checksums[]? | select(.algorithm == "SHA256") | .checksumValue] |
+      if length == 1 then .[0] else error("ambiguous") end' "${helper_staging}/sbom.json" 2>/dev/null) ||
+    die "signed SBOM does not list ${PACKAGING_HELPER_MEMBER}"
+  jq -jer --arg name "${PACKAGING_HELPER_MEMBER}" --arg prefix "${PACKAGING_HELPER_ANNOTATION}" \
+    '[.files[]? | select(.fileName == $name) | .annotations[]? | .comment // "" | select(startswith($prefix)) |
+      .[($prefix | length):]] | if length == 1 then .[0] else error("ambiguous") end' \
+    "${helper_staging}/sbom.json" >"${helper_staging}/helper.b64" 2>/dev/null ||
+    die "signed SBOM does not carry ${PACKAGING_HELPER_MEMBER}"
+  base64 -d "${helper_staging}/helper.b64" >"${helper_staging}/cdnca-edge-agent-helper" 2>/dev/null ||
+    die "signed SBOM content of ${PACKAGING_HELPER_MEMBER} is not base64"
+  [ "$(sha256_file "${helper_staging}/cdnca-edge-agent-helper")" = "${helper_digest}" ] ||
+    die "${PACKAGING_HELPER_MEMBER} differs from the signed SBOM"
+  helper_installed=$(root_path "${PACKAGING_HELPER_BINARY}")
+  if [ -f "${helper_installed}" ] && [ ! -L "${helper_installed}" ] &&
+    cmp -s "${helper_installed}" "${helper_staging}/cdnca-edge-agent-helper"; then
+    helper_result=unchanged
+  elif [ -n "${DESTDIR}" ] || [ -w "$(dirname -- "${helper_installed}")" ]; then
+    install_staged_helper "${helper_staging}/cdnca-edge-agent-helper" "${helper_digest}"
+    helper_result=ok
+  else
+    # Inside the helper unit (ProtectSystem=strict) /usr/libexec is read-only;
+    # its ReadWritePaths already let it write systemd units, so a transient
+    # root unit runs the same fixed, root-owned install.sh mode instead.
+    command -v systemd-run >/dev/null 2>&1 || die "systemd-run is required to replace the packaging helper"
+    systemd-run --quiet --wait --collect -p Type=oneshot \
+      "$(root_path /usr/libexec/cdnca-edge-agent/install.sh)" --install-staged-helper \
+      "${helper_staging}/cdnca-edge-agent-helper" "${helper_digest}" >/dev/null 2>&1 ||
+      die "transient unit could not replace the packaging helper"
+    cmp -s "${helper_installed}" "${helper_staging}/cdnca-edge-agent-helper" ||
+      die "packaging helper was not replaced"
+    helper_result=ok
+  fi
+  find "${helper_staging}" -mindepth 1 -maxdepth 1 -type f -delete
+  rmdir -- "${helper_staging}"
+  printf '%s\n' "${helper_result}"
+}
+
+# write_toolset_record STATUS VERSION REASON HELPER_STATUS HELPER_REASON: the
+# toolset-refresh record the Agent reports (reason lines only when set).
+write_toolset_record() {
+  toolset_record=$(root_path /var/lib/cdnca-edge-agent-packaging/toolset-refresh)
+  {
+    printf 'status=%s\nversion=%s\n' "$1" "$2"
+    [ -z "$3" ] || printf 'reason=%s\n' "$3"
+    printf 'time=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'helper_status=%s\n' "$4"
+    [ -z "$5" ] || printf 'helper_reason=%s\n' "$5"
+  } >"${toolset_record}.$$"
+  chmod 0600 "${toolset_record}.$$"
+  mv -f "${toolset_record}.$$" "${toolset_record}"
+}
+
+toolset_reason() {
+  tail -n 1 "$1" 2>/dev/null | tr -cd '[:print:]' | cut -c1-200
+}
+
+# After an upgrade committed: make the installed toolset and packaging helper
+# the ones the new release signed. Never fails the upgrade; the outcome is kept
+# in toolset-refresh (the Agent reports it) and the next upgrade retries.
 refresh_toolset_after_upgrade() {
   toolset_release=$1
+  toolset_version=$(basename -- "${toolset_release}")
   toolset_error=$(root_path /var/lib/cdnca-edge-agent-packaging)/.toolset-refresh.err.$$
-  toolset_record=$(root_path /var/lib/cdnca-edge-agent-packaging/toolset-refresh)
   if ! sbom_carries_toolset "${toolset_release}/edge-agent.spdx.json"; then
     # Releases built before the SBOM carried the scripts.
-    printf 'status=skipped\nversion=%s\nreason=signed SBOM carries no packaging scripts\n' \
-      "$(basename -- "${toolset_release}")" >"${toolset_record}.$$"
-    chmod 0600 "${toolset_record}.$$"
-    mv -f "${toolset_record}.$$" "${toolset_record}"
+    write_toolset_record skipped "${toolset_version}" 'signed SBOM carries no packaging scripts' \
+      skipped 'signed SBOM carries no packaging helper'
     return 0
   fi
   set +e
   (set -e; refresh_toolset_from_release "${toolset_release}") 2>"${toolset_error}"
   toolset_status=$?
   set -e
-  if [ "${toolset_status}" -eq 0 ]; then
-    printf 'status=ok\nversion=%s\n' "$(basename -- "${toolset_release}")" >"${toolset_record}.$$"
-  else
-    printf 'status=failed\nversion=%s\nreason=%s\n' "$(basename -- "${toolset_release}")" \
-      "$(tail -n 1 "${toolset_error}" | tr -cd '[:print:]' | cut -c1-200)" >"${toolset_record}.$$"
+  if [ "${toolset_status}" -ne 0 ]; then
+    write_toolset_record failed "${toolset_version}" "$(toolset_reason "${toolset_error}")" \
+      skipped 'packaging scripts were not refreshed'
     printf 'cdnca-edge-agent packaging: toolset refresh failed; the upgrade stands and the next upgrade retries\n' >&2
     remove_toolset_staging
+    rm -f -- "${toolset_error}"
+    return 0
+  fi
+  set +e
+  helper_outcome=$(set -e; install_helper_from_sbom "${toolset_release}/edge-agent.spdx.json" \
+    "$(manifest_value "${toolset_release}/manifest" 8 sbom_sha256)" 2>"${toolset_error}")
+  helper_exit=$?
+  set -e
+  helper_reason=
+  if [ "${helper_exit}" -ne 0 ]; then
+    helper_outcome=failed
+    helper_reason=$(toolset_reason "${toolset_error}")
+    printf 'cdnca-edge-agent packaging: packaging helper refresh failed; the upgrade stands and the next upgrade retries\n' >&2
+    remove_toolset_staging
+  elif [ "${helper_outcome}" = skipped ]; then
+    helper_reason='signed SBOM carries no packaging helper'
   fi
   rm -f -- "${toolset_error}"
-  chmod 0600 "${toolset_record}.$$"
-  mv -f "${toolset_record}.$$" "${toolset_record}"
+  write_toolset_record ok "${toolset_version}" '' "${helper_outcome}" "${helper_reason}"
   return 0
 }
 

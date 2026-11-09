@@ -43,6 +43,7 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/nativeruntime"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/nodeinventory"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/nodemonitoring"
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/packagingtoolset"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/rulepackprecheck"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/sched302runtime"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/telemetryclient"
@@ -562,6 +563,9 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		// per-node-dist: the key document's withheld L4 forwards are left out
 		// (gatewayclient selectNodeStreams)
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_L4_STREAM_SELECTION, ApiVersion: siteobject.L4StreamSelectionAPIVersion},
+		// The key document's withheld websites are left out
+		// (gatewayclient SelectNodeSites)
+		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_SITE_SELECTION, ApiVersion: siteobject.SiteSelectionAPIVersion},
 		// fz-x12: the node's region is the key document's node_region
 		// (dynroute.Input.NodeRegion); the agent has no region setting.
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_NODE_REGION, ApiVersion: siteobject.NodeRegionAPIVersion},
@@ -604,6 +608,9 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	clientConfig.MaximumBackoff = timeouts.MaximumBackoff
 	runtimeStatusProbe := gatewayclient.RuntimeStatusProbe{OpenResty: deploymentRuntime.Healthy,
 		MarketProbeRoleNow: marketRoleState.Role}
+	// Every node reports its packaging toolset (deb nodes read
+	// the scripts and helper digests; the refresh record is root-only there).
+	runtimeStatusProbe.PackagingToolset = packagingtoolset.NewReporter(packagingtoolset.ProductionPaths()).Report
 	if nativeRuntimeNode(config) {
 		statusPath := nativeRuntimeStatusPath(config)
 		runtimeStatusProbe.NativeRuntime = func() *agentv1.NativeRuntimeStatus { return nativeRuntimeReport(statusPath) }

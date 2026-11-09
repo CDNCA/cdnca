@@ -420,6 +420,24 @@ describe('site publications API', () => {
     }
   })
 
+  it('keeps the nodes a publish left on the old configuration and refuses malformed lists', async () => {
+    const left = ['018cc251-f400-7def-8000-0000000000a1', '018cc251-f400-7def-8000-0000000000a2']
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({
+      ...adminPublication, key_envelope_oversized_node_ids: left, site_selection_unsupported_node_ids: [nodeID],
+    }, 201))
+    await expect(sitePublicationsApi.publish('token', publishInput, metadata)).resolves.toMatchObject({
+      key_envelope_oversized_node_ids: left, site_selection_unsupported_node_ids: [nodeID],
+    })
+    for (const broken of [[], [left[0], left[0]], ['node-1'], left[0]]) {
+      fetchSpy.mockResolvedValueOnce(json({ ...adminPublication, key_envelope_oversized_node_ids: broken }, 201))
+      await expect(sitePublicationsApi.publish('token', publishInput, metadata))
+        .rejects.toMatchObject({ code: 'invalid_response' })
+      fetchSpy.mockResolvedValueOnce(json({ ...adminPublication, site_selection_unsupported_node_ids: broken }, 201))
+      await expect(sitePublicationsApi.publish('token', publishInput, metadata))
+        .rejects.toMatchObject({ code: 'invalid_response' })
+    }
+  })
+
   it.each([
     ['exact nodes', { kind: 'nodes', node_ids: [nodeID] }, true],
     ['exact line-group snapshot', publishInput.target, true],

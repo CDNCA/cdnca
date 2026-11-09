@@ -76,7 +76,11 @@ func validateSiteObjectCommand(command *agentv1.DeploymentCommand, config Config
 		return fmt.Errorf("%w: site object root artifact is invalid", ErrInvalidMessage)
 	}
 	if key.EncryptionAlgorithm != agentv1.ArtifactEncryptionAlgorithm_ARTIFACT_ENCRYPTION_ALGORITHM_HPKE_X25519_HKDF_SHA256_AES_256_GCM ||
-		key.Compression != agentv1.ArtifactCompression_ARTIFACT_COMPRESSION_NONE || key.SizeBytes > 4096 {
+		key.Compression != agentv1.ArtifactCompression_ARTIFACT_COMPRESSION_NONE ||
+		key.SizeBytes > siteobject.MaxKeyEnvelopeBytes {
+		// SITE_SELECTION v1: the key document's bound is the shared
+		// siteobject.MaxKeyEnvelopeBytes (control refuses larger), no longer
+		// the 4096 bytes of an envelope that carried a content key only.
 		return fmt.Errorf("%w: site object key artifact is invalid", ErrInvalidMessage)
 	}
 	// The key envelope carries the generic checks: integrity metadata, HPKE

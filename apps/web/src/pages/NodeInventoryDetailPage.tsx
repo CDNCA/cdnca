@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { nodeInstallationTicketsApi } from '../api/nodeInstallationTickets'
 import { NodeFrozenTag, useNodeFrozenText } from '../components/NodeFrozenTag'
+import { NodeStaleConfigurationAlert } from '../components/NodeStaleConfigurationTag'
 import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Result, Space, Spin, Tag, Typography } from 'antd'
 import { Check, Plus, RefreshCw, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -400,6 +401,27 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
             ? nativeRuntimeSummary(presence, t(`nativeRuntimeStates.${presence.native_runtime_state}`), t('fields.nativeRuntimePrevious'))
             : fallback}
         </Descriptions.Item>
+        <Descriptions.Item label={t('fields.toolset')}>
+          {!presence.toolset_refresh_status ? t('toolset.notReported') : (
+            <>
+              <Typography.Text type={presence.toolset_refresh_status === 'failed' ? 'danger' : undefined}>
+                {t(`toolset.${presence.toolset_refresh_status}`, {
+                  version: presence.toolset_refresh_version, reason: presence.toolset_refresh_reason ?? '',
+                })}
+              </Typography.Text>
+              {presence.toolset_helper_status && (
+                <Typography.Text type={presence.toolset_helper_status === 'failed' ? 'danger' : 'secondary'} style={{ display: 'block' }}>
+                  {t(`toolset.helper.${presence.toolset_helper_status}`, { reason: presence.toolset_helper_reason ?? '' })}
+                </Typography.Text>
+              )}
+              {presence.toolset_refreshed_at && (
+                <Typography.Text type="secondary" style={{ display: 'block' }}>
+                  {t('toolset.refreshedAt', { time: displayTime(presence.toolset_refreshed_at, locale, fallback) })}
+                </Typography.Text>
+              )}
+            </>
+          )}
+        </Descriptions.Item>
         <Descriptions.Item label={t('fields.marketProbe')}>
           {presence.market_probe_role ? t(`marketProbeRoles.${presence.market_probe_role}`) : fallback}
         </Descriptions.Item>
@@ -433,6 +455,7 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
               : fallback}
         </Descriptions.Item>
       </Descriptions>
+      <NodeStaleConfigurationAlert items={item.stale_configurations} />
       <ProtectionPanel nodeID={nodeID} queryKey={queryKey} accessToken={currentSessionAccess} />
       <NodeConfigurationScopesPanel nodeID={nodeID} queryKey={queryKey} accessToken={currentSessionAccess} />
       {transition && (

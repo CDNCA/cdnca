@@ -660,6 +660,11 @@
        "name": "market_supply_groups",
        "type": "array<object>",
        "description": "Hidden node-market supply groups whose current revision lists the node (no line group list shows them, but they hold the node against deletion like a line group); omitted when none."
+      },
+      {
+       "name": "stale_configurations",
+       "type": "array<object>",
+       "description": "Tenants (configuration scopes) whose latest release left the node out: its Agent predates SITE_SELECTION (capability 82) and the release's key document is larger than such an Agent takes. The node still runs its previous configuration of that tenant, so websites withheld and forwards deleted since then still serve there, until it is upgraded to a version with capability 82 and takes a later release. Omitted when none."
       }
      ]
     },

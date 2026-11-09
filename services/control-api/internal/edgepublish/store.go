@@ -564,7 +564,8 @@ func loadPublication(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, key stri
 	stored, err := scanStoredPublication(tx.QueryRow(ctx, `
 		SELECT id,source_revision,request_digest,canonical_snapshot_sha256,artifact_sha256,
 		       config_version_id,rollout_id,node_count,created_at,target_kind,
-		       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256
+		       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256,
+		       key_envelope_oversized_node_ids,site_selection_unsupported_node_ids
 		FROM edge_config_publications
 		WHERE configuration_scope_id=$1 AND idempotency_key=$2`, scopeID, key), scopeID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -585,10 +586,13 @@ func scanStoredPublication(row rowScanner, scopeID uuid.UUID) (storedPublication
 		&stored.result.PublicationID, &stored.result.SourceRevision, &stored.requestDigest,
 		&snapshotDigest, &artifactDigest, &stored.result.ConfigVersionID, &stored.result.RolloutID,
 		&stored.result.NodeCount, &stored.result.CreatedAt, &stored.result.TargetKind,
-		&targetID, &targetRevision, &resolverDigest, &targetDigest)
+		&targetID, &targetRevision, &resolverDigest, &targetDigest,
+		&stored.result.KeyEnvelopeOversizedNodeIDs, &stored.result.SiteSelectionUnsupportedNodeIDs)
 	if err != nil {
 		return storedPublication{}, err
 	}
+	stored.result.KeyEnvelopeOversizedNodeIDs = LeftOutNodeIDs(stored.result.KeyEnvelopeOversizedNodeIDs)
+	stored.result.SiteSelectionUnsupportedNodeIDs = LeftOutNodeIDs(stored.result.SiteSelectionUnsupportedNodeIDs)
 	if len(stored.requestDigest) != 32 || len(snapshotDigest) != 32 ||
 		len(artifactDigest) != 32 || len(targetDigest) != 32 {
 		return storedPublication{}, fmt.Errorf("invalid publication digest")
@@ -637,15 +641,17 @@ func insertPublication(ctx context.Context, tx pgx.Tx, result PublishResult, req
 			request_id,correlation_id,canonical_snapshot_sha256,artifact_sha256,
 			config_version_id,rollout_id,node_count,created_at,expected_source_revision,
 			actor_user_id,actor_scope_id,target_kind,target_snapshot_id,target_snapshot_revision,
-			target_resolver_sha256,target_snapshot_sha256,contract_version
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,1)
+			target_resolver_sha256,target_snapshot_sha256,contract_version,
+			key_envelope_oversized_node_ids,site_selection_unsupported_node_ids
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,1,$22,$23)
 		ON CONFLICT (configuration_scope_id,idempotency_key) DO NOTHING`,
 		result.PublicationID, result.ConfigurationScopeID, result.SourceRevision, request.IdempotencyKey,
 		digest[:], request.RequestUUID, request.CorrelationUUID, result.CanonicalSnapshotSHA256[:],
 		result.ArtifactSHA256[:], result.ConfigVersionID, result.RolloutID, result.NodeCount, result.CreatedAt,
 		request.ExpectedSourceRevision, request.Actor.UserID, request.Actor.ScopeID, result.TargetKind,
 		targetReferenceID(result.TargetSnapshot), targetReferenceRevision(result.TargetSnapshot),
-		targetReferenceDigest(result.TargetSnapshot), result.TargetSnapshotSHA256[:])
+		targetReferenceDigest(result.TargetSnapshot), result.TargetSnapshotSHA256[:],
+		storedNodeIDs(result.KeyEnvelopeOversizedNodeIDs), storedNodeIDs(result.SiteSelectionUnsupportedNodeIDs))
 	if err != nil {
 		var databaseError *pgconn.PgError
 		if errors.As(err, &databaseError) && databaseError.ConstraintName == "edge_config_publications_one_contract_source_idx" {
@@ -660,6 +666,24 @@ func insertPublication(ctx context.Context, tx pgx.Tx, result PublishResult, req
 		return ErrIdempotencyConflict
 	}
 	return nil
+}
+
+// storedNodeIDs is the column value of a left-out node list (migration 649
+// NOT NULL: none is the empty array).
+func storedNodeIDs(nodeIDs []uuid.UUID) []uuid.UUID {
+	if nodeIDs == nil {
+		return []uuid.UUID{}
+	}
+	return nodeIDs
+}
+
+// LeftOutNodeIDs is a stored left-out node list as PublishResult carries it:
+// nil when none (the read omits it, as a publish without such nodes does).
+func LeftOutNodeIDs(nodeIDs []uuid.UUID) []uuid.UUID {
+	if len(nodeIDs) == 0 {
+		return nil
+	}
+	return nodeIDs
 }
 
 func targetReferenceID(reference *TargetSnapshotReference) *uuid.UUID {

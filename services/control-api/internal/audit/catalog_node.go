@@ -65,6 +65,7 @@ func init() {
 		e("edge_publication.capability_hold", CategoryNode, "部分节点版本过低，暂缓发布 {resource}", "held publication {resource}: some nodes lack a capability"),
 		e("edge_publication.entitlement_check", CategoryNode, "检查发布 {resource} 的授权", "checked the entitlement of publication {resource}"),
 		e("edge_publication.site_config_invalid", CategoryNode, "网站 {resource} 的配置无法发布（{reason}），已停止自动重试", "publication refused: site {resource} configuration is invalid ({reason}); automatic retries stopped"),
+		e("edge_publication.key_envelope_oversized", CategoryNode, "节点 {resource} 版本过旧，本次发布未下发（旧配置仍生效）", "node {resource} skipped: its agent is too old for this release (old configuration still in effect)"),
 		e("edge_publication.node_scope_conflict", CategoryNode, "节点 {resource} 同时属于多个用户的发布范围，已阻止", "blocked: node {resource} is in more than one tenant's scope"),
 		e("edge_rollout.start", CategoryNode, "开始分批发布 {resource}", "started rollout {resource}"),
 		e("edge_rollout.pause", CategoryNode, "暂停分批发布 {resource}", "paused rollout {resource}"),

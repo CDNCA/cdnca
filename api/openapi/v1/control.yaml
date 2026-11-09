@@ -8771,6 +8771,43 @@ components:
           format: int64
           minimum: 1
           description: Number of heartbeats that saw telemetry_error_code since telemetry_first_seen_at.
+        toolset_refresh_status:
+          type: string
+          enum: [none, unknown, ok, failed, skipped]
+          description: >-
+            Packaging toolset of the latest heartbeat (EdgeRuntimeStatus.packaging_toolset, capability
+            PACKAGING_TOOLSET_REPORT 83): the last refresh of the packaging scripts and root packaging helper
+            the node's upgrades run. none = never refreshed; unknown = the Agent cannot read the record (deb
+            layout) or it is not in a known format. Omitted with every toolset_* field when the Agent does not
+            report it (older Agents; the console shows "not reported").
+        toolset_refresh_version:
+          type: string
+          maxLength: 128
+          description: Release whose signed SBOM the last refresh read; present for ok, failed and skipped.
+        toolset_refresh_reason:
+          type: string
+          maxLength: 200
+          description: Why the last script refresh failed or was skipped.
+        toolset_refreshed_at:
+          type: string
+          format: date-time
+          description: When the last refresh was recorded (node clock); present for ok, failed and skipped.
+        toolset_helper_status:
+          type: string
+          enum: [ok, unchanged, failed, skipped]
+          description: Packaging helper result of the last refresh; omitted for records older than helper refresh.
+        toolset_helper_reason:
+          type: string
+          maxLength: 200
+          description: Why the packaging helper refresh failed or was skipped.
+        toolset_scripts_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA256 over the six installed scripts' "<sha256>  <name>.sh" lines in name order; omitted when one is unreadable.
+        toolset_helper_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA256 of the installed packaging helper binary; omitted when unreadable.
     NodeInventory:
       allOf:
         - $ref: '#/components/schemas/Node'
@@ -8800,6 +8837,37 @@ components:
                     minLength: 1
                     maxLength: 128
                     description: The seller's name of the supply group, without the hidden-group prefix.
+            stale_configurations:
+              type: array
+              description: >-
+                Tenants (configuration scopes) whose latest release left the node out: its Agent predates
+                SITE_SELECTION (capability 82) and the release's key document is larger than such an Agent
+                takes. The node still runs its previous configuration of that tenant, so websites withheld and
+                forwards deleted since then still serve there, until it is upgraded to a version with capability 82 and
+                takes a later release. Omitted when none.
+              minItems: 1
+              items:
+                type: object
+                additionalProperties: false
+                required: [scope_id, tenant_name, source_revision, reason, left_out_at]
+                properties:
+                  scope_id:
+                    type: string
+                    format: uuid
+                  tenant_name:
+                    type: string
+                    description: Empty for the platform scope.
+                  source_revision:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                    description: The release the node was left out of.
+                  reason:
+                    type: string
+                    enum: [key_envelope_oversized]
+                  left_out_at:
+                    type: string
+                    format: date-time
     NodeNetworkInventoryStatus:
       type: object
       additionalProperties: false

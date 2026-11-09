@@ -336,8 +336,20 @@ done
 jq -e --arg artifact "$(sha256_file "${workdir}/one/edge-agent")" --slurpfile toolset "${workdir}/toolset-files.jsonl" '
   .spdxVersion == "SPDX-2.3" and .dataLicense == "CC0-1.0" and .SPDXID == "SPDXRef-DOCUMENT" and
   .creationInfo.created == "2026-07-01T00:00:00Z" and
-  .files == [{"SPDXID":"SPDXRef-File-edge-agent","checksums":[{"algorithm":"SHA256","checksumValue":$artifact}],"fileName":"edge-agent"}] + $toolset
+  .files[:7] == [{"SPDXID":"SPDXRef-File-edge-agent","checksums":[{"algorithm":"SHA256","checksumValue":$artifact}],"fileName":"edge-agent"}] + $toolset and
+  (.files | length) == 8 and (.files[7] | .SPDXID == "SPDXRef-File-packaging-helper" and
+    .fileName == "packaging/bin/cdnca-edge-agent-helper" and (.checksums | length) == 1 and .checksums[0].algorithm == "SHA256" and
+    (.annotations | length) == 1 and .annotations[0].annotator == "Tool: cdnca-edge-release-build-v1" and
+    (.annotations[0].comment | startswith("cdnca.packaging-helper/v1 base64:")))
 ' "${workdir}/one/edge-agent.spdx.json" >/dev/null || fail 'SPDX 2.3 output'
+# The helper the recipe built (with the helper command, not the Agent's) rides
+# the SBOM: its bytes decode to the signed digest and are a Linux ELF.
+jq -jr '.files[7].annotations[0].comment | ltrimstr("cdnca.packaging-helper/v1 base64:")' "${workdir}/one/edge-agent.spdx.json" |
+  base64 -d >"${workdir}/helper.bin" 2>/dev/null || fail 'helper content is not base64'
+[ "$(sha256_file "${workdir}/helper.bin")" = "$(jq -r '.files[7].checksums[0].checksumValue' "${workdir}/one/edge-agent.spdx.json")" ] ||
+  fail 'helper content differs from its SBOM digest'
+[ "$(head -c 4 "${workdir}/helper.bin" | od -An -tx1 | tr -d ' \n')" = 7f454c46 ] || fail 'helper is not an ELF'
+! grep -F 'agent_version=1.2.3' "${workdir}/helper.bin" >/dev/null || fail 'helper was built with the Agent version flags'
 jq -e --arg source "$(sha256_file "${source_manifest}")" --arg c "$(sha256_file "${c_manifest}")" --arg arch "${fixture_arch}" '
   .schema == "cdnca.edge.release-provenance/v1" and .version == "1.2.3" and
   .build_id == "edge-1.2.3-build.7" and .arch == $arch and

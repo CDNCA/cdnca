@@ -3318,3 +3318,31 @@ func stagedBundleForTest(t *testing.T, directory string) (StagedBundle, error) {
 		ExecutableSHA256: digestOf(executable), ExecutableSize: int64(len(executable)),
 	}, nil
 }
+
+func TestBinaryReplacedOnlyAfterRename(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "cdnca-edge-agent-helper")
+	if err := os.WriteFile(path, []byte("old"), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	started, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if BinaryReplaced(path, started) {
+		t.Fatal("unchanged binary reported as replaced")
+	}
+	if BinaryReplaced(filepath.Join(directory, "missing"), started) {
+		t.Fatal("missing binary reported as replaced")
+	}
+	staged := filepath.Join(directory, ".staged")
+	if err := os.WriteFile(staged, []byte("new"), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(staged, path); err != nil {
+		t.Fatal(err)
+	}
+	if !BinaryReplaced(path, started) {
+		t.Fatal("renamed binary not reported as replaced")
+	}
+}

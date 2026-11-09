@@ -66,6 +66,19 @@ type Presence struct {
 	TelemetryFirstSeenAt *time.Time `json:"telemetry_first_seen_at,omitempty"`
 	TelemetryLastSeenAt  *time.Time `json:"telemetry_last_seen_at,omitempty"`
 	TelemetryCount       *int64     `json:"telemetry_count,omitempty"`
+	// Toolset* are the packaging toolset of the latest heartbeat
+	// (EdgeRuntimeStatus.packaging_toolset, migration 647):
+	// the last refresh (status none/unknown/ok/failed/skipped, version, reason,
+	// time, packaging helper result) and the installed scripts / helper
+	// digests. ToolsetRefreshStatus omitted: the Agent does not report it.
+	ToolsetRefreshStatus  *string    `json:"toolset_refresh_status,omitempty"`
+	ToolsetRefreshVersion *string    `json:"toolset_refresh_version,omitempty"`
+	ToolsetRefreshReason  *string    `json:"toolset_refresh_reason,omitempty"`
+	ToolsetRefreshedAt    *time.Time `json:"toolset_refreshed_at,omitempty"`
+	ToolsetHelperStatus   *string    `json:"toolset_helper_status,omitempty"`
+	ToolsetHelperReason   *string    `json:"toolset_helper_reason,omitempty"`
+	ToolsetScriptsSHA256  *string    `json:"toolset_scripts_sha256,omitempty"`
+	ToolsetHelperSHA256   *string    `json:"toolset_helper_sha256,omitempty"`
 }
 
 type InventoryItem struct {
@@ -76,7 +89,28 @@ type InventoryItem struct {
 	// current revision lists the node (they hold it against deletion like any
 	// line group, but no line group list shows them); omitted when none.
 	MarketSupplyGroups []MarketSupplyGroupRef `json:"market_supply_groups,omitempty"`
+	// StaleConfigurations are the tenants (configuration scopes) whose
+	// latest release left the node out because its Agent predates
+	// SITE_SELECTION and the key envelope did not fit: the
+	// node still runs the previous configuration, so websites withheld and
+	// forwards deleted since then still serve there. Omitted when none.
+	StaleConfigurations []StaleConfiguration `json:"stale_configurations,omitempty"`
 }
+
+// StaleConfiguration is a scope release the node did not get
+// (InventoryItem.StaleConfigurations): SourceRevision is the release it was
+// left out of, LeftOutAt when.
+type StaleConfiguration struct {
+	ScopeID        uuid.UUID `json:"scope_id"`
+	TenantName     string    `json:"tenant_name"`
+	SourceRevision int64     `json:"source_revision"`
+	Reason         string    `json:"reason"`
+	LeftOutAt      time.Time `json:"left_out_at"`
+}
+
+// StaleReasonKeyEnvelopeOversized: the release's key document is larger
+// than an Agent before SITE_SELECTION (capability 82) takes.
+const StaleReasonKeyEnvelopeOversized = "key_envelope_oversized"
 
 // MarketSupplyGroupRef names a market supply group: Name is the seller's
 // name, without the hidden-group prefix.
@@ -186,6 +220,9 @@ func (i *Inventory) List(ctx context.Context, request InventoryListRequest) (Inv
 		       node_presence.native_runtime_previous_release, node_presence.native_runtime_error_code,
 		       node_presence.telemetry_error_code, node_presence.telemetry_first_seen_at,
 		       node_presence.telemetry_last_seen_at, node_presence.telemetry_count,
+		       node_presence.toolset_refresh_status, node_presence.toolset_refresh_version, node_presence.toolset_refresh_reason,
+		       node_presence.toolset_refreshed_at, node_presence.toolset_helper_status, node_presence.toolset_helper_reason,
+		       node_presence.toolset_scripts_sha256, node_presence.toolset_helper_sha256,
 		       session.capabilities_snapshot, session.capabilities_sha256,
 		       CASE WHEN network.ipv4_state='verified' AND host(nodes.ipv4) IS DISTINCT FROM network.ipv4_address THEN 'address_conflict' ELSE network.ipv4_state END,
 		       CASE WHEN network.ipv6_state='verified' AND host(nodes.ipv6) IS DISTINCT FROM network.ipv6_address THEN 'address_conflict' ELSE network.ipv6_state END,
@@ -247,6 +284,9 @@ func (i *Inventory) List(ctx context.Context, request InventoryListRequest) (Inv
 	if err := i.attachMarketSupplyGroups(ctx, result.Items); err != nil {
 		return InventoryListResult{}, err
 	}
+	if err := i.attachStaleConfigurations(ctx, result.Items); err != nil {
+		return InventoryListResult{}, err
+	}
 	return result, nil
 }
 
@@ -266,6 +306,9 @@ func (i *Inventory) Get(ctx context.Context, scopeID, nodeID uuid.UUID) (Invento
 		       node_presence.native_runtime_previous_release, node_presence.native_runtime_error_code,
 		       node_presence.telemetry_error_code, node_presence.telemetry_first_seen_at,
 		       node_presence.telemetry_last_seen_at, node_presence.telemetry_count,
+		       node_presence.toolset_refresh_status, node_presence.toolset_refresh_version, node_presence.toolset_refresh_reason,
+		       node_presence.toolset_refreshed_at, node_presence.toolset_helper_status, node_presence.toolset_helper_reason,
+		       node_presence.toolset_scripts_sha256, node_presence.toolset_helper_sha256,
 		       session.capabilities_snapshot, session.capabilities_sha256,
 		       CASE WHEN network.ipv4_state='verified' AND host(nodes.ipv4) IS DISTINCT FROM network.ipv4_address THEN 'address_conflict' ELSE network.ipv4_state END,
 		       CASE WHEN network.ipv6_state='verified' AND host(nodes.ipv6) IS DISTINCT FROM network.ipv6_address THEN 'address_conflict' ELSE network.ipv6_state END,
@@ -286,6 +329,9 @@ func (i *Inventory) Get(ctx context.Context, scopeID, nodeID uuid.UUID) (Invento
 	items := []InventoryItem{item}
 	i.attachLeaseSignals(ctx, items)
 	if err := i.attachMarketSupplyGroups(ctx, items); err != nil {
+		return InventoryItem{}, err
+	}
+	if err := i.attachStaleConfigurations(ctx, items); err != nil {
 		return InventoryItem{}, err
 	}
 	return items[0], nil
@@ -310,6 +356,9 @@ func scanInventoryItem(row rowScanner, cutoff time.Time) (InventoryItem, error) 
 		&item.Presence.NativeRuntimePreviousRelease, &item.Presence.NativeRuntimeErrorCode,
 		&item.Presence.TelemetryErrorCode, &item.Presence.TelemetryFirstSeenAt,
 		&item.Presence.TelemetryLastSeenAt, &item.Presence.TelemetryCount,
+		&item.Presence.ToolsetRefreshStatus, &item.Presence.ToolsetRefreshVersion, &item.Presence.ToolsetRefreshReason,
+		&item.Presence.ToolsetRefreshedAt, &item.Presence.ToolsetHelperStatus, &item.Presence.ToolsetHelperReason,
+		&item.Presence.ToolsetScriptsSHA256, &item.Presence.ToolsetHelperSHA256,
 		&capabilitiesSnapshot, &capabilitiesDigest,
 		&ipv4State, &ipv6State, &item.NetworkInventory.ReceivedAt,
 	); err != nil {
@@ -333,6 +382,9 @@ func scanInventoryItem(row rowScanner, cutoff time.Time) (InventoryItem, error) 
 		item.Presence.NativeRuntimePreviousRelease, item.Presence.NativeRuntimeErrorCode = nil, nil
 		item.Presence.TelemetryErrorCode, item.Presence.TelemetryFirstSeenAt = nil, nil
 		item.Presence.TelemetryLastSeenAt, item.Presence.TelemetryCount = nil, nil
+		item.Presence.ToolsetRefreshStatus, item.Presence.ToolsetRefreshVersion, item.Presence.ToolsetRefreshReason = nil, nil, nil
+		item.Presence.ToolsetRefreshedAt, item.Presence.ToolsetHelperStatus, item.Presence.ToolsetHelperReason = nil, nil, nil
+		item.Presence.ToolsetScriptsSHA256, item.Presence.ToolsetHelperSHA256 = nil, nil
 		return item, nil
 	}
 	item.Presence.OpenRestyVersion = sessionOpenRestyVersion(capabilitiesSnapshot, capabilitiesDigest)
@@ -420,6 +472,68 @@ func (i *Inventory) attachMarketSupplyGroups(ctx context.Context, items []Invent
 	}
 	for index := range items {
 		items[index].MarketSupplyGroups = groups[items[index].ID]
+	}
+	return nil
+}
+
+// staleConfigurationsQuery reads the stale configurations of the nodes $1.
+// The LATERAL lookup per (node, scope) is served by
+// audit_events_node_key_envelope_oversized_648_idx.
+const staleConfigurationsQuery = `
+	SELECT state.node_id, state.configuration_scope_id, COALESCE(tenant.display_name,''),
+	       left_out.source_revision, left_out.occurred_at
+	FROM node_config_state state
+	JOIN access_scopes scope ON scope.id=state.configuration_scope_id
+	LEFT JOIN tenants tenant ON tenant.id=scope.tenant_id
+	JOIN LATERAL (
+		SELECT (event.payload->>'source_revision')::bigint AS source_revision, event.occurred_at
+		FROM audit_events event
+		WHERE event.scope_id=state.configuration_scope_id AND event.action='edge_publication.key_envelope_oversized'
+		  AND event.resource_type='node' AND event.resource_id=state.node_id::text
+		ORDER BY event.occurred_at DESC, event.stream_position DESC LIMIT 1
+	) left_out ON true
+	WHERE state.node_id=ANY($1)
+	  AND NOT EXISTS (
+		SELECT 1 FROM edge_config_publications running
+		WHERE running.configuration_scope_id=state.configuration_scope_id
+		  AND running.config_version_id=state.current_config_version_id
+		  AND running.source_revision>=left_out.source_revision)
+	ORDER BY state.node_id, COALESCE(tenant.display_name,''), state.configuration_scope_id`
+
+// attachStaleConfigurations reads, in one query, the scopes whose release
+// left each node out for its key envelope: the newest
+// edge_publication.key_envelope_oversized row of the (scope, node) -- the
+// newest row of its group, which archiving keeps (migration 331) -- names a
+// revision and the node has applied no release of that revision or later
+// since. It clears once the node takes a later release (the capability
+// watcher republishes after it upgrades).
+func (i *Inventory) attachStaleConfigurations(ctx context.Context, items []InventoryItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(items))
+	for index := range items {
+		ids[index] = items[index].ID
+	}
+	rows, err := i.pool.Query(ctx, staleConfigurationsQuery, ids)
+	if err != nil {
+		return fmt.Errorf("read node stale configurations: %w", err)
+	}
+	defer rows.Close()
+	stale := make(map[uuid.UUID][]StaleConfiguration)
+	for rows.Next() {
+		var nodeID uuid.UUID
+		item := StaleConfiguration{Reason: StaleReasonKeyEnvelopeOversized}
+		if err := rows.Scan(&nodeID, &item.ScopeID, &item.TenantName, &item.SourceRevision, &item.LeftOutAt); err != nil {
+			return fmt.Errorf("scan node stale configurations: %w", err)
+		}
+		stale[nodeID] = append(stale[nodeID], item)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read node stale configurations: %w", err)
+	}
+	for index := range items {
+		items[index].StaleConfigurations = stale[items[index].ID]
 	}
 	return nil
 }

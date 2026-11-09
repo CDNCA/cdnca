@@ -126,6 +126,25 @@ beforeEach(() => {
 const stateCell = (row: HTMLElement) => row.querySelector('.node-state-cell') as HTMLElement
 
 describe('node list in-use and presence', () => {
+  // A node a release left out (Agent before capability 82)
+  // shows 旧配置仍生效 in the status column, the details on hover.
+  it('marks a node that still runs an old configuration', async () => {
+    authenticate()
+    const stale: NodeInventoryItem = { ...base, id: '018f0000-0000-7000-8000-000000000005', display_id: '5', name: 'edge-old-agent',
+      ipv4: '192.0.2.15', stale_configurations: [{ scope_id: scopeID, tenant_name: '', source_revision: 7,
+        reason: 'key_envelope_oversized', left_out_at: '2026-11-04T08:30:00Z' }] }
+    serve([base, stale])
+    renderWithProviders(<NodeListPage />)
+
+    const row = (await screen.findByText('edge-old-agent')).closest('tr')!
+    const tag = within(row).getByText('旧配置仍生效')
+    expect(tag).toHaveAttribute('aria-label', expect.stringContaining('租户 平台 的第 7 版发布'))
+    expect(tag).toHaveAttribute('aria-label', expect.stringContaining('新屏蔽的站点、删除的转发在该节点上仍然生效'))
+    expect(tag).toHaveAttribute('aria-label', expect.stringContaining('支持能力 82 的版本，升级后系统自动补发'))
+    const current = screen.getByText('edge-online').closest('tr')!
+    expect(within(current).queryByText('旧配置仍生效')).not.toBeInTheDocument()
+  })
+
   it('shows an active node whose agent is not online as offline', async () => {
     authenticate()
     serve([base, offline, never, disabledOffline])

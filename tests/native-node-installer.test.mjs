@@ -54,7 +54,8 @@ const packagingScriptBody = (path) => `#!/bin/sh\n# ${path}\n`
 const agentSBOM = `${JSON.stringify({ spdxVersion: 'SPDX-2.3', files: packagingScripts.map((path) => ({
   fileName: path, checksums: [{ algorithm: 'SHA256', checksumValue: hash(packagingScriptBody(path)) }],
   annotations: [{ annotationType: 'OTHER', comment: `cdnca.packaging-script/v1 base64:${Buffer.from(packagingScriptBody(path)).toString('base64')}` }],
-})) })}\n`
+})).concat([{ fileName: 'packaging/bin/cdnca-edge-agent-helper', checksums: [{ algorithm: 'SHA256', checksumValue: hash(helperElf) }],
+  annotations: [{ annotationType: 'OTHER', comment: `cdnca.packaging-helper/v1 base64:${helperElf.toString('base64')}` }] }]) })}\n`
 // Canonical manifest v2 for the fixture Agent and SBOM under a packaged key.
 const upgradeManifest = Buffer.from([
   'manifest_version=2', 'release_sequence=7', 'version=1.2.3', 'artifact_path=edge-agent',

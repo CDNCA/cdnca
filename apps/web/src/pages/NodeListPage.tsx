@@ -55,6 +55,7 @@ import { supplyInUse } from '../api/marketSupplier'
 import { nodeMonitoringApi, type NodeMonitoringLatest, type NodeMonitoringLatestBatch } from '../api/nodeMonitoring'
 import { nodeInstallationTicketsApi } from '../api/nodeInstallationTickets'
 import { NodeFrozenTag } from '../components/NodeFrozenTag'
+import { NodeStaleConfigurationTag } from '../components/NodeStaleConfigurationTag'
 import { useSessionStore } from '../auth/session'
 import { controlUpgradesReadPermission } from '../routes/routePolicy'
 import { ResourceID } from '../components/ResourceID'
@@ -2666,6 +2667,7 @@ function NodeListContent({
       render: (value: NodeAdminState, item) => <span className="node-status-cell">
         <PresenceCell state={value} presence={item.presence} />
         <NodeFrozenTag ticket={ticketItems.get(item.id)} />
+        <NodeStaleConfigurationTag items={item.stale_configurations} />
         {/* Reference: "[任务]" only follows a non-normal state and opens that node's tasks. */}
         {value !== 'active' ? <Link to={`/sys/task?resource_id=${encodeURIComponent(item.id)}`} aria-label={t('list.tasksLabel')}>{t('list.tasks')}</Link> : null}
       </span>,

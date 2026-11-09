@@ -7,6 +7,7 @@
 //   scripts/lib/install-progress.sh   -> "install-progress" (stage/progress display)
 //   scripts/lib/package-automation.sh -> "package-automation" (apt-daily/unattended-upgrades)
 //   scripts/lib/install-i18n.sh       -> "install-i18n" (--lang zh|en, msg)
+//   scripts/lib/repo-keys.sh          -> "repo-keys" (bundled APT/YUM repository signing keys)
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -14,11 +15,14 @@ import path from 'node:path'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const libraries = { 'install-preflight': 'scripts/lib/install-preflight.sh', 'systemd-compat': 'scripts/lib/systemd-compat.sh',
   'ssh-guard': 'scripts/lib/ssh-guard.sh', 'install-progress': 'scripts/lib/install-progress.sh',
-  'package-automation': 'scripts/lib/package-automation.sh', 'install-i18n': 'scripts/lib/install-i18n.sh' }
+  'package-automation': 'scripts/lib/package-automation.sh', 'install-i18n': 'scripts/lib/install-i18n.sh',
+  'repo-keys': 'scripts/lib/repo-keys.sh' }
 // Libraries each installer embeds.
 export const embeds = {
   'scripts/install-control.sh': ['install-preflight', 'systemd-compat', 'ssh-guard', 'install-progress', 'package-automation', 'install-i18n'],
   'scripts/install-node.sh': ['install-preflight', 'systemd-compat', 'ssh-guard', 'install-progress', 'package-automation', 'install-i18n'],
+  // Signed dependency helper run by install-control.sh step 5 (repository keys only).
+  'scripts/native-runtime/install-ubuntu-dependencies.sh': ['repo-keys'],
 }
 // Installers that embed install-preflight (tests/install-preflight.test.mjs).
 export const installers = Object.keys(embeds).filter((relative) => embeds[relative].includes('install-preflight'))

@@ -50,6 +50,10 @@ var reviewedAuditReaders = []string{
 	"jobhttp/command_postgres.go",
 	"node/registration_store.go",
 	"nodepresence/configuration_scopes.go",
+	// stale_configurations: the newest
+	// edge_publication.key_envelope_oversized row of a (scope, node) group,
+	// always kept; older rows of the node may leave.
+	"nodepresence/inventory.go",
 	"notification/settlement.go",
 	"notificationcontrol/store.go",
 	"observabilitylog/store.go",

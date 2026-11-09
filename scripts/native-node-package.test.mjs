@@ -70,6 +70,14 @@ function writeToolsetSBOM(payload, overrides = {}, carried = {}) {
     annotations: carried[name] === null ? [] : [{ annotationType: 'OTHER',
       comment: `cdnca.packaging-script/v1 base64:${(carried[name] ?? fs.readFileSync(path.join(payload, name))).toString('base64')}` }],
   }))
+  // And the root packaging helper (overrides/carried key 'helper').
+  if (overrides.helper !== null) {
+    const helper = fs.readFileSync(path.join(payload, 'bin/cdnca-edge-agent-helper'))
+    files.push({ SPDXID: 'SPDXRef-File-packaging-helper', fileName: 'packaging/bin/cdnca-edge-agent-helper',
+      checksums: [{ algorithm: 'SHA256', checksumValue: overrides.helper ?? sha(helper) }],
+      annotations: carried.helper === null ? [] : [{ annotationType: 'OTHER',
+        comment: `cdnca.packaging-helper/v1 base64:${(carried.helper ?? helper).toString('base64')}` }] })
+  }
   const target = path.join(payload, 'evidence/edge-agent.spdx.json')
   fs.chmodSync(target, 0o644)
   fs.writeFileSync(target, JSON.stringify({ spdxVersion: 'SPDX-2.3', SPDXID: 'SPDXRef-DOCUMENT', files }))
@@ -101,6 +109,25 @@ for (const [label, carried] of [['without the content of', { 'packaging/scripts/
     writeToolsetSBOM(payload, {}, carried)
     writeUpgradeInputs(payload)
     assert.throws(() => createNativeNodeManifest(payload, metadata), /release SBOM does not carry packaging script/)
+  })
+}
+
+test('prepare refuses a packaged helper that differs from the signed SBOM', (t) => {
+  const { payload } = fixture(t)
+  const target = path.join(payload, 'bin/cdnca-edge-agent-helper')
+  fs.chmodSync(target, 0o755); fs.appendFileSync(target, 'changed after the release build'); fs.chmodSync(target, 0o555)
+  assert.throws(() => createNativeNodeManifest(payload, metadata), /packaging helper bin\/cdnca-edge-agent-helper differs from the signed release SBOM/)
+})
+
+for (const [label, overrides, carried, message] of [
+  ['that does not sign', { helper: null }, {}, /release SBOM does not sign packaging helper/],
+  ['without the content of', {}, { helper: null }, /release SBOM does not carry packaging helper/],
+  ['with other content for', {}, { helper: Buffer.from('\x7fELF other helper') }, /release SBOM does not carry packaging helper/]]) {
+  test(`prepare refuses an SBOM ${label} the packaging helper`, (t) => {
+    const { payload } = fixture(t)
+    writeToolsetSBOM(payload, overrides, carried)
+    writeUpgradeInputs(payload)
+    assert.throws(() => createNativeNodeManifest(payload, metadata), message)
   })
 }
 

@@ -2,6 +2,22 @@
 set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+# Internal: a transient root unit started by an upgrade inside the helper unit
+# (where /usr/libexec is read-only) replaces the packaging helper with a
+# staged, signed copy (lib.sh install_helper_from_sbom). Only the installed
+# toolset runs it; it takes no package lock and touches nothing else.
+if [ "${1:-}" = --install-staged-helper ]; then
+  [ "$#" -eq 3 ] && [ "${script_dir}" = /usr/libexec/cdnca-edge-agent ] || {
+    printf 'cdnca-edge-agent packaging: --install-staged-helper is internal\n' >&2
+    exit 64
+  }
+  # shellcheck source=lib.sh
+  . "${script_dir}/lib.sh"
+  DESTDIR=
+  [ "$(id -u)" -eq 0 ] || die "installation must run as root"
+  install_staged_helper "$2" "$3"
+  exit 0
+fi
 bootstrap_transaction_recovery() {
   bootstrap_destdir=
   bootstrap_destdir_seen=false
@@ -196,9 +212,42 @@ if [ "${refresh_toolset}" = true ]; then
   trap 'exit 1' HUP INT TERM
   ! state_layout_migration_pending || die "a state layout migration is pending; toolset was not refreshed"
   install_toolset_from_sbom "${sbom}" "${BUNDLE_SBOM_SHA256}"
+  printf 'refreshed cdnca-edge-agent packaging toolset from %s\n' "${VERIFIED_VERSION}"
+  # The packaging helper too; a helper failure keeps the refreshed scripts.
+  helper_error=$(root_path /var/lib/cdnca-edge-agent-packaging)/.toolset-refresh.err.$$
+  set +e
+  helper_outcome=$(set -e; install_helper_from_sbom "${sbom}" "${BUNDLE_SBOM_SHA256}" 2>"${helper_error}")
+  helper_exit=$?
+  set -e
+  helper_reason=
+  if [ "${helper_exit}" -ne 0 ]; then
+    helper_outcome=failed
+    helper_reason=$(toolset_reason "${helper_error}")
+    remove_toolset_staging
+    printf 'packaging helper was not refreshed: %s\n' "${helper_reason}" >&2
+  elif [ "${helper_outcome}" = skipped ]; then
+    helper_reason='signed SBOM carries no packaging helper'
+  fi
+  rm -f -- "${helper_error}"
+  write_toolset_record ok "${VERIFIED_VERSION}" '' "${helper_outcome}" "${helper_reason}"
   release_lock
   trap - EXIT HUP INT TERM
-  printf 'refreshed cdnca-edge-agent packaging toolset from %s\n' "${VERIFIED_VERSION}"
+  if [ "${helper_outcome}" = ok ] && [ -z "${DESTDIR}" ]; then
+    # Helpers installed before this release never exit on their own; restart
+    # the running one under its state directory lock, so a helper inside an
+    # upgrade or rollback (which holds the lock) finishes it first.
+    if systemctl is-active --quiet cdnca-edge-agent-helper.service; then
+      if flock -w 600 /var/lib/cdnca-edge-agent-helper systemctl try-restart cdnca-edge-agent-helper.service; then
+        printf 'restarted the packaging helper on the refreshed binary\n'
+      else
+        printf 'packaging helper replaced; it runs the new binary from its next start\n' >&2
+      fi
+    else
+      printf 'packaging helper replaced; it runs the new binary from its next start\n'
+    fi
+  elif [ "${helper_outcome}" = ok ]; then
+    printf 'packaging helper replaced\n'
+  fi
   exit 0
 fi
 check_release_replay

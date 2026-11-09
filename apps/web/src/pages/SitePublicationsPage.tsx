@@ -56,6 +56,7 @@ import '../i18n/sitePublications'
 import { challengePolicyRefusalText } from '../i18n/crsRepublish'
 import { formatDateTime } from '../i18n/formatters'
 import LineGroupSwitchPanel from './site-publications/LineGroupSwitchPanel'
+import PublicationLeftOutNodesAlert, { PublicationLeftOutNodesTag } from './site-publications/PublicationLeftOutNodesAlert'
 
 import './SitePublicationsPage.css'
 
@@ -535,7 +536,11 @@ export default function SitePublicationsPage() {
     { title: t('columns.publicationId'), dataIndex: 'id', width: 245, render: (value: string) => <code>{value}</code> },
     { title: t('columns.sourceRevision'), dataIndex: 'source_revision', width: 105 },
     { title: t('columns.target'), width: 150, render: (_, item) => <Tag>{t(`targets.${item.target.kind}`)}</Tag> },
-    { title: t('columns.nodes'), dataIndex: 'node_count', width: 90 },
+    {
+      title: t('columns.nodes'), dataIndex: 'node_count', width: 90,
+      // Nodes this publication left on the old configuration.
+      render: (value: number, item) => <Space size={4} wrap>{value}<PublicationLeftOutNodesTag publication={item} /></Space>,
+    },
     {
       title: t('columns.createdAt'), dataIndex: 'created_at', width: 180,
       render: (value: string) => formatDateTime(value, i18n.resolvedLanguage) || value,
@@ -878,7 +883,8 @@ export default function SitePublicationsPage() {
           <Alert type="error" showIcon message={t('errors.detailLoadFailed')} description={errorText(publicationDetailQuery.error, t)} action={
             <Button onClick={() => void publicationDetailQuery.refetch()}>{t('actions.retry')}</Button>
           } />
-        ) : publicationDetailQuery.data ? (
+        ) : publicationDetailQuery.data ? (<>
+          <PublicationLeftOutNodesAlert publication={publicationDetailQuery.data} />
           <Descriptions column={1} bordered size="small">
             <Descriptions.Item label={t('detail.publicationId')}><code>{publicationDetailQuery.data.id}</code></Descriptions.Item>
             <Descriptions.Item label={t('detail.configVersion')}><code>{publicationDetailQuery.data.config_version_id}</code></Descriptions.Item>
@@ -894,7 +900,7 @@ export default function SitePublicationsPage() {
               {formatDateTime(publicationDetailQuery.data.created_at, i18n.resolvedLanguage)}
             </Descriptions.Item>
           </Descriptions>
-        ) : <div className="site-publications-loading">{t('accessibility.loading')}</div>}
+        </>) : <div className="site-publications-loading">{t('accessibility.loading')}</div>}
       </Drawer> : null}
 
       {visibleRollout ? <Drawer

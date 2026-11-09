@@ -725,6 +725,7 @@ func (s *Service) publishExcludingIncapableTx(
 		if err != nil {
 			return PublishResult{}, nil, nil, err
 		}
+		normalized.capabilityHoldByCaller = true
 		round, err := tx.Begin(ctx)
 		if err != nil {
 			return PublishResult{}, nil, nil, err
@@ -734,7 +735,15 @@ func (s *Service) publishExcludingIncapableTx(
 			if err := round.Commit(ctx); err != nil {
 				return PublishResult{}, nil, nil, err
 			}
-			return result, normalized.NodeIDs, refused, nil
+			// Nodes left out for their key envelope are
+			// refused like the others: held, and not published to.
+			published := slices.Clone(normalized.NodeIDs)
+			for _, node := range result.keyEnvelopeOversized {
+				item, _ := systemRefusalOf(node.refusal)
+				refused = append(refused, item)
+				published = slices.DeleteFunc(published, func(nodeID uuid.UUID) bool { return nodeID == item.NodeID })
+			}
+			return result, published, refused, nil
 		}
 		if errors.Is(err, ErrEntitlementDenied) {
 			// Only the denial audit was written: keep it, as Publish does.

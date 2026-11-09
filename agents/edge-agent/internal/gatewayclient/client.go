@@ -27,6 +27,7 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/gatewaytunnel"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/objectstore"
 	"github.com/cdnca/cdnca/libs/edgeconfig/autodefense"
+	"github.com/cdnca/cdnca/libs/edgeconfig/packagingtoolset"
 	"github.com/cdnca/cdnca/libs/edgeconfig/sched302"
 	contractsshaccess "github.com/cdnca/cdnca/libs/edgeconfig/sshaccess"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
@@ -180,6 +181,9 @@ type RuntimeStatusProbe struct {
 	// Telemetry, when set, is the telemetry pipeline's current degradation
 	// (EdgeRuntimeStatus.telemetry); nil result: healthy.
 	Telemetry func() *agentv1.TelemetryHealth
+	// PackagingToolset, when set, is EdgeRuntimeStatus.packaging_toolset and
+	// the Agent declares PACKAGING_TOOLSET_REPORT; nil: absent.
+	PackagingToolset func() *agentv1.PackagingToolsetStatus
 }
 
 type CertificateRenewer interface {
@@ -2953,6 +2957,12 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW, ApiVersion: challengePoWAPIVersion,
 		})
 	}
+	// Declared only; the heartbeat carries the report.
+	if c.runtimeProbe.PackagingToolset != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT) {
+		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT, ApiVersion: packagingtoolset.APIVersion,
+		})
+	}
 	if c.siteDrop != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_SITE_DROP) {
 		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_SITE_DROP, ApiVersion: siteDropAPIVersion,
@@ -3107,6 +3117,9 @@ func (c *Client) runtimeStatus(ctx context.Context, loadedConfigVersionID *strin
 	}
 	if c.runtimeProbe.NativeRuntime != nil {
 		status.NativeRuntime = c.runtimeProbe.NativeRuntime()
+	}
+	if c.runtimeProbe.PackagingToolset != nil {
+		status.PackagingToolset = c.runtimeProbe.PackagingToolset()
 	}
 	if c.runtimeProbe.Telemetry != nil {
 		status.Telemetry = c.runtimeProbe.Telemetry()

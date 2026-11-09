@@ -23,7 +23,7 @@ func TestAgentCapabilityLimitIsShared128(t *testing.T) {
 		t.Fatalf("71 capabilities rejected: %v", err)
 	}
 	// Without the two client-added capabilities the node still reports 70,
-	// above the old 64 cutoff: both must be appended, ending at 74 (CHALLENGE_POW 81).
+	// above the old 64 cutoff: both must be appended, ending at 76 (CHALLENGE_POW 81, SITE_SELECTION 82, PACKAGING_TOOLSET_REPORT 83).
 	capabilities := &agentv1.AgentCapabilities{}
 	for _, feature := range knownCapabilities() {
 		if feature.Name != agentv1.CapabilityName_CAPABILITY_NAME_ACTIVE_CONFIG_IDENTITY &&
@@ -37,8 +37,8 @@ func TestAgentCapabilityLimitIsShared128(t *testing.T) {
 	if err := ensureDeploymentStatusAckReceiptCapability(capabilities); err != nil {
 		t.Fatalf("ack receipt capability not added beyond 64: %v", err)
 	}
-	if len(capabilities.Features) != 74 {
-		t.Fatalf("capabilities=%d, want 74", len(capabilities.Features))
+	if len(capabilities.Features) != 76 {
+		t.Fatalf("capabilities=%d, want 76", len(capabilities.Features))
 	}
 	config.Capabilities.Features = features(agentv1.MaxCapabilities + 1)
 	if err := config.validate(); err == nil {

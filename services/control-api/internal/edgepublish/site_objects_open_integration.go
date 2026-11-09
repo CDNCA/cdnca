@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"sort"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
 	"github.com/cdnca/cdnca/libs/edgeconfig/edgesite"
@@ -39,6 +40,9 @@ type SiteObjectReleaseForTest struct {
 	// L4WithheldStreams: the scope's forwards this node's key document
 	// withholds (L4_STREAM_SELECTION).
 	L4WithheldStreams []string
+	// WithheldSites: the scope's websites this node's key document
+	// withholds (SITE_SELECTION).
+	WithheldSites []string
 	// NodeRegion: the region code this node's key document carries
 	// (NODE_REGION, fz-x12).
 	NodeRegion string
@@ -192,6 +196,26 @@ func OpenSiteObjectReleaseForTest(ctx context.Context, pool *pgxpool.Pool, deplo
 	}
 	bundle := edgeconfig.Bundle{Files: map[string][]byte{siteobject.DocumentPath: bytes.Clone(canonical)}}
 	return SiteObjectReleaseForTest{Command: command, Root: root, RootSHA256: rootSHA256, Bundle: bundle, Members: memberSet,
-		Scope: scope, Sites: sites, Objects: objects, L4WithheldStreams: key.L4WithheldStreams, NodeRegion: key.NodeRegion,
+		Scope: scope, Sites: sites, Objects: objects, L4WithheldStreams: key.L4WithheldStreams, WithheldSites: withheldSiteIDsForTest(sites, key.WithheldSites), NodeRegion: key.NodeRegion,
 		NodeStorage: key.NodeStorage}, nil
+}
+
+// withheldSiteIDsForTest decodes a key document's withheld website bitmap
+// against the root's websites (bit i = i-th site_id ascending), sorted.
+func withheldSiteIDsForTest(sites []edgesite.Site, bitmap *siteobject.SiteBitmap) []string {
+	if bitmap == nil {
+		return nil
+	}
+	ids := make([]string, len(sites))
+	for index, site := range sites {
+		ids[index] = site.SiteID
+	}
+	sort.Strings(ids)
+	var withheld []string
+	for index, id := range ids {
+		if bitmap.Withheld(index) {
+			withheld = append(withheld, id)
+		}
+	}
+	return withheld
 }

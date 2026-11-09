@@ -328,6 +328,21 @@ enum CapabilityName {
   // explicit pow_difficulty only to nodes that declare it; the others keep
   // their previous policy.
   CAPABILITY_NAME_CHALLENGE_POW = 81;
+  // SITE_SELECTION v1: the
+  // node's site object key document names the scope's websites it must not
+  // serve (none of their line groups or L2 configurations has it), and the
+  // Agent leaves them out of its dynamic routing runtime as if the root did
+  // not carry them (no certificate, cache, origin or route). Control writes
+  // the list only for an Agent that declares it; an older node serves every
+  // website of the scope as before. The site counterpart of
+  // L4_STREAM_SELECTION.
+  CAPABILITY_NAME_SITE_SELECTION = 82;
+  // PACKAGING_TOOLSET_REPORT v1: the
+  // heartbeat carries EdgeRuntimeStatus.packaging_toolset, the node's last
+  // packaging toolset refresh and the digests of the installed packaging
+  // scripts and root packaging helper. Report only: control stores and shows
+  // it and sends nothing back. A node without it is shown as not reporting.
+  CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT = 83;
 }
 
 // Capability advertises the highest implementation version for one feature.
@@ -675,6 +690,41 @@ message EdgeRuntimeStatus {
   // telemetry is the node telemetry pipeline's current degradation:
   // absent while the pipeline is healthy or disabled.
   TelemetryHealth telemetry = 8;
+  // 9 is left unused.
+  // packaging_toolset (PACKAGING_TOOLSET_REPORT v1) is set by
+  // every Agent that declares the capability; absent on older Agents.
+  PackagingToolsetStatus packaging_toolset = 10;
+}
+
+// PackagingToolsetStatus: the packaging scripts (/usr/libexec/cdnca-edge-agent)
+// and root packaging helper the node's next upgrade and rollback run, and the
+// last refresh of them (the toolset-refresh record install.sh writes after an
+// upgrade and on install.sh --refresh-toolset).
+message PackagingToolsetStatus {
+  // refresh_status: none (no record), ok, failed, skipped, or unknown (the
+  // record is unreadable by the Agent or not in a known format).
+  string refresh_status = 1;
+  // refresh_version: the release whose signed SBOM the refresh read
+  // (version grammar, at most 128 bytes); empty for none and unknown.
+  string refresh_version = 2;
+  // refresh_reason: why the refresh failed or was skipped (printable ASCII,
+  // at most 200 bytes); empty otherwise.
+  string refresh_reason = 3;
+  // refresh_time: when the record was written (records written by older
+  // packaging scripts carry no time; the Agent then uses the file's mtime).
+  google.protobuf.Timestamp refresh_time = 4;
+  // helper_status: ok, unchanged, failed, skipped, or empty when the record
+  // predates helper refresh.
+  string helper_status = 5;
+  // helper_reason: why the helper refresh failed or was skipped (as
+  // refresh_reason).
+  string helper_reason = 6;
+  // scripts_sha256: SHA256 over the six installed scripts' "<sha256>  <name>.sh\n"
+  // lines in name order; empty when any of them is missing or unreadable.
+  string scripts_sha256 = 7;
+  // helper_sha256: SHA256 of /usr/libexec/cdnca-edge-agent-helper; empty
+  // when missing or unreadable.
+  string helper_sha256 = 8;
 }
 
 // TelemetryHealth is the error code the node telemetry pipeline (the upload

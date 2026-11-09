@@ -164,12 +164,33 @@ describe('NodeInventoryDetailPage', () => {
     expect(nodeInstallationTicketsApi.get).toHaveBeenCalledWith(expect.any(String), [nodeID], expect.anything())
   })
 
+  // A node left out of a release keeps the old configuration;
+  // the detail says so, what still serves there and to upgrade to capability 82.
+  it('warns that a node left out of a release still runs the old configuration', async () => {
+    authenticate()
+    vi.spyOn(nodesApi, 'get').mockResolvedValue({ ...inventory, stale_configurations: [{
+      scope_id: '018f0000-0000-7000-8000-000000000021', tenant_name: '租户甲', source_revision: 12,
+      reason: 'key_envelope_oversized', left_out_at: '2026-08-01T08:30:00Z',
+    }] })
+    renderPage()
+    const alert = await waitFor(() => {
+      const element = document.querySelector<HTMLElement>('.node-inventory-stale-configuration')
+      expect(element).not.toBeNull()
+      return element!
+    })
+    expect(alert).toHaveTextContent('该节点仍在使用旧配置')
+    expect(alert).toHaveTextContent('租户 租户甲 的第 12 版发布')
+    expect(alert).toHaveTextContent('新屏蔽的站点、删除的转发在该节点上仍然生效')
+    expect(alert).toHaveTextContent('能力 82 的版本，升级后系统自动补发')
+  })
+
   it('shows a valid ticket as its expiry without a frozen tag', async () => {
     authenticate()
     vi.spyOn(nodesApi, 'get').mockResolvedValue(inventory)
     renderPage()
     expect(await screen.findByText(/^有效至 2026/)).toBeInTheDocument()
     expect(document.querySelector('.node-frozen-tag')).toBeNull()
+    expect(document.querySelector('.node-inventory-stale-configuration')).toBeNull()
   })
 
   // E1 遗留：节点详情单独显示 DDoS 防护状态（列表只在 XDP 列显示异常）。
@@ -263,6 +284,30 @@ describe('NodeInventoryDetailPage', () => {
     renderPage()
     expect(await screen.findByText('市场探测')).toBeInTheDocument()
     expect(screen.getByText(label)).toBeInTheDocument()
+  })
+
+  // The packaging scripts row (capability 83).
+  it.each([
+    [{}, ['未上报']],
+    [{ toolset_refresh_status: 'none', toolset_scripts_sha256: 'a'.repeat(64) }, ['未刷新']],
+    [{ toolset_refresh_status: 'unknown' }, ['刷新记录不可读']],
+    [{ toolset_refresh_status: 'ok', toolset_refresh_version: '1.0.36', toolset_refreshed_at: '2026-11-09T04:00:00Z',
+      toolset_helper_status: 'ok' }, ['1.0.36 正常', '辅助程序已更新', /^刷新于 .+/]],
+    [{ toolset_refresh_status: 'failed', toolset_refresh_version: '1.0.29', toolset_refreshed_at: '2026-11-09T04:00:00Z',
+      toolset_refresh_reason: 'packaging/scripts/rollback.sh differs from the signed SBOM', toolset_helper_status: 'skipped' },
+    ['1.0.29 刷新失败：packaging/scripts/rollback.sh differs from the signed SBOM', '辅助程序未刷新']],
+    [{ toolset_refresh_status: 'ok', toolset_refresh_version: '1.0.36', toolset_refreshed_at: '2026-11-09T04:00:00Z',
+      toolset_helper_status: 'failed', toolset_helper_reason: 'transient unit could not replace the packaging helper' },
+    ['1.0.36 正常', '辅助程序刷新失败：transient unit could not replace the packaging helper']],
+  ] as const)('shows the packaging toolset %#', async (toolset, texts) => {
+    authenticate()
+    vi.spyOn(nodesApi, 'get').mockResolvedValue({ ...inventory, presence: { ...inventory.presence, ...toolset } })
+
+    renderPage()
+    const label = await screen.findByText('打包脚本')
+    const cell = label.closest('th')?.nextElementSibling as HTMLElement | null
+    expect(cell).not.toBeNull()
+    for (const text of texts) expect(within(cell!).getByText(text)).toBeInTheDocument()
   })
 
   it.each([

@@ -35,7 +35,8 @@ func (s *Service) GetPublication(
 		stored, err := scanStoredPublication(tx.QueryRow(ctx, `
 			SELECT id,source_revision,request_digest,canonical_snapshot_sha256,artifact_sha256,
 			       config_version_id,rollout_id,node_count,created_at,target_kind,
-			       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256
+			       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256,
+			       key_envelope_oversized_node_ids,site_selection_unsupported_node_ids
 			FROM edge_config_publications
 			WHERE configuration_scope_id=$1 AND id=$2`, scopeID, publicationID), scopeID)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -90,7 +91,8 @@ func (s *Service) ListPublications(
 		rows, err := tx.Query(ctx, `
 			SELECT id,source_revision,request_digest,canonical_snapshot_sha256,artifact_sha256,
 			       config_version_id,rollout_id,node_count,created_at,target_kind,
-			       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256
+			       target_snapshot_id,target_snapshot_revision,target_resolver_sha256,target_snapshot_sha256,
+			       key_envelope_oversized_node_ids,site_selection_unsupported_node_ids
 			FROM edge_config_publications
 			WHERE configuration_scope_id=$1
 			  AND ($2::timestamptz IS NULL OR (created_at,id) < ($2,$3))

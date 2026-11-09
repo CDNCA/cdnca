@@ -93,7 +93,7 @@ read_contract() {
 
 write_sbom() {
   perl -MJSON::PP -MMIME::Base64 -MDigest::SHA=sha256_hex -e '
-    my ($output, $created, $namespace, $version, $artifact, @toolset) = @ARGV;
+    my ($output, $created, $namespace, $version, $artifact, $helper, @toolset) = @ARGV;
     # The packaging scripts the release signs through this SBOM; installed nodes
     # refresh their /usr/libexec toolset from them after an upgrade. SPDX 2.3
     # has no file content field and allows no extension properties, so each
@@ -119,6 +119,23 @@ write_sbom() {
         fileName => "packaging/scripts/$name.sh",
       };
     }
+    # The root packaging helper the same way: installed nodes replace
+    # /usr/libexec/cdnca-edge-agent-helper with these bytes after an upgrade.
+    open my $helper_stream, "<:raw", $helper or exit 1;
+    my $helper_content = do { local $/; <$helper_stream> };
+    close $helper_stream or exit 1;
+    exit 1 unless length($helper_content) > 0;
+    my $helper_file = {
+      SPDXID => "SPDXRef-File-packaging-helper",
+      annotations => [{
+        annotationDate => $created,
+        annotationType => "OTHER",
+        annotator => "Tool: cdnca-edge-release-build-v1",
+        comment => "cdnca.packaging-helper/v1 base64:" . encode_base64($helper_content, ""),
+      }],
+      checksums => [{algorithm => "SHA256", checksumValue => sha256_hex($helper_content)}],
+      fileName => "packaging/bin/cdnca-edge-agent-helper",
+    };
     my $document = {
       SPDXID => "SPDXRef-DOCUMENT",
       creationInfo => {created => $created, creators => ["Tool: cdnca-edge-release-build-v1"]},
@@ -128,7 +145,7 @@ write_sbom() {
         SPDXID => "SPDXRef-File-edge-agent",
         checksums => [{algorithm => "SHA256", checksumValue => $artifact}],
         fileName => "edge-agent",
-      }, @toolset_files],
+      }, @toolset_files, $helper_file],
       name => "cdnca-edge-agent-$version",
       spdxVersion => "SPDX-2.3",
     };
@@ -339,6 +356,24 @@ if [ "${goarch}" = "${native_goarch}" ]; then
   verify_version_output "${version}" "${build_id}" <<<"${version_output}" || fail 'binary version output mismatch'
 fi
 
+# Root packaging helper: never obfuscated, the same flags stage1 builds it
+# with. Kept out of the published output (contract output_files); the SBOM
+# carries it so upgrades can refresh installed helpers.
+helper_binary="${work}/cdnca-edge-agent-helper"
+(
+  cd -- "${source_root}/agents/edge-agent"
+  env -u GOENV -u GOFLAGS \
+    LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH="${source_date_epoch}" GOTOOLCHAIN=local GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH="${goarch}" \
+    "${go_binary}" build -buildvcs=false -mod=readonly -trimpath -ldflags '-s -w -buildid=' -o "${helper_binary}" ./packaging/helper/cmd/cdnca-edge-agent-helper
+) || fail 'helper build failed'
+perl -e '
+  my ($path,$machine)=@ARGV;
+  open my $in, "<:raw", $path or exit 1;
+  read($in, my $header, 20) == 20 or exit 1;
+  exit 1 unless substr($header,0,7) eq "\x7fELF\x02\x01\x01";
+  exit 1 unless unpack("v", substr($header,18,2)) == $machine;
+' "${helper_binary}" "${elf_machine}" || fail 'helper is not the expected Linux ELF'
+
 artifact_sha=$(sha256_file "${binary}")
 artifact_size=$(wc -c <"${binary}" | tr -d ' ')
 source_sha=$(sha256_file "${source_manifest}")
@@ -351,7 +386,7 @@ for toolset_name in lib install preflight rollback uninstall upgrade; do
   toolset_path=${source_root}/agents/edge-agent/packaging/scripts/${toolset_name}.sh
   toolset_digests+=("${toolset_name}" "$(sha256_file "${toolset_path}")" "${toolset_path}")
 done
-write_sbom "${sbom}" "${created}" "${namespace}" "${version}" "${artifact_sha}" "${toolset_digests[@]}" || fail 'write SPDX SBOM'
+write_sbom "${sbom}" "${created}" "${namespace}" "${version}" "${artifact_sha}" "${helper_binary}" "${toolset_digests[@]}" || fail 'write SPDX SBOM'
 sbom_sha=$(sha256_file "${sbom}")
 provenance="${publish}/edge-agent.provenance.json"
 write_provenance "${provenance}" "${arch}" "${artifact_sha}" "${artifact_size}" "${build_id}" \

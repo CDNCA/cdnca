@@ -233,6 +233,16 @@
       {
        "name": "replayed",
        "type": "boolean"
+      },
+      {
+       "name": "key_envelope_oversized_node_ids",
+       "type": "array<string(uuid)>",
+       "description": "Stored on the publication for every channel (manual, automatic, system republication, sold package, system configuration); publish, replay, list and detail return the same list. Requested nodes left out of this release: their Agent predates SITE_SELECTION (capability 82) and the key envelope exceeds the 4096 bytes it accepts. They keep their previous configuration, so websites withheld and forwards deleted by this release still serve there until they upgrade to a version with capability 82, after which the release is redelivered automatically. Sorted; omitted when none (also on publications made before this list was stored)."
+      },
+      {
+       "name": "site_selection_unsupported_node_ids",
+       "type": "array<string(uuid)>",
+       "description": "Stored on the publication for every channel (manual, automatic, system republication, sold package, system configuration); publish, replay, list and detail return the same list. Target nodes without SITE_SELECTION that serve none of the line groups of some website of the release: they still receive and serve every website of the scope. Sorted; omitted when none."
       }
      ]
     },
@@ -351,6 +361,16 @@
       {
        "name": "replayed",
        "type": "boolean"
+      },
+      {
+       "name": "key_envelope_oversized_node_ids",
+       "type": "array<string(uuid)>",
+       "description": "Stored on the publication for every channel (manual, automatic, system republication, sold package, system configuration); publish, replay, list and detail return the same list. Requested nodes left out of this release: their Agent predates SITE_SELECTION (capability 82) and the key envelope exceeds the 4096 bytes it accepts. They keep their previous configuration, so websites withheld and forwards deleted by this release still serve there until they upgrade to a version with capability 82, after which the release is redelivered automatically. Sorted; omitted when none (also on publications made before this list was stored)."
+      },
+      {
+       "name": "site_selection_unsupported_node_ids",
+       "type": "array<string(uuid)>",
+       "description": "Stored on the publication for every channel (manual, automatic, system republication, sold package, system configuration); publish, replay, list and detail return the same list. Target nodes without SITE_SELECTION that serve none of the line groups of some website of the release: they still receive and serve every website of the scope. Sorted; omitted when none."
       }
      ]
     },

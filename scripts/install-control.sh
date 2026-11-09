@@ -2710,6 +2710,42 @@ download_verified() {
   return 1
 }
 
+# fetch_with_retry LABEL CURL-COMMAND...: limited retries for third-party
+# downloads (GitHub releases). The command is curl, optionally behind
+# progress_download, and must write the body with -o/--output; its TLS options
+# are kept as given on every attempt. Up to 4 attempts, 2/5/10 s apart, only for
+# network errors (DNS, connect, TLS handshake, timeout, reset) and HTTP 5xx.
+# HTTP 4xx and other curl errors (file too large, write error) fail at once;
+# the caller checks the content afterwards and that check never retries.
+FETCH_RETRY_DELAYS=(2 5 10)
+fetch_with_retry() {
+  local label=$1 attempt=1 status code
+  shift
+  while :; do
+    status=0
+    code=$("$@" --write-out '%{http_code}') || status=$?
+    if [ "$status" -eq 0 ]; then
+      [ "$attempt" -eq 1 ] || log "$(msg "$label 第 $attempt 次下载成功" "$label downloaded on attempt $attempt")"
+      return 0
+    fi
+    case "$code" in
+      4[0-9][0-9]) warn "$(msg "$label 下载失败（HTTP $code），不重试" "$label download failed (HTTP $code); not retried")"; return "$status" ;;
+      5[0-9][0-9]) ;;
+      *) case "$status" in
+           6|7|16|18|28|35|52|55|56|92) ;;
+           *) warn "$(msg "$label 下载失败（curl 退出码 $status），不是网络错误，不重试" "$label download failed (curl exit $status); not a network error, not retried")"; return "$status" ;;
+         esac ;;
+    esac
+    if [ "$attempt" -ge 4 ]; then
+      warn "$(msg "$label 连续 $attempt 次下载失败（最后一次 curl 退出码 $status，HTTP ${code:-000}），放弃" "$label download failed $attempt times (last curl exit $status, HTTP ${code:-000}); giving up")"
+      return "$status"
+    fi
+    warn "$(msg "$label 第 $attempt 次下载失败（curl 退出码 $status，HTTP ${code:-000}），${FETCH_RETRY_DELAYS[$((attempt - 1))]} 秒后重试" "$label download attempt $attempt failed (curl exit $status, HTTP ${code:-000}); retrying in ${FETCH_RETRY_DELAYS[$((attempt - 1))]}s")"
+    sleep "${FETCH_RETRY_DELAYS[$((attempt - 1))]}"
+    attempt=$((attempt + 1))
+  done
+}
+
 download_json_verified() {
   local primary=$1 fallback=$2 output=$3 expression=$4 candidate index
   local -a urls=("$primary")
@@ -3228,8 +3264,9 @@ configure_runtime_dependencies() {
     progress_run "$(msg '初始化 ClickHouse' 'Initialise ClickHouse')" python3 -I -B "$runtime/configure-clickhouse.py" install --migrations "$NATIVE_SUPPORT/infra/clickhouse/migrations"
   fi
   url=$(jq -er '.archive_url | select(startswith("https://"))' "$runtime/rustfs-1.0.1.json")
-  progress_download RustFS curl --proto '=https' --proto-redir '=https' -fL --connect-timeout 10 --max-time 600 --max-filesize 300000000 \
-    --retry 1 --output "$archive" "$url"
+  # Third-party (GitHub release): limited retries on network errors; install-rustfs.py pins the ZIP.
+  fetch_with_retry RustFS progress_download RustFS curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fL --connect-timeout 10 \
+    --max-time 600 --max-filesize 300000000 --output "$archive" "$url"
   # The signed helper pins both the ZIP and the binary, and never resets state.
   if [ -e /etc/cdnca-objectstore ] || [ -L /etc/cdnca-objectstore ]; then
     python3 -I -B "$runtime/install-rustfs.py" preflight --archive "$archive"
@@ -3354,9 +3391,16 @@ download_nats_binaries() {
   install -m 0644 "$NATIVE_SUPPORT/NATS-LICENSE" "$CONFIG_DIR/NATS-LICENSE"
   if [ ! -x "$NATS_CLI_BIN" ]; then
     log 'downloading NATS CLI'
-    download_verified "$NATS_CLI_URL" "$NATS_CLI_URL" "$NATS_CLI_SHA256_URL" "$NATS_CLI_SHA256_URL" \
-      "${TEMP_DIR}/nats-cli.zip" "nats-${NATS_CLI_VERSION}-linux-${architecture}.zip" 'NATS CLI'
+    # Third-party (GitHub release, one source): limited retries on network errors; the checksum never retries.
+    local sums="${TEMP_DIR}/nats-cli-SHA256SUMS" sum
+    fetch_with_retry 'NATS CLI' progress_download 'NATS CLI' curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fL \
+      --connect-timeout 10 --max-time 600 --max-filesize 1073741824 --output "${TEMP_DIR}/nats-cli.zip" "$NATS_CLI_URL"
     assert_not_html "${TEMP_DIR}/nats-cli.zip" 'NATS CLI'
+    fetch_with_retry 'NATS CLI SHA256SUMS' curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fL \
+      --connect-timeout 10 --max-time 60 --max-filesize 1048576 --output "$sums" "$NATS_CLI_SHA256_URL"
+    sum=$(awk -v name="nats-${NATS_CLI_VERSION}-linux-${architecture}.zip" '$2 == name || $2 == "./" name {print $1; exit}' "$sums")
+    [[ "$sum" =~ ^[[:xdigit:]]{64}$ ]] && [ "$(sha256sum "${TEMP_DIR}/nats-cli.zip" | awk '{print $1}')" = "$sum" ] ||
+      fail "$(msg 'NATS CLI 校验和不符' 'NATS CLI checksum mismatch')"
     mkdir -p "${TEMP_DIR}/nats-cli"
     unzip -q "${TEMP_DIR}/nats-cli.zip" -d "${TEMP_DIR}/nats-cli"
     binary=$(find "${TEMP_DIR}/nats-cli" -type f -name nats -perm -u+x -print -quit)

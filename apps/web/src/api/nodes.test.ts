@@ -126,6 +126,20 @@ describe('nodesApi.get', () => {
     await expect(nodesApi.get('node-detail-token', nodeID)).resolves.toEqual(withNative)
   })
 
+  it('accepts the packaging toolset report of the latest heartbeat', async () => {
+    for (const toolset of [
+      { toolset_refresh_status: 'none', toolset_scripts_sha256: 'a'.repeat(64), toolset_helper_sha256: 'b'.repeat(64) },
+      { toolset_refresh_status: 'unknown' },
+      { toolset_refresh_status: 'ok', toolset_refresh_version: '1.0.35', toolset_refreshed_at: '2026-11-09T04:00:00Z' },
+      { toolset_refresh_status: 'ok', toolset_refresh_version: '1.0.36', toolset_refreshed_at: '2026-11-09T04:00:00Z',
+        toolset_helper_status: 'failed', toolset_helper_reason: 'transient unit could not replace the packaging helper' },
+    ]) {
+      const withToolset = { ...inventory, presence: { ...inventory.presence, ...toolset } }
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(withToolset))
+      await expect(nodesApi.get('node-detail-token', nodeID)).resolves.toEqual(withToolset)
+    }
+  })
+
   it('rejects an invalid node identifier before making a request', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
 
@@ -178,6 +192,11 @@ describe('nodesApi.get', () => {
     { ...inventory, presence: { ...inventory.presence, native_runtime_state: 'switched', native_runtime_release: 'A'.repeat(64) } },
     { ...inventory, presence: { ...inventory.presence, native_runtime_state: 'switched', native_runtime_error_code: 'RUNTIME_SWITCH_FAILED' } },
     { ...inventory, presence: { ...inventory.presence, native_runtime_state: 'rolled_back', native_runtime_error_code: 'bad' } },
+    { ...inventory, presence: { ...inventory.presence, toolset_refresh_status: 'done' } },
+    { ...inventory, presence: { ...inventory.presence, toolset_refresh_status: 'ok' } },
+    { ...inventory, presence: { ...inventory.presence, toolset_refresh_status: 'none', toolset_refresh_version: '1.0.36' } },
+    { ...inventory, presence: { ...inventory.presence, toolset_helper_sha256: 'b'.repeat(64) } },
+    { ...inventory, presence: { ...inventory.presence, toolset_refresh_status: 'none', toolset_scripts_sha256: 'XYZ' } },
   ])('rejects malformed inventory response %#', async (invalid) => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(invalid))
 

@@ -42,6 +42,10 @@ export interface AdminSitePublication extends PublicationBase {
   artifact_sha256: string
   target: AdminPublicationTarget
   replayed?: boolean
+  /** Fresh publish only: nodes left out, their old configuration still in effect. */
+  key_envelope_oversized_node_ids?: string[]
+  /** Fresh publish only: nodes without SITE_SELECTION that still serve every website. */
+  site_selection_unsupported_node_ids?: string[]
 }
 
 /** A revoked module the scope's published release uses: pending republication. */
@@ -369,6 +373,12 @@ function parseTenantPublication(value: unknown): TenantSitePublication {
   return { ...value, target: parseTenantTarget(value.target) } as unknown as TenantSitePublication
 }
 
+/** Absent, or 1–10 000 distinct canonical node UUIDs (AdminPublication *_node_ids). */
+function optionalNodeIDs(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.length >= 1 && value.length <= 10_000 &&
+    value.every(canonicalUUID) && new Set(value).size === value.length)
+}
+
 function parseAdminPublication(
   value: unknown,
   expectedScopeID?: string,
@@ -378,7 +388,10 @@ function parseAdminPublication(
     'id', 'configuration_scope_id', 'source_revision', 'config_version_id', 'rollout_id',
     'canonical_source_sha256', 'artifact_sha256', 'target', 'node_count', 'created_at',
   ]
-  if (!record(value) || !exactKeys(value, required, ['replayed']) || !canonicalUUID(value.id) ||
+  if (!record(value) || !exactKeys(value, required,
+    ['replayed', 'key_envelope_oversized_node_ids', 'site_selection_unsupported_node_ids']) || !canonicalUUID(value.id) ||
+    !optionalNodeIDs(value.key_envelope_oversized_node_ids) ||
+    !optionalNodeIDs(value.site_selection_unsupported_node_ids) ||
     !canonicalUUID(value.configuration_scope_id) || !uint(value.source_revision, 1) ||
     !canonicalUUID(value.config_version_id) || !canonicalUUID(value.rollout_id) ||
     !sha256(value.canonical_source_sha256) || !sha256(value.artifact_sha256) ||

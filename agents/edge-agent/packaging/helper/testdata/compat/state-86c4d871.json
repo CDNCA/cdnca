@@ -1,0 +1,300 @@
+{
+ "package_private": "pL/PTxdY1HxOq14HQ3M9Rer5zp8SGWEh7ONAubu+AE8b4Cfjxh+6T06iTznhaI2oWtOqeAZ6LkbSGJeep8KbVQ==",
+ "receipt_key_id": "helper-compat-old",
+ "baseline": {
+  "schema_version": 1,
+  "installer_transaction_id": "current-9df940913f53298eb7be654fc9c69997",
+  "release_sequence": 1,
+  "artifact_sha256": "85a247599bde78751b3bce2b7fd8f963433b9d855a3764eda6b79fefe75952c4",
+  "current_version": "1.0.0",
+  "status": "active",
+  "issued_at": "2026-07-28T04:00:00Z",
+  "signature": {
+   "key_id": "helper-compat-old",
+   "value": "UUy9BXzt4lLoodEVJso7hwgxIc1bX5CYx+dUJDB/ZLAF/gOHYedhCMVHbUtLpfakmuA0ZxAXfBbH2CEuAwNzAg"
+  }
+ },
+ "v2_active": {
+  "schema_version": 1,
+  "installer_transaction_id": "txn-compat-v2",
+  "release_sequence": 2,
+  "artifact_sha256": "e873fcd5feb414966a184da1cf2b99808a4543309194537cbbda5593efa19be2",
+  "current_version": "1.0.1",
+  "previous_version": "1.0.0",
+  "status": "active",
+  "issued_at": "2026-07-28T04:00:00Z",
+  "signature": {
+   "key_id": "helper-compat-old",
+   "value": "AFvyGXUrjWvp0XdJB+wEbYlNPv1WNXqMM/Ac9GJGqChPAxL6wfl2bao3wb8KJBDwpOLbhWwESmTX9jrklo9bBw"
+  }
+ },
+ "v3_active": {
+  "schema_version": 2,
+  "installer_transaction_id": "txn-compat-v3",
+  "execution_sequence": 3,
+  "release_sequence": 3,
+  "artifact_sha256": "bc22ccc76869613f01ae4678219092f965e25c282dcbb399e5dcef5a95a243de",
+  "current_version": "1.0.2",
+  "previous_version": "1.0.1",
+  "status": "active",
+  "issued_at": "2026-07-28T04:00:00Z",
+  "signature": {
+   "key_id": "helper-compat-old",
+   "value": "2dueM9w2NVMtIaY5SlUdbJIQaD04eggjaaaL6CXGN3VuF6oclSmc3/ky4DzBkc9ZlXHRIl+UEzc3gND++TmfDA"
+  }
+ },
+ "rolled_back": {
+  "schema_version": 2,
+  "installer_transaction_id": "txn-compat-v3",
+  "execution_sequence": 3,
+  "release_sequence": 3,
+  "artifact_sha256": "bc22ccc76869613f01ae4678219092f965e25c282dcbb399e5dcef5a95a243de",
+  "current_version": "1.0.1",
+  "previous_version": "1.0.2",
+  "status": "rolled_back",
+  "issued_at": "2026-07-28T04:00:00Z",
+  "signature": {
+   "key_id": "helper-compat-old",
+   "value": "u2+JO3KMShRI12gGri4jPJI7DNwVYxWDollRB7IkMn4tRJ46p5iXyuuDVhC8/kBRzTCleEVj6ub+kHFQ6UOuCg"
+  }
+ },
+ "entries": [
+  {
+   "path": "etc",
+   "kind": "dir",
+   "mode": 448
+  },
+  {
+   "path": "etc/helper-receipt-public.json",
+   "kind": "file",
+   "mode": 288,
+   "content": "eyJzY2hlbWFfdmVyc2lvbiI6MSwia2V5X2lkIjoiaGVscGVyLWNvbXBhdC1vbGQiLCJwdWJsaWNfa2V5IjoicG1sS2VTWC9FNVBoZnRaeGRhREV5WlZWNHlZRGpySmVJdnkrN1QzRFBudyJ9"
+  },
+  {
+   "path": "helper-state",
+   "kind": "dir",
+   "mode": 448
+  },
+  {
+   "path": "helper-state/current.json",
+   "kind": "file",
+   "mode": 384,
+   "content": "eyJzY2hlbWFfdmVyc2lvbiI6MSwibWFuaWZlc3Rfc2hhMjU2IjoiMTk3N2EwNTczZTcxOWZkMGQ5MDNhNTUzZmExYzkzM2Y1ZDMxMDE1NWEwZjIyYTUwZjY5NDE2MzBhNzlhODRhYSIsInJlY2VpcHQiOnsic2NoZW1hX3ZlcnNpb24iOjIsImluc3RhbGxlcl90cmFuc2FjdGlvbl9pZCI6ImN1cnJlbnQtNjU4Y2JmY2U5MTQ1ZTY0MzI1ZWU3MDU4MjRlZTY2MDkiLCJleGVjdXRpb25fc2VxdWVuY2UiOjMsInJlbGVhc2Vfc2VxdWVuY2UiOjMsImFydGlmYWN0X3NoYTI1NiI6ImU4NzNmY2Q1ZmViNDE0OTY2YTE4NGRhMWNmMmI5OTgwOGE0NTQzMzA5MTk0NTM3Y2JiZGE1NTkzZWZhMTliZTIiLCJjdXJyZW50X3ZlcnNpb24iOiIxLjAuMSIsInByZXZpb3VzX3ZlcnNpb24iOiIxLjAuMiIsInN0YXR1cyI6ImFjdGl2ZSIsImlzc3VlZF9hdCI6IjIwMjYtMDctMjhUMDQ6MDA6MDBaIiwic2lnbmF0dXJlIjp7ImtleV9pZCI6ImhlbHBlci1jb21wYXQtb2xkIiwidmFsdWUiOiJYeCsyMDgzNjNIbm9jMWxUUzRlRzY1UzF6TVVKWHduZXZZTi81ZlRUVno5Nk4zZ3kvKzJVckJhc3QxamxDSE9jZzYxZjliYk0yd3JtMGp5Wi84V1JEdyJ9fX0="
+  },
+  {
+   "path": "helper-state/journal-txn-compat-v2.json",
+   "kind": "file",
+   "mode": 384,
+   "content": "eyJzY2hlbWFfdmVyc2lvbiI6MiwidHJhbnNhY3Rpb25faWQiOiJ0eG4tY29tcGF0LXYyIiwicGhhc2UiOiJhY3RpdmUiLCJpbnN0YWxsX3BheWxvYWRfc2hhMjU2IjoiNzQ5NDllY2ZiMWY0YjFjY2QyNjgyODc0YzQwODQ2NDYzZGFhMTQ3YjVlMGZhNGVjZDgzM2QwMWVjNTA4Yjk2ZiIsInJlbGVhc2Vfc2VxdWVuY2UiOjIsIm91dGVyX2FydGlmYWN0X3NoYTI1NiI6ImU4NzNmY2Q1ZmViNDE0OTY2YTE4NGRhMWNmMmI5OTgwOGE0NTQzMzA5MTk0NTM3Y2JiZGE1NTkzZWZhMTliZTIiLCJtYW5pZmVzdF9zaGEyNTYiOiIxOTc3YTA1NzNlNzE5ZmQwZDkwM2E1NTNmYTFjOTMzZjVkMzEwMTU1YTBmMjJhNTBmNjk0MTYzMGE3OWE4NGFhIiwiZXhlY3V0YWJsZV9zaGEyNTYiOiJiZDgwN2VhOTU0NjMzZDViMWZmNGEzMWMzNGE2N2FhMmFkMDljNzhkNjUzM2M0MThjMjQ0MTg3NDJkMTFlYTcwIiwic2JvbV9zaGEyNTYiOiI3YzU3MDJhM2YxZWRiM2MyYzllYmRiOTQ5NTJlYWVmNDA1ZmY2MWIxNzM4OTM3YTZkMDQ5ZWZhYmRlZTk2MjAwIiwicHJldmlvdXNfdmVyc2lvbiI6IjEuMC4wIiwidGFyZ2V0X3ZlcnNpb24iOiIxLjAuMSIsInByZXZpb3VzX3BoeXNpY2FsX3JlbGVhc2Vfc2VxdWVuY2UiOjEsInByZXZpb3VzX21hbmlmZXN0X3NoYTI1NiI6IjEyZWZkNjYyZDc0NjRmYzMwYTczOWZjZDI4NzZlZjUwN2NmMjFhMTYzNmJiMzY2NmE2MmRlODAyYTUzYTcyOTciLCJwcmV2aW91c19yZWNlaXB0Ijp7InNjaGVtYV92ZXJzaW9uIjoxLCJpbnN0YWxsZXJfdHJhbnNhY3Rpb25faWQiOiJjdXJyZW50LTlkZjk0MDkxM2Y1MzI5OGViN2JlNjU0ZmM5YzY5OTk3IiwicmVsZWFzZV9zZXF1ZW5jZSI6MSwiYXJ0aWZhY3Rfc2hhMjU2IjoiODVhMjQ3NTk5YmRlNzg3NTFiM2JjZTJiN2ZkOGY5NjM0MzNiOWQ4NTVhMzc2NGVkYTZiNzlmZWZlNzU5NTJjNCIsImN1cnJlbnRfdmVyc2lvbiI6IjEuMC4wIiwic3RhdHVzIjoiYWN0aXZlIiwiaXNzdWVkX2F0IjoiMjAyNi0wNy0yOFQwNDowMDowMFoiLCJzaWduYXR1cmUiOnsia2V5X2lkIjoiaGVscGVyLWNvbXBhdC1vbGQiLCJ2YWx1ZSI6IlVVeTlCWHp0NGxMb29kRVZKc283aHdneEljMWJYNUNZeCtkVUpEQi9aTEFGL2dPSFllZGhDTVZIYlV0THBmYWttdUEwWnhBWGZCYkgyQ0V1QXdOekFnIn19LCJhY3RpdmVfcmVjZWlwdCI6eyJzY2hlbWFfdmVyc2lvbiI6MSwiaW5zdGFsbGVyX3RyYW5zYWN0aW9uX2lkIjoidHhuLWNvbXBhdC12MiIsInJlbGVhc2Vfc2VxdWVuY2UiOjIsImFydGlmYWN0X3NoYTI1NiI6ImU4NzNmY2Q1ZmViNDE0OTY2YTE4NGRhMWNmMmI5OTgwOGE0NTQzMzA5MTk0NTM3Y2JiZGE1NTkzZWZhMTliZTIiLCJjdXJyZW50X3ZlcnNpb24iOiIxLjAuMSIsInByZXZpb3VzX3ZlcnNpb24iOiIxLjAuMCIsInN0YXR1cyI6ImFjdGl2ZSIsImlzc3VlZF9hdCI6IjIwMjYtMDctMjhUMDQ6MDA6MDBaIiwic2lnbmF0dXJlIjp7ImtleV9pZCI6ImhlbHBlci1jb21wYXQtb2xkIiwidmFsdWUiOiJBRnZ5R1hVcmpXdnAwWGRKQit3RWJZbE5QdjFXTlhxTU0vQWM5R0pHcUNoUEF4TDZ3ZmwyYmFvM3diOEtKQkR3cE9MYmhXd0VTbVRYOWpya2xvOWJCdyJ9fX0="
+  },
+  {
+   "path": "helper-state/journal-txn-compat-v3.json",
+   "kind": "file",
+   "mode": 384,
+   "content": "eyJzY2hlbWFfdmVyc2lvbiI6MywidHJhbnNhY3Rpb25faWQiOiJ0eG4tY29tcGF0LXYzIiwicGhhc2UiOiJyb2xsZWRfYmFjayIsImluc3RhbGxfcGF5bG9hZF9zaGEyNTYiOiIyM2Q2NDk1ZjQwZTM0OTBhMTU0NWI0ODgwMzI4NjFiMzRhOGIxNjcwZDRjNTMzOWRiN2NhYTFmN2U4NWVlNjA0Iiwicm9sbGJhY2tfcGF5bG9hZF9zaGEyNTYiOiIyOTYyMTFmMDVmYWEwOTU5MzYzN2U3ZmYyNzZiNWY4NzZhYjY5MzdjYTViZTJhNThmZjc4NzYzMjg3YzRkMWE5IiwiZXhlY3V0aW9uX3NlcXVlbmNlIjozLCJyZWxlYXNlX3NlcXVlbmNlIjozLCJhY3Rpb24iOiJ1cGdyYWRlIiwib3V0ZXJfYXJ0aWZhY3Rfc2hhMjU2IjoiYmMyMmNjYzc2ODY5NjEzZjAxYWU0Njc4MjE5MDkyZjk2NWUyNWMyODJkY2JiMzk5ZTVkY2VmNWE5NWEyNDNkZSIsIm1hbmlmZXN0X3NoYTI1NiI6IjE0NDlkZjkxYmIxOTRlNjljZWNhOWI4OWU0MDUxM2I1Nzc4ZGQyYWVmODliMTZjZGY0YzY1MzU5NTM4YzZhOWQiLCJleGVjdXRhYmxlX3NoYTI1NiI6IjE2ZWNmOGJhYzkzMGMyN2FiYWM4NGU3NTU1MTZhYjg2ZjcxMmQ2Y2I3NzQ3MWYxZjc0NjIxODY1NTYzMzBiOGMiLCJzYm9tX3NoYTI1NiI6IjFiNTYyNzcxOGM2MzRkMGNlNzA1M2U1ZjAzNjVhODI1NGRhZTM1NmQzYmIyYjVjMTU2ZjJlMDZjMGNjZDY2NGUiLCJwcmV2aW91c192ZXJzaW9uIjoiMS4wLjEiLCJ0YXJnZXRfdmVyc2lvbiI6IjEuMC4yIiwicHJldmlvdXNfcGh5c2ljYWxfcmVsZWFzZV9zZXF1ZW5jZSI6MiwicHJldmlvdXNfbWFuaWZlc3Rfc2hhMjU2IjoiMTk3N2EwNTczZTcxOWZkMGQ5MDNhNTUzZmExYzkzM2Y1ZDMxMDE1NWEwZjIyYTUwZjY5NDE2MzBhNzlhODRhYSIsInByZXZpb3VzX3JlY2VpcHQiOnsic2NoZW1hX3ZlcnNpb24iOjEsImluc3RhbGxlcl90cmFuc2FjdGlvbl9pZCI6InR4bi1jb21wYXQtdjIiLCJyZWxlYXNlX3NlcXVlbmNlIjoyLCJhcnRpZmFjdF9zaGEyNTYiOiJlODczZmNkNWZlYjQxNDk2NmExODRkYTFjZjJiOTk4MDhhNDU0MzMwOTE5NDUzN2NiYmRhNTU5M2VmYTE5YmUyIiwiY3VycmVudF92ZXJzaW9uIjoiMS4wLjEiLCJwcmV2aW91c192ZXJzaW9uIjoiMS4wLjAiLCJzdGF0dXMiOiJhY3RpdmUiLCJpc3N1ZWRfYXQiOiIyMDI2LTA3LTI4VDA0OjAwOjAwWiIsInNpZ25hdHVyZSI6eyJrZXlfaWQiOiJoZWxwZXItY29tcGF0LW9sZCIsInZhbHVlIjoiQUZ2eUdYVXJqV3ZwMFhkSkIrd0ViWWxOUHYxV05YcU1NL0FjOUdKR3FDaFBBeEw2d2ZsMmJhbzN3YjhLSkJEd3BPTGJoV3dFU21UWDlqcmtsbzliQncifX0sImFjdGl2ZV9yZWNlaXB0Ijp7InNjaGVtYV92ZXJzaW9uIjoyLCJpbnN0YWxsZXJfdHJhbnNhY3Rpb25faWQiOiJ0eG4tY29tcGF0LXYzIiwiZXhlY3V0aW9uX3NlcXVlbmNlIjozLCJyZWxlYXNlX3NlcXVlbmNlIjozLCJhcnRpZmFjdF9zaGEyNTYiOiJiYzIyY2NjNzY4Njk2MTNmMDFhZTQ2NzgyMTkwOTJmOTY1ZTI1YzI4MmRjYmIzOTllNWRjZWY1YTk1YTI0M2RlIiwiY3VycmVudF92ZXJzaW9uIjoiMS4wLjIiLCJwcmV2aW91c192ZXJzaW9uIjoiMS4wLjEiLCJzdGF0dXMiOiJhY3RpdmUiLCJpc3N1ZWRfYXQiOiIyMDI2LTA3LTI4VDA0OjAwOjAwWiIsInNpZ25hdHVyZSI6eyJrZXlfaWQiOiJoZWxwZXItY29tcGF0LW9sZCIsInZhbHVlIjoiMmR1ZU05dzJOVk10SWFZNVNsVWRiSklRYUQwNGVnZ2phYWFMNkNYR04zVnVGNm9jbFNtYzMva3k0RHpCa2M5WmxYSFJJbCtVRXpjM2dORCsrVG1mREEifX0sInJvbGxiYWNrX3JlY2VpcHQiOnsic2NoZW1hX3ZlcnNpb24iOjIsImluc3RhbGxlcl90cmFuc2FjdGlvbl9pZCI6InR4bi1jb21wYXQtdjMiLCJleGVjdXRpb25fc2VxdWVuY2UiOjMsInJlbGVhc2Vfc2VxdWVuY2UiOjMsImFydGlmYWN0X3NoYTI1NiI6ImJjMjJjY2M3Njg2OTYxM2YwMWFlNDY3ODIxOTA5MmY5NjVlMjVjMjgyZGNiYjM5OWU1ZGNlZjVhOTVhMjQzZGUiLCJjdXJyZW50X3ZlcnNpb24iOiIxLjAuMSIsInByZXZpb3VzX3ZlcnNpb24iOiIxLjAuMiIsInN0YXR1cyI6InJvbGxlZF9iYWNrIiwiaXNzdWVkX2F0IjoiMjAyNi0wNy0yOFQwNDowMDowMFoiLCJzaWduYXR1cmUiOnsia2V5X2lkIjoiaGVscGVyLWNvbXBhdC1vbGQiLCJ2YWx1ZSI6InUyK0pPM0tNU2hSSTEyZ0dyaTRqUEpJN0ROd1ZZeFdEb2xsUkI3SWtNbjR0Uko0NnA1aVh5dXVEVmhDOC9rQlJ6VENsZUVWajZ1YitrSEZRNlVPdUNnIn19fQ=="
+  },
+  {
+   "path": "helper-state/receipt-key.json",
+   "kind": "file",
+   "mode": 256,
+   "content": "eyJzY2hlbWFfdmVyc2lvbiI6MSwia2V5X2lkIjoiaGVscGVyLWNvbXBhdC1vbGQiLCJwcml2YXRlX2tleSI6IjQ3ZWRXZ0kvc092OS9jdnVmWEFFcVVCRXd2YnEwaUcyOXRpZ2xqSWFUeXVtYVVwNUpmOFRrK0YrMW5GMW9NVEpsVlhqSmdPT3NsNGkvTDd0UGNNK2ZBIn0="
+  },
+  {
+   "path": "helper-state/transactions",
+   "kind": "dir",
+   "mode": 448
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v2",
+   "kind": "dir",
+   "mode": 448
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v2/edge-agent",
+   "kind": "file",
+   "mode": 320,
+   "content": "f0VMRi1jZG5jYS1lZGdlLWFnZW50LTEuMC4x"
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v2/edge-agent.spdx.json",
+   "kind": "file",
+   "mode": 256,
+   "content": "eyJzcGR4VmVyc2lvbiI6IlNQRFgtMi4zIiwibmFtZSI6ImVkZ2UtYWdlbnQtMS4wLjEifQ=="
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v2/manifest",
+   "kind": "file",
+   "mode": 256,
+   "content": "bWFuaWZlc3RfdmVyc2lvbj0yCnJlbGVhc2Vfc2VxdWVuY2U9Mgp2ZXJzaW9uPTEuMC4xCmFydGlmYWN0X3BhdGg9ZWRnZS1hZ2VudAphcnRpZmFjdF9zaGEyNTY9YmQ4MDdlYTk1NDYzM2Q1YjFmZjRhMzFjMzRhNjdhYTJhZDA5Yzc4ZDY1MzNjNDE4YzI0NDE4NzQyZDExZWE3MAphcnRpZmFjdF9zaXplPTI3CnNib21fcGF0aD1lZGdlLWFnZW50LnNwZHguanNvbgpzYm9tX3NoYTI1Nj03YzU3MDJhM2YxZWRiM2MyYzllYmRiOTQ5NTJlYWVmNDA1ZmY2MWIxNzM4OTM3YTZkMDQ5ZWZhYmRlZTk2MjAwCnNib21fc2l6ZT01Mgpvcz1saW51eAphcmNoPWFybTY0CnNvdXJjZV9yZXBvc2l0b3J5PWh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2NkbmNhCnNvdXJjZV9jb21taXQ9YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQpidWlsZF90aW1lPTIwMjYtMDctMjhUMDA6MDA6MDBaCm1pbmltdW1fY29udHJvbF9wcm90b2NvbD0xLjAKbWluaW11bV9hZ2VudF9wcm90b2NvbD0xLjAK"
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v2/manifest.sig",
+   "kind": "file",
+   "mode": 256,
+   "content": "aRJGi0V0Cz3c8iivPj8HG8jCJqC4vGx1RjcH44Tr58QKEGvr3xSx+H6ftuNNfyhug9UiNzaq3/xzmcRV9DQfBQ=="
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v3",
+   "kind": "dir",
+   "mode": 448
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v3/edge-agent",
+   "kind": "file",
+   "mode": 320,
+   "content": "f0VMRi1jZG5jYS1lZGdlLWFnZW50LTEuMC4y"
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v3/edge-agent.spdx.json",
+   "kind": "file",
+   "mode": 256,
+   "content": "eyJzcGR4VmVyc2lvbiI6IlNQRFgtMi4zIiwibmFtZSI6ImVkZ2UtYWdlbnQtMS4wLjIifQ=="
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v3/manifest",
+   "kind": "file",
+   "mode": 256,
+   "content": "bWFuaWZlc3RfdmVyc2lvbj0yCnJlbGVhc2Vfc2VxdWVuY2U9Mwp2ZXJzaW9uPTEuMC4yCmFydGlmYWN0X3BhdGg9ZWRnZS1hZ2VudAphcnRpZmFjdF9zaGEyNTY9MTZlY2Y4YmFjOTMwYzI3YWJhYzg0ZTc1NTUxNmFiODZmNzEyZDZjYjc3NDcxZjFmNzQ2MjE4NjU1NjMzMGI4YwphcnRpZmFjdF9zaXplPTI3CnNib21fcGF0aD1lZGdlLWFnZW50LnNwZHguanNvbgpzYm9tX3NoYTI1Nj0xYjU2Mjc3MThjNjM0ZDBjZTcwNTNlNWYwMzY1YTgyNTRkYWUzNTZkM2JiMmI1YzE1NmYyZTA2YzBjY2Q2NjRlCnNib21fc2l6ZT01Mgpvcz1saW51eAphcmNoPWFybTY0CnNvdXJjZV9yZXBvc2l0b3J5PWh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2NkbmNhCnNvdXJjZV9jb21taXQ9YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQpidWlsZF90aW1lPTIwMjYtMDctMjhUMDA6MDA6MDBaCm1pbmltdW1fY29udHJvbF9wcm90b2NvbD0xLjAKbWluaW11bV9hZ2VudF9wcm90b2NvbD0xLjAK"
+  },
+  {
+   "path": "helper-state/transactions/txn-compat-v3/manifest.sig",
+   "kind": "file",
+   "mode": 256,
+   "content": "EK1xzGBLtBHr0Ti51/6l/4ljLMhYUcLrxC6wjCpUUlZ3622fkOXmmj1xmrdkFdqQFv43M27uDY+1e0QqFQo+Dg=="
+  },
+  {
+   "path": "usr",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "usr/lib",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/current",
+   "kind": "symlink",
+   "mode": 493,
+   "target": "versions/1.0.1"
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.0",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.0/edge-agent",
+   "kind": "file",
+   "mode": 365,
+   "content": "f0VMRi1jZG5jYS1lZGdlLWFnZW50LTEuMC4w"
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.0/edge-agent.spdx.json",
+   "kind": "file",
+   "mode": 292,
+   "content": "eyJzcGR4VmVyc2lvbiI6IlNQRFgtMi4zIiwibmFtZSI6ImVkZ2UtYWdlbnQtMS4wLjAifQ=="
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.0/manifest",
+   "kind": "file",
+   "mode": 292,
+   "content": "bWFuaWZlc3RfdmVyc2lvbj0yCnJlbGVhc2Vfc2VxdWVuY2U9MQp2ZXJzaW9uPTEuMC4wCmFydGlmYWN0X3BhdGg9ZWRnZS1hZ2VudAphcnRpZmFjdF9zaGEyNTY9MTRkOTlkMzU0MGU2NzgzNjZmMDgzNDEyZTJkYmY5Y2JkMTI2NTgyZjcxZjE0MDJmNzBmZDQ1ZjIzNzM0MDYxZAphcnRpZmFjdF9zaXplPTI3CnNib21fcGF0aD1lZGdlLWFnZW50LnNwZHguanNvbgpzYm9tX3NoYTI1Nj05Yzc2YmM0NzU4ZjdmMTk2NzJjOWE4NzA0MjkxOTZmZWUwMzY0MWQzZGNlYjRhODdlN2ZiMDhmZmU5YjljYTc3CnNib21fc2l6ZT01Mgpvcz1saW51eAphcmNoPWFybTY0CnNvdXJjZV9yZXBvc2l0b3J5PWh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2NkbmNhCnNvdXJjZV9jb21taXQ9YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQpidWlsZF90aW1lPTIwMjYtMDctMjhUMDA6MDA6MDBaCm1pbmltdW1fY29udHJvbF9wcm90b2NvbD0xLjAKbWluaW11bV9hZ2VudF9wcm90b2NvbD0xLjAK"
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.0/manifest.sig",
+   "kind": "file",
+   "mode": 292,
+   "content": "4icaLIBcCv/kGrR3c3YQxBt9+jNSVy1xEDZSRGPas7p36LX1pS+JXnWiCmvd4PglvB/p0zEQaTC0+inQn8ZJDw=="
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.1",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.1/edge-agent",
+   "kind": "file",
+   "mode": 365,
+   "content": "f0VMRi1jZG5jYS1lZGdlLWFnZW50LTEuMC4x"
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.1/edge-agent.spdx.json",
+   "kind": "file",
+   "mode": 292,
+   "content": "eyJzcGR4VmVyc2lvbiI6IlNQRFgtMi4zIiwibmFtZSI6ImVkZ2UtYWdlbnQtMS4wLjEifQ=="
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.1/manifest",
+   "kind": "file",
+   "mode": 292,
+   "content": "bWFuaWZlc3RfdmVyc2lvbj0yCnJlbGVhc2Vfc2VxdWVuY2U9Mgp2ZXJzaW9uPTEuMC4xCmFydGlmYWN0X3BhdGg9ZWRnZS1hZ2VudAphcnRpZmFjdF9zaGEyNTY9YmQ4MDdlYTk1NDYzM2Q1YjFmZjRhMzFjMzRhNjdhYTJhZDA5Yzc4ZDY1MzNjNDE4YzI0NDE4NzQyZDExZWE3MAphcnRpZmFjdF9zaXplPTI3CnNib21fcGF0aD1lZGdlLWFnZW50LnNwZHguanNvbgpzYm9tX3NoYTI1Nj03YzU3MDJhM2YxZWRiM2MyYzllYmRiOTQ5NTJlYWVmNDA1ZmY2MWIxNzM4OTM3YTZkMDQ5ZWZhYmRlZTk2MjAwCnNib21fc2l6ZT01Mgpvcz1saW51eAphcmNoPWFybTY0CnNvdXJjZV9yZXBvc2l0b3J5PWh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2NkbmNhCnNvdXJjZV9jb21taXQ9YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQpidWlsZF90aW1lPTIwMjYtMDctMjhUMDA6MDA6MDBaCm1pbmltdW1fY29udHJvbF9wcm90b2NvbD0xLjAKbWluaW11bV9hZ2VudF9wcm90b2NvbD0xLjAK"
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.1/manifest.sig",
+   "kind": "file",
+   "mode": 292,
+   "content": "aRJGi0V0Cz3c8iivPj8HG8jCJqC4vGx1RjcH44Tr58QKEGvr3xSx+H6ftuNNfyhug9UiNzaq3/xzmcRV9DQfBQ=="
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.2",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.2/edge-agent",
+   "kind": "file",
+   "mode": 365,
+   "content": "f0VMRi1jZG5jYS1lZGdlLWFnZW50LTEuMC4y"
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.2/edge-agent.spdx.json",
+   "kind": "file",
+   "mode": 292,
+   "content": "eyJzcGR4VmVyc2lvbiI6IlNQRFgtMi4zIiwibmFtZSI6ImVkZ2UtYWdlbnQtMS4wLjIifQ=="
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.2/manifest",
+   "kind": "file",
+   "mode": 292,
+   "content": "bWFuaWZlc3RfdmVyc2lvbj0yCnJlbGVhc2Vfc2VxdWVuY2U9Mwp2ZXJzaW9uPTEuMC4yCmFydGlmYWN0X3BhdGg9ZWRnZS1hZ2VudAphcnRpZmFjdF9zaGEyNTY9MTZlY2Y4YmFjOTMwYzI3YWJhYzg0ZTc1NTUxNmFiODZmNzEyZDZjYjc3NDcxZjFmNzQ2MjE4NjU1NjMzMGI4YwphcnRpZmFjdF9zaXplPTI3CnNib21fcGF0aD1lZGdlLWFnZW50LnNwZHguanNvbgpzYm9tX3NoYTI1Nj0xYjU2Mjc3MThjNjM0ZDBjZTcwNTNlNWYwMzY1YTgyNTRkYWUzNTZkM2JiMmI1YzE1NmYyZTA2YzBjY2Q2NjRlCnNib21fc2l6ZT01Mgpvcz1saW51eAphcmNoPWFybTY0CnNvdXJjZV9yZXBvc2l0b3J5PWh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2NkbmNhCnNvdXJjZV9jb21taXQ9YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQpidWlsZF90aW1lPTIwMjYtMDctMjhUMDA6MDA6MDBaCm1pbmltdW1fY29udHJvbF9wcm90b2NvbD0xLjAKbWluaW11bV9hZ2VudF9wcm90b2NvbD0xLjAK"
+  },
+  {
+   "path": "usr/lib/cdnca-edge-agent/versions/1.0.2/manifest.sig",
+   "kind": "file",
+   "mode": 292,
+   "content": "EK1xzGBLtBHr0Ti51/6l/4ljLMhYUcLrxC6wjCpUUlZ3622fkOXmmj1xmrdkFdqQFv43M27uDY+1e0QqFQo+Dg=="
+  },
+  {
+   "path": "var",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "var/lib",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "var/lib/cdnca-edge-agent-packaging",
+   "kind": "dir",
+   "mode": 493
+  },
+  {
+   "path": "var/lib/cdnca-edge-agent-packaging/accepted-manifest",
+   "kind": "file",
+   "mode": 384,
+   "content": "bWFuaWZlc3RfdmVyc2lvbj0yCnJlbGVhc2Vfc2VxdWVuY2U9Mwp2ZXJzaW9uPTEuMC4yCmFydGlmYWN0X3BhdGg9ZWRnZS1hZ2VudAphcnRpZmFjdF9zaGEyNTY9MTZlY2Y4YmFjOTMwYzI3YWJhYzg0ZTc1NTUxNmFiODZmNzEyZDZjYjc3NDcxZjFmNzQ2MjE4NjU1NjMzMGI4YwphcnRpZmFjdF9zaXplPTI3CnNib21fcGF0aD1lZGdlLWFnZW50LnNwZHguanNvbgpzYm9tX3NoYTI1Nj0xYjU2Mjc3MThjNjM0ZDBjZTcwNTNlNWYwMzY1YTgyNTRkYWUzNTZkM2JiMmI1YzE1NmYyZTA2YzBjY2Q2NjRlCnNib21fc2l6ZT01Mgpvcz1saW51eAphcmNoPWFybTY0CnNvdXJjZV9yZXBvc2l0b3J5PWh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2NkbmNhCnNvdXJjZV9jb21taXQ9YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQpidWlsZF90aW1lPTIwMjYtMDctMjhUMDA6MDA6MDBaCm1pbmltdW1fY29udHJvbF9wcm90b2NvbD0xLjAKbWluaW11bV9hZ2VudF9wcm90b2NvbD0xLjAK"
+  }
+ ]
+}

@@ -61,7 +61,7 @@ func (h *siteObjectHarness) dynamicRoutingReleaseFor(t *testing.T, scopeID strin
 // (the only configuration release a node takes) with its key envelope sealed
 // to the recipient.
 func newSiteObjectRelease(t *testing.T, signingKey ed25519.PrivateKey, recipientKey []byte, recipientID string,
-	contentKey []byte, scopeID string, sites int, referenced []byte) *siteObjectTestRelease {
+	contentKey []byte, scopeID string, sites int, referenced []byte, keyEdits ...func(*siteobject.KeyDocument)) *siteObjectTestRelease {
 	t.Helper()
 	configID := uuid.NewString()
 	input := siteobject.BuildV2Input{
@@ -114,9 +114,13 @@ func newSiteObjectRelease(t *testing.T, signingKey ed25519.PrivateKey, recipient
 		DeadlineTime: timestamppb.New(time.Now().Add(time.Hour)),
 	}
 	release.artifacts[root.ArtifactId] = publication.RootBytes
-	keyPlaintext, err := siteobject.Encode(siteobject.KeyDocument{Schema: siteobject.KeySchema, ConfigurationScopeID: scopeID,
+	keyDocument := siteobject.KeyDocument{Schema: siteobject.KeySchema, ConfigurationScopeID: scopeID,
 		ConfigVersionID: configID, RootSHA256: publication.RootSHA256, KeyEpoch: 1, ContentKey: contentKey,
-		NodeRegion: "region-7"})
+		NodeRegion: "region-7"}
+	for _, edit := range keyEdits {
+		edit(&keyDocument)
+	}
+	keyPlaintext, err := siteobject.Encode(keyDocument)
 	if err != nil {
 		t.Fatal(err)
 	}

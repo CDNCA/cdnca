@@ -101,6 +101,15 @@ export interface NodePresence {
   native_runtime_release?: string
   native_runtime_previous_release?: string
   native_runtime_error_code?: string
+  // Capability 83: the packaging toolset of the latest heartbeat; all absent: not reported.
+  toolset_refresh_status?: NodeToolsetRefreshStatus
+  toolset_refresh_version?: string
+  toolset_refresh_reason?: string
+  toolset_refreshed_at?: string
+  toolset_helper_status?: NodeToolsetHelperStatus
+  toolset_helper_reason?: string
+  toolset_scripts_sha256?: string
+  toolset_helper_sha256?: string
 }
 
 export type NodeMarketProbeRole = 'probe_only' | 'join_market' | 'disabled'
@@ -120,6 +129,36 @@ export function nativeRuntimeSummary(presence: NodePresence, stateText: string, 
   }
   if (presence.native_runtime_error_code) parts.push(presence.native_runtime_error_code)
   return parts.join(' ')
+}
+
+export type NodeToolsetRefreshStatus = 'none' | 'unknown' | 'ok' | 'failed' | 'skipped'
+export type NodeToolsetHelperStatus = 'ok' | 'unchanged' | 'failed' | 'skipped'
+const toolsetRefreshStates = new Set<string>(['none', 'unknown', 'ok', 'failed', 'skipped'])
+const toolsetHelperStates = new Set<string>(['ok', 'unchanged', 'failed', 'skipped'])
+const toolsetDigestPattern = /^[0-9a-f]{64}$/
+const toolsetReasonPattern = /^[ -~]{1,200}$/
+
+// packagingToolset mirrors migration 647: a refresh status or nothing; a
+// record status (ok/failed/skipped) carries version and time.
+function packagingToolset(presence: Record<string, unknown>): boolean {
+  const status = presence.toolset_refresh_status
+  const optional = (value: unknown, pattern: RegExp) => value === undefined || (typeof value === 'string' && pattern.test(value))
+  if (status === undefined) {
+    return ['toolset_refresh_version', 'toolset_refresh_reason', 'toolset_refreshed_at', 'toolset_helper_status',
+      'toolset_helper_reason', 'toolset_scripts_sha256', 'toolset_helper_sha256'].every((key) => presence[key] === undefined)
+  }
+  if (!toolsetRefreshStates.has(status as string) || !optional(presence.toolset_scripts_sha256, toolsetDigestPattern) ||
+    !optional(presence.toolset_helper_sha256, toolsetDigestPattern) || !optional(presence.toolset_refresh_reason, toolsetReasonPattern) ||
+    !optional(presence.toolset_helper_reason, toolsetReasonPattern) ||
+    (presence.toolset_helper_status !== undefined && !toolsetHelperStates.has(presence.toolset_helper_status as string))) return false
+  const recorded = status === 'ok' || status === 'failed' || status === 'skipped'
+  if (!recorded) {
+    return presence.toolset_refresh_version === undefined && presence.toolset_refreshed_at === undefined &&
+      presence.toolset_refresh_reason === undefined && presence.toolset_helper_status === undefined && presence.toolset_helper_reason === undefined
+  }
+  return typeof presence.toolset_refresh_version === 'string' && presence.toolset_refresh_version.length > 0 &&
+    presence.toolset_refresh_version.length <= 128 && timestamp(presence.toolset_refreshed_at) &&
+    (presence.toolset_helper_status !== undefined || presence.toolset_helper_reason === undefined)
 }
 
 function nativeRuntime(presence: Record<string, unknown>): boolean {
@@ -145,6 +184,17 @@ export interface NodeInventoryItem extends NodeRecord {
   network_inventory?: NodeNetworkInventory
   /** Omitted when the node is in no market supply group (and by older servers). */
   market_supply_groups?: NodeMarketSupplyGroupRef[]
+  /** Tenants whose latest release left the node out (旧配置仍生效); omitted when none (and by older servers). */
+  stale_configurations?: NodeStaleConfiguration[]
+}
+
+/** A tenant release the node did not get: its Agent predates capability 82 and the key document did not fit. */
+export interface NodeStaleConfiguration {
+  scope_id: string
+  tenant_name: string
+  source_revision: number
+  reason: 'key_envelope_oversized'
+  left_out_at: string
 }
 
 export type NodeNetworkInventoryState = 'not_reported' | 'verified' | 'address_conflict' | 'peer_mismatch' |
@@ -1045,10 +1095,17 @@ function marketSupplyGroups(value: unknown): value is NodeMarketSupplyGroupRef[]
     typeof group.id === 'string' && uuidPattern.test(group.id) && boundedString(group.name, 1, 128))
 }
 
+function staleConfigurations(value: unknown): value is NodeStaleConfiguration[] {
+  return Array.isArray(value) && value.length > 0 && value.every((item) => record(item) &&
+    exactKeys(item, ['scope_id', 'tenant_name', 'source_revision', 'reason', 'left_out_at']) &&
+    typeof item.scope_id === 'string' && uuidPattern.test(item.scope_id) && typeof item.tenant_name === 'string' &&
+    positiveInteger(item.source_revision) && item.reason === 'key_envelope_oversized' && timestamp(item.left_out_at))
+}
+
 function inventoryItem(value: unknown): value is NodeInventoryItem {
   if (!record(value) || !exactKeys(value, [
     'id', 'display_id', 'name', 'description', 'region', 'admin_state', 'management_settings', 'revision', 'created_at', 'updated_at', 'presence',
-  ], ['ipv4', 'ipv6', 'network_inventory', 'market_supply_groups']) ||
+  ], ['ipv4', 'ipv6', 'network_inventory', 'market_supply_groups', 'stale_configurations']) ||
     typeof value.id !== 'string' || !uuidPattern.test(value.id) ||
     typeof value.display_id !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value.display_id) ||
     !boundedString(value.name, 1, 128) || !boundedString(value.description, 0, 1024) ||
@@ -1057,6 +1114,7 @@ function inventoryItem(value: unknown): value is NodeInventoryItem {
     (value.ipv6 !== undefined && !ipv6(value.ipv6)) ||
     (value.network_inventory !== undefined && !networkInventory(value.network_inventory, value)) ||
     (value.market_supply_groups !== undefined && !marketSupplyGroups(value.market_supply_groups)) ||
+    (value.stale_configurations !== undefined && !staleConfigurations(value.stale_configurations)) ||
     !adminStates.has(value.admin_state as NodeAdminState) || !managementSettings(value.management_settings) || !positiveInteger(value.revision) ||
     !timestamp(value.created_at) || !timestamp(value.updated_at) || !record(value.presence)) return false
 
@@ -1065,7 +1123,9 @@ function inventoryItem(value: unknown): value is NodeInventoryItem {
     'last_heartbeat_at', 'agent_version', 'session_epoch', 'heartbeat_sequence', 'projected_at', 'market_probe_role',
     'openresty_version', 'native_runtime_state', 'native_runtime_release', 'native_runtime_previous_release',
     'native_runtime_error_code',
-  ]) || !nativeRuntime(presence) || !presenceStates.has(presence.status as NodePresenceStatus) ||
+    'toolset_refresh_status', 'toolset_refresh_version', 'toolset_refresh_reason', 'toolset_refreshed_at',
+    'toolset_helper_status', 'toolset_helper_reason', 'toolset_scripts_sha256', 'toolset_helper_sha256',
+  ]) || !nativeRuntime(presence) || !packagingToolset(presence) || !presenceStates.has(presence.status as NodePresenceStatus) ||
     !projectionStates.has(presence.projection_freshness as NodeProjectionFreshness) ||
     !leaseSignals.has(presence.lease_signal as NodeLeaseSignal) ||
     (presence.last_heartbeat_at !== undefined && !timestamp(presence.last_heartbeat_at)) ||

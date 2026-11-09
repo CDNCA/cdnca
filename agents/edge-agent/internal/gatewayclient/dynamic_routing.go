@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/deployment"
@@ -261,17 +262,23 @@ func (c *Client) fetchDynamicRoutingRelease(ctx context.Context, gateway agentv1
 		return DynamicRoutingRelease{}, nil, nil, integrity(fmt.Errorf("v2 scope: %v", err))
 	}
 	indexBytes := len(rootWire)
-	var sites []string
+	var entries []siteobject.BucketEntry
 	for _, digest := range root.Buckets {
 		indexBytes += len(fetcher.plaintext[digest])
 		bucket, err := siteobject.ParseBucketV2(fetcher.plaintext[digest])
 		if err != nil || bucket.ConfigurationScopeID != root.ConfigurationScopeID || bucket.BucketCount != root.BucketCount {
 			return DynamicRoutingRelease{}, nil, nil, integrity(fmt.Errorf("v2 bucket: %v", err))
 		}
-		sites = append(sites, bucket.SiteDigests()...)
+		entries = append(entries, bucket.Sites...)
 	}
 	if indexBytes > siteobject.MaxRootIndexBytes {
 		return DynamicRoutingRelease{}, nil, nil, integrity(fmt.Errorf("root index of %d bytes", indexBytes))
+	}
+	// SITE_SELECTION: this node's key document names the websites none of
+	// whose line groups has it; their objects are not even fetched.
+	sites, err := SelectNodeSites(entries, key.WithheldSites)
+	if err != nil {
+		return DynamicRoutingRelease{}, nil, nil, integrity(err)
 	}
 	if err := fetcher.ensure(ctx, sites); err != nil {
 		return DynamicRoutingRelease{}, nil, nil, err
@@ -303,6 +310,45 @@ func (c *Client) fetchDynamicRoutingRelease(ctx context.Context, gateway agentv1
 	fetcher.stats.Duration = c.now().Sub(started)
 	c.recordSiteObjectStats(fetcher.stats)
 	return release, fetcher.referenced, fetcher.unstage, nil
+}
+
+// SelectNodeSites is the digests of the root's websites (bucket entries, in
+// bucket order) this node serves: all but those its key document withholds
+// (SITE_SELECTION v1, bit i = the i-th website in ascending site_id order).
+// A bitmap over another number of websites is refused: control derives it
+// from the same release.
+func SelectNodeSites(entries []siteobject.BucketEntry, withheld *siteobject.SiteBitmap) ([]string, error) {
+	if withheld == nil {
+		sites := make([]string, len(entries))
+		for index, entry := range entries {
+			sites[index] = entry.SHA256
+		}
+		return sites, nil
+	}
+	if withheld.Sites != len(entries) {
+		return nil, fmt.Errorf("site object key withholds websites of a root of %d websites, the release carries %d", withheld.Sites, len(entries))
+	}
+	ids := make([]string, len(entries))
+	for index, entry := range entries {
+		ids[index] = entry.SiteID
+	}
+	sort.Strings(ids)
+	skip := make(map[string]bool, withheld.Count())
+	for index, id := range ids {
+		if index > 0 && ids[index-1] == id {
+			return nil, fmt.Errorf("release carries website %s twice", id)
+		}
+		if withheld.Withheld(index) {
+			skip[id] = true
+		}
+	}
+	sites := make([]string, 0, len(entries)-len(skip))
+	for _, entry := range entries {
+		if !skip[entry.SiteID] {
+			sites = append(sites, entry.SHA256)
+		}
+	}
+	return sites, nil
 }
 
 // SelectNodeStreams is the scope's L4 forwards this node serves: the root's

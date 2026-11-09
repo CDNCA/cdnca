@@ -14,7 +14,10 @@ import (
 	"github.com/cdnca/cdnca/agents/edge-agent/packaging/helper"
 )
 
-const fixedAgentAccount = "cdnca-edge"
+const (
+	fixedAgentAccount = "cdnca-edge"
+	helperBinaryPath  = "/usr/libexec/cdnca-edge-agent-helper"
+)
 
 var (
 	errCommandUsage = errors.New("invalid helper command")
@@ -123,7 +126,15 @@ func serveProduction(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return helper.Serve(ctx, listener, service)
+	// An upgrade or toolset refresh replaces this file with the release's
+	// signed helper (packaging lib.sh install_helper_from_sbom). The running
+	// process keeps its inode; it exits after the exchange that saw the change
+	// and the next connection starts the new file.
+	started, err := os.Stat(helperBinaryPath)
+	if err != nil {
+		return err
+	}
+	return helper.ServeUntil(ctx, listener, service, func() bool { return helper.BinaryReplaced(helperBinaryPath, started) })
 }
 
 func fixedAgentGID() (uint32, error) {

@@ -12,13 +12,13 @@ func TestHTTPPolicyWriterAndPublisherUseOneLockOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(service)
-	start := strings.Index(body, "func (s *Service) publishAuthorizedTx(")
+	start := strings.Index(body, "func (s *Service) publishRoundTx(")
 	if start < 0 {
-		t.Fatal("publishAuthorizedTx source boundary not found")
+		t.Fatal("publishRoundTx source boundary not found")
 	}
 	end := strings.Index(body[start+1:], "\nfunc ")
 	if end <= 0 {
-		t.Fatal("publishAuthorizedTx source boundary not found")
+		t.Fatal("publishRoundTx source boundary not found")
 	}
 	body = body[start : start+1+end]
 	advisory := strings.Index(body, "lockHTTPPolicyPublicationFacts(ctx, tx, request.ConfigurationScopeID)")

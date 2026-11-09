@@ -18,7 +18,8 @@ import (
 // leaves the database unchanged; on an empty fact set it restores 053's
 // function and drops the column, and up applies again.
 func TestChallengePoWDifficulty646DownUpOnReleaseHead(t *testing.T) {
-	pool := releaseHeadMigrationPool(t)
+	// Pinned at 646: its down guard needs 646 to be the head (647+ came later).
+	pool := migrationPoolAt(t, 646)
 	ctx := t.Context()
 	columnExists := func() bool {
 		t.Helper()

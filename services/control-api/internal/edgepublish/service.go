@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
+	"github.com/cdnca/cdnca/libs/edgeconfig/siteobject"
 	"github.com/cdnca/cdnca/libs/entitlement/rulecatalog"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
@@ -57,6 +58,12 @@ type normalizedPublishRequest struct {
 	allowExpiredReplay bool
 	// overlay replaces compiling the scope's rows (system stop overlay).
 	overlay *publicationOverlay
+	// keyEnvelopeOversized are the target nodes publishRoundTx leaves out
+	// (KeyEnvelopeOversizedError of an earlier round).
+	keyEnvelopeOversized []oversizedKeyEnvelope
+	// capabilityHoldByCaller: the caller records the nodes left out
+	// (publishExcludingIncapableTx), so publishRoundTx does not.
+	capabilityHoldByCaller bool
 }
 
 type normalizedRollbackRequest struct {
@@ -580,7 +587,39 @@ func (s *Service) publishTx(ctx context.Context, tx pgx.Tx, request normalizedPu
 	return s.publishAuthorizedTx(ctx, tx, request, now)
 }
 
+// publishAuthorizedTx publishes request in a savepoint of tx. Target nodes
+// whose older Agent cannot take their key envelope (KeyEnvelopeOversizedError)
+// are left out and the rest published in a second round: one old node does
+// not hold back the scope. A refusal rolls the savepoint back;
+// an entitlement denial keeps its audit, as before.
 func (s *Service) publishAuthorizedTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	request normalizedPublishRequest,
+	now time.Time,
+) (PublishResult, error) {
+	for {
+		round, err := tx.Begin(ctx)
+		if err != nil {
+			return PublishResult{}, fmt.Errorf("%w: begin publication round", ErrPersistence)
+		}
+		result, err := s.publishRoundTx(ctx, round, request, now)
+		if err == nil || errors.Is(err, ErrEntitlementDenied) {
+			if commitErr := round.Commit(ctx); commitErr != nil {
+				return PublishResult{}, fmt.Errorf("%w: finish publication round", ErrPersistence)
+			}
+			return result, err
+		}
+		_ = round.Rollback(ctx)
+		var oversized *KeyEnvelopeOversizedError
+		if !errors.As(err, &oversized) || len(request.keyEnvelopeOversized) > 0 {
+			return PublishResult{}, err
+		}
+		request.keyEnvelopeOversized = oversized.Nodes
+	}
+}
+
+func (s *Service) publishRoundTx(
 	ctx context.Context,
 	tx pgx.Tx,
 	request normalizedPublishRequest,
@@ -632,6 +671,19 @@ func (s *Service) publishAuthorizedTx(
 	target, targetDigest, err := s.resolveTarget(ctx, tx, request)
 	if err != nil {
 		return PublishResult{}, err
+	}
+	if len(request.keyEnvelopeOversized) > 0 {
+		left := make(map[uuid.UUID]bool, len(request.keyEnvelopeOversized))
+		for _, node := range request.keyEnvelopeOversized {
+			left[node.refusal.NodeID] = true
+		}
+		target.NodeIDs = slices.DeleteFunc(target.NodeIDs, func(nodeID uuid.UUID) bool { return left[nodeID] })
+		if len(target.NodeIDs) == 0 {
+			return PublishResult{}, request.keyEnvelopeOversized[0].refusal
+		}
+		if targetDigest, err = targetSnapshotDigest(targetKind(request), target); err != nil {
+			return PublishResult{}, err
+		}
 	}
 	decision, authorizationErr := s.authorizer.AuthorizePublication(ctx, tx, EntitlementRequest{
 		Actor: request.Actor, ConfigurationScopeID: request.ConfigurationScopeID,
@@ -798,6 +850,21 @@ func (s *Service) publishAuthorizedTx(
 		TargetKind: targetKind(request), TargetSnapshot: cloneTargetReference(request.TargetSnapshot),
 		TargetSnapshotSHA256: targetDigest, NodeCount: len(target.NodeIDs), CreatedAt: now,
 	}
+	if siteObjects != nil && len(siteObjects.siteSelectionUnsupported) > 0 {
+		result.SiteSelectionUnsupportedNodeIDs = slices.Clone(siteObjects.siteSelectionUnsupported)
+		slices.SortFunc(result.SiteSelectionUnsupportedNodeIDs, func(left, right uuid.UUID) int {
+			return bytes.Compare(left[:], right[:])
+		})
+	}
+	if len(request.keyEnvelopeOversized) > 0 {
+		result.keyEnvelopeOversized = slices.Clone(request.keyEnvelopeOversized)
+		slices.SortFunc(result.keyEnvelopeOversized, func(left, right oversizedKeyEnvelope) int {
+			return bytes.Compare(left.refusal.NodeID[:], right.refusal.NodeID[:])
+		})
+		for _, node := range result.keyEnvelopeOversized {
+			result.KeyEnvelopeOversizedNodeIDs = append(result.KeyEnvelopeOversizedNodeIDs, node.refusal.NodeID)
+		}
+	}
 	if err := insertPublication(ctx, tx, result, request, requestDigest); err != nil {
 		return PublishResult{}, err
 	}
@@ -812,6 +879,18 @@ func (s *Service) publishAuthorizedTx(
 	}
 	if v2Inputs != nil && len(v2Inputs.L2Skipped) > 0 {
 		payload["l2_skipped_sites"] = siteL2SkippedPayload(v2Inputs.L2Skipped)
+	}
+	if len(result.SiteSelectionUnsupportedNodeIDs) > 0 {
+		// "该节点不支持按节点屏蔽站点": these nodes keep every website.
+		unsupported := make([]string, len(result.SiteSelectionUnsupportedNodeIDs))
+		for index, nodeID := range result.SiteSelectionUnsupportedNodeIDs {
+			unsupported[index] = nodeID.String()
+		}
+		payload["site_selection_unsupported_nodes"] = unsupported
+	}
+	if len(result.keyEnvelopeOversized) > 0 {
+		// "旧配置仍生效": these nodes did not get this release.
+		payload["key_envelope_oversized_nodes"] = keyEnvelopeOversizedPayload(result.keyEnvelopeOversized)
 	}
 	if err := s.auditor.Append(ctx, tx, audit.Event{
 		ScopeID: request.Actor.ScopeID, ActorUserID: &request.Actor.UserID,
@@ -846,6 +925,34 @@ func (s *Service) publishAuthorizedTx(
 	}, now)
 	if err != nil {
 		return PublishResult{}, fmt.Errorf("%w: start publication background job", ErrPersistence)
+	}
+	for _, node := range result.keyEnvelopeOversized {
+		// One row per node: the node list reads the newest of the
+		// (scope, action, node) group, which archiving always keeps (331).
+		if err := s.auditor.Append(ctx, tx, audit.Event{
+			ScopeID: request.ConfigurationScopeID, ActorUserID: auditActorUserID(request.Actor),
+			Action: "edge_publication.key_envelope_oversized", ResourceType: "node",
+			ResourceID: node.refusal.NodeID.String(), RequestID: request.RequestID, Result: "denied",
+			Payload: map[string]any{
+				"source_revision": result.SourceRevision, "config_version_id": result.ConfigVersionID.String(),
+				"publication_id": result.PublicationID.String(), "key_envelope_bytes": node.sizeBytes,
+				"limit_bytes": siteobject.LegacyMaxKeyEnvelopeBytes,
+			},
+		}); err != nil {
+			return PublishResult{}, fmt.Errorf("%w: append key envelope audit", ErrPersistence)
+		}
+	}
+	if len(result.keyEnvelopeOversized) > 0 && !request.capabilityHoldByCaller {
+		// The capability watcher republishes once a left-out node upgrades.
+		refused := make([]systemRefusal, len(result.keyEnvelopeOversized))
+		for index, node := range result.keyEnvelopeOversized {
+			refused[index], _ = systemRefusalOf(node.refusal)
+		}
+		requested := append(slices.Clone(target.NodeIDs), refusedNodeIDs(refused)...)
+		if err := s.insertCapabilityHoldTx(ctx, tx, request.PublishRequest, requested,
+			refusedNodeIDs(refused), capabilityHoldFacts(refused), true); err != nil {
+			return PublishResult{}, fmt.Errorf("%w: record capability hold", ErrPersistence)
+		}
 	}
 	for _, nodeID := range target.NodeIDs {
 		if _, err := jobstate.ReportTx(ctx, tx, jobstate.ReportInput{

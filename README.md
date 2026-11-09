@@ -72,7 +72,8 @@ A node is the Go `edge-agent` plus the OpenResty edge runtime. The control plane
 - **Layer-4 forwarding**: TCP / UDP forwarding, port ranges, layer-4 session logs and live connections
 - **Certificates loaded on demand**: no fixed limit on the node certificate store; automatic ACME HTTP-01 / DNS-01 issuance
 - **Secure node enrollment**: one-time registration tokens and mutual TLS, node certificates bound to the node ID, no long-lived shared secrets; automatic reconnect with backoff when the gateway drops
-- **Packaging scripts follow the signed release**: after a successful upgrade the node refreshes its installed packaging scripts from the hashes in the signed SBOM; uninstall checks the state before stopping the service and leaves the node running when the check fails
+- **Packaging scripts follow the signed release**: after a successful upgrade the node refreshes its installed packaging scripts and packaging helper from the hashes in the signed SBOM, and the node detail page shows the last refresh; uninstall checks the state before stopping the service and leaves the node running when the check fails
+- **Sites per node**: a node runs only the sites of its line groups; a site removed from a line group or moved to another is withdrawn from the old nodes. Nodes on older versions still receive every site; an older node the release no longer fits is skipped alone and keeps its previous configuration, and the node list and the publication records mark it "old configuration still in effect"
 
 Node status is shown in the admin console under the node list and real-time monitoring (see the screenshots above).
 

@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
+	"github.com/cdnca/cdnca/libs/edgeconfig/packagingtoolset"
 	"github.com/cdnca/cdnca/libs/edgeconfig/siteobject"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
@@ -229,6 +230,11 @@ func (g *Gateway) validateHeartbeatActiveConfigIdentities(heartbeat *agentv1.Hea
 		}
 		if !validNativeRuntimeStatus(heartbeat.Runtime.NativeRuntime) {
 			return fmt.Errorf("heartbeat.runtime.native_runtime is invalid")
+		}
+		if toolset := heartbeat.Runtime.PackagingToolset; toolset != nil && !packagingtoolset.Valid(toolset.RefreshStatus,
+			toolset.RefreshVersion, toolset.RefreshReason, toolset.RefreshTime != nil, toolset.HelperStatus, toolset.HelperReason,
+			toolset.ScriptsSha256, toolset.HelperSha256) {
+			return fmt.Errorf("heartbeat.runtime.packaging_toolset is invalid")
 		}
 		if !validTelemetryHealth(heartbeat.Runtime.Telemetry) {
 			return fmt.Errorf("heartbeat.runtime.telemetry is invalid")

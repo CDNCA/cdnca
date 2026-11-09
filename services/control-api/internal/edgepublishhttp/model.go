@@ -167,6 +167,13 @@ type PublicationView struct {
 	NodeCount             int        `json:"node_count"`
 	CreatedAt             string     `json:"created_at"`
 	Replayed              bool       `json:"replayed,omitempty"`
+	// Platform view only: the nodes this release did not
+	// reach as intended -- left out for their key envelope (old configuration
+	// still in effect) or sent every website for lack of SITE_SELECTION.
+	// Stored on the publication (migration 649): publish, replay, list and
+	// detail agree. Omitted when none.
+	KeyEnvelopeOversizedNodeIDs     []uuid.UUID `json:"key_envelope_oversized_node_ids,omitempty"`
+	SiteSelectionUnsupportedNodeIDs []uuid.UUID `json:"site_selection_unsupported_node_ids,omitempty"`
 }
 
 type PublicationPageView struct {
