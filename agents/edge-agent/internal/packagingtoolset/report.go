@@ -49,60 +49,109 @@ const (
 	maxHelperBytes = 64 << 20
 )
 
-// Reporter caches each file's digest (or read failure) under its stat
-// signature, absence included: a heartbeat rereads only the small record and
-// a file whose stat changed (replaced, created, deleted).
+// Reporter caches the parsed record and each file's digest (or read failure)
+// under its stat signature, absence included: a file whose stat changed
+// (replaced, created, deleted) is read again. With the three directories
+// watched (Linux), an unchanged heartbeat makes no stat and returns a copy of
+// the last report; otherwise it stats each file (record, six scripts, helper).
 type Reporter struct {
-	paths Paths
-	hash  func(path string, limit int64) (string, error)
-	mu    sync.Mutex
-	files map[string]cachedDigest
+	paths   Paths
+	scripts []string
+	hash    func(path string, limit int64) (string, error)
+	read    func(path string) *agentv1.PackagingToolsetStatus
+	stat    func(path string) fileSignature
+	watch   *watch
+	mu      sync.Mutex
+	files   map[string]cachedDigest
+	record  cachedRecord
+	// scriptsSum is the combined scripts digest, recomputed only when one of
+	// the six scripts changed; scriptsKnown is false before the first report.
+	scriptsSum   string
+	scriptsKnown bool
+	helperSum    string
 }
 
 type cachedDigest struct {
-	signature string
+	signature fileSignature
 	sum       string
 	ok        bool
 }
 
+type cachedRecord struct {
+	signature fileSignature
+	status    *agentv1.PackagingToolsetStatus
+}
+
 func NewReporter(paths Paths) *Reporter {
-	return &Reporter{paths: paths, hash: fileSHA256, files: map[string]cachedDigest{}}
+	scripts := make([]string, len(scriptNames))
+	for index, name := range scriptNames {
+		scripts[index] = filepath.Join(paths.Scripts, name+".sh")
+	}
+	return &Reporter{paths: paths, scripts: scripts, hash: fileSHA256, read: readRecord, stat: statSignature,
+		watch: newWatch(filepath.Dir(paths.Record), paths.Scripts, filepath.Dir(paths.Helper)), files: map[string]cachedDigest{}}
 }
 
 func (r *Reporter) Report() *agentv1.PackagingToolsetStatus {
-	status := readRecord(r.paths.Record)
-	status.ScriptsSha256, status.HelperSha256 = r.digests()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Drain the events before the stats: a change during them is still queued
+	// for the next report.
+	if r.watch.changed() || r.record.status == nil {
+		r.recordLocked()
+		r.scriptsSum, r.helperSum = r.digestsLocked()
+	}
+	record := r.record.status
+	status := &agentv1.PackagingToolsetStatus{
+		RefreshStatus: record.RefreshStatus, RefreshVersion: record.RefreshVersion, RefreshReason: record.RefreshReason,
+		HelperStatus: record.HelperStatus, HelperReason: record.HelperReason,
+	}
+	if record.RefreshTime != nil {
+		status.RefreshTime = timestamppb.New(record.RefreshTime.AsTime())
+	}
+	status.ScriptsSha256, status.HelperSha256 = r.scriptsSum, r.helperSum
 	return status
 }
 
-func (r *Reporter) digests() (string, string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var lines bytes.Buffer
+// recordLocked rereads the record only when its stat signature changed.
+func (r *Reporter) recordLocked() {
+	signature := r.stat(r.paths.Record)
+	if r.record.status == nil || r.record.signature != signature {
+		r.record = cachedRecord{signature: signature, status: r.read(r.paths.Record)}
+	}
+}
+
+func (r *Reporter) digestsLocked() (string, string) {
+	changed := !r.scriptsKnown
 	scripts := true
-	for _, name := range scriptNames {
-		sum, ok := r.digestLocked(filepath.Join(r.paths.Scripts, name+".sh"), maxScriptBytes)
-		scripts = scripts && ok
-		fmt.Fprintf(&lines, "%s  %s.sh\n", sum, name)
+	for _, path := range r.scripts {
+		_, ok, fresh := r.digestLocked(path, maxScriptBytes)
+		scripts, changed = scripts && ok, changed || fresh
 	}
-	scriptsSum := ""
-	if scripts {
-		total := sha256.Sum256(lines.Bytes())
-		scriptsSum = hex.EncodeToString(total[:])
+	if changed {
+		r.scriptsSum, r.scriptsKnown = "", true
+		if scripts {
+			var lines bytes.Buffer
+			for index, path := range r.scripts {
+				fmt.Fprintf(&lines, "%s  %s.sh\n", r.files[path].sum, scriptNames[index])
+			}
+			total := sha256.Sum256(lines.Bytes())
+			r.scriptsSum = hex.EncodeToString(total[:])
+		}
 	}
-	helper, _ := r.digestLocked(r.paths.Helper, maxHelperBytes)
-	return scriptsSum, helper
+	helper, _, _ := r.digestLocked(r.paths.Helper, maxHelperBytes)
+	return r.scriptsSum, helper
 }
 
 // digestLocked hashes path only when its stat signature changed since the
-// last report; a missing or unreadable file is cached the same way.
-func (r *Reporter) digestLocked(path string, limit int64) (string, bool) {
-	signature := statSignature(path)
+// last report (changed reports that); a missing or unreadable file is cached
+// the same way.
+func (r *Reporter) digestLocked(path string, limit int64) (string, bool, bool) {
+	signature := r.stat(path)
 	if cached, found := r.files[path]; found && cached.signature == signature {
-		return cached.sum, cached.ok
+		return cached.sum, cached.ok, false
 	}
 	entry := cachedDigest{signature: signature}
-	if !strings.HasPrefix(signature, "missing") && !strings.HasPrefix(signature, "error") {
+	if signature.state == statPresent {
 		sum, err := r.hash(path, limit)
 		entry.sum, entry.ok = sum, err == nil
 		if err != nil {
@@ -110,24 +159,39 @@ func (r *Reporter) digestLocked(path string, limit int64) (string, bool) {
 		}
 	}
 	r.files[path] = entry
-	return entry.sum, entry.ok
+	return entry.sum, entry.ok, true
 }
 
-// statSignature: device, inode, mode, size, mtime and ctime, or the stat
-// failure (missing, or the error) as its own state.
-func statSignature(path string) string {
+const (
+	statPresent = iota
+	statMissing
+	statError
+)
+
+// fileSignature: device, inode, mode, size, mtime and ctime, or the stat
+// failure (missing, or the error) as its own state. Comparable, so an
+// unchanged file costs no formatting.
+type fileSignature struct {
+	state             int
+	err               string
+	dev, ino          uint64
+	mode              fs.FileMode
+	size, mtime, ctim int64
+}
+
+func statSignature(path string) fileSignature {
 	info, err := os.Stat(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "missing"
+		return fileSignature{state: statMissing}
 	}
 	if err != nil {
-		return "error:" + err.Error()
+		return fileSignature{state: statError, err: err.Error()}
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return fmt.Sprintf("info:%v:%d:%d", info.Mode(), info.Size(), info.ModTime().UnixNano())
+	signature := fileSignature{mode: info.Mode(), size: info.Size(), mtime: info.ModTime().UnixNano()}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		signature.dev, signature.ino, signature.ctim = uint64(stat.Dev), uint64(stat.Ino), statCtime(stat)
 	}
-	return fmt.Sprintf("%d:%d:%v:%d:%d:%d", stat.Dev, stat.Ino, info.Mode(), info.Size(), info.ModTime().UnixNano(), statCtime(stat))
+	return signature
 }
 
 func fileSHA256(path string, limit int64) (string, error) {
