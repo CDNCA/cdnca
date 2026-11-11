@@ -181,6 +181,19 @@ describe('controlUpgradesApi', () => {
     expect(fetchSpy.mock.calls[0][0]).toBe('/v1/admin/maintenance-upgrade-status')
   })
 
+  // The /downloads node package sync state rides on the maintenance status.
+  it('reads the node downloads sync state and refuses a malformed one', async () => {
+    const node_downloads = { state: 'failed' as const, reason: 'signature_invalid', served_sha256: 'a'.repeat(64),
+      source_sha256: 'b'.repeat(64), checked_at: '2026-11-10T08:00:00Z' }
+    const data = { ...maintenanceStatus(), nodes: [], node_downloads }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data }))
+    await expect(controlUpgradesApi.maintenanceStatus('access-token')).resolves.toEqual(data)
+    for (const bad of [{ ...node_downloads, state: 'broken' }, { ...node_downloads, served_sha256: 'x' }, { ...node_downloads, extra: 1 }]) {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: { ...data, node_downloads: bad } }))
+      await expect(controlUpgradesApi.maintenanceStatus('access-token')).rejects.toMatchObject({ code: 'invalid_response' })
+    }
+  })
+
   it.each([
     ['blank token', '', []],
     ['duplicate node', 'token', [ids.nodeA, ids.nodeA]],

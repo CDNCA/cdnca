@@ -402,6 +402,7 @@ components:
         expires_at: {type: string, format: date-time}
         grace_until: {type: string, format: date-time}
         last_verified_at: {type: string, format: date-time}
+        license_expires_at: {type: 'null', description: Always null in the community edition (permanent).}
         customer:
           type: object
           additionalProperties: false

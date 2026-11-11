@@ -396,7 +396,7 @@ func validExternalCredentialMaterial(value []byte) bool {
 	}
 	var extra any
 	if !errors.Is(decoder.Decode(&extra), io.EOF) || credential.SchemaVersion != ExternalCredentialSchemaVersion ||
-		!validIdentifier(credential.Provider) || !validIdentifier(credential.AppID) || len(credential.Secret) < 16 ||
+		!ValidExternalProvider(credential.Provider) || !ValidExternalAppID(credential.AppID) || len(credential.Secret) < 16 ||
 		len(credential.Secret) > 256 || credential.Environment != "sandbox" && credential.Environment != "production" {
 		clear(credential.Secret)
 		return false

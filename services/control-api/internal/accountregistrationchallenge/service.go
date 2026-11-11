@@ -253,7 +253,7 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 		}
 		now := storeTime(service.now())
 		command, updateErr := service.pool.Exec(ctx, `UPDATE account_registration_challenge_writes_163
-			SET state=$3,human_verified_at=CASE WHEN $3='human_verified' THEN $4 ELSE NULL END,updated_at=$4
+			SET state=$3,human_verified_at=CASE WHEN $3='human_verified' THEN $4::timestamptz ELSE NULL END,updated_at=$4
 			WHERE scope_id=$1 AND idempotency_key=$2 AND state='human_verifying'`,
 			normalized.ScopeID, normalized.IdempotencyKey, nextState, now)
 		if updateErr != nil || command.RowsAffected() != 1 {

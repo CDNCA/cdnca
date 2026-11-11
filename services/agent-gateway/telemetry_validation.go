@@ -210,7 +210,8 @@ func validateTelemetryBatch(
 			record.PackageSubscriptionId = subscriptionID
 		}
 		switch record.Kind {
-		case agentv1.TelemetryKind_TELEMETRY_KIND_ACCESS_WINDOW_V1, agentv1.TelemetryKind_TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1:
+		case agentv1.TelemetryKind_TELEMETRY_KIND_ACCESS_WINDOW_V1, agentv1.TelemetryKind_TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1,
+			agentv1.TelemetryKind_TELEMETRY_KIND_RUM_MINUTE_V1:
 		case agentv1.TelemetryKind_TELEMETRY_KIND_ACCESS_V1, agentv1.TelemetryKind_TELEMETRY_KIND_SECURITY_V1:
 			kind := "access.v1"
 			if record.Kind == agentv1.TelemetryKind_TELEMETRY_KIND_SECURITY_V1 {
@@ -490,6 +491,8 @@ func validateTelemetryPayload(
 		return validateAccessWindowTelemetry(record, nodeID, authorization, now)
 	case agentv1.TelemetryKind_TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1:
 		return validateSubscriptionMinuteTelemetry(record, nodeID, authorization, now)
+	case agentv1.TelemetryKind_TELEMETRY_KIND_RUM_MINUTE_V1:
+		return validateRUMMinuteTelemetry(record, nodeID, authorization, now)
 	case agentv1.TelemetryKind_TELEMETRY_KIND_L4_SESSION_V1:
 		return validateL4TelemetryPayload(record, nodeID, authorization, now)
 	case agentv1.TelemetryKind_TELEMETRY_KIND_ACCESS_V1:
@@ -1035,6 +1038,8 @@ func bindTelemetryPackageSubscription(record *agentv1.TelemetryRecord, subscript
 		return bindAccessWindowTelemetry(record, subscriptionID, installationID)
 	case agentv1.TelemetryKind_TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1:
 		return bindSubscriptionMinuteTelemetry(record, subscriptionID, installationID)
+	case agentv1.TelemetryKind_TELEMETRY_KIND_RUM_MINUTE_V1:
+		return bindRUMMinuteTelemetry(record, subscriptionID, installationID)
 	case agentv1.TelemetryKind_TELEMETRY_KIND_ACCESS_V1:
 		var envelope telemetryAccessEnvelope
 		if err := json.Unmarshal(record.Payload, &envelope); err != nil {

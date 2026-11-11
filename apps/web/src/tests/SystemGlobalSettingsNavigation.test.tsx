@@ -82,7 +82,7 @@ describe('system settings navigation (ADMIN-CURRENT-08)', () => {
     await user.click(within(screen.getByTestId('system-settings-baseline-cleanup')).getByRole('button', { name: /保存/ }))
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
     expect(put.mock.calls[0][2]).toMatchObject({ access_logs_days: 15 })
-    expect(await within(screen.getByTestId('system-settings-baseline-cleanup')).findByText(/修订版本\s*3/)).toBeInTheDocument()
+    expect(await within(screen.getByTestId('system-settings-baseline-cleanup')).findByText('系统配置已保存')).toBeInTheDocument()
   })
 
   it('states the scope and save granularity of each tab', async () => {

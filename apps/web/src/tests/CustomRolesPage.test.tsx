@@ -224,7 +224,7 @@ describe('CustomRolesPage', () => {
   })
 
   it.each([
-    ['custom_rbac_revision_conflict', 409, '角色版本已变化，请刷新后重试'],
+    ['custom_rbac_revision_conflict', 409, '内容已被其他人修改，请刷新后再保存'],
     ['custom_rbac_step_up_required', 428, '此操作需要有效且未使用的二次认证证明'],
     ['custom_rbac_permission_not_delegable', 422, '所选权限不能委派给租户自定义角色'],
     ['custom_rbac_store_unavailable', 503, '自定义角色服务暂不可用，请稍后重试'],

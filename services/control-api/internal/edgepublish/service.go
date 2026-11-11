@@ -256,6 +256,9 @@ type securityBindingFact struct {
 	// ipLists (ACL / WAF bindings whose rules name IP lists): the lists'
 	// current contents, attachSiteIPLists.
 	ipLists securitypolicy.ResolvedIPLists
+	// stringSets (WAF bindings whose rules name string sets): the sets'
+	// current revisions, attachSiteStringSets.
+	stringSets securitypolicy.ResolvedStringSets
 }
 
 func NewService(pool *pgxpool.Pool, deployments *edgedeployment.Store, signer ArtifactSigner, config Config) (*Service, error) {
@@ -1570,7 +1573,7 @@ func compileSecurityPoliciesFor(fact siteFact, domains []string, port uint16, bi
 			if err != nil || (rule.Flow != securitypolicy.FlowContinue && rule.Flow != securitypolicy.FlowStop) {
 				return nil, ErrUnsupportedSecurityPolicy
 			}
-			matches, err := compileSecurityRuleMatchesFor(domains, port, rule.Conditions, binding.ipLists)
+			matches, err := compileSecurityRuleMatchesFor(domains, port, rule.Conditions, binding.ipLists, binding.stringSets)
 			if err != nil {
 				return nil, err
 			}
@@ -1657,8 +1660,12 @@ func compileWAFSettings(settings *securitypolicy.WAFSettings) (edgeconfig.WAFMod
 }
 
 func compileSecurityRuleMatches(domain string, port uint16, conditions []securitypolicy.Condition) ([]edgeconfig.WAFMatch, error) {
-	return compileSecurityRuleMatchesFor([]string{domain}, port, conditions, nil)
+	return compileSecurityRuleMatchesFor([]string{domain}, port, conditions, nil, nil)
 }
+
+// securityRuleNow anchors the weekly request_time offset table
+// (edgeconfig.CompileWAFTimeMatch: the same table all year).
+var securityRuleNow = time.Now
 
 // compileSecurityRuleMatchesFor compiles a rule for a server whose
 // server_name is domains (the primary first). The server scopes the rule:
@@ -1667,7 +1674,8 @@ func compileSecurityRuleMatches(domain string, port uint16, conditions []securit
 // request host equals) carry no host, so the rule holds on every host the
 // server serves; a host condition, decided here against one domain, cannot
 // be decided for all of them and is refused.
-func compileSecurityRuleMatchesFor(domains []string, port uint16, conditions []securitypolicy.Condition, ipLists securitypolicy.ResolvedIPLists) ([]edgeconfig.WAFMatch, error) {
+func compileSecurityRuleMatchesFor(domains []string, port uint16, conditions []securitypolicy.Condition,
+	ipLists securitypolicy.ResolvedIPLists, stringSets securitypolicy.ResolvedStringSets) ([]edgeconfig.WAFMatch, error) {
 	if len(domains) == 0 {
 		return nil, ErrUnsupportedSecurityPolicy
 	}
@@ -1680,6 +1688,18 @@ func compileSecurityRuleMatchesFor(domains []string, port uint16, conditions []s
 	matches := []edgeconfig.WAFMatch{{Host: host, Port: port}}
 	seenFields := make(map[string]struct{}, len(conditions))
 	for _, condition := range conditions {
+		if securitypolicy.IsStringSetCondition(condition) {
+			// A named string set, by (id, revision); the members
+			// ride in the site object. May repeat; needs WAF v6.
+			ref, ok := stringSets.Condition(condition)
+			if !ok {
+				return nil, ErrUnsupportedSecurityPolicy
+			}
+			for index := range matches {
+				matches[index].StringSets = append(append([]edgeconfig.WAFStringSetRef(nil), matches[index].StringSets...), ref)
+			}
+			continue
+		}
 		// Content conditions are cdnca_waf.lua inspect clauses, mapped as
 		// securitypublication.edgeWAFInspect and the node precheck
 		// (securityRuntimeInspect) do; they may repeat (ANDed).
@@ -1803,6 +1823,12 @@ func compileSecurityRuleMatchesFor(domains []string, port uint16, conditions []s
 			for index := range matches {
 				matches[index].IPLists = append(append([]edgeconfig.WAFIPList(nil), matches[index].IPLists...), list)
 			}
+		case "browser", "device", "browser_version", "request_time":
+			// what the User-Agent claims and the request time;
+			// needs WAF v6.
+			if err := setClientCondition(matches, condition); err != nil {
+				return nil, ErrUnsupportedSecurityPolicy
+			}
 		case "carrier", "ip_tag", "asn", "country", "province", "city":
 			// Looked up in the node's IP intelligence library; needs
 			// CAPABILITY_NAME_IP_INTEL v2 (requiredCapabilities).
@@ -1893,6 +1919,49 @@ func intersectSecurityCIDRMatches(matches []edgeconfig.WAFMatch, values []string
 }
 
 // securityRuleInspect mirrors securitypublication.edgeWAFInspect.
+// setClientCondition sets a browser / device / browser_version /
+// request_time condition on every match (one of each per rule).
+func setClientCondition(matches []edgeconfig.WAFMatch, condition securitypolicy.Condition) error {
+	negate := condition.Operator == "not_in" || condition.Operator == "not_in_time_range"
+	values := slices.Sorted(slices.Values(condition.Values))
+	for index := range matches {
+		match := &matches[index]
+		switch condition.Field {
+		case "browser":
+			if condition.Operator != "in" && condition.Operator != "not_in" {
+				return ErrUnsupportedSecurityPolicy
+			}
+			match.Browser = &edgeconfig.WAFBrowserMatch{Names: slices.Clone(values), Negate: negate}
+		case "device":
+			if condition.Operator != "in" && condition.Operator != "not_in" {
+				return ErrUnsupportedSecurityPolicy
+			}
+			match.Device = &edgeconfig.WAFDeviceMatch{Kinds: slices.Clone(values), Negate: negate}
+		case "browser_version":
+			op, ok := map[string]string{"version_eq": edgeconfig.WAFVersionEQ, "version_gte": edgeconfig.WAFVersionGTE,
+				"version_lt": edgeconfig.WAFVersionLT}[condition.Operator]
+			if !ok || len(values) != 1 {
+				return ErrUnsupportedSecurityPolicy
+			}
+			version, err := edgeconfig.ParseBrowserVersion(values[0])
+			if err != nil {
+				return err
+			}
+			match.BrowserVersion = &edgeconfig.WAFBrowserVersion{Name: condition.Key, Op: op, Version: version}
+		case "request_time":
+			if condition.Operator != "in_time_range" && condition.Operator != "not_in_time_range" {
+				return ErrUnsupportedSecurityPolicy
+			}
+			compiled, err := edgeconfig.CompileWAFTimeMatch(condition.Key, condition.Values, negate, securityRuleNow())
+			if err != nil {
+				return err
+			}
+			match.Time = &compiled
+		}
+	}
+	return nil
+}
+
 func securityRuleInspect(condition securitypolicy.Condition) (edgeconfig.WAFInspect, bool, error) {
 	return edgeconfig.WAFInspectPolicyCondition(condition.Field, condition.Operator, condition.Key, condition.Values,
 		condition.Filters, condition.BodyOverflow)

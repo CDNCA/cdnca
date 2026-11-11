@@ -28,6 +28,12 @@ type Store struct {
 	authorizer TxAuthorizer
 	now        func() time.Time
 	cursor     *CursorCodec
+	// credentials encrypts the console external credential;
+	// nil leaves PUT /external-credential unavailable.
+	credentials CredentialCipher
+	// keyFacts writes the policy HMAC key fact of every enabled revision in
+	// the revision's transaction; nil writes none.
+	keyFacts KeyFactIssuer
 }
 
 type entitlementGuardAdapter struct {
@@ -168,6 +174,9 @@ func (store *Store) Create(ctx context.Context, actor Actor, request CreateReque
 		if err := insertRevision(ctx, tx, actor, item, request.WriteMetadata, "create"); err != nil {
 			return err
 		}
+		if err := store.issueKeyFact(ctx, tx, actor, item); err != nil {
+			return err
+		}
 		result.Policy = item.public()
 		return store.completeWrite(ctx, tx, actor, "challenge_policy.create", request.WriteMetadata.IdempotencyKey, "success", item.ID, 201, result.Policy)
 	})
@@ -182,7 +191,7 @@ func (store *Store) Create(ctx context.Context, actor Actor, request CreateReque
 
 func (store *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, digest [32]byte) (WriteResult, error) {
 	return store.change(ctx, actor, request.TargetScopeID, request.ID, request.ExpectedRevision,
-		request.WriteMetadata, digest, "update", true, func(item *storedPolicy) error {
+		request.WriteMetadata, digest, "update", true, func(_ pgx.Tx, item *storedPolicy) error {
 			applyConfig(item, request.Config)
 			return nil
 		})
@@ -196,7 +205,7 @@ func (store *Store) SetEnabled(ctx context.Context, actor Actor, request StateRe
 		requireEntitlement = true
 	}
 	return store.change(ctx, actor, request.TargetScopeID, request.ID, request.ExpectedRevision,
-		request.WriteMetadata, digest, action, requireEntitlement, func(item *storedPolicy) error {
+		request.WriteMetadata, digest, action, requireEntitlement, func(_ pgx.Tx, item *storedPolicy) error {
 			if item.Enabled == request.Enabled {
 				return ErrConflict
 			}
@@ -207,7 +216,7 @@ func (store *Store) SetEnabled(ctx context.Context, actor Actor, request StateRe
 
 func (store *Store) Delete(ctx context.Context, actor Actor, request DeleteRequest, digest [32]byte) (WriteResult, error) {
 	return store.change(ctx, actor, request.TargetScopeID, request.ID, request.ExpectedRevision,
-		request.WriteMetadata, digest, "delete", false, func(item *storedPolicy) error {
+		request.WriteMetadata, digest, "delete", false, func(_ pgx.Tx, item *storedPolicy) error {
 			item.Enabled = false
 			item.Deleted = true
 			return nil
@@ -223,7 +232,7 @@ func (store *Store) change(
 	digest [32]byte,
 	action string,
 	requireEntitlement bool,
-	mutate func(*storedPolicy) error,
+	mutate func(pgx.Tx, *storedPolicy) error,
 ) (WriteResult, error) {
 	operation := "challenge_policy." + action
 	var result WriteResult
@@ -255,7 +264,10 @@ func (store *Store) change(
 				return store.completeDenial(ctx, tx, actor, targetScopeID, policyID, operation, metadata, denial)
 			}
 		}
-		if err := mutate(&item); err != nil {
+		if err := mutate(tx, &item); err != nil {
+			return err
+		}
+		if err := pruneExternalCredential(ctx, tx, item); err != nil {
 			return err
 		}
 		item.Revision++
@@ -264,6 +276,9 @@ func (store *Store) change(
 			return err
 		}
 		if err := insertRevision(ctx, tx, actor, item, metadata, action); err != nil {
+			return err
+		}
+		if err := store.issueKeyFact(ctx, tx, actor, item); err != nil {
 			return err
 		}
 		result.Policy = item.public()
@@ -535,10 +550,16 @@ func insertRevision(ctx context.Context, tx pgx.Tx, actor Actor, item storedPoli
 	if err != nil {
 		return err
 	}
-	var provider, appReference any
+	var provider, appReference, scoreThreshold, unavailable any
 	if item.External != nil {
 		provider = item.External.Provider
 		appReference = item.External.AppReference
+		if item.External.ScoreThreshold != nil {
+			scoreThreshold = *item.External.ScoreThreshold
+		}
+		if item.External.Unavailable != "" {
+			unavailable = item.External.Unavailable
+		}
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO challenge_policy_revisions (
@@ -547,17 +568,18 @@ func insertRevision(ctx context.Context, tx pgx.Tx, actor Actor, item storedPoli
 			clock_skew_seconds, attempts_per_nonce, failure_window_seconds, max_failures_per_window,
 			ip_binding, bind_user_agent, bypass_routes, key_reference, external_provider,
 			external_app_reference, enabled, deleted, document, created_by_scope_id,
-			created_by_user_id, request_id, trace_id, created_at, pow_difficulty
+			created_by_user_id, request_id, trace_id, created_at, pow_difficulty,
+			external_score_threshold, external_unavailable
 		) VALUES (
 			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-			$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31
+			$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33
 		)`,
 		item.ID, item.TenantScopeID, item.TenantID, item.SiteID, item.Host, item.Revision, action,
 		item.Priority, item.Mode, item.MinDelaySeconds, item.ChallengeTTLSeconds, item.PassTTLSeconds,
 		item.ClockSkewSeconds, item.AttemptsPerNonce, item.FailureWindowSeconds, item.MaxFailuresPerWindow,
 		item.IPBinding, item.BindUserAgent, encodedRoutes, item.KeyReference, provider, appReference,
 		item.Enabled, item.Deleted, encodedDocument, actor.ScopeID, actor.UserID,
-		metadata.RequestID, metadata.TraceID, item.UpdatedAt, item.PowDifficulty,
+		metadata.RequestID, metadata.TraceID, item.UpdatedAt, item.PowDifficulty, scoreThreshold, unavailable,
 	)
 	return err
 }
@@ -571,7 +593,7 @@ const selectPolicySQL = `
 	       revision.bypass_routes, revision.key_reference, revision.external_provider,
 	       revision.external_app_reference, policy.current_enabled, policy.current_deleted,
 	       policy.current_revision, policy.created_by_user_id, policy.created_at, policy.updated_at,
-	       revision.pow_difficulty
+	       revision.pow_difficulty, revision.external_score_threshold, revision.external_unavailable
 	FROM challenge_policies policy
 	JOIN challenge_policy_revisions revision
 	  ON revision.policy_id = policy.id AND revision.revision = policy.current_revision`
@@ -610,7 +632,8 @@ type rowScanner interface {
 func scanStoredPolicy(row rowScanner) (storedPolicy, error) {
 	var item storedPolicy
 	var routes []byte
-	var provider, appReference *string
+	var provider, appReference, unavailable *string
+	var scoreThreshold *float64
 	err := row.Scan(
 		&item.ID, &item.TenantScopeID, &item.TenantID, &item.SiteID, &item.Host,
 		&item.Priority, &item.Mode, &item.MinDelaySeconds, &item.ChallengeTTLSeconds,
@@ -618,7 +641,7 @@ func scanStoredPolicy(row rowScanner) (storedPolicy, error) {
 		&item.FailureWindowSeconds, &item.MaxFailuresPerWindow, &item.IPBinding,
 		&item.BindUserAgent, &routes, &item.KeyReference, &provider, &appReference,
 		&item.Enabled, &item.Deleted, &item.Revision, &item.CreatedByUserID,
-		&item.CreatedAt, &item.UpdatedAt, &item.PowDifficulty,
+		&item.CreatedAt, &item.UpdatedAt, &item.PowDifficulty, &scoreThreshold, &unavailable,
 	)
 	if err != nil {
 		return storedPolicy{}, err
@@ -630,7 +653,13 @@ func scanStoredPolicy(row rowScanner) (storedPolicy, error) {
 		if provider == nil || appReference == nil {
 			return storedPolicy{}, ErrUnavailable
 		}
-		item.External = &ExternalProviderReference{Provider: *provider, AppReference: *appReference}
+		item.External = &ExternalProviderReference{Provider: *provider, AppReference: *appReference,
+			ScoreThreshold: scoreThreshold}
+		if unavailable != nil {
+			item.External.Unavailable = *unavailable
+		}
+	} else if scoreThreshold != nil || unavailable != nil {
+		return storedPolicy{}, ErrUnavailable
 	}
 	return item, nil
 }
@@ -654,10 +683,19 @@ func applyConfig(item *storedPolicy, config Config) {
 		value := *config.PowDifficulty
 		item.PowDifficulty = &value
 	}
+	previous := item.External
 	if config.ExternalProvider == nil {
 		item.External = nil
 	} else {
 		value := *config.ExternalProvider
+		if value.AppReference == "" {
+			// the reference is server-owned; keep the stored one.
+			if previous != nil && previous.AppReference != "" {
+				value.AppReference = previous.AppReference
+			} else {
+				value.AppReference = "appref:policy:" + item.ID.String()
+			}
+		}
 		item.External = &value
 	}
 }
@@ -667,6 +705,17 @@ func (item storedPolicy) public() Policy {
 	result.BypassRoutes = append([]BypassRoute(nil), item.BypassRoutes...)
 	result.KeyReferenceConfigured = item.KeyReference != ""
 	result.ExternalProviderConfigured = item.External != nil
+	if item.External != nil {
+		summary := ExternalProviderSummary{Provider: item.External.Provider, Unavailable: item.External.Unavailable}
+		if summary.Unavailable == "" {
+			summary.Unavailable = ExternalUnavailableBuiltin
+		}
+		if item.External.ScoreThreshold != nil {
+			value := *item.External.ScoreThreshold
+			summary.ScoreThreshold = &value
+		}
+		result.ExternalProvider = &summary
+	}
 	return result
 }
 

@@ -147,6 +147,16 @@ func refusePlatformDNSCopyOrder(ctx context.Context, tx pgx.Tx, scopeID, provide
 func (s *Store) checkOrderChallenge(ctx context.Context, tx pgx.Tx, request CreateOrderRequest) ([]string, error) {
 	switch {
 	case request.ChallengeType == "dns-01" && request.DNSProviderID != nil:
+		// 本 scope 看不到的 DNS 账号（别的租户的或不存在的）按不存在处理，与插入时外键拒绝一致，
+		// 不能落成「该账号没有托管此域名」的 422，否则跨租户引用不再隐藏。
+		var visible bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM dns_providers WHERE scope_id=$1 AND id=$2)`,
+			request.TargetScopeID, *request.DNSProviderID).Scan(&visible); err != nil {
+			return nil, err
+		}
+		if !visible {
+			return nil, ErrNotFound
+		}
 		_, uncovered, found, err := ManagedZoneFor(ctx, tx, request.TargetScopeID, *request.DNSProviderID, request.Domains)
 		if err != nil {
 			return nil, err

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/certstore"
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/challenge"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/ddos"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/dynroute"
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/dyntelemetry"
@@ -156,6 +157,18 @@ func dynamicRoutingRoots(config fileConfig) (state, shared string) {
 	return state, shared
 }
 
+// dynamicRoutingChallengeConsumer installs challenge policy artifacts under
+// <state root>/challenge, the directory the skeleton's challenge_root points
+// the workers' Lua at. dynamicRoutingManager has no StateRoot(), so the
+// gateway client cannot pick the installer up from the manager
+// (without it challenge artifacts were refused as unsupported, the
+// CHALLENGE_POW/EXTERNAL capabilities were not declared and the Lua preload
+// found no policy). The state root exists once dynroute.New has run.
+func dynamicRoutingChallengeConsumer(config fileConfig) (*challenge.ArtifactInstaller, error) {
+	state, _ := dynamicRoutingRoots(config)
+	return challenge.NewArtifactInstaller(state)
+}
+
 // dynamicRoutingObjectsRoot is the agent's object store on a dynamic routing
 // node: inside the state root, opened shared with the worker group, so the
 // workers read the site objects the gateway client stored (no copy, F13).
@@ -244,7 +257,7 @@ func assembleDynamicRouting(config fileConfig, nodeID string, certificates *cert
 			return &dynwaf.Engine{ModulePath: module, UnicodeMapPath: unicodeMap}, nil
 		},
 		Registry: registry, HealthTimeout: healthTimeout, HealthPort: healthPort, DDoS: ddosTable, RulePlans: rulePlans,
-		L4: l4, ACMEOverlayRoot: dynamicRoutingACMERoot(config),
+		L4: l4, ACMEOverlayRoot: dynamicRoutingACMERoot(config), URLAuthRoot: filepath.Join(config.DeploymentRoot, "urlauth"),
 		MarketProbe: config.MarketProbe.Enabled, MarketBenchmark: config.MarketProbe.JoinMarket,
 		// The gate the local auto defense runtime writes (AD-05; assembleAutoDefense).
 		AutoDefense: false, // cdncaCE: the auto defense module is not part of the community edition
@@ -418,9 +431,11 @@ func dynamicRoutingTelemetrySource(runtime *dynroute.Runtime, nodeID string) *dy
 	access, security := runtime.TelemetryLogs()
 	resolver := &dyntelemetry.Resolver{Registry: runtime.TelemetryRegistry(),
 		Sites: &dyntelemetry.ObjectSites{Root: runtime.ObjectsRoot()}, NodeID: strings.ToLower(nodeID)}
-	return &dynamicRoutingTelemetry{AccessLogPath: access, SecurityLogPath: security, Resolve: resolver.Resolve,
+	return &dynamicRoutingTelemetry{AccessLogPath: access, SecurityLogPath: security, Resolve: resolver.ResolveTail,
 		Sites: runtime.MetricSites, Connections: runtime.SiteConnections,
 		SubscriptionMinutes: &dyntelemetry.SubscriptionMinutes{NodeID: strings.ToLower(nodeID), Take: runtime.SubscriptionMinutes,
+			Sites: runtime.SubscriptionMinuteSites},
+		RUMMinutes: &dyntelemetry.RUMMinutes{NodeID: strings.ToLower(nodeID), Take: runtime.RUMMinutes,
 			Sites: runtime.SubscriptionMinuteSites}}
 }
 

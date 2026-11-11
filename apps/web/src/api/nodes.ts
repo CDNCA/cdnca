@@ -602,7 +602,7 @@ export interface IssuedEnrollmentToken {
   created_at: string
   expires_at: string
   token: string
-  /** Only from POST /v1/nodes/{id}/enrollment-tokens: Gateway entry of the reinstall command. */
+  /** Only from POST /v1/nodes/{id}/enrollment-tokens: Gateway entry of the reinstall command (a ws console names its first grpc entry). */
   gateway?: NodeInstallGateway
 }
 

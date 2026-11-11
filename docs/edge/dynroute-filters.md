@@ -28,6 +28,7 @@
 | 1 `error_page` | cdnca_filters（D9） | 决定是否替换（§3）；替换时清头并写页面头 | — |
 | 2 `http_policy` | HTTP 策略（入口 `configure` 把 D7 的 `cdnca_security.header_filter` 注册为本槽） | 自定义响应头、CORS、`X-CDNCA-HTTP-Policy-Version` | **不执行**（v7 替换页走命名 location，location 级 header_filter 不作用） |
 | 3 `cache_status` | cdnca_cache（D8，入口 `configure` 时 `register`） | `X-CDN-Cache`/`X-CDN-Cache-Reason`/预热回显 | 执行（v7 是 server/location 级 `add_header … always`） |
+| 3b `server_timing` | cdnca_filters | 站点对象带 `server_timing` 时追加 `Server-Timing: cdn-cache;desc=<状态>, cdn-hit-layer;desc=edge\|l2, cdn-connect;dur=<ms>, cdn-ttfb;dur=<ms>`（不适用的条目省略、源站自带条目保留在前）；L2 收到受信 L1 跳时只写 `X-Cdnca-L2-Cache: <本层状态>`（L1 `proxy_hide_header`，仍可读 `$upstream_http_x_cdnca_l2_cache`）。站点未开时只多一次表字段判断 | 执行 |
 | 4 `hsts` | cdnca_filters（D9） | `Strict-Transport-Security`，只在 `$https = on`（RFC 6797 §7.2，h3 同样为 on） | 执行 |
 | 5 `alt_svc` | cdnca_tls（D4） | `Alt-Svc: h3=":<端口>"; ma=86400`（站点在该端口宣告 h3） | 执行（v7 server 级 `add_header … always`） |
 

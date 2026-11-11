@@ -63,8 +63,10 @@ func TestSecurityRuntimeCapabilitiesRequireExactMountedAssetDigests(t *testing.T
 	// WAF v2: challenge / ban actions, auto block, observe mode (ge-waf);
 	// v3: the managed WAF's c3 context (ADR 0011 RI-03); v4: content_type /
 	// http_version conditions and IP lists; v5: multipart
-	// field names / part count / field length.
-	if !hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_WAF, edgeconfig.WAFMultipartAPIVersion) ||
+	// field names / part count / field length; v6:
+	// string sets, browser / device / time conditions.
+	if !hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_WAF, edgeconfig.WAFStringSetAPIVersion) ||
+		hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_WAF, edgeconfig.WAFMultipartAPIVersion) ||
 		hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_WAF, edgeconfig.WAFConditionsAPIVersion) ||
 		hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_WAF, edgeconfig.WAFAdaptiveAPIVersion) ||
 		hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_WAF, 2) ||
@@ -242,8 +244,8 @@ func TestNativeSecurityRuntimeDeclaresWAFAndCCAfterSelfTest(t *testing.T) {
 	}
 	capabilities := agentCapabilities("1.31.1.1", status)
 	if !hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_WAF, edgeconfig.WAFNodeAPIVersion) ||
-		edgeconfig.WAFNodeAPIVersion != 5 || !hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_CC, ccAPIVersion) {
-		t.Fatal("native node did not declare WAF v5 and CC")
+		edgeconfig.WAFNodeAPIVersion != 6 || !hasAgentCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_CC, ccAPIVersion) {
+		t.Fatal("native node did not declare WAF v6 and CC")
 	}
 }
 

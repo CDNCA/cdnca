@@ -8,6 +8,7 @@ import (
 
 	"github.com/cdnca/cdnca/libs/passwordpolicy"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
+	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/google/uuid"
 )
@@ -52,14 +53,20 @@ func (s *Server) handleBuiltInRegister(w http.ResponseWriter, r *http.Request) {
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_terms_required", "terms must be accepted")
 		return
 	}
-	captcha, ok := s.loginCaptchaProof(w, r, body.Captcha)
-	if !ok {
-		return
+	// with a verification required the human check was
+	// spent sending the code, so the CAPTCHA is optional here and the
+	// service decides; the verified proofs come from the proof cookies.
+	var proof identity.LoginCaptchaProof
+	if body.Captcha != nil {
+		captcha, ok := s.loginCaptchaProof(w, r, body.Captcha)
+		if !ok {
+			return
+		}
+		if captcha != nil {
+			proof = identity.LoginCaptchaProof{ID: captcha.ID, Answer: captcha.Answer}
+		}
 	}
-	if captcha == nil {
-		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_captcha_invalid", "captcha is required")
-		return
-	}
+	legacy, references, _ := accountregistrationproof.CookieReferenceResolver{}.ResolveProofReferences(r)
 	info := s.requestInfo(r)
 	requestID := info.RequestID
 	if !builtInRegistrationMetadataPattern.MatchString(requestID) {
@@ -71,8 +78,9 @@ func (s *Server) handleBuiltInRegister(w http.ResponseWriter, r *http.Request) {
 			Email: body.Email, Phone: body.Phone, TermsAccepted: body.TermsAccepted,
 			TermsVersion: body.TermsVersion, VerificationChannel: body.VerificationChannel,
 			IdempotencyKey: key, RequestID: requestID, Source: info.SourceIP,
+			ProofReference: legacy, ProofReferences: references,
 		},
-		Captcha: identity.LoginCaptchaProof{ID: captcha.ID, Answer: captcha.Answer},
+		Captcha: proof,
 	})
 	if err != nil {
 		s.writeBuiltInRegistrationError(w, r, err)
@@ -92,6 +100,8 @@ func (s *Server) writeBuiltInRegistrationError(w http.ResponseWriter, r *http.Re
 	switch {
 	case errors.Is(err, accountregistration.ErrCaptchaInvalid):
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_captcha_invalid", "captcha is invalid")
+	case errors.Is(err, accountregistration.ErrProofInvalid):
+		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_verification_required", "a required verification code is missing or expired")
 	case errors.Is(err, accountregistration.ErrInvalidInput):
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "account_registration_invalid_input", "registration details are invalid")
 	case errors.Is(err, accountregistration.ErrRegistrationDisabled):

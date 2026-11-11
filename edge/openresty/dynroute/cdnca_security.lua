@@ -46,7 +46,7 @@ local config = {
     -- node's hot site set, like cdnca_site's lru_items.
     cache_items = 10000,
     challenges = false,             -- delivered policy versions to preload: { { id = <uuid>, revision = <n> }, ... }
-    -- rule pack mounts (ADR 0009 §8.4): the agent compiles a site's mounted
+    -- rule pack mounts (ADR 0009): the agent compiles a site's mounted
     -- WAF/ACL pack rules into <rule_plan_root>/<resolved_sha256>.json and its
     -- cc_v2 / challenge pack rules into
     -- <rule_plan_root>/<resolved_sha256>.<site_id>.cc.json (tmpfs, worker
@@ -113,7 +113,7 @@ end
 -- CC binding; here the binding is the one whose ports hold the public port.
 -- ---------------------------------------------------------------------------
 --
--- Rule pack mounts (ADR 0009 §8.4) with cc_v2 / challenge rules: the agent
+-- Rule pack mounts (ADR 0009) with cc_v2 / challenge rules: the agent
 -- writes the site's pack policy (one CC v2 policy, the pack rules in the
 -- published order user -> developer -> system) as
 -- <rule_plan_root>/<resolved_sha256>.<site_id>.cc.json. It runs after the
@@ -198,7 +198,7 @@ end
 local function program_for(site, digest)
     local program = programs:get(digest)
     if program then return program end
-    local plan, problem = rule_plan.plan(site.security.rules, true, site.site_id)
+    local plan, problem = rule_plan.plan(site.security.rules, true, site.site_id, site.security.string_sets)
     if not plan then return nil, problem end
     local compiled, compile_error = interp.compile(plan)
     if not compiled then return nil, compile_error end

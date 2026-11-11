@@ -77,7 +77,7 @@ function errorMessage(error: unknown, t: TFunction<'urlAuthPolicies'>): string {
   if (!(error instanceof ApiError)) return t('errors.request_failed')
   const known = new Set([
     'validation_error', 'permission_denied', 'version_conflict', 'idempotency_conflict',
-    'url_auth_policy_conflict', 'url_auth_key_not_revocable', 'credential_encryption_unavailable',
+    'url_auth_policy_conflict', 'url_auth_key_not_revocable', 'credential_encryption_unavailable', 'url_auth_unavailable',
     'network_error', 'request_failed',
   ])
   return known.has(error.code)

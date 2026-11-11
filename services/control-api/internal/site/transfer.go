@@ -68,6 +68,8 @@ func transferFields(current Site, subscriptionID *uuid.UUID, https bool) SiteFie
 		ForceHTTPS: boolPtr(current.ForceHTTPS), HTTPSRedirectPort: &current.HTTPSRedirectPort,
 		CacheSharedAcrossDomains: boolPtr(current.CacheSharedAcrossDomains),
 		CacheStatusHeader:        boolPtr(current.CacheStatusHeader),
+		ServerTiming:             boolPtr(current.ServerTiming),
+		RUMSet:                   true, RUMSamplePercent: current.RUMSamplePercent,
 	}
 	if !fields.HTTPSEnabled {
 		fields.HTTPSPorts, fields.ForceHTTPS, fields.HTTP3Enabled = nil, boolPtr(false), boolPtr(false)

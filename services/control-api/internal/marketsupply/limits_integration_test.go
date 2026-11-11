@@ -184,7 +184,16 @@ func TestMarketLimitsShareHoldAndRepublish(t *testing.T) {
 		}
 		return r
 	}
+	scopeRevision := func() int64 {
+		t.Helper()
+		var r int64
+		if err := pool.QueryRow(ctx, `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1`, tenant).Scan(&r); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
 	before := siteRevision()
+	scopeBefore := scopeRevision()
 	// Nothing changed: no republication.
 	if n, err := svc.RefreshLimits(ctx, map[string]Hold{}); err != nil || n != 0 || heads() != 0 || siteRevision() != before {
 		t.Fatalf("unchanged refresh republished: %d %v", n, err)
@@ -199,8 +208,10 @@ func TestMarketLimitsShareHoldAndRepublish(t *testing.T) {
 		got.connections != 4 || got.newPerSec != 2 || got.qps != 34 || got.stopped {
 		t.Fatalf("three nodes %+v", got)
 	}
-	if heads() != 1 || siteRevision() != before+1 {
-		t.Fatalf("republish heads %d site revision %d->%d", heads(), before, siteRevision())
+	// The limits are not a site column the admin edits: sites.revision (the
+	// admin's If-Match) stays, only the scope's source revision moves.
+	if heads() != 1 || siteRevision() != before || scopeRevision() <= scopeBefore {
+		t.Fatalf("republish heads %d site revision %d->%d scope revision %d->%d", heads(), before, siteRevision(), scopeBefore, scopeRevision())
 	}
 
 	// Stop hold: nodes stop; an unreachable market keeps it; release restores.

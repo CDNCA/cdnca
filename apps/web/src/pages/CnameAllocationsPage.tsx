@@ -153,7 +153,6 @@ function CnameAllocationsContent({ owner, ownerKey }: { owner: Owner; ownerKey: 
     { title: t('columns.hostname'), dataIndex: 'hostname', width: 210 },
     { title: t('columns.state'), dataIndex: 'state', width: 100, render: (value: CnameAllocationState) => <Tag color={stateColors[value]}>{t(`states.${value}`)}</Tag> },
     { title: t('columns.generation'), dataIndex: 'generation', width: 90 },
-    { title: t('columns.revision'), dataIndex: 'current_revision', width: 100 },
     { title: t('columns.updated'), dataIndex: 'updated_at', width: 180, render: (value: string) => formatDateTime(value, locale) || value },
     { title: t('columns.actions'), key: 'actions', width: 80, fixed: 'right', render: (_, row) => <Tooltip title={t('actions.detail')}><Button aria-label={t('actions.detail')} icon={<Eye size={15} />} onClick={() => setSelectedID(row.id)} /></Tooltip> },
   ]

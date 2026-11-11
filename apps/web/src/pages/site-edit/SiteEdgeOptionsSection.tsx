@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Input, Radio, Select, Switch } from 'antd'
+import { Alert, Input, InputNumber, Radio, Select, Switch } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
@@ -20,6 +20,9 @@ export interface SiteEdgeOptionsSectionProps {
   // performance: 高级设置 → 性能与协议 cards (WebSocket, 搜索引擎回源);
   // other: 高级设置 → 其它 cards. AdvancedSiteTab places both.
   part?: 'performance' | 'other'
+  // the Server-Timing switch (ServerTimingSwitch, saved on its
+  // own), placed last in 性能与协议
+  serverTiming?: React.ReactNode
   onChange: (value: SiteOriginPool) => void
   onBasicChange: (value: SiteBasicConfig) => void
 }
@@ -33,7 +36,7 @@ function lines(value: string): string[] {
 // the card title. Bound to the page's basic/origin drafts, saved with the
 // page's save button.
 export default function SiteEdgeOptionsSection({
-  pool, basic, admin, accessToken, readOnly = false, basicReadOnly = false, part = 'other', onChange, onBasicChange,
+  pool, basic, admin, accessToken, readOnly = false, basicReadOnly = false, part = 'other', serverTiming, onChange, onBasicChange,
 }: SiteEdgeOptionsSectionProps) {
   const { t } = useTranslation('siteEdgeOptions')
   const update = (changes: Partial<SiteOriginPool>) => onChange({ ...pool, ...changes })
@@ -50,6 +53,7 @@ export default function SiteEdgeOptionsSection({
   const searchEngineOn = searchEngine !== '' || searchEngineOpen
   if (part === 'performance') {
     const websocket = originForwarding(pool).websocket
+    const rum = basic.rum ?? null
     return <>
       <SettingGroup title={t('fields.websocket')} help={t('short.websocket')} tip={t('help.websocket')}
         extra={<Switch aria-label={t('fields.websocket')} disabled={readOnly} checked={websocket.enabled}
@@ -71,6 +75,22 @@ export default function SiteEdgeOptionsSection({
               value={searchEngine} onChange={(event) => update({ search_engine_origin: event.target.value })} />
           </FormRow>
         ) : null}
+      </SettingGroup>
+      {serverTiming}
+      <SettingGroup title={t('fields.rum')} help={t('short.rum')}
+        extra={<Switch aria-label={t('fields.rum')} disabled={basicReadOnly} checked={rum !== null}
+          onChange={(checked) => onBasicChange({ ...basic, rum: checked ? { sample_percent: 10 } : null })} />}>
+        {rum !== null ? <>
+          <FormRow label={t('fields.rumSample')}>
+            <InputNumber aria-label={t('fields.rumSample')} aria-describedby="site-rum-sample-hint" disabled={basicReadOnly}
+              min={1} max={100} precision={0} addonAfter="%" value={rum.sample_percent}
+              onChange={(value) => onBasicChange({ ...basic, rum: { sample_percent: Math.min(100, Math.max(1, Math.round(value ?? 10))) } })} />
+            <span id="site-rum-sample-hint" className="site-rum-hint">{t('rum.sampleHint', { percent: rum.sample_percent })}</span>
+          </FormRow>
+          <Alert type="info" showIcon className="site-rum-notes" message={<ul>
+            <li>{t('rum.privacy')}</li>
+          </ul>} />
+        </> : null}
       </SettingGroup>
     </>
   }

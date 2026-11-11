@@ -343,6 +343,46 @@ enum CapabilityName {
   // scripts and root packaging helper. Report only: control stores and shows
   // it and sends nothing back. A node without it is shown as not reporting.
   CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT = 83;
+  // SITE_SERVER_TIMING v1:
+  // the site object field server_timing (cdnca.edge.site/v2). The node
+  // appends Server-Timing entries cdn-cache, cdn-hit-layer, cdn-connect and
+  // cdn-ttfb to the site's responses. Older agents decode site objects
+  // strictly and refuse the field, so a publication with a site that has it
+  // requires this capability (site object capability "site_server_timing")
+  // and is refused for nodes that do not declare it.
+  CAPABILITY_NAME_SITE_SERVER_TIMING = 84;
+  // CHALLENGE_EXTERNAL v1 (86):
+  // the node's JS challenge engine accepts the external providers turnstile
+  // and recaptcha-v3 and the external_provider fields score_threshold and
+  // unavailable, and the Agent verifier answers 204 / 403 / 503 (passed /
+  // refused / provider unavailable). Control sends a policy using either
+  // provider or either field only to nodes declaring it; the others keep
+  // their previous policy. tencent and geetest-v4 policies without the new
+  // fields are byte for byte what older agents accept.
+  CAPABILITY_NAME_CHALLENGE_EXTERNAL = 86;
+  // URL_AUTH v1 (87): the site
+  // object field security.url_auth (cdnca.edge.site/v2) names the site's
+  // enabled URL auth policy version, and the node verifies signed URLs in
+  // dynamic routing before the cache, from the policy the URL auth secret
+  // rollout installed (no policy installed: 503). Older agents decode site
+  // objects strictly and refuse the field, so a publication with a site that
+  // has it requires this capability (site object capability "url_auth").
+  CAPABILITY_NAME_URL_AUTH = 87;
+  // SITE_RUM v1: the site
+  // object field rum (cdnca.edge.site/v2): the node injects the same-origin
+  // RUM script into the site's HTML documents and serves /.cdnca/rum/v1.js
+  // and /.cdnca/rum/collect. Older agents decode site objects strictly and
+  // refuse the field, so a publication with a site that has it requires this
+  // capability (site object capability "site_rum").
+  CAPABILITY_NAME_SITE_RUM = 89;
+  // SITE_CONTENT_REWRITE v1:
+  // the site object field content_rewrite (cdnca.edge.site/v2): the node
+  // fetches matching paths without Accept-Encoding and rewrites links,
+  // replaces text and upgrades http:// links in the site's HTML/CSS/JS
+  // (cdnca_rewrite.lua). Older agents refuse the field, so a publication
+  // with a site that has it requires this capability (site object
+  // capability "site_content_rewrite").
+  CAPABILITY_NAME_SITE_CONTENT_REWRITE = 90;
 }
 
 // Capability advertises the highest implementation version for one feature.
@@ -2008,6 +2048,9 @@ enum TelemetryKind {
   // ADR 0012 ML-07: per subscription minute statistics of cdnca_limits
   // (JSON subscription_minute.v1).
   TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1 = 8;
+  // One site's real user monitoring minute on one node
+  // (JSON rum_minute.v1): histograms and error counts, no visitor data.
+  TELEMETRY_KIND_RUM_MINUTE_V1 = 9;
 }
 
 // TelemetryClientHello must be the first Agent payload on every telemetry RPC.

@@ -1118,3 +1118,20 @@
   display: inline-flex;
   white-space: nowrap;
 }
+
+/* RUM card: body text color for contrast */
+.site-edit-v4 .site-rum-hint {
+  margin-left: 12px;
+  color: var(--cdnca-color-text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.site-edit-v4 .site-rum-notes {
+  margin-top: 12px;
+}
+
+.site-edit-v4 .site-rum-notes ul {
+  margin: 0;
+  padding-left: 18px;
+}

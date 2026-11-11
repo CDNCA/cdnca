@@ -289,7 +289,7 @@ const fixedLocaleOracle = {
   "errors.node_scheduling_platform_write_forbidden": { zh: "平台会话不能写入租户线路配置", en: "Platform sessions cannot change tenant line configuration" },
   "errors.node_scheduling_not_found": { zh: "线路组或版本不存在", en: "The line group or revision does not exist" },
   "errors.node_scheduling_name_conflict": { zh: "线路组名称已存在", en: "A line group with this name already exists" },
-  "errors.node_scheduling_revision_conflict": { zh: "线路组已被其他操作修改，请刷新后重试", en: "Another operation changed this line group. Refresh and try again." },
+  "errors.node_scheduling_revision_conflict": { zh: "内容已被其他人修改，请刷新后再保存", en: "Someone else changed this content. Refresh before saving." },
   "errors.node_scheduling_idempotency_conflict": { zh: "幂等键已绑定到不同请求，请重新操作", en: "This idempotency key is already bound to a different request. Start the operation again." },
   "errors.node_scheduling_reference_conflict": { zh: "线路组正被其他活动配置引用，请先解除引用", en: "This line group is referenced by another active configuration. Remove the reference first." },
   "errors.lineGroupInUse.message": { zh: "被{{holders}}引用，请先改它们的线路", en: "Used by {{holders}}. Change their line group first." },

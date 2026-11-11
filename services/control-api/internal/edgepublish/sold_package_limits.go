@@ -200,6 +200,9 @@ func bindSoldPackageRuntimeSecurity(ctx context.Context, tx pgx.Tx, scopeID, ten
 	if err := attachSiteIPLists(ctx, tx, scopeID, bindings); err != nil {
 		return err
 	}
+	if err := attachSiteStringSets(ctx, tx, scopeID, bindings); err != nil {
+		return err
+	}
 	byID := make(map[uuid.UUID]siteFact, len(facts))
 	for _, fact := range facts {
 		byID[fact.id] = fact

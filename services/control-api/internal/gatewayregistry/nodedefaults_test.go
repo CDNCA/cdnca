@@ -3,6 +3,7 @@ package gatewayregistry
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -141,5 +142,41 @@ func TestWithCDNTunnelPutsTheWebSocketTunnelFirst(t *testing.T) {
 	}
 	if got := WithCDNTunnel(nil, local, true); got != nil {
 		t.Fatalf("empty = %+v", got)
+	}
+}
+
+// The 重装此节点 command of a ws console names the first
+// published grpc entry (the installer falls back to 443 ws when it is closed).
+func TestReinstallNodeInstallGatewayNamesTheFirstGRPCEntryOnAWebSocketConsole(t *testing.T) {
+	local := Entrypoint{Address: "203.0.113.20:20407", ServerName: "gw.example", Transport: TransportGRPC, EnrollmentAddress: "203.0.113.20:29402"}
+	ws := Entrypoint{Address: "console.example:443", ServerName: "gw.example", Transport: TransportWS, TunnelHost: "console.example"}
+	second := Entrypoint{Address: "198.51.100.9:20407", ServerName: "gw2.example", Transport: TransportGRPC}
+	d, ok := ReinstallNodeInstallGateway([]Entrypoint{ws, local, second}, local)
+	if !ok || !reflect.DeepEqual(d, NodeGatewayDefaults{EnrollmentAddress: "203.0.113.20:29402", Address: "203.0.113.20:20407", ServerName: "gw.example", Transport: TransportGRPC}) {
+		t.Fatalf("ws console = %+v ok=%v", d, ok)
+	}
+	// A page entry without its own enrollment address falls back to the local Gateway's (NodeGatewayDefaultsFor).
+	page := Entrypoint{Address: "gw.example:20407", ServerName: "gw.example"}
+	if d, ok := ReinstallNodeInstallGateway([]Entrypoint{ws, page}, local); !ok || d.Address != "gw.example:20407" || d.EnrollmentAddress != "203.0.113.20:29402" {
+		t.Fatalf("page entry = %+v ok=%v", d, ok)
+	}
+	// A grpc console: the same entry as the install command.
+	direct, _ := DirectNodeInstallGateway([]Entrypoint{local, second}, local)
+	if d, ok := ReinstallNodeInstallGateway([]Entrypoint{local, second}, local); !ok || !reflect.DeepEqual(d, direct) {
+		t.Fatalf("grpc console = %+v ok=%v", d, ok)
+	}
+	// The install command of the ws console stays without gateway arguments.
+	if _, ok := DirectNodeInstallGateway([]Entrypoint{ws, local}, local); ok {
+		t.Fatal("install command of a ws console changed")
+	}
+	if _, ok := ReinstallNodeInstallGateway([]Entrypoint{ws}, Entrypoint{}); ok {
+		t.Fatal("ws only: no grpc entry to name")
+	}
+	if _, ok := ReinstallNodeInstallGateway([]Entrypoint{ws, {Address: "bad host:1", ServerName: "x"}}, Entrypoint{}); ok {
+		t.Fatal("invalid grpc entry accepted")
+	}
+	var none *Service
+	if _, ok, err := none.NodeReinstallGateway(t.Context()); ok || err != nil {
+		t.Fatal("nil service")
 	}
 }

@@ -247,3 +247,45 @@ func TestSiteTrafficLimitIdempotencyAndLock(t *testing.T) {
 		t.Fatal("denied audit missing")
 	}
 }
+
+// 后台评估只写 site_traffic_limits，不得推进 sites.revision（管理员保存用的 If-Match），
+// 但必须推进作用域源修订，让系统重发能看到这次决定。
+func TestSiteTrafficLimitEvaluatorKeepsAdminRevision(t *testing.T) {
+	value := newFixture(t)
+	value.put(t, sitetrafficlimit.Setting{Enabled: true, MonthlyBytes: ptr(1 << 30), TimeZone: "Asia/Shanghai"})
+	before, err := value.store.Get(t.Context(), value.tenantActor, value.site)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scopeBefore int64
+	if err := value.pool.QueryRow(t.Context(), `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1`, value.scope).Scan(&scopeBefore); err != nil {
+		t.Fatal(err)
+	}
+
+	value.usage.bytes = 2 << 30
+	if !value.tick(t, value.now.Add(2*time.Minute)) {
+		t.Fatal("over the cap did not decide")
+	}
+
+	var siteRevision, scopeAfter int64
+	if err := value.pool.QueryRow(t.Context(), `SELECT revision FROM sites WHERE id=$1`, value.site).Scan(&siteRevision); err != nil {
+		t.Fatal(err)
+	}
+	if siteRevision != before.Version {
+		t.Fatalf("evaluator advanced sites.revision %d -> %d", before.Version, siteRevision)
+	}
+	if err := value.pool.QueryRow(t.Context(), `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1`, value.scope).Scan(&scopeAfter); err != nil {
+		t.Fatal(err)
+	}
+	if scopeAfter <= scopeBefore {
+		t.Fatalf("scope source_revision did not advance: %d -> %d", scopeBefore, scopeAfter)
+	}
+	// The admin saves with the revision read before the background run: no conflict.
+	if _, err := value.store.Update(t.Context(), value.tenantActor, sitetrafficlimit.UpdateRequest{
+		SiteID: value.site, ExpectedRevision: before.Version,
+		Setting:        sitetrafficlimit.Setting{Enabled: true, MonthlyBytes: ptr(4 << 30), TimeZone: "Asia/Shanghai"},
+		IdempotencyKey: "key-" + uuid.NewString(), RequestID: "request-" + uuid.NewString(), SourceIP: "198.51.100.7",
+	}); err != nil {
+		t.Fatalf("admin save after the background run conflicted: %v", err)
+	}
+}

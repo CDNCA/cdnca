@@ -47,6 +47,7 @@ describe('role navigation', () => {
       { key: 'monitor', children: [
         '/monitor/site/realtime',
         '/monitor/site/analysis',
+        '/monitor/site/rum',
         '/monitor/site/block-log',
         '/monitor/site/block-event-log',
         '/monitor/site/cc-coordination',
@@ -70,11 +71,12 @@ describe('role navigation', () => {
         '/site/list',
         '/site/cert',
         '/site/cache-clean',
+        '/site/content-rewrite',
         '/site/cc-rule',
         '/site/waf-rule',
         '/site/rule-packs',
         '/site/security-bans',
-        '/site/ip-lists',
+        '/site/lists',
       ] },
       { key: 'stream', children: ['/stream/list'] },
       { key: 'config', children: [
@@ -97,6 +99,7 @@ describe('role navigation', () => {
         '/sys/tickets',
         '/sys/identity-review',
         '/sys/gateways',
+        '/sys/status-page',
         '/sys/approvals',
       ] },
     ])
@@ -106,6 +109,7 @@ describe('role navigation', () => {
       { key: 'monitor', children: [
         '/monitor/site/realtime',
         '/monitor/site/analysis',
+        '/monitor/site/rum',
         '/monitor/site/block-log',
         '/monitor/site/access-log',
         '/monitor/site/attack-log',
@@ -118,11 +122,12 @@ describe('role navigation', () => {
         '/site/list',
         '/site/cert',
         '/site/cache-clean',
+        '/site/content-rewrite',
         '/site/cc-rule',
         '/site/waf-rule',
         '/site/rule-packs',
         '/site/security-bans',
-        '/site/ip-lists',
+        '/site/lists',
         '/site/dns-hub',
       ] },
       { key: 'stream', children: ['/stream/list'] },
@@ -151,6 +156,7 @@ describe('role navigation', () => {
     expect(admin.find((item) => item.key === 'monitor')?.children?.map((item) => item.label)).toEqual([
       '实时监控',
       '数据分析',
+      '真实用户体验',
       '拉黑日志',
       '拦截事件明细',
       '跨节点 CC 状态',
@@ -188,6 +194,7 @@ describe('role navigation', () => {
       '工单管理',
       '实名审核',
       '网关管理',
+      '状态页',
       '审批中心',
     ])
 
@@ -208,6 +215,7 @@ describe('role navigation', () => {
     expect(getNavigation('user').find((item) => item.key === 'monitor')?.children?.map((item) => item.label)).toEqual([
       '实时监控',
       '数据分析',
+      '真实用户体验',
       '拉黑日志',
       '访问日志',
       'WAF日志',
@@ -406,14 +414,16 @@ describe('role navigation', () => {
       { key: '/site/list', label: '网站列表' },
       { key: '/site/cert', label: '证书管理' },
       { key: '/site/cache-clean', label: '刷新预热' },
+      // 内容改写
+      { key: '/site/content-rewrite', label: '内容改写' },
       { key: '/site/cc-rule', label: 'CC规则' },
       { key: '/site/waf-rule', label: 'WAF规则' },
       // PA-11 rule packs: beyond the reference menu (1.0.35 plugin platform).
       { key: '/site/rule-packs', label: '规则包' },
       // Ban list.
       { key: '/site/security-bans', label: '封禁名单' },
-      // Named IP lists.
-      { key: '/site/ip-lists', label: 'IP 名单' },
+      // Named IP lists and string sets.
+      { key: '/site/lists', label: '列表与对象' },
     ]
 
     for (const role of ['admin', 'user'] as const) {
@@ -775,7 +785,7 @@ describe('role navigation', () => {
     expect(getBreadcrumbLabels('admin', '/monitor/site/cc-coordination')).toEqual(['首页', '统计分析', '跨节点 CC 状态'])
   })
 
-  // tp-b1: the tenant console follows the reference user menu (AUDIT §3).
+  // tp-b1: the tenant console follows the reference user menu (AUDIT).
   it('moves operator pages out of the tenant console and keeps them for administrators', () => {
     expect(isImplementedPath('user', '/monitor/site/cc-coordination', ['sites.read'])).toBe(false)
     expect(isImplementedPath('admin', '/monitor/site/cc-coordination', ['sites.read'])).toBe(true)
@@ -913,6 +923,8 @@ describe('route metadata guard', () => {
     '/403', '/500', '*', '/plugin-ui/:pluginId/:pageId',
     // 纯重定向（Navigate / AliasRedirect）
     '/sys/custom-roles', '/sys/notification', '/sys/log', '/finance/recharge',
+    // IP 名单 moved into 列表与对象 (?tab=ip).
+    '/site/ip-lists',
   ])
 
   it('gives every rendered App route a breadcrumb beyond the home label', () => {

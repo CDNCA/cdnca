@@ -471,6 +471,7 @@ func siteFields(c siteconf.Config, http3 bool) (site.SiteFields, site.OriginPool
 	fields.TLSPreferServerCiphersReset = tlsOptions.PreferServerCiphers == nil
 	fields.IPv6Enabled = c.IPv6
 	fields.CacheSharedAcrossDomains, fields.CacheStatusHeader = boolean(c.CacheSharedAcrossDomains), boolean(!c.CacheStatusHeaderOff)
+	fields.ServerTiming = boolean(c.ServerTiming)
 	if c.ClientAuth != nil {
 		fields.TLSClientAuth, fields.TLSClientCAPEM = text(c.ClientAuth.Mode), text(c.ClientAuth.CAPEM)
 	}

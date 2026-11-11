@@ -18,7 +18,7 @@ func TestCompileSiteCarriesSiteSettings(t *testing.T) {
 	s.TLSProtocols = []string{"TLSv1", "TLSv1.1", "TLSv1.2"}
 	s.TLSCipherPreset, s.TLSCipherSuites = "custom", []string{"ECDHE-RSA-AES128-GCM-SHA256"}
 	s.TLSOCSPStapling, s.TLSPreferServerCiphers, s.HTTP2Enabled = true, &on, false
-	s.ListenerState.IPv6DesiredEnabled, s.CacheSharedAcrossDomains, s.CacheStatusHeader = true, true, false
+	s.ListenerState.IPv6DesiredEnabled, s.CacheSharedAcrossDomains, s.CacheStatusHeader, s.ServerTiming = true, true, false, true
 	s.OriginPool.L2Mode = site.SiteL2Off
 	cfg, unsupported := CompileSite(s)
 	if len(unsupported) != 0 {
@@ -32,7 +32,7 @@ func TestCompileSiteCarriesSiteSettings(t *testing.T) {
 		!slices.Equal(tls.CipherSuites, s.TLSCipherSuites) || !tls.OCSPStapling || tls.PreferServerCiphers == nil || !tls.HTTP2Off {
 		t.Fatalf("tls = %+v", tls)
 	}
-	if !cfg.IPv6 || !cfg.CacheSharedAcrossDomains || !cfg.CacheStatusHeaderOff || cfg.Forwarding == nil || !cfg.Forwarding.L2Off {
+	if !cfg.IPv6 || !cfg.CacheSharedAcrossDomains || !cfg.CacheStatusHeaderOff || !cfg.ServerTiming || cfg.Forwarding == nil || !cfg.Forwarding.L2Off {
 		t.Fatalf("config = %+v forwarding %+v", cfg, cfg.Forwarding)
 	}
 }
@@ -44,7 +44,7 @@ func TestCompileSiteDefaultSettingsAreAbsent(t *testing.T) {
 	if err := cfg.Normalize(); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.TLS != nil || cfg.IPv6 || cfg.CacheStatusHeaderOff || cfg.Forwarding != nil {
+	if cfg.TLS != nil || cfg.IPv6 || cfg.CacheStatusHeaderOff || cfg.ServerTiming || cfg.Forwarding != nil {
 		t.Fatalf("defaults carried: tls=%+v forwarding=%+v", cfg.TLS, cfg.Forwarding)
 	}
 }

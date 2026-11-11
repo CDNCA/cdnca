@@ -19,10 +19,10 @@ export const zhCNFirewallAction = {
   inheritedHint: '下方为当前生效的默认值。修改并保存后，本站改为使用自己的设置；之后可随时「恢复继承默认」。',
   defaults: {
     title: '默认设置', edit: '编辑默认设置', collapse: '收起', save: '保存默认设置', readOnly: '当前账号没有防火墙管理权限，只能查看。',
-    hintSystem: '尚未保存默认设置：没有单独设置的网站（{{count}} 个）使用系统内置默认，不下发到节点。保存后这些网站立即按默认设置生效。',
-    hintSaved: '没有单独设置的网站（{{count}} 个）都使用这里的设置；单独设置过的网站不受影响，可在该网站页「恢复继承默认」。',
+    inheriting: '继承此默认的网站', inheritingCount: '{{count}} 个', pickUser: '在下方选择所属用户，查看并编辑该用户的默认设置',
+    systemNote: '尚未保存默认设置，使用系统内置默认，不下发到节点；保存后继承中的网站立即按默认设置生效。',
     saved: '默认设置已保存，{{count}} 个继承中的网站将按新设置下发', saveFailed: '默认设置保存失败', loadFailed: '默认设置加载失败',
-    tenant: '默认设置所属用户', tenantPlaceholder: '选择用户后显示并编辑其默认设置', tenantEmpty: '没有匹配的用户',
+    tenant: '所属用户', tenantPlaceholder: '全部用户', tenantEmpty: '没有匹配的用户',
   },
   sections: { trigger: '动作与阈值', networks: '网段' },
   help: {
@@ -34,7 +34,7 @@ export const zhCNFirewallAction = {
     trustedCrawler: '网段与 User-Agent 前缀同时匹配时放行，不受阈值影响。', returnPage: '常态动作为「返回受控页面」时返回的状态码与正文。',
   },
   picker: {
-    search: '按域名搜索网站', empty: '没有网站', loadFailed: '网站列表加载失败', retry: '重试', openFailed: '无法读取该网站的所属用户，请稍后重试',
+    search: '按域名搜索网站', empty: '没有网站', emptySearch: '没有匹配「{{domain}}」的网站，换个域名关键字试试', aliases: '另有 {{count}} 个域名', loadFailed: '网站列表加载失败', retry: '重试', openFailed: '无法读取该网站的所属用户，请稍后重试',
     configure: '配置动作策略', configureSite: '配置 {{domain}} 的动作策略',
     columns: { domain: '网站', owner: '所属用户', action: '操作' },
   },
@@ -62,10 +62,10 @@ export const enUSFirewallAction = {
   inheritedHint: 'The fields below are the default in force. Saving changes gives this site its own settings; restore the default at any time.',
   defaults: {
     title: 'Default settings', edit: 'Edit default settings', collapse: 'Collapse', save: 'Save default settings', readOnly: 'This account lacks firewall management permission; view only.',
-    hintSystem: 'No default saved yet: sites without their own settings ({{count}}) use the built-in system default, which is not delivered. Saving applies it to them at once.',
-    hintSaved: 'Sites without their own settings ({{count}}) use these settings; sites with their own are unaffected and can restore the default on their page.',
+    inheriting: 'Sites inheriting this default', inheritingCount: '{{count}}', pickUser: 'Pick a user below to view and edit their default settings',
+    systemNote: 'No default saved yet: the built-in system default applies and is not delivered to nodes. Saving applies it to inheriting sites at once.',
     saved: 'Default settings saved; {{count}} inheriting sites are delivered the new settings', saveFailed: 'Failed to save the default settings', loadFailed: 'Failed to load the default settings',
-    tenant: 'Default settings of user', tenantPlaceholder: 'Pick a user to view and edit their default settings', tenantEmpty: 'No matching users',
+    tenant: 'Owner', tenantPlaceholder: 'All users', tenantEmpty: 'No matching users',
   },
   sections: { trigger: 'Actions and thresholds', networks: 'Networks' },
   help: {
@@ -77,7 +77,7 @@ export const enUSFirewallAction = {
     trustedCrawler: 'Allowed when both the network and the User-Agent prefix match, regardless of thresholds.', returnPage: 'Status and body returned when the normal action is "Return controlled page".',
   },
   picker: {
-    search: 'Search sites by domain', empty: 'No sites', loadFailed: 'Failed to load sites', retry: 'Retry', openFailed: 'Could not read the site owner; try again later',
+    search: 'Search sites by domain', empty: 'No sites', emptySearch: 'No site matches "{{domain}}"; try another domain keyword', aliases: '{{count}} more domains', loadFailed: 'Failed to load sites', retry: 'Retry', openFailed: 'Could not read the site owner; try again later',
     configure: 'Configure policy', configureSite: 'Configure the action policy of {{domain}}',
     columns: { domain: 'Site', owner: 'Owner', action: 'Action' },
   },

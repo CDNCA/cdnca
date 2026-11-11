@@ -25,6 +25,9 @@ type Store struct {
 	auditor    *audit.Log
 	authorizer TxAuthorizer
 	now        func() time.Time
+	// publisher delivers an enabled policy's version to its nodes
+	// (SetPublisher); nil: enabled writes are refused.
+	publisher Publisher
 }
 
 type rowScanner interface{ Scan(...any) error }
@@ -121,6 +124,9 @@ func (s *Store) Create(ctx context.Context, actor Actor, request CreateRequest, 
 		if err := s.appendAudit(ctx, tx, actor, item, request.RequestID, "url_auth_policy.create", map[string]any{"current_key_id": key.ID}); err != nil {
 			return err
 		}
+		if err := s.afterWrite(ctx, tx, actor.UserID, item, request.RequestID); err != nil {
+			return err
+		}
 		if err := s.completeWrite(ctx, tx, actor.UserID, "url_auth_policy.create", request.IdempotencyKey, item.ID, item); err != nil {
 			return err
 		}
@@ -198,6 +204,9 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 		if err := s.appendAudit(ctx, tx, actor, item, request.RequestID, "url_auth_policy.update", nil); err != nil {
 			return err
 		}
+		if err := s.afterWrite(ctx, tx, actor.UserID, item, request.RequestID); err != nil {
+			return err
+		}
 		if err := s.completeWrite(ctx, tx, actor.UserID, "url_auth_policy.update", request.IdempotencyKey, item.ID, item); err != nil {
 			return err
 		}
@@ -265,6 +274,9 @@ func (s *Store) SetEnabled(ctx context.Context, actor Actor, request StateReques
 			return err
 		}
 		if err := s.appendAudit(ctx, tx, actor, item, request.RequestID, auditOperation, nil); err != nil {
+			return err
+		}
+		if err := s.afterWrite(ctx, tx, actor.UserID, item, request.RequestID); err != nil {
 			return err
 		}
 		if err := s.completeWrite(ctx, tx, actor.UserID, writeOperation, request.IdempotencyKey, item.ID, item); err != nil {
@@ -341,6 +353,9 @@ func (s *Store) Rotate(ctx context.Context, actor Actor, request RotateRequest, 
 		if err := s.appendAudit(ctx, tx, actor, item, request.RequestID, "url_auth_policy.rotate", map[string]any{"current_key_id": key.ID, "previous_key_id": current.CurrentKey.KeyID}); err != nil {
 			return err
 		}
+		if err := s.afterWrite(ctx, tx, actor.UserID, item, request.RequestID); err != nil {
+			return err
+		}
 		if err := s.completeWrite(ctx, tx, actor.UserID, "url_auth_policy.rotate", request.IdempotencyKey, item.ID, item); err != nil {
 			return err
 		}
@@ -410,6 +425,9 @@ func (s *Store) Revoke(ctx context.Context, actor Actor, request RevokeRequest, 
 			return err
 		}
 		if err := s.appendAudit(ctx, tx, actor, item, request.RequestID, "url_auth_policy.revoke", map[string]any{"revoked_key_id": request.KeyID}); err != nil {
+			return err
+		}
+		if err := s.afterWrite(ctx, tx, actor.UserID, item, request.RequestID); err != nil {
 			return err
 		}
 		if err := s.completeWrite(ctx, tx, actor.UserID, "url_auth_policy.revoke", request.IdempotencyKey, item.ID, item); err != nil {

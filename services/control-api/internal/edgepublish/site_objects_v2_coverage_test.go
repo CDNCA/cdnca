@@ -120,6 +120,9 @@ var siteObjectV2Coverage = map[string]string{
 	"http_policy.policy_id":                   "-> http_policy.id",
 	"http_policy.policy_revision":             "-> http_policy.revision",
 	"http_policy.artifact_sha256":             "dropped: digest of the whole scope file; http_policy.sha256 addresses the site's own entry",
+	"url_auth.policy_id":                      "-> security.url_auth.id",
+	"url_auth.policy_version":                 "-> security.url_auth.revision",
+	"url_auth.fallback_floor":                 "-> security.url_auth_fallback_floor",
 	"firewall_action.policy_id":               "-> security.firewall_action.id",
 	"firewall_action.policy_revision":         "-> security.firewall_action.revision",
 	"firewall_action.document_sha256":         "-> security.firewall_action.sha256 (the file object)",
@@ -263,6 +266,8 @@ var siteObjectV2Outside = map[string]string{
 	"challenge secret":               "unchanged: the challenge secret rollout installs <policy_id>/versions/<n> on the node",
 	"limits.max_body_bytes (system)": "0 = the node-level system limit (document system.nginx.client_max_body_bytes stays a node skeleton setting)",
 	"security.mounts (rule packs)":   "-> security.mounts, security.resolved_sha256 (site_security_mounts, loadSiteRuleMounts; packs travel as node artifact set items)",
+	"server_timing":                  "fact: sites.server_timing (migration 651) -> server_timing",
+	"security.string_sets":           "fact: security_string_sets referenced by the rules (migration 652, loadSiteStringSets) -> security.string_sets",
 	"placement":                      "pending: site_runtime 10 (ADR 0009 §8.1)",
 	"SNI != Host":                    "pending: product decision (ADR 0009 PoC §7)",
 }

@@ -122,8 +122,12 @@ func TestChallengePolicyHTTPCRUDIsolationAndRBAC(t *testing.T) {
 	if updated.Revision != 2 || updated.Mode != ModeExternal || !updated.ExternalProviderConfigured {
 		t.Fatalf("updated policy = %#v", updated)
 	}
+	// provider 名在只读的 external_provider_summary 中展示（§7），密钥与应用引用仍不得出现。
 	assertNoPrivateReferences(t, updatedResponse.Body.Bytes(), external.KeyReference,
-		external.ExternalProvider.AppReference, external.ExternalProvider.Provider)
+		external.ExternalProvider.AppReference)
+	if updated.ExternalProvider == nil || updated.ExternalProvider.Provider != external.ExternalProvider.Provider {
+		t.Fatalf("external_provider_summary = %#v, want provider %q", updated.ExternalProvider, external.ExternalProvider.Provider)
+	}
 
 	stale := fixture.request(t, "owner-a", http.MethodPatch, itemPath(fixture.tenantA, created.ID),
 		map[string]any{"config": external}, "stale-update", quoteRevision(1))

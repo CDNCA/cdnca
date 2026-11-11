@@ -168,8 +168,70 @@ local function action_spec(site_id, policy, telemetry)
     return table.concat(parts)
 end
 
+-- WAF v6 condition values as edgeconfig conditionSpec
+-- writes them: struct field order, compact, no HTML escaping. Their strings
+-- are UUIDs, names of fixed lists and header names, which Go and cjson
+-- encode alike once cjson's "\/" is undone.
+local function spec_string(value)
+    return (cjson.encode(value):gsub("\\/", "/"))
+end
+
+local function spec_list(values, encode)
+    local parts = {}
+    for index, value in ipairs(values or {}) do parts[index] = encode(value) end
+    return "[" .. table.concat(parts, ",") .. "]"
+end
+
+local function spec_ints(values) return spec_list(values, go_int) end
+local function spec_pairs(values) return spec_list(values, spec_ints) end
+
+-- WAFBrowserMatch.Spec (field "names") / WAFDeviceMatch.Spec ("kinds").
+local function names_spec(field, values, negate)
+    return '{"' .. field .. '":' .. spec_list(values, spec_string) .. (negate == true and ',"negate":true' or "") .. "}"
+end
+
+-- WAFBrowserVersion.Spec.
+local function browser_version_spec(value)
+    return '{"name":' .. spec_string(value.name) .. ',"op":' .. spec_string(value.op) .. ',"version":' ..
+        spec_ints(value.version) .. "}"
+end
+
+-- WAFTimeMatch.Spec: negate, ranges, weekly, offsets, until, each omitted
+-- when empty.
+local function time_spec(value)
+    local parts = {}
+    if value.negate == true then parts[#parts + 1] = '"negate":true' end
+    if type(value.ranges) == "table" and #value.ranges > 0 then parts[#parts + 1] = '"ranges":' .. spec_pairs(value.ranges) end
+    if type(value.weekly) == "table" and #value.weekly > 0 then
+        parts[#parts + 1] = '"weekly":' .. spec_list(value.weekly, function(slot)
+            return '{"days":' .. go_int(slot.days) .. ',"from":' .. go_int(slot.from) .. ',"to":' .. go_int(slot.to) .. "}"
+        end)
+    end
+    if type(value.offsets) == "table" and #value.offsets > 0 then parts[#parts + 1] = '"offsets":' .. spec_pairs(value.offsets) end
+    local until_value = tonumber(value["until"])
+    if until_value and until_value ~= 0 then parts[#parts + 1] = '"until":' .. go_int(until_value) end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
+-- StringSetConditionSpec: {"id","revision","target","key","negate"}, every key present.
+local function string_set_spec(ref)
+    return '{"id":' .. spec_string(ref.set_id) .. ',"revision":' .. go_int(ref.revision) .. ',"target":' ..
+        spec_string(ref.target) .. ',"key":' .. spec_string(ref.key or "") .. ',"negate":' ..
+        (ref.negate == true and "true" or "false") .. "}"
+end
+
+-- The edgeconfig.WAFMatch fields this builder maps. A field the site object
+-- has and this list does not would be dropped, widening the rule: the plan is
+-- refused instead (unknown fields are an error).
+local MATCH_FIELDS = { host = true, port = true, method = true, path = true, header = true, source_cidr = true,
+    inspect = true, ja4 = true, not_ja4 = true, ip_intel = true, ip_lists = true, string_sets = true,
+    browser = true, browser_version = true, device = true, time = true }
+
 local function rule_conditions(rule)
     local match = rule.match or {}
+    for key in pairs(match) do
+        if not MATCH_FIELDS[key] then return nil, "match field " .. tostring(key) end
+    end
     local conditions = {}
     local function add(condition) conditions[#conditions + 1] = condition end
     if rule.expires_at and rule.expires_at ~= "" then
@@ -195,12 +257,25 @@ local function rule_conditions(rule)
     if match.source_cidr and match.source_cidr ~= "" then add({ op = "source_cidr", value = match.source_cidr }) end
     if type(match.ja4) == "table" then add({ op = "ja4_in", values = match.ja4 }) end
     if type(match.not_ja4) == "table" then add({ op = "ja4_not_in", values = match.not_ja4 }) end
+    -- WAF v6 client conditions: after ja4_not_in, before ip_intel.
+    if type(match.browser) == "table" then
+        add({ op = "browser_in", value = names_spec("names", match.browser.names, match.browser.negate) })
+    end
+    if type(match.browser_version) == "table" then
+        add({ op = "browser_version", value = browser_version_spec(match.browser_version) })
+    end
+    if type(match.device) == "table" then
+        add({ op = "device_in", value = names_spec("kinds", match.device.kinds, match.device.negate) })
+    end
+    if type(match.time) == "table" then add({ op = "time_window", value = time_spec(match.time) }) end
     for _, condition in ipairs(match.ip_intel or {}) do
         local spec = ipintel_spec(condition)
         if not spec then return nil, "ip_intel" end
         add({ op = "ip_intel", value = spec })
     end
     for _, list in ipairs(match.ip_lists or {}) do add({ op = "ip_list", value = ip_list_spec(list) }) end
+    -- WAF v6 string sets: after ip_list, before inspect.
+    for _, ref in ipairs(match.string_sets or {}) do add({ op = "string_set", value = string_set_spec(ref) }) end
     for _, inspect in ipairs(match.inspect or {}) do add({ op = "inspect", value = inspect_json(inspect) }) end
     return conditions
 end
@@ -209,11 +284,13 @@ end
 -- (cdnca_managed_waf: a temporary allow's CRS exemption, SF-E01).
 _M.unix_seconds = unix_seconds
 
--- plan(site_rules, telemetry, site_id): the rule plan table of a site
--- object's security.rules, as CompileSiteSecurityRulePlan(site_id, ...)
--- builds it (site_id scopes WAF v2 bans).
-function _M.plan(rules, telemetry, site_id)
+-- plan(site_rules, telemetry, site_id, string_sets): the rule plan table of a
+-- site object's security.rules, as CompileSiteSecurityRulePlan(site_id, ...)
+-- builds it (site_id scopes WAF v2 bans; string_sets is the site object's
+-- security.string_sets, carried as the plan's string_sets).
+function _M.plan(rules, telemetry, site_id, string_sets)
     local plan = { schema = SCHEMA, header_overflow = "none", telemetry = telemetry == true, segments = {} }
+    if type(string_sets) == "table" and #string_sets > 0 then plan.string_sets = string_sets end
     for index, policy in ipairs(rules.policies or {}) do
         local segment = { kind = policy.kind, policy_id = policy.policy_id, policy_version = policy.policy_version,
             binding_revision = policy.binding_revision, runtime_sha256 = policy.runtime_sha256, enabled = policy.enabled,

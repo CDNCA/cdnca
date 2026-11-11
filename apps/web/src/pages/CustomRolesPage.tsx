@@ -227,7 +227,6 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
   const roleColumns: TableColumnsType<Role> = [
     { title: t('fields.name'), dataIndex: 'name' },
     { title: t('fields.permissions'), dataIndex: 'permissions', render: (value: string[]) => <Space wrap>{value.map((item) => <Tag key={item} title={item}>{permissionName(item)}</Tag>)}</Space> },
-    { title: t('fields.revision'), dataIndex: 'current_revision', width: 100 },
     { title: t('fields.status'), key: 'status', width: 110, render: (_, row) => <Tag color={row.deactivated_at ? 'default' : 'success'}>{t(row.deactivated_at ? 'statuses.deactivated' : 'statuses.active')}</Tag> },
     { title: t('fields.actions'), key: 'actions', width: 360, render: (_, row) => <Space size={4} wrap>
       <Button size="small" onClick={() => openEditor({ kind: 'rename', role: row })}>{t('actions.rename')}</Button>
@@ -247,7 +246,6 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
   const grantColumns: TableColumnsType<Grant> = [
     { title: t('fields.role'), dataIndex: 'role_id', width: 270, render: (value: string) => <span title={value}>{roleName(value)}</span> },
     { title: t('fields.subjectUser'), dataIndex: 'subject_user_id', width: 270, render: (value: string) => <span title={value}>{memberName(value)}</span> },
-    { title: t('fields.revision'), dataIndex: 'role_revision', width: 100 },
     { title: t('fields.status'), key: 'state', width: 100, render: (_, row) => t(row.revoked_at ? 'statuses.revoked' : 'statuses.active') },
     { title: t('fields.actions'), key: 'actions', width: 130, render: (_, row) => row.revoked_at ? null : <Button danger size="small" onClick={() => openEditor({ kind: 'revoke', grant: row })}>{t('actions.revoke')}</Button> },
   ]

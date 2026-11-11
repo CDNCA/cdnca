@@ -60,6 +60,19 @@ local OP_CIDR4, OP_CIDR6, OP_JA4, OP_IPINTEL, OP_INSPECT = 10, 11, 12, 13, 14
 local OP_IPLIST = 15
 -- ja4_not_in (WAF_JA4_NEGATION v1); never an index key.
 local OP_JA4_NOT = 16
+-- WAF v6: string_set, browser_in,
+-- browser_version, device_in, time_window; never index keys.
+-- Every op >= OP_STRSET is one of them (v6_condition).
+local OP_STRSET, OP_BROWSER, OP_BROWSER_VERSION, OP_DEVICE, OP_TIME = 17, 18, 19, 20, 21
+local BROWSER_VERSION_OPS = { eq = 0, gte = 1, lt = 2 }
+local STRSET_MODES = { exact = true, prefix = true, suffix = true, contains = true, wildcard = true }
+local STRSET_TARGETS = { host = true, path = true, request_uri = true, user_agent = true, referer = true,
+    header = true, ja4 = true }
+-- edgeconfig MaxSiteStringSets / MaxStringSetMembers.
+local MAX_STRING_SETS, MAX_STRING_SET_MEMBERS = 16, 10000
+local MAX_UNIX = 9007199254740991
+-- cdnca_ua, loaded by the first plan with a browser / device condition.
+local ua_parser
 
 local ACTIONS = { allow = "allow", block = "block", log = "log" }
 -- WAF v2 rule actions (edgeconfig waf_action.go): only in segments with an
@@ -148,7 +161,75 @@ local function compile_cidr(text)
     return OP_CIDR6, network, masks
 end
 
-local function compile_condition(condition, out)
+-- names_set: a sorted, unique, non-empty list of allowed names as a set.
+local function names_set(values, allowed)
+    if type(values) ~= "table" or #values == 0 then return nil end
+    local set = {}
+    for index, value in ipairs(values) do
+        if not is_string(value) or not allowed[value] or (index > 1 and values[index - 1] >= value) then return nil end
+        set[value] = true
+    end
+    return set
+end
+
+local function is_pair(value)
+    return type(value) == "table" and #value == 2 and is_integer(value[1], -MAX_UNIX, MAX_UNIX) and
+        is_integer(value[2], -MAX_UNIX, MAX_UNIX)
+end
+
+-- compile_time checks a time_window value (edgeconfig ValidateWAFTimeMatch)
+-- into {negate, ranges = flat [start, end, ...]} or {negate, weekly, starts,
+-- shifts, until}.
+local function compile_time(spec)
+    if type(spec) ~= "table" then return nil end
+    local ranges, weekly, offsets = spec.ranges, spec.weekly, spec.offsets
+    local has_ranges = type(ranges) == "table" and #ranges > 0
+    local has_weekly = type(weekly) == "table" and #weekly > 0
+    if has_ranges == has_weekly or (spec.negate ~= nil and type(spec.negate) ~= "boolean") then return nil end
+    local compiled = { negate = spec.negate == true }
+    if has_ranges then
+        if offsets ~= nil or spec["until"] ~= nil or #ranges > 4 then return nil end
+        local flat = {}
+        for index, span in ipairs(ranges) do
+            if not is_pair(span) or span[1] < 0 or span[1] >= span[2] or (index > 1 and ranges[index - 1][2] >= span[1]) then
+                return nil
+            end
+            flat[#flat + 1], flat[#flat + 2] = span[1], span[2]
+        end
+        compiled.ranges = flat
+        return compiled
+    end
+    if #weekly > 7 or type(offsets) ~= "table" or #offsets == 0 or #offsets > 64 then return nil end
+    local slots = {}
+    for index, slot in ipairs(weekly) do
+        if type(slot) ~= "table" or not is_integer(slot.days, 1, 127) or not is_integer(slot.from, 0, 1439) or
+            not is_integer(slot.to, 0, 1439) or slot.from == slot.to then
+            return nil
+        end
+        if index > 1 then
+            local previous = weekly[index - 1]
+            if previous.from > slot.from or (previous.from == slot.from and (previous.to > slot.to or
+                (previous.to == slot.to and previous.days >= slot.days))) then
+                return nil
+            end
+        end
+        slots[index] = { slot.days, slot.from, slot.to }
+    end
+    local starts, shifts = {}, {}
+    for index, entry in ipairs(offsets) do
+        if not is_pair(entry) or entry[1] < 0 or entry[2] < -64800 or entry[2] > 64800 or
+            (index > 1 and starts[index - 1] >= entry[1]) then
+            return nil
+        end
+        starts[index], shifts[index] = entry[1], entry[2]
+    end
+    local until_value = spec["until"]
+    if not is_integer(until_value, starts[#starts] + 1, MAX_UNIX) then return nil end
+    compiled.weekly, compiled.starts, compiled.shifts, compiled["until"] = slots, starts, shifts, until_value
+    return compiled
+end
+
+local function compile_condition(condition, out, sets)
     if type(condition) ~= "table" or not is_string(condition.op) then return "condition" end
     local op, value, number = condition.op, condition.value, condition.number
     local code, a, b, c
@@ -203,6 +284,46 @@ local function compile_condition(condition, out)
     elseif op == "ip_list" then
         if not is_string(value) then return "ip_list" end
         code, a = OP_IPLIST, value
+    elseif op == "string_set" then
+        -- a = {matcher, target, key (header) | nil, ja4}, b = negate.
+        local ref = is_string(value) and cjson.decode(value)
+        if type(ref) ~= "table" or not is_string(ref.id) or not is_integer(ref.revision, 1, MAX_UNIX) or
+            not STRSET_TARGETS[ref.target] or type(ref.key) ~= "string" or type(ref.negate) ~= "boolean" or
+            (ref.target == "header") ~= (ref.key ~= "") or ref.key ~= str_lower(ref.key) then
+            return "string_set"
+        end
+        local matcher = sets[ref.id .. "\0" .. string.format("%d", ref.revision)]
+        if not matcher then return "string_set " .. ref.id .. " revision " .. string.format("%d", ref.revision) .. " missing" end
+        if ref.target == "ja4" and (matcher.mode ~= "exact" or matcher.caseless) then return "string_set ja4 target" end
+        code, a, b = OP_STRSET, { matcher = matcher, target = ref.target, key = ref.key ~= "" and ref.key or nil }, ref.negate
+    elseif op == "browser_in" or op == "device_in" then
+        -- a = name set, b = negate.
+        if not ua_parser then ua_parser = require("cdnca_ua") end
+        local spec = is_string(value) and cjson.decode(value)
+        local field, allowed = "names", ua_parser.BROWSERS
+        if op == "device_in" then field, allowed = "kinds", ua_parser.DEVICES end
+        local set = type(spec) == "table" and names_set(spec[field], allowed)
+        if not set or (spec.negate ~= nil and type(spec.negate) ~= "boolean") then return op end
+        code, a, b = op == "browser_in" and OP_BROWSER or OP_DEVICE, set, spec.negate == true
+    elseif op == "browser_version" then
+        -- a = browser, b = version number (cdnca_ua scale), c = 0 eq | 1 gte | 2 lt.
+        if not ua_parser then ua_parser = require("cdnca_ua") end
+        local spec = is_string(value) and cjson.decode(value)
+        if type(spec) ~= "table" or not ua_parser.VERSIONED[spec.name] or BROWSER_VERSION_OPS[spec.op] == nil or
+            type(spec.version) ~= "table" or #spec.version ~= 3 then
+            return op
+        end
+        local number = 0
+        for index = 1, 3 do
+            local part = spec.version[index]
+            if not is_integer(part, 0, ua_parser.VERSION_SCALE - 1) then return op end
+            number = number * ua_parser.VERSION_SCALE + part
+        end
+        code, a, b, c = OP_BROWSER_VERSION, spec.name, number, BROWSER_VERSION_OPS[spec.op]
+    elseif op == "time_window" then
+        local compiled = compile_time(is_string(value) and cjson.decode(value))
+        if not compiled then return op end
+        code, a = OP_TIME, compiled
     else
         return "unknown op " .. op
     end
@@ -212,7 +333,7 @@ local function compile_condition(condition, out)
 end
 
 -- Match index (cdnca.edge.rule-index/v1, libs/rulepack CompileMatchIndex;
--- ADR 0011 §6.5). keys[n] names rule n's key condition (rules numbered in
+-- ADR 0011). keys[n] names rule n's key condition (rules numbered in
 -- plan order across segments); the request's own values are looked up in
 -- hash buckets of pure key conditions, and every inspect clause key of one
 -- (target, key, filters) is merged into one Aho-Corasick automaton over its
@@ -268,10 +389,12 @@ local function alternation(sorted, lo, hi, depth)
     return "(?:" .. table.concat(parts, "|") .. ")"
 end
 
--- patterns compiles needles[lo..hi] (sorted) into caseless JIT PCREs.
-local function patterns(sorted, lo, hi, out)
+-- patterns compiles needles[lo..hi] (sorted) into JIT PCREs, caseless
+-- unless options says otherwise (a case-sensitive string set: "j").
+local function patterns(sorted, lo, hi, out, options)
+    options = options or "ji"
     if hi - lo + 1 <= NEEDLES_PER_PATTERN then
-        local compiled, _, flags = re_compile(alternation(sorted, lo, hi, 0), "ji")
+        local compiled, _, flags = re_compile(alternation(sorted, lo, hi, 0), options)
         if compiled then
             out[#out + 1] = { compiled, flags }
             return true
@@ -279,15 +402,14 @@ local function patterns(sorted, lo, hi, out)
         if lo == hi then return false end
     end
     local middle = math.floor((lo + hi) / 2)
-    return patterns(sorted, lo, middle, out) and patterns(sorted, middle + 1, hi, out)
+    return patterns(sorted, lo, middle, out, options) and patterns(sorted, middle + 1, hi, out, options)
 end
 
--- automaton builds the scanner of needles (array of lower-case strings):
--- the trie of the needles in flat FFI arrays (root transitions direct,
--- other states a run of (label, target) edges, out = needle number) and the
--- PCREs that find every position where a needle starts. Returns nil when
--- PCRE refuses a needle.
-local function automaton(needles)
+-- trie builds the trie of needles (array of strings) in flat FFI arrays
+-- (root transitions direct, other states a run of (label, target) edges,
+-- out = needle number); automaton adds the PCREs, a prefix / suffix string
+-- set walks it alone (trie_hit).
+local function trie(needles)
     local child, parents, labels, targets = {}, {}, {}, {}
     local states = 1
     local out_needle = {}
@@ -325,11 +447,170 @@ local function automaton(needles)
         if parent == 0 then ac.root[labels[index]] = targets[index] end
     end
     for state, needle_index in pairs(out_needle) do ac.out[state] = needle_index end
+    return ac
+end
+
+-- automaton builds the scanner of needles (array of lower-case strings):
+-- their trie and the PCREs that find every position where a needle starts.
+-- Returns nil when PCRE refuses a needle.
+local function automaton(needles)
+    local ac = trie(needles)
     local sorted = {}
     for index, needle in ipairs(needles) do sorted[index] = needle end
     table.sort(sorted)
     if not patterns(sorted, 1, #sorted, ac.patterns) then return nil end
     return ac
+end
+
+-- String sets -------------------------------------------
+-- A plan's string_sets compile once per worker by (id, revision) into a
+-- matcher {mode, fold, exact | trie | patterns}; plans of several sites that
+-- reference one platform set share it. Weak values: a matcher no program
+-- holds any more is collected.
+local string_set_matchers = setmetatable({}, { __mode = "v" })
+local IDENTITY = ffi.new("uint8_t[256]")
+for index = 0, 255 do IDENTITY[index] = index end
+-- Wildcard members per PCRE.
+local WILDCARD_PER_PATTERN = 256
+
+-- wildcard_regex: one member as a PCRE alternative, * any bytes, ? one byte.
+local function wildcard_regex(member)
+    local parts = {}
+    for position = 1, #member do
+        local value = byte(member, position)
+        if value == 42 then
+            parts[#parts + 1] = ".*"
+        elseif value == 63 then
+            parts[#parts + 1] = "."
+        else
+            parts[#parts + 1] = escape_byte(value)
+        end
+    end
+    return table.concat(parts)
+end
+
+-- wildcard_patterns compiles members[lo..hi] as whole-value PCREs ("s": *
+-- and ? match a newline byte too; no UTF mode, ? is one byte), halving a
+-- group PCRE refuses as too large.
+local function wildcard_patterns(members, lo, hi, out, options)
+    if hi - lo + 1 <= WILDCARD_PER_PATTERN then
+        local parts = {}
+        for index = lo, hi do parts[#parts + 1] = wildcard_regex(members[index]) end
+        local compiled, _, flags = re_compile("^(?:" .. table.concat(parts, "|") .. ")\\z", options)
+        if compiled then
+            out[#out + 1] = { compiled, flags }
+            return true
+        end
+        if lo == hi then return false end
+    end
+    local middle = math.floor((lo + hi) / 2)
+    return wildcard_patterns(members, lo, middle, out, options) and wildcard_patterns(members, middle + 1, hi, out, options)
+end
+
+-- reverse_all: each member reversed (the suffix trie).
+local function reverse_all(members)
+    local out = {}
+    for index = 1, #members do out[index] = members[index]:reverse() end
+    return out
+end
+
+-- compile_string_set builds the matcher of one published set
+-- (edgeconfig.WAFStringSet: members canonical, lower case when caseless).
+local function compile_string_set(set)
+    if type(set) ~= "table" or not is_string(set.id) or not is_integer(set.revision, 1, MAX_UNIX) or
+        not STRSET_MODES[set.mode] or type(set.case_sensitive) ~= "boolean" or type(set.members) ~= "table" or
+        #set.members == 0 or #set.members > MAX_STRING_SET_MEMBERS then
+        return nil
+    end
+    local members = set.members
+    for index = 1, #members do
+        if not is_string(members[index]) then return nil end
+    end
+    local key = set.id .. "\0" .. string.format("%d", set.revision) .. "\0" .. set.mode .. "\0" ..
+        tostring(set.case_sensitive) .. "\0" .. #members
+    local matcher = string_set_matchers[key]
+    if matcher then return matcher end
+    local caseless = not set.case_sensitive
+    matcher = { mode = set.mode, caseless = caseless, fold = caseless and LOWER or IDENTITY }
+    if set.mode == "exact" then
+        local exact = {}
+        for index = 1, #members do exact[members[index]] = true end
+        matcher.exact = exact
+    elseif set.mode == "prefix" then
+        matcher.trie = trie(members)
+    elseif set.mode == "suffix" then
+        matcher.trie = trie(reverse_all(members))
+    else
+        local options = caseless and "ji" or "j"
+        matcher.patterns = {}
+        local ok
+        if set.mode == "contains" then
+            local sorted = {}
+            for index = 1, #members do sorted[index] = members[index] end
+            table.sort(sorted)
+            ok = patterns(sorted, 1, #sorted, matcher.patterns, options)
+        else
+            ok = wildcard_patterns(members, 1, #members, matcher.patterns, options .. "s")
+        end
+        if not ok then return nil end
+    end
+    string_set_matchers[key] = matcher
+    return matcher
+end
+
+-- trie_hit: whether a member of the trie is a prefix of text (step 1 from
+-- the first byte) or a suffix (step -1 from the last byte).
+local function trie_hit(ac, fold, text, step)
+    local length = #text
+    if length == 0 then return false end
+    local bytes = ffi.cast(u8p, text)
+    local first, label_of, target_of, out = ac.first, ac.label, ac.target, ac.out
+    local position = step == 1 and 0 or length - 1
+    local state = ac.root[fold[bytes[position]]]
+    while state > 0 do
+        if out[state] > 0 then return true end
+        position = position + step
+        if position < 0 or position >= length then return false end
+        local label, next_state = fold[bytes[position]], 0
+        local slot, last = first[state], first[state + 1] - 1
+        while slot <= last do
+            if label_of[slot] == label then
+                next_state, slot = target_of[slot], last
+            end
+            slot = slot + 1
+        end
+        state = next_state
+    end
+    return false
+end
+
+-- regex_hit: true when a PCRE of the list matches text, false when none
+-- does, nil when PCRE gave up (match limit; the condition holds neither in
+-- nor not_in, as a regex inspect).
+local function regex_hit(list, text)
+    local length = #text
+    for index = 1, #list do
+        local pattern = list[index]
+        local compiled = pattern[1]
+        local rc = exec_regex(compiled, pattern[2], text, length, 0)
+        if rc >= 0 then return true end
+        if rc ~= -1 then return nil end
+    end
+    return false
+end
+
+-- set_hit: whether value is matched by a member (true / false; nil: PCRE error).
+local function set_hit(matcher, value)
+    local mode = matcher.mode
+    if mode == "exact" then
+        if matcher.caseless then value = str_lower(value) end
+        return matcher.exact[value] == true
+    elseif mode == "prefix" then
+        return trie_hit(matcher.trie, matcher.fold, value, 1)
+    elseif mode == "suffix" then
+        return trie_hit(matcher.trie, matcher.fold, value, -1)
+    end
+    return regex_hit(matcher.patterns, value)
 end
 
 -- compile_index validates index against the program and builds its tables.
@@ -363,7 +644,7 @@ local function compile_index(index, program)
         if key > 0 then
             for before = 1, key - 1 do
                 local op = conditions[(before - 1) * 4 + 1]
-                if op == OP_INSPECT or ((op == OP_IPINTEL or op == OP_IPLIST) and conditions[base0(key)] ~= OP_INSPECT) then
+                if op == OP_INSPECT or ((op == OP_IPINTEL or op == OP_IPLIST or op == OP_STRSET) and conditions[base0(key)] ~= OP_INSPECT) then
                     return "index key " .. number .. " after a side effect"
                 end
             end
@@ -496,6 +777,18 @@ local function compile(plan, consume)
     if type(plan.telemetry) ~= "boolean" then return nil, "telemetry" end
     local segments = plan.segments
     if type(segments) ~= "table" or #segments > MAX_SEGMENTS then return nil, "segments" end
+    -- The plan's string sets by (id, revision); a string_set condition
+    -- naming none of them refuses the plan.
+    local sets = {}
+    if plan.string_sets ~= nil then
+        local list = plan.string_sets
+        if type(list) ~= "table" or #list == 0 or #list > MAX_STRING_SETS then return nil, "string_sets" end
+        for index, set in ipairs(list) do
+            local matcher = compile_string_set(set)
+            if not matcher then return nil, "string set " .. index end
+            sets[set.id .. "\0" .. string.format("%d", set.revision)] = matcher
+        end
+    end
     local program = { overflow = plan.header_overflow, telemetry = plan.telemetry, segments = {} }
     local total, uses_headers = 0, false
     for segment_index, segment in ipairs(segments) do
@@ -522,7 +815,7 @@ local function compile(plan, consume)
             end
             local conditions = {}
             for _, condition in ipairs(rule.conditions) do
-                local problem, code = compile_condition(condition, conditions)
+                local problem, code = compile_condition(condition, conditions, sets)
                 if problem then return nil, "segment " .. segment_index .. " rule " .. rule_index .. ": " .. problem end
                 if code == OP_HEADER_EXISTS or code == OP_HEADER_EQ then uses_headers = true end
             end
@@ -630,6 +923,109 @@ local function set_log_telemetry(kind, rule_id)
     ngx_var[names.rule_id] = rule_id
 end
 
+-- WAF v6 conditions --------------------------------------------------------
+-- warn_limited: one warn per kind and minute per worker.
+local warned_at = {}
+local function warn_limited(kind, message)
+    local now = ngx_time()
+    if (warned_at[kind] or 0) + 60 <= now then
+        warned_at[kind] = now
+        ngx.log(ngx.WARN, "cdnca waf: ", message)
+    end
+end
+
+-- string_set_match: in_string_set holds when a value of the target matches
+-- a member, not_in_string_set when none does; a PCRE error holds neither.
+-- ja4 without a fingerprint (plain HTTP, HTTP/3) holds neither either, as
+-- ja4_not_in. The text targets are cdnca_waf's inspect values (decoded,
+-- truncated, cached per request); host and ja4 are read directly.
+local function string_set_match(record, negate)
+    local target, matcher, values = record.target, record.matcher, nil
+    if target == "host" then
+        values = ngx_var.host or ""
+    elseif target == "ja4" then
+        values = ngx_var.cdnca_ja4 or ""
+        if values == "" then return false end
+    else
+        if not waf then waf = require("cdnca_waf") end
+        values = waf.text_values(record)
+    end
+    local hit = false
+    if type(values) == "string" then
+        hit = set_hit(matcher, values)
+    else
+        for index = 1, #values do
+            hit = set_hit(matcher, values[index])
+            if hit ~= false then break end
+        end
+    end
+    if hit == nil then
+        warn_limited("string_set", "string set PCRE error, condition does not hold")
+        return false
+    end
+    return hit ~= negate
+end
+
+-- time_match: the request time (now, UTC seconds) in a time_window. Weekly:
+-- the local time by the offset table; outside [starts[1], until) the
+-- condition holds neither in nor not_in.
+local function time_match(spec, now)
+    local ranges = spec.ranges
+    local inside = false
+    if ranges then
+        for index = 1, #ranges, 2 do
+            if now >= ranges[index] and now < ranges[index + 1] then
+                inside = true
+                break
+            end
+        end
+        return inside ~= spec.negate
+    end
+    local starts = spec.starts
+    if now < starts[1] or now >= spec["until"] then
+        warn_limited("time_window", "request time outside the time zone table, condition does not hold")
+        return false
+    end
+    local low, high = 1, #starts
+    while low < high do
+        local middle = math.floor((low + high + 1) / 2)
+        if starts[middle] <= now then low = middle else high = middle - 1 end
+    end
+    local localtime = now + spec.shifts[low]
+    local day = math.floor(localtime / 86400)
+    local minute = math.floor((localtime - day * 86400) / 60)
+    local weekday = (day + 3) % 7 -- 1970-01-01 was a Thursday; Monday = 0
+    local today, yesterday = lshift(1, weekday), lshift(1, (weekday + 6) % 7)
+    local weekly = spec.weekly
+    for index = 1, #weekly do
+        local slot = weekly[index]
+        local days, from, to = slot[1], slot[2], slot[3]
+        if from < to then
+            if band(days, today) ~= 0 and minute >= from and minute < to then inside = true end
+        elseif (band(days, today) ~= 0 and minute >= from) or (band(days, yesterday) ~= 0 and minute < to) then
+            inside = true
+        end
+        if inside then break end
+    end
+    return inside ~= spec.negate
+end
+
+-- v6_condition evaluates an op >= OP_STRSET; now is the request time. The
+-- User-Agent is parsed only here, once per request (cdnca_ua.request).
+local function v6_condition(op, a, b, c, now)
+    if op == OP_STRSET then return string_set_match(a, b) end
+    if op == OP_TIME then return time_match(a, now) end
+    local info = ua_parser.request()
+    if op == OP_BROWSER then return (a[info.browser] == true) ~= b end
+    if op == OP_DEVICE then return (a[info.device] == true) ~= b end
+    -- OP_BROWSER_VERSION: that browser with a version only.
+    local version = info.version
+    if info.browser ~= a or not version then return false end
+    if c == 0 then return version == b end
+    if c == 1 then return version >= b end
+    return version < b
+end
+
 -- Indexed evaluation ------------------------------------------------------
 local HUGE = math.huge
 
@@ -679,6 +1075,8 @@ local function chain(rule, r, limit)
         elseif op == OP_IPLIST then
             if not waf then waf = require("cdnca_waf") end
             matched = waf.ip_list(a) and true or false
+        elseif op >= OP_STRSET then
+            matched = v6_condition(op, a, conditions[base + 2], conditions[base + 3], r.now)
         else
             if not waf then waf = require("cdnca_waf") end
             matched = waf.inspect(a) and true or false
@@ -1041,6 +1439,9 @@ function _M.evaluate(program, trace)
                 elseif op == OP_IPLIST then
                     if not waf then waf = require("cdnca_waf") end
                     matched = waf.ip_list(a) and true or false
+                elseif op >= OP_STRSET then
+                    if op == OP_TIME and not now then now = ngx_time() end
+                    matched = v6_condition(op, a, conditions[base + 2], conditions[base + 3], now)
                 else -- OP_INSPECT
                     if not waf then waf = require("cdnca_waf") end
                     matched = waf.inspect(a) and true or false

@@ -137,6 +137,7 @@ func TestOriginFailoverAutoWalksLevelsAndFailsBack(t *testing.T) {
 		t.Fatalf("healthy start %+v", status)
 	}
 	revision := value.count(t, `SELECT revision FROM sites WHERE id=$1`, value.site)
+	scopeBefore := value.count(t, `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1`, value.scope)
 
 	// primary down: 3 failures make it unhealthy, then backup 1
 	value.rounds(t, 2, false, true, true)
@@ -148,8 +149,13 @@ func TestOriginFailoverAutoWalksLevelsAndFailsBack(t *testing.T) {
 	if status.ActiveLevel != 1 || status.SwitchedAt == nil || status.Origins[0].Status != "unhealthy" || status.Origins[0].Reason != "connect" {
 		t.Fatalf("primary down %+v", status)
 	}
-	if got := value.count(t, `SELECT revision FROM sites WHERE id=$1`, value.site); got != revision+1 {
-		t.Fatalf("site revision %d, want %d", got, revision+1)
+	// the background switch must not advance sites.revision (the admin's
+	// If-Match, so a save with the revision read earlier still works); only the scope moves.
+	if got := value.count(t, `SELECT revision FROM sites WHERE id=$1`, value.site); got != revision {
+		t.Fatalf("site revision %d, want unchanged %d", got, revision)
+	}
+	if got := value.count(t, `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1`, value.scope); got <= scopeBefore {
+		t.Fatalf("scope source_revision %d, want > %d", got, scopeBefore)
 	}
 	if value.audits(t, originfailover.AuditFailover) != 1 || value.notices(t, originfailover.EventFailover) != 1 {
 		t.Fatalf("audit %d notice %d", value.audits(t, originfailover.AuditFailover), value.notices(t, originfailover.EventFailover))

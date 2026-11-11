@@ -42,6 +42,9 @@ func openNodeServingWorker(pool *pgxpool.Pool) (*nodeserving.Worker, error) {
 	return nodeserving.NewWorker(store, nodeServingInterval, slog.Default(),
 		nodeserving.NewDeploymentTimeoutEvaluator(store), nodeserving.NewMonitorEvaluator(store), nodeserving.NewAutoDisableEvaluator(store),
 		nodeserving.NewConfigSyncEvaluator(store, edgeautopublish.NewNodeSyncRetrier(pool)),
+		// A reinstalled host whose enrollment republication failed (no ticket or
+		// node artifact set yet) gets its scopes again.
+		nodeserving.NewReinstallRedeliveryEvaluator(store, edgeautopublish.NewNodeSyncRetrier(pool)),
 		// Republishes what a frozen node refused once it serves again.
 		nodeserving.NewFrozenRedeliveryEvaluator(store, edgeautopublish.FrozenRepublisher{}),
 		// Backup IP state last: it reads the holds the sources above just wrote.

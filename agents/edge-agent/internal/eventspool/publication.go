@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"hash"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -163,7 +164,7 @@ func buildPublications(records []Record) ([]Publication, error) {
 }
 
 func samePublicationDimension(first, candidate Record) bool {
-	if first.Type == EventAccessWindow || first.Type == EventSubscriptionMinute {
+	if first.Type == EventAccessWindow || first.Type == EventSubscriptionMinute || first.Type == EventRUMMinute {
 		return false
 	}
 	if candidate.Type != first.Type || candidate.TenantID != first.TenantID || candidate.NodeID != first.NodeID ||
@@ -222,6 +223,9 @@ func encodePublication(records []Record) (Publication, error) {
 	if first.Type == EventSubscriptionMinute {
 		return encodeSubscriptionMinutePublication(records)
 	}
+	if first.Type == EventRUMMinute {
+		return encodeRUMMinutePublication(records)
+	}
 	producedAt := first.OccurredAt
 	accessEvents := make([]analyticsAccessEvent, 0, len(records))
 	securityEvents := make([]analyticsSecurityEvent, 0, len(records))
@@ -251,42 +255,116 @@ func encodePublication(records []Record) (Publication, error) {
 			return Publication{}, ErrCorruptState
 		}
 	}
-	var candidate any
+	var events []byte
+	var err error
+	kind := analyticsAccessTypeV2
 	if first.Type == EventAccess {
-		candidate = &analyticsAccessEnvelope{
-			SchemaVersion: analyticsIngestVersionV2, Type: analyticsAccessTypeV2,
-			ProducedAt: producedAt, TenantID: first.TenantID, NodeID: first.NodeID, Events: accessEvents,
-		}
+		events, err = json.Marshal(accessEvents)
 	} else {
-		candidate = &analyticsSecurityEnvelope{
-			SchemaVersion: analyticsIngestVersionV2, Type: analyticsSecurityTypeV2,
-			ProducedAt: producedAt, TenantID: first.TenantID, NodeID: first.NodeID, Events: securityEvents,
-		}
+		kind = analyticsSecurityTypeV2
+		events, err = json.Marshal(securityEvents)
 	}
-	unsigned, err := json.Marshal(candidate)
 	if err != nil {
 		return Publication{}, ErrInvalidEvent
 	}
-	canonical, ok := canonicalPublicationV2Envelope(unsigned)
-	if !ok {
-		return Publication{}, ErrInvalidEvent
-	}
-	messageID := publicationV2MessageID(first.Sequence, last.Sequence, canonical)
-	switch envelope := candidate.(type) {
-	case *analyticsAccessEnvelope:
-		envelope.MessageID = messageID
-	case *analyticsSecurityEnvelope:
-		envelope.MessageID = messageID
-	}
-	payload, err := json.Marshal(candidate)
+	header, err := marshalV2Header(kind, producedAt, first.TenantID, first.NodeID)
 	if err != nil {
 		return Publication{}, ErrInvalidEvent
 	}
-	return Publication{
+	messageID := publicationV2MessageID(first.Sequence, last.Sequence, header.canonical(events))
+	payload, err := header.payload(messageID, events)
+	if err != nil {
+		return Publication{}, ErrInvalidEvent
+	}
+	publication := Publication{
 		Subject: analyticsSubjectPrefix + "." + strings.ToLower(first.NodeID), MessageID: messageID,
 		Payload: payload, FirstSequence: first.Sequence, LastSequence: last.Sequence,
 		LastEventID: last.EventID, EventCount: len(records),
-	}, nil
+	}
+	installation := false
+	for index := range accessEvents {
+		installation = installation || accessEvents[index].InstallationID != ""
+	}
+	for index := range securityEvents {
+		installation = installation || securityEvents[index].InstallationID != ""
+	}
+	if !installation && len(payload) > 0 {
+		publication.analytics = &analyticsOrigin{
+			summary: AnalyticsSummary{Type: kind, TenantID: first.TenantID, NodeID: first.NodeID, SiteID: first.envelope.SiteID,
+				ConfigVersionID: first.envelope.ConfigVersionID, FirstEventID: first.EventID, LastEventID: last.EventID,
+				Events: len(records), ProducedAt: producedAt},
+			payload: &payload[0], payloadBytes: len(payload), subject: publication.Subject, messageID: messageID,
+			lastID: last.EventID, firstSequence: first.Sequence, lastSequence: last.Sequence, events: len(records),
+		}
+	}
+	return publication, nil
+}
+
+// v2Header holds the marshalled top-level values of an analytics v2 envelope
+// (analyticsAccessEnvelope / analyticsSecurityEnvelope). The canonical form
+// the message id covers is that envelope with "message_id":"" and its keys
+// sorted, which is what canonicalPublicationV2Envelope makes of json.Marshal's
+// output; building it from the values marshals the events once instead of
+// marshalling, re-reading and re-marshalling them.
+type v2Header struct{ kind, producedAt, tenantID, nodeID []byte }
+
+func marshalV2Header(kind string, producedAt time.Time, tenantID, nodeID string) (v2Header, error) {
+	var header v2Header
+	var err error
+	for _, field := range []struct {
+		target *[]byte
+		value  any
+	}{{&header.kind, kind}, {&header.producedAt, producedAt}, {&header.tenantID, tenantID}, {&header.nodeID, nodeID}} {
+		if *field.target, err = json.Marshal(field.value); err != nil {
+			return v2Header{}, err
+		}
+	}
+	return header, nil
+}
+
+func (h v2Header) canonical(events []byte) []byte {
+	var output bytes.Buffer
+	output.Grow(len(events) + 256)
+	output.WriteString(`{"events":`)
+	output.Write(events)
+	output.WriteString(`,"installation_id":"","message_id":"","node_id":`)
+	output.Write(h.nodeID)
+	output.WriteString(`,"produced_at":`)
+	output.Write(h.producedAt)
+	output.WriteString(`,"schema_version":`)
+	output.WriteString(strconv.FormatUint(uint64(analyticsIngestVersionV2), 10))
+	output.WriteString(`,"tenant_id":`)
+	output.Write(h.tenantID)
+	output.WriteString(`,"type":`)
+	output.Write(h.kind)
+	output.WriteByte('}')
+	return output.Bytes()
+}
+
+// payload is json.Marshal of the envelope struct (its field order).
+func (h v2Header) payload(messageID string, events []byte) ([]byte, error) {
+	id, err := json.Marshal(messageID)
+	if err != nil {
+		return nil, err
+	}
+	var output bytes.Buffer
+	output.Grow(len(events) + 320)
+	output.WriteString(`{"schema_version":`)
+	output.WriteString(strconv.FormatUint(uint64(analyticsIngestVersionV2), 10))
+	output.WriteString(`,"type":`)
+	output.Write(h.kind)
+	output.WriteString(`,"message_id":`)
+	output.Write(id)
+	output.WriteString(`,"produced_at":`)
+	output.Write(h.producedAt)
+	output.WriteString(`,"tenant_id":`)
+	output.Write(h.tenantID)
+	output.WriteString(`,"installation_id":"","node_id":`)
+	output.Write(h.nodeID)
+	output.WriteString(`,"events":`)
+	output.Write(events)
+	output.WriteByte('}')
+	return output.Bytes(), nil
 }
 
 func encodeL4Publication(records []Record) (Publication, error) {
@@ -756,4 +834,19 @@ func ValidConnectionsPublication(publication Publication) bool {
 	identity := connectionsIdentityDigest(&envelope)
 	return publication.MessageID == connectionsMessageID(identity) && publication.LastEventID == envelope.GetEvent().GetEventId() &&
 		publication.Subject == connectionsSubjectPrefix+"."+strings.ToLower(envelope.GetInstallationId())
+}
+
+// Analytics returns the summary of an access/security v2 publication this
+// package encoded, when the publication still is that one (same fields, same
+// payload slice). Its message id is content bound by construction, so a
+// publisher may skip decoding the payload again; any other publication
+// (built elsewhere, copied, edited) returns false and is to be verified.
+func (p Publication) Analytics() (AnalyticsSummary, bool) {
+	origin := p.analytics
+	if origin == nil || len(p.Payload) == 0 || &p.Payload[0] != origin.payload || len(p.Payload) != origin.payloadBytes ||
+		p.Subject != origin.subject || p.MessageID != origin.messageID || p.LastEventID != origin.lastID ||
+		p.FirstSequence != origin.firstSequence || p.LastSequence != origin.lastSequence || p.EventCount != origin.events {
+		return AnalyticsSummary{}, false
+	}
+	return origin.summary, true
 }

@@ -1,0 +1,265 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Status Page API
+  version: 0.1.0
+  description: Public status page of the site (components, 90 day history, incidents and maintenance) and its platform administrator editor.
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+servers:
+  - {url: /}
+paths:
+  /v1/status-page/public:
+    get:
+      summary: Read the public status page
+      operationId: getPublicStatusPage
+      x-summary-zh: "读取公开状态页"
+      security: []
+      responses:
+        '200': {description: Public view, content: {application/json: {schema: {$ref: '#/components/schemas/PublicView'}}}}
+        '304': {description: Not modified (conditional request)}
+        '405': {description: Only GET and HEAD are served, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '404': {description: The status page is disabled, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429': {description: Rate limited by source address, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {description: Status storage is unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  /v1/admin/status-page:
+    get:
+      summary: Read the status page editor view
+      operationId: getAdminStatusPage
+      x-summary-zh: "读取状态页编辑视图"
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': {description: Settings, components, incidents and selectable line groups, content: {application/json: {schema: {$ref: '#/components/schemas/AdminView'}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    put:
+      summary: Save the status page settings and components
+      operationId: updateAdminStatusPage
+      x-summary-zh: "保存状态页设置与组件"
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"?[0-9]+"?$'}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SaveRequest'}}}
+      responses:
+        '200': {description: Saved view, content: {application/json: {schema: {$ref: '#/components/schemas/AdminView'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {description: Duplicate component name, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '412': {description: Revision conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '428': {description: If-Match revision is missing, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/status-page/incidents:
+    post:
+      summary: Create an incident or a scheduled maintenance
+      operationId: createStatusPageIncident
+      x-summary-zh: "新建状态页事件或计划维护"
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system_configuration.manage]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/IncidentInput'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Incident'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/status-page/incidents/{incident_id}:
+    delete:
+      summary: Delete an incident
+      operationId: deleteStatusPageIncident
+      x-summary-zh: "删除状态页事件"
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IncidentID'}
+      responses:
+        '204': {description: Deleted}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/status-page/incidents/{incident_id}/updates:
+    post:
+      summary: Add an update to an incident
+      operationId: addStatusPageIncidentUpdate
+      x-summary-zh: "追加状态页事件进展"
+      security: [{bearerAuth: []}]
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IncidentID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/UpdateInput'}}}
+      responses:
+        '200': {description: Updated incident, content: {application/json: {schema: {$ref: '#/components/schemas/Incident'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {description: The incident is already resolved or the maintenance completed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    IncidentID: {name: incident_id, in: path, required: true, schema: {type: string, format: uuid}}
+  responses:
+    Error: {description: Error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties:
+            code:
+              type: string
+              enum: [status_page_unauthenticated, status_page_permission_denied, status_page_validation_error, status_page_too_many_components, status_page_line_group_not_found, status_page_unknown_component, status_page_duplicate_component, status_page_incident_closed, status_page_revision_required, status_page_revision_conflict, status_page_not_found, status_page_disabled, status_page_method_not_allowed, status_page_rate_limited, status_page_unavailable]
+            request_id: {type: string}
+    Status: {type: string, enum: [operational, degraded, outage, maintenance]}
+    IncidentStatus: {type: string, enum: [investigating, identified, monitoring, resolved, scheduled, in_progress, completed]}
+    Settings:
+      type: object
+      required: [enabled, title, description, show_logo]
+      properties:
+        enabled: {type: boolean}
+        title: {type: string, maxLength: 64, description: Empty falls back to the default title.}
+        description: {type: string, maxLength: 500}
+        show_logo: {type: boolean}
+    SettingsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled: {type: boolean}
+        title: {type: string, maxLength: 64}
+        description: {type: string, maxLength: 500}
+        show_logo: {type: boolean}
+    ComponentInput:
+      type: object
+      additionalProperties: false
+      required: [name, source]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 64, description: Unique among the components, compared case-insensitively.}
+        description: {type: string, maxLength: 200}
+        source: {type: string, enum: [manual, line_group]}
+        line_group_id: {type: string, format: uuid, description: Required when source is line_group, refused when source is manual.}
+        manual_status: {$ref: '#/components/schemas/Status', description: Defaults to operational.}
+    SaveRequest:
+      type: object
+      additionalProperties: false
+      required: [settings, components]
+      description: Replaces the settings and the whole component list; a component missing from the list is deleted with its history.
+      properties:
+        settings: {$ref: '#/components/schemas/SettingsInput'}
+        components: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ComponentInput'}}
+    AdminComponent:
+      type: object
+      required: [id, name, description, source, line_group_missing, manual_status, status]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        source: {type: string, enum: [manual, line_group]}
+        line_group_id: {type: string, format: uuid}
+        line_group_name: {type: string}
+        line_group_missing: {type: boolean}
+        manual_status: {$ref: '#/components/schemas/Status'}
+        auto_status: {$ref: '#/components/schemas/Status'}
+        status: {$ref: '#/components/schemas/Status'}
+    IncidentUpdate:
+      type: object
+      required: [id, status, message, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/IncidentStatus'}
+        message: {type: string}
+        created_at: {type: string, format: date-time}
+    Incident:
+      type: object
+      required: [id, kind, title, impact, status, component_ids, started_at, updates]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [incident, maintenance]}
+        title: {type: string}
+        impact: {type: string, enum: [degraded, outage, maintenance]}
+        status: {$ref: '#/components/schemas/IncidentStatus'}
+        component_ids: {type: array, items: {type: string, format: uuid}}
+        scheduled_start: {type: string, format: date-time, description: Maintenance only.}
+        scheduled_end: {type: string, format: date-time, description: Maintenance only.}
+        started_at: {type: string, format: date-time}
+        resolved_at: {type: string, format: date-time, description: Set once the incident is resolved or the maintenance completed.}
+        updates: {type: array, items: {$ref: '#/components/schemas/IncidentUpdate'}}
+    IncidentInput:
+      type: object
+      additionalProperties: false
+      required: [kind, title, message]
+      properties:
+        kind: {type: string, enum: [incident, maintenance]}
+        title: {type: string, minLength: 1, maxLength: 120}
+        impact: {type: string, description: 'Required for an incident (degraded or outage); ignored for maintenance, which is always maintenance.'}
+        status: {$ref: '#/components/schemas/IncidentStatus', description: 'Incident: investigating, identified, monitoring or resolved (default investigating). Maintenance: scheduled, in_progress or completed (default scheduled).'}
+        message: {type: string, minLength: 1, maxLength: 2000}
+        component_ids: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+        scheduled_start: {type: string, format: date-time, description: 'Maintenance only, required there.'}
+        scheduled_end: {type: string, format: date-time, description: 'Maintenance only, required there; after scheduled_start, at most 30 days after it, and in the future.'}
+    UpdateInput:
+      type: object
+      additionalProperties: false
+      required: [status, message]
+      properties:
+        status: {$ref: '#/components/schemas/IncidentStatus', description: Must belong to the incident's kind.}
+        message: {type: string, minLength: 1, maxLength: 2000}
+    AdminView:
+      type: object
+      required: [revision, settings, components, incidents, line_groups, updated_at]
+      properties:
+        revision: {type: integer, format: int64, minimum: 1}
+        settings: {$ref: '#/components/schemas/Settings'}
+        components: {type: array, items: {$ref: '#/components/schemas/AdminComponent'}}
+        incidents: {type: array, items: {$ref: '#/components/schemas/Incident'}}
+        line_groups:
+          type: array
+          items: {type: object, required: [id, name], properties: {id: {type: string, format: uuid}, name: {type: string}}}
+        updated_at: {type: string, format: date-time}
+    PublicDay:
+      type: object
+      required: [day, status, uptime]
+      properties:
+        day: {type: string, format: date, description: UTC day.}
+        status:
+          type: string
+          enum: [operational, degraded, outage, maintenance, no_data]
+          description: no_data for a day without samples.
+        uptime: {type: [number, 'null'], minimum: 0, maximum: 1}
+    PublicComponent:
+      type: object
+      required: [id, name, status, uptime_90d, history]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        status: {$ref: '#/components/schemas/Status'}
+        uptime_90d: {type: [number, 'null'], minimum: 0, maximum: 1}
+        history: {type: array, minItems: 90, maxItems: 90, items: {$ref: '#/components/schemas/PublicDay'}, description: The last 90 UTC days, oldest first.}
+    PublicView:
+      type: object
+      required: [schema, title, show_logo, status, components, active, upcoming, recent, generated_at]
+      properties:
+        schema: {type: string, const: cdnca.status-page/v1}
+        title: {type: string}
+        description: {type: string}
+        show_logo: {type: boolean}
+        status: {$ref: '#/components/schemas/Status'}
+        components: {type: array, items: {$ref: '#/components/schemas/PublicComponent'}}
+        active: {type: array, items: {$ref: '#/components/schemas/Incident'}}
+        upcoming: {type: array, items: {$ref: '#/components/schemas/Incident'}}
+        recent: {type: array, items: {$ref: '#/components/schemas/Incident'}}
+        generated_at: {type: string, format: date-time}

@@ -358,7 +358,7 @@ describe('OriginAuthPublicationsPage', () => {
 
   it.each([
     [new ApiError('raw conflict', 409, 'idempotency_conflict'), '幂等请求与原请求不一致，请刷新确认。'],
-    [new ApiError('raw stale', 412, 'revision_conflict'), '发布版本已变化，请刷新后重试。'],
+    [new ApiError('raw stale', 412, 'revision_conflict'), '内容已被其他人修改，请刷新后再保存'],
     [new ApiError('raw invalid', 422, 'validation_error'), '当前规则无法生成有效发布，请检查后重试。'],
   ])('treats terminal publication errors as localized and not retryable', async (error, expected) => {
     authenticate()

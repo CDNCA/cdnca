@@ -417,7 +417,6 @@ describe('AdminTasksPage', () => {
     await user.click(screen.getByRole('button', { name: '详情' }))
     const drawer = await screen.findByRole('dialog', { name: '子任务详情' })
     expect(await within(drawer).findByText('执行进度')).toBeInTheDocument()
-	expect(within(drawer).getByText('任务修订')).toBeInTheDocument()
     expect(within(drawer).getByText('租约已过期')).toBeInTheDocument()
     expect(within(drawer).getByText('node-1')).toBeInTheDocument()
     expect(within(drawer).getAllByText('节点暂不可用')).toHaveLength(3)
@@ -1064,7 +1063,7 @@ describe('AdminTasksPage', () => {
 		await user.click(within((await screen.findByText('确认重试任务')).closest<HTMLElement>('[role="dialog"]')!)
 			.getByRole('button', { name: '确认' }))
 
-		expect(await screen.findByText('任务状态已更新，请刷新任务后重试')).toBeInTheDocument()
+		expect(await screen.findByText('内容已被其他人修改，请刷新后再保存')).toBeInTheDocument()
 		expect(screen.queryByText('private current revision')).not.toBeInTheDocument()
 		const readsBeforeRefresh = readCalls
 		await user.click(screen.getByRole('button', { name: '刷新任务' }))

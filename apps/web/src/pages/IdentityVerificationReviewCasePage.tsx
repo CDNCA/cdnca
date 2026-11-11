@@ -217,7 +217,6 @@ function IdentityVerificationReviewCaseContent({ owner, caseID }: { owner: Owner
               <Descriptions.Item label={t('details.reviewer')}>
                 {item.reviewer_user_id ?? t('details.unassigned')}
               </Descriptions.Item>
-              <Descriptions.Item label={t('details.revision')}>v{item.revision}</Descriptions.Item>
               {item.submitted_at ? <Descriptions.Item label={t('details.submittedAt')}>
                 {formatDateTime(item.submitted_at, locale)}
               </Descriptions.Item> : null}

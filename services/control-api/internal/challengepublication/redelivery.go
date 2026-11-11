@@ -119,7 +119,8 @@ func (redeliverer *ChallengeSecretRedeliverer) RedeliverChallengeSecretTx(
 	result, err := redeliverer.store.CreateSystemSecretRolloutTx(ctx, tx, edgedeployment.SystemSecretRolloutRequest{
 		ConfigurationScopeID: item.ScopeID, AccountableUserID: item.AccountableUserID, NodeIDs: []uuid.UUID{item.NodeID},
 		CanonicalSnapshot: document, GeneratorName: edgepublish.ChallengeSecretGeneratorName, GeneratorVersion: "1.0.0",
-		PayloadDigest: sha256.Sum256(document), RequiredCapabilities: RequiredCapabilities(facts.Policy.PowDifficulty != nil),
+		PayloadDigest: sha256.Sum256(document), RequiredCapabilities: RequiredCapabilities(facts.Policy.PowDifficulty != nil,
+			ExternalNeedsCapability(facts.Policy.ExternalProvider)),
 		HealthCheck: redeliverer.policy.HealthCheck, Deadline: item.Deadline, IdempotencyKey: item.IdempotencyKey,
 		RequestID: uuid.NewString(), CorrelationID: uuid.NewString(), Reason: "challenge_redelivery",
 	}, builder)
@@ -161,18 +162,20 @@ func (PostgresRedeliveryFactSource) LoadRedeliveryFactsTx(
 		return RedeliveryFacts{}, err
 	}
 	var routes []byte
-	var provider, appReference *string
+	var provider, appReference, unavailable *string
+	var scoreThreshold *float64
 	policy := &facts.Policy
 	err = tx.QueryRow(ctx, `SELECT policy_id,tenant_scope_id,tenant_id,site_id,host,revision,priority,mode,
 		min_delay_seconds,challenge_ttl_seconds,pass_ttl_seconds,clock_skew_seconds,attempts_per_nonce,
 		failure_window_seconds,max_failures_per_window,ip_binding,bind_user_agent,bypass_routes,key_reference,
-		external_provider,external_app_reference,pow_difficulty
+		external_provider,external_app_reference,pow_difficulty,external_score_threshold,external_unavailable
 		FROM challenge_policy_revisions WHERE policy_id=$1 AND revision=$2 AND tenant_scope_id=$3 AND site_id=$4`,
 		item.PolicyID, item.PolicyVersion, item.ScopeID, item.SiteID).Scan(&policy.PolicyID, &policy.TenantScopeID,
 		&policy.TenantID, &policy.SiteID, &policy.Host, &policy.Revision, &policy.Priority, &policy.Mode,
 		&policy.MinDelaySeconds, &policy.ChallengeTTLSeconds, &policy.PassTTLSeconds, &policy.ClockSkewSeconds,
 		&policy.AttemptsPerNonce, &policy.FailureWindowSeconds, &policy.MaxFailuresPerWindow, &policy.IPBinding,
-		&policy.BindUserAgent, &routes, &policy.KeyReference, &provider, &appReference, &policy.PowDifficulty)
+		&policy.BindUserAgent, &routes, &policy.KeyReference, &provider, &appReference, &policy.PowDifficulty,
+		&scoreThreshold, &unavailable)
 	if errors.Is(err, pgx.ErrNoRows) {
 		zeroBytes(facts.OriginSnapshot)
 		return RedeliveryFacts{}, ErrRedeliveryOriginMissing
@@ -189,11 +192,18 @@ func (PostgresRedeliveryFactSource) LoadRedeliveryFactsTx(
 		policy.BypassRoutes = []BypassRoute{} // as publication passes them (never null)
 	}
 	if provider != nil {
-		policy.ExternalProvider = &ExternalProviderReference{Provider: *provider, AppReference: *appReference}
+		policy.ExternalProvider = &ExternalProviderReference{Provider: *provider, AppReference: *appReference,
+			ScoreThreshold: scoreThreshold}
+		if unavailable != nil {
+			policy.ExternalProvider.Unavailable = *unavailable
+		}
+	} else if scoreThreshold != nil || unavailable != nil {
+		zeroBytes(facts.OriginSnapshot)
+		return RedeliveryFacts{}, ErrRedeliveryOriginMissing
 	}
-	if policy.PowDifficulty != nil {
+	if policy.PowDifficulty != nil || ExternalNeedsCapability(policy.ExternalProvider) {
 		facts.Unsupported = edgepublish.ValidateFeatureCapabilityTargets(ctx, tx, []uuid.UUID{item.NodeID},
-			RequiredCapabilities(true))
+			RequiredCapabilities(policy.PowDifficulty != nil, ExternalNeedsCapability(policy.ExternalProvider)))
 		if facts.Unsupported != nil && !errors.As(facts.Unsupported, new(*edgepublish.TargetCapabilityError)) {
 			zeroBytes(facts.OriginSnapshot)
 			return RedeliveryFacts{}, facts.Unsupported

@@ -250,9 +250,21 @@ export interface MaintenanceUpgradeNode {
   eligible: boolean
 }
 
+// The console's /downloads node package sync (the package 重装/安装 commands download).
+export interface MaintenanceNodeDownloads {
+  state: 'pending' | 'current' | 'waiting_for_control_upgrade' | 'failed' | 'disabled'
+  reason?: string
+  served_sha256?: string
+  source_sha256?: string
+  source_version?: string
+  checked_at?: string
+  updated_at?: string
+}
+
 export interface MaintenanceUpgradeStatus {
   schema: 'cdnca.maintenance-upgrade-status/v1'
   observed_at: string
+  node_downloads?: MaintenanceNodeDownloads
   control: {
     component: 'control-api'
     current_version: string | null
@@ -595,12 +607,24 @@ function maintenanceBuild(value: unknown): value is MaintenanceUpgradeBuild {
     (value.binary_sha256 === null || typeof value.binary_sha256 === 'string' && hexDigestPattern.test(value.binary_sha256))
 }
 
+const nodeDownloadStates = ['pending', 'current', 'waiting_for_control_upgrade', 'failed', 'disabled']
+function nodeDownloads(value: unknown): boolean {
+  if (!isRecord(value) || !hasExactKeys(value, ['state'], ['reason', 'served_sha256', 'source_sha256', 'source_version', 'checked_at', 'updated_at']) ||
+    typeof value.state !== 'string' || !nodeDownloadStates.includes(value.state)) return false
+  const digest = (field: unknown) => field === undefined || (typeof field === 'string' && /^[0-9a-f]{64}$/.test(field))
+  const time = (field: unknown) => field === undefined || dateTime(field)
+  return (value.reason === undefined || (typeof value.reason === 'string' && codePattern.test(value.reason))) &&
+    digest(value.served_sha256) && digest(value.source_sha256) && time(value.checked_at) && time(value.updated_at) &&
+    (value.source_version === undefined || (typeof value.source_version === 'string' && value.source_version.length <= 64))
+}
+
 function parseMaintenanceStatus(value: unknown, nodeIDs: string[]): MaintenanceUpgradeStatus {
   if (!isRecord(value) || !hasExactKeys(value, ['data']) || !isRecord(value.data)) throw invalidResponse()
   const data = value.data
-  if (!hasExactKeys(data, ['schema', 'observed_at', 'control', 'nodes']) ||
+  if (!hasExactKeys(data, ['schema', 'observed_at', 'control', 'nodes'], ['node_downloads']) ||
     data.schema !== 'cdnca.maintenance-upgrade-status/v1' || !dateTime(data.observed_at) ||
-    !isRecord(data.control) || !Array.isArray(data.nodes)) throw invalidResponse()
+    !isRecord(data.control) || !Array.isArray(data.nodes) ||
+    (data.node_downloads !== undefined && !nodeDownloads(data.node_downloads))) throw invalidResponse()
   const control = data.control
   if (!hasExactKeys(control, ['component', 'current_version', 'configured_version_matches', 'authorization', 'candidate', 'runtime'], ['build']) ||
     control.component !== 'control-api' || !nullableVersion(control.current_version) ||

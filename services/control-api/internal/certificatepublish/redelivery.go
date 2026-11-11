@@ -104,11 +104,14 @@ func DefaultRedelivererConfig() RedelivererConfig {
 type redeliveryKey struct{ scopeID, nodeID uuid.UUID }
 
 // redeliveryBackoff is a node's failed rounds: missing is what it lacked when
-// the last round started (fewer since is progress and resets the count).
+// the last round started (fewer since is progress and resets the count);
+// enrolled is the node's latest initial enrollment then (a newer one is a
+// reinstalled host under the same ID, D-d: it starts over).
 type redeliveryBackoff struct {
 	attempts int
 	next     time.Time
 	missing  int
+	enrolled time.Time
 }
 
 // Redeliverer runs on the automatic edge publication loop
@@ -199,9 +202,10 @@ func (redeliverer *Redeliverer) SweepOnce(ctx context.Context) (RedeliverySweep,
 }
 
 type redeliveryNode struct {
-	id      uuid.UUID
-	missing []certificateasset.RedeliverySite // in site order
-	busy    bool                              // a deployment of the scope is in flight on it
+	id       uuid.UUID
+	missing  []certificateasset.RedeliverySite // in site order
+	busy     bool                              // a deployment of the scope is in flight on it
+	enrolled time.Time                         // its latest initial enrollment (zero: none recorded)
 }
 
 type redeliverySync struct {
@@ -212,6 +216,9 @@ type redeliverySync struct {
 type redeliveryPlan struct {
 	nodes []redeliveryNode // missing something, in node order
 	sync  []redeliverySync // hold everything, the last redelivery not yet followed by a republication
+	// held: bound sites every serving node holds at their binding revision
+	// (a failed publication of that binding is settled by redelivery)
+	held []certificateasset.RedeliverySite
 }
 
 type redeliveryOutcome int
@@ -239,6 +246,13 @@ func (redeliverer *Redeliverer) sweepScope(ctx context.Context, scopeID uuid.UUI
 		return err
 	}
 	var failures []error
+	if len(plan.held) > 0 {
+		if err := pgx.BeginFunc(ctx, redeliverer.pool, func(tx pgx.Tx) error {
+			return recordRedeliveryRecoveriesTx(ctx, tx, scopeID, plan.held)
+		}); err != nil {
+			failures = append(failures, fmt.Errorf("record recovered publications: %w", err))
+		}
+	}
 	for _, node := range plan.nodes {
 		key := redeliveryKey{scopeID: scopeID, nodeID: node.id}
 		seen[key] = true
@@ -246,8 +260,9 @@ func (redeliverer *Redeliverer) sweepScope(ctx context.Context, scopeID uuid.UUI
 			continue
 		}
 		state, found := redeliverer.backoff[key]
-		if found && len(node.missing) < state.missing {
-			state, found = redeliveryBackoff{}, false // the last round delivered something
+		if found && (len(node.missing) < state.missing || !node.enrolled.Equal(state.enrolled)) {
+			// the last round delivered something, or a new host took the node over
+			state, found = redeliveryBackoff{}, false
 		}
 		if found && now.Before(state.next) {
 			continue
@@ -260,7 +275,7 @@ func (redeliverer *Redeliverer) sweepScope(ctx context.Context, scopeID uuid.UUI
 			continue
 		}
 		state.attempts++
-		state.missing = len(node.missing)
+		state.missing, state.enrolled = len(node.missing), node.enrolled
 		state.next = now.Add(redeliverer.retryDelay(state.attempts))
 		redeliverer.backoff[key] = state
 		if outcome == redeliveryCreated {
@@ -276,6 +291,43 @@ func (redeliverer *Redeliverer) sweepScope(ctx context.Context, scopeID uuid.UUI
 		}
 	}
 	return errors.Join(failures...)
+}
+
+// recordRedeliveryRecoveriesTx settles, as succeeded, the permanently failed
+// publication of each held site's binding (after the
+// certificates reached the reinstalled nodes the console kept showing the publications
+// failed). The result names the newest healthy redelivery rollout that
+// carried the site at that binding revision (migration 650 checks it); a
+// binding no redelivery carried (its own publication reached every node) is
+// left as it is.
+func recordRedeliveryRecoveriesTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, sites []certificateasset.RedeliverySite) error {
+	for _, site := range sites {
+		if _, err := tx.Exec(ctx, `INSERT INTO certificate_publication_intent_state_facts(tenant_scope_id,site_id,
+				binding_revision,sequence,state,attempt,idempotency_key,lease_owner,lease_token,lease_expires_at,
+				occurred_at,recovered_by_rollout_id)
+			SELECT latest.tenant_scope_id,latest.site_id,latest.binding_revision,latest.sequence+1,'succeeded',
+				latest.attempt,latest.idempotency_key,'certificate-redelivery',$4,transaction_timestamp(),
+				transaction_timestamp(),carrier.id
+			FROM certificate_publication_intents intent
+			JOIN LATERAL (SELECT * FROM certificate_publication_intent_state_facts state
+			  WHERE state.tenant_scope_id=intent.tenant_scope_id AND state.site_id=intent.site_id
+			    AND state.binding_revision=intent.binding_revision ORDER BY sequence DESC LIMIT 1) latest ON true
+			JOIN LATERAL (SELECT rollout.id FROM rollouts rollout
+			  JOIN config_versions version ON version.id=rollout.config_version_id
+			   AND version.configuration_scope_id=rollout.configuration_scope_id AND version.generator_name=$5
+			  JOIN node_deployments deployment ON deployment.rollout_id=rollout.id AND deployment.state='healthy'
+			  CROSS JOIN LATERAL jsonb_array_elements(convert_from(version.canonical_snapshot,'UTF8')::jsonb->'certificates') certificate
+			  WHERE rollout.configuration_scope_id=intent.tenant_scope_id AND starts_with(rollout.idempotency_key,$6)
+			    AND (certificate->>'site_id')::uuid=intent.site_id
+			    AND (certificate->>'binding_revision')::bigint>=intent.binding_revision
+			  ORDER BY deployment.updated_at DESC LIMIT 1) carrier ON true
+			WHERE intent.tenant_scope_id=$1 AND intent.site_id=$2 AND intent.binding_revision=$3
+			  AND intent.operation='publish' AND latest.state='permanent_failed'`,
+			scopeID, site.SiteID, site.BindingRevision, uuid.New(), defaultGeneratorName, redeliveryIdempotencyPrefix); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (redeliverer *Redeliverer) retryDelay(attempt int) time.Duration {
@@ -373,10 +425,33 @@ func (redeliverer *Redeliverer) planScopeTx(ctx context.Context, tx pgx.Tx, scop
 	if err != nil {
 		return redeliveryPlan{}, err
 	}
+	enrolled := map[uuid.UUID]time.Time{}
+	rows, err = tx.Query(ctx, `SELECT node_id,max(issued_at) FROM node_certificates
+		WHERE node_id=ANY($1::uuid[]) AND issuance_kind='initial' GROUP BY 1`, nodeIDs)
+	if err != nil {
+		return redeliveryPlan{}, err
+	}
+	var enrolledAt time.Time
+	if _, err := pgx.ForEachRow(rows, []any{&nodeID, &enrolledAt}, func() error {
+		enrolled[nodeID] = enrolledAt
+		return nil
+	}); err != nil {
+		return redeliveryPlan{}, err
+	}
 	var plan redeliveryPlan
+	for _, site := range bound {
+		nodes := serving[site.SiteID]
+		all := len(nodes) > 0
+		for _, nodeID := range nodes {
+			all = all && held[siteNode{siteID: site.SiteID, nodeID: nodeID}] >= site.BindingRevision
+		}
+		if all {
+			plan.held = append(plan.held, site)
+		}
+	}
 	var complete []uuid.UUID // hold every site they serve, nothing in flight
 	for _, nodeID := range nodeIDs {
-		node := redeliveryNode{id: nodeID, busy: busy[nodeID]}
+		node := redeliveryNode{id: nodeID, busy: busy[nodeID], enrolled: enrolled[nodeID]}
 		for _, site := range bound {
 			if slices.Contains(serving[site.SiteID], nodeID) &&
 				held[siteNode{siteID: site.SiteID, nodeID: nodeID}] < site.BindingRevision {

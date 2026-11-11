@@ -62,10 +62,13 @@ describe('stream write error messages', () => {
   it.each([
     ['zh-CN', '这个端口有多个使用方（转发或网站），不能开启 PROXY 协议（入站或出站）'],
     ['en-US', 'PROXY protocol (inbound or outbound) cannot be used on a port shared with other streams or websites'],
-  ])('maps the shared-port PROXY conflict in %s without leaking the server message', (locale, expected) => {
+  ])('maps the shared-port PROXY conflict in %s without leaking the server message', async (locale, expected) => {
+    await i18n.changeLanguage(locale)
     const t = i18n.getFixedT(locale, 'streams')
     expect(errorMessage(new ApiError('raw backend text', 409, 'stream_shared_port_proxy_protocol'), t)).toBe(expected)
-    expect(errorMessage(new ApiError('raw backend text', 409, 'something_else'), t)).toBe(t('errors.operationFailed'))
+    // An unregistered 4xx code shows the refusal and its code, never the server text.
+    expect(errorMessage(new ApiError('raw backend text', 409, 'something_else'), t))
+      .toBe(i18n.getFixedT(locale, 'errors')('refusedUnregistered', { code: 'something_else' }))
   })
 })
 

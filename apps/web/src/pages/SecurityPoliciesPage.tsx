@@ -25,7 +25,7 @@ import {
 import { AdvancedFilters, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from './filterUrl'
 import { userSearch } from './idNameSources'
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, FlaskConical, GripVertical, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, ExternalLink, FlaskConical, GripVertical, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -54,6 +54,7 @@ import type { SecurityPolicyBatchAction, SecurityPolicyBatchResult, SecurityPoli
 import { openrestySecurityApi, type OpenRestySecurityRuleGroup } from '../api/openrestySecurity'
 import { roleForPrincipal, useSessionStore } from '../auth/session'
 import { listSecurityIPLists, type SecurityIPListAudience } from '../api/securityIPLists'
+import { listSecurityStringSets, type SecurityStringSetAudience } from '../api/securityStringSets'
 import { formatDateTime } from '../i18n/formatters'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import '../i18n/challengePolicies'
@@ -67,7 +68,12 @@ import ChallengePoliciesPanel from './security/ChallengePoliciesPanel'
 import SecurityActivationPanel from './security/SecurityActivationPanel'
 import RebindStatusNotice from './security/RebindStatusNotice'
 import { conditionValues } from './security/conditionValues'
-import { conditionValuePlaceholder, groupedFieldOptions, invalidJA4Values, wafGeoFields, wafJA4Operators, wafSetFields, wafSetOperators } from './security/conditionFields'
+import {
+  browserVersionPattern, conditionValuePlaceholder, groupedFieldOptions, invalidJA4Values, isStringSetOperator, stringSetConditionFields,
+  stringSetOperators, wafBrowserNames, wafClientFields, wafDeviceKinds, wafGeoFields, wafJA4Operators, wafSetFields, wafSetOperators,
+  wafTimeOperators, wafVersionBrowsers, wafVersionOperators,
+} from './security/conditionFields'
+import { TimeWindowInput, TimeZoneInput, UserAgentTryDialog, timeWindowProblem } from './security/ClientConditionInputs'
 import CCStatsPanel from './security/CCStatsPanel'
 import { SystemRuleCatalogSection, useSystemRules } from './security/SystemRuleCatalogTable'
 import { CatalogImport, ChallengeFields, ManagedWAFFields, managedWAFFromForm, managedWAFToForm } from './security/ManagedRuleFields'
@@ -126,7 +132,8 @@ const wafNumberFields = ['request_length', 'body_length', 'uri_length', 'header_
   'multipart_part_count', 'multipart_field_max_length']
 // ge36-waf: http_version (equals / not_equals 1.0 1.1 2 3) and ip_list (a named IP list).
 // ja4 (JA4 v1) and the IP intelligence fields (IP_INTEL v2) the node already runs.
-const wafFields = ['client_ip', 'ip_list', 'path', 'method', 'header', 'port', 'http_version', ...wafContentFields, ...wafNumberFields, 'ja4', ...wafGeoFields]
+// host (string sets only), browser / browser_version / device / request_time (WAF v6).
+const wafFields = ['client_ip', 'ip_list', 'path', 'method', 'host', 'header', 'port', 'http_version', ...wafContentFields, ...wafNumberFields, 'ja4', ...wafGeoFields, ...wafClientFields]
 // Mirrors securitypolicy wafContentOperators / wafLengthOperators / wafKeyedFields / wafBodyFields.
 const wafLengthOperators = ['number_gt', 'number_gte', 'number_lt', 'number_lte', 'number_eq', 'number_neq']
 const wafContentOperators = ['contains', 'not_contains', 'contains_all', 'regex', 'not_regex', 'detect', 'equals', 'not_equals', 'prefix', 'suffix', ...wafLengthOperators]
@@ -223,6 +230,10 @@ function errorMessage(error: ApiError, t: TFunction<'securityPolicies'>): string
     case 'quick_block_site_override_conflict':
     case 'request_failed':
       return t(`errors.${error.code}`)
+    case 'string_set_unavailable': // a string set condition names an unusable set
+      return t('conditionFields.stringSet.unavailable')
+    case 'string_set_target_mismatch':
+      return t('conditionFields.stringSet.ja4Only')
     default:
       return localizedUnknownApiError(error, t('errors.request_failed'))
   }
@@ -544,9 +555,10 @@ function fieldsFromForm(values: PolicyForm): SecurityPolicyFields {
       // managed_waf runs for the whole site: no conditions.
       conditions: rule.action === 'managed_waf' ? [] : values.kind === 'cc' && matchAll ? [{ ...matchAllCondition, values: [...matchAllCondition.values] }] : rule.conditions.map(({ filters, body_overflow: bodyOverflow, ...condition }) => ({
         ...condition,
-        key: condition.field === 'header' || (values.kind === 'waf' && wafKeyedFields.includes(condition.field)) ? condition.key?.trim() || undefined : undefined,
+        key: condition.field === 'header' || (values.kind === 'waf' && (wafKeyedFields.includes(condition.field) ||
+          condition.field === 'browser_version' || condition.field === 'request_time')) ? condition.key?.trim() || undefined : undefined,
         values: conditionValues(condition.values),
-        filters: values.kind === 'waf' && filters?.length ? filters : undefined,
+        filters: values.kind === 'waf' && filters?.length && !isStringSetOperator(condition.operator) ? filters : undefined,
         body_overflow: values.kind === 'waf' && bodyOverflow && wafBodyFields.includes(condition.field) ? bodyOverflow : undefined,
       })),
       action_config: rule.action === 'rate_limit'
@@ -581,11 +593,17 @@ function conditionOperators(kind: SecurityPolicyKind, field: string, ruleEditor 
   if (field === 'ip_list') return ['in_ip_list', 'not_in_ip_list']
   if (field === 'http_version') return ['equals', 'not_equals']
   if (field === 'port') return ['number_eq']
-  if (field === 'ja4') return wafJA4Operators
+  // WAF v6 conditions.
+  if (field === 'browser' || field === 'device') return ['in', 'not_in']
+  if (field === 'browser_version') return wafVersionOperators
+  if (field === 'request_time') return wafTimeOperators
+  if (field === 'host') return stringSetOperators
+  const sets = (stringSetConditionFields as readonly string[]).includes(field) ? stringSetOperators : []
+  if (field === 'ja4') return [...wafJA4Operators, ...sets]
   if (wafSetFields.includes(field)) return wafSetOperators
   if (wafNumberFields.includes(field)) return wafLengthOperators
   // number_* on a content field needs the length filter last.
-  if (field === 'path' || field === 'header' || wafContentFields.includes(field)) return wafContentOperators
+  if (field === 'path' || field === 'header' || wafContentFields.includes(field)) return [...wafContentOperators, ...sets]
   return ['equals']
 }
 
@@ -793,6 +811,25 @@ function RulePolicyEditor({
     retry: false,
     queryFn: () => listSecurityIPLists(accessToken, ipListAudience),
   })
+  // the string sets a string set condition may name (own + platform).
+  const stringSetAudience: SecurityStringSetAudience = isAdmin ? 'admin' : 'tenant'
+  const stringSets = useQuery({
+    queryKey: ['security-string-sets', stringSetAudience, 'editor'],
+    enabled: open && kind === 'waf' && Boolean(accessToken),
+    retry: false,
+    queryFn: () => listSecurityStringSets(accessToken, stringSetAudience),
+  })
+  const [tryingUA, setTryingUA] = useState(false)
+  // A changed field / operator resets values that no longer fit (a set ID, a browser name, a time slot).
+  const resetConditionValues = (ruleName: number, conditionName: number, field: string, operator: string) => {
+    const current = form.getFieldValue(['rules', ruleName, 'conditions', conditionName]) as { field?: string; operator?: string } | undefined
+    const special = (value?: string) => value === 'browser' || value === 'device' || value === 'browser_version' || value === 'request_time'
+    if (isStringSetOperator(operator) !== isStringSetOperator(current?.operator) || special(field) || special(current?.field)) {
+      form.setFieldValue(['rules', ruleName, 'conditions', conditionName, 'values'], field === 'request_time' ? 'mon,tue,wed,thu,fri 09:00-18:00' : '')
+    }
+    if (field === 'request_time' && current?.field !== 'request_time') form.setFieldValue(['rules', ruleName, 'conditions', conditionName, 'key'], 'Asia/Shanghai')
+    if (field === 'browser_version' && current?.field !== 'browser_version') form.setFieldValue(['rules', ruleName, 'conditions', conditionName, 'key'], 'google_chrome')
+  }
   const importRules = async (keys: string[]) => {
     const targetScope = (item?.scope_id ?? (form.getFieldValue('target_scope_id') as string | undefined)?.trim()) || undefined
     const scopeArgument = isAdmin && targetScope ? [targetScope] as const : [] as const
@@ -1061,7 +1098,9 @@ function RulePolicyEditor({
                                 popupMatchSelectWidth={false}
                                 options={groupedFieldOptions(t, availableConditionFields)}
                                 onChange={(value) => {
-                                  form.setFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'operator'], conditionOperators(kind, value, true)[0])
+                                  const operator = conditionOperators(kind, value, true)[0]
+                                  if (kind === 'waf') resetConditionValues(ruleField.name, conditionField.name, value, operator)
+                                  form.setFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'operator'], operator)
                                 }}
                               />
                             </Form.Item>
@@ -1071,7 +1110,8 @@ function RulePolicyEditor({
                                 const available = conditionOperators(kind, field, true)
                                 return (
                                   <Form.Item name={[conditionField.name, 'operator']} rules={[{ required: true }]}>
-                                    <Select aria-label={cellLabel(t('editor.operator'))} popupMatchSelectWidth={false} options={available.map((value) => ({ value, label: t(`operatorsMap.${value}`) }))} />
+                                    <Select aria-label={cellLabel(t('editor.operator'))} popupMatchSelectWidth={false} options={available.map((value) => ({ value, label: t(`operatorsMap.${value}`) }))}
+                                      onChange={(operator: string) => { if (kind === 'waf') resetConditionValues(ruleField.name, conditionField.name, field, operator) }} />
                                   </Form.Item>
                                 )
                               }}
@@ -1086,6 +1126,17 @@ function RulePolicyEditor({
                                     <Input aria-label={t('editor.headerName')} placeholder={t('editor.headerName')} />
                                   </Form.Item>
                                 )
+                                if (kind === 'waf' && field === 'browser_version') return (
+                                  <Form.Item className="sp-editor-cond-key" name={[conditionField.name, 'key']} rules={[{ required: true }]}>
+                                    <Select aria-label={t('conditionFields.version.browser')} popupMatchSelectWidth={false}
+                                      options={wafVersionBrowsers.map((name) => ({ value: name, label: t(`conditionFields.browsers.${name}`) }))} />
+                                  </Form.Item>
+                                )
+                                if (kind === 'waf' && field === 'request_time') return (
+                                  <Form.Item className="sp-editor-cond-key" name={[conditionField.name, 'key']} rules={[{ required: true, whitespace: true, message: t('conditionFields.time.unknownZone') }]}>
+                                    <TimeZoneInput />
+                                  </Form.Item>
+                                )
                                 if (kind !== 'waf' || !wafKeyedFields.includes(field)) return null
                                 return (
                                   <Form.Item className="sp-editor-cond-key" name={[conditionField.name, 'key']}>
@@ -1095,7 +1146,59 @@ function RulePolicyEditor({
                               }}
                             </Form.Item>
                             <Form.Item noStyle shouldUpdate>
-                              {({ getFieldValue }) => getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'field']) === 'ip_list' ? (
+                              {({ getFieldValue }) => {
+                                const condition = getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name]) as { field?: string; operator?: string } | undefined
+                                const field = condition?.field ?? ''
+                                if (kind === 'waf' && isStringSetOperator(condition?.operator)) return (
+                                  // one string set; ja4 only takes exact, case-sensitive sets.
+                                  <>
+                                    <Form.Item className="sp-editor-cond-input" name={[conditionField.name, 'values']} rules={[{ required: true, whitespace: true, message: t('conditionFields.stringSet.select') }]}>
+                                      <Select aria-label={t('conditionFields.stringSet.select')} placeholder={t('conditionFields.stringSet.select')} showSearch optionFilterProp="label"
+                                        loading={stringSets.isLoading} popupMatchSelectWidth={false}
+                                        options={(stringSets.data ?? []).map((set) => {
+                                          const unfit = field === 'ja4' && (set.match_mode !== 'exact' || !set.case_sensitive)
+                                          return { value: set.id, disabled: unfit, title: unfit ? t('conditionFields.stringSet.ja4Only') : undefined,
+                                            label: t('conditionFields.stringSet.option', { name: set.name, mode: t(`conditionFields.stringSet.modes.${set.match_mode}`), count: set.entry_count }) }
+                                        })} />
+                                    </Form.Item>
+                                    <a className="sp-editor-cond-link" href="/site/lists?tab=strings" target="_blank" rel="noreferrer">
+                                      {t('conditionFields.stringSet.create')} <ExternalLink size={12} aria-hidden />
+                                    </a>
+                                  </>
+                                )
+                                if (kind === 'waf' && (field === 'browser' || field === 'device')) return (
+                                  <>
+                                    <Form.Item className="sp-editor-cond-input" name={[conditionField.name, 'values']} rules={[{ required: true, whitespace: true }]}
+                                      getValueProps={(text?: string) => ({ value: conditionValues(text ?? '') })}
+                                      getValueFromEvent={(picked: string[]) => picked.join('\n')}>
+                                      <Select mode="multiple" allowClear maxTagCount="responsive" aria-label={t(`fields.${field}`)} title={t(`conditionFields.help.${field}`)}
+                                        options={(field === 'browser' ? wafBrowserNames : wafDeviceKinds).map((value) => ({ value,
+                                          label: t(field === 'browser' ? `conditionFields.browsers.${value}` : `conditionFields.devices.${value}`) }))} />
+                                    </Form.Item>
+                                    <Button size="small" type="link" onClick={() => setTryingUA(true)}>{t('conditionFields.tryUA.button')}</Button>
+                                  </>
+                                )
+                                if (kind === 'waf' && field === 'browser_version') return (
+                                  <>
+                                    <Form.Item className="sp-editor-cond-input" name={[conditionField.name, 'values']} validateFirst
+                                      rules={[{ required: true, whitespace: true, message: t('conditionFields.version.invalid') },
+                                        { pattern: browserVersionPattern, message: t('conditionFields.version.invalid') }]}
+                                      extra={t('conditionFields.help.browser_version')}>
+                                      <Input aria-label={t('conditionFields.version.value')} placeholder="100" inputMode="decimal" />
+                                    </Form.Item>
+                                    <Button size="small" type="link" onClick={() => setTryingUA(true)}>{t('conditionFields.tryUA.button')}</Button>
+                                  </>
+                                )
+                                if (kind === 'waf' && field === 'request_time') return (
+                                  <Form.Item className="sp-editor-cond-input" name={[conditionField.name, 'values']}
+                                    rules={[{ validator: async (_, value?: string) => {
+                                      const problem = timeWindowProblem(value ?? '')
+                                      if (problem) throw new Error(t(`conditionFields.time.${problem}`))
+                                    } }]}>
+                                    <TimeWindowInput />
+                                  </Form.Item>
+                                )
+                                return field === 'ip_list' ? (
                                 <Form.Item className="sp-editor-cond-input" name={[conditionField.name, 'values']} rules={[{ required: true, whitespace: true }]}>
                                   <Select aria-label={t('editor.ipList')} showSearch optionFilterProp="label" loading={ipLists.isLoading}
                                     options={(ipLists.data ?? []).map((list) => ({ value: list.id, label: `${list.name} (${list.entries.length})` }))} />
@@ -1113,15 +1216,17 @@ function RulePolicyEditor({
                                   <Input.TextArea aria-label={cellLabel(t('editor.values'))} autoSize={{ minRows: 1, maxRows: 6 }}
                                     placeholder={conditionValuePlaceholder(t, getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'field']) as string)} />
                                 </Form.Item>
-                              )}
+                              )
+                              }}
                             </Form.Item>
                             {kind === 'waf' ? (
                               <Form.Item noStyle shouldUpdate>
                                 {({ getFieldValue }) => {
                                   const field = getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'field']) as string
+                                  const stringSet = isStringSetOperator(getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'operator']) as string)
                                   return (
                                     <>
-                                      {field === 'path' || field === 'header' || wafContentFields.includes(field) ? (
+                                      {!stringSet && (field === 'path' || field === 'header' || wafContentFields.includes(field)) ? (
                                         <Form.Item className="sp-editor-cond-extra" name={[conditionField.name, 'filters']}>
                                           <Select mode="multiple" allowClear maxTagCount="responsive" aria-label={t('editor.filters')} placeholder={t('editor.filters')}
                                             options={wafFilterNames.map((value) => ({ value, label: value }))} />
@@ -1163,7 +1268,8 @@ function RulePolicyEditor({
               <div className="sp-editor-footnotes">
                 {kind === 'cc' ? <p className="sp-editor-hint">{t('editor.ccConditionHint')}</p> : null}
                 {kind === 'waf' ? <p className="sp-editor-hint">{t('editor.ipListHint')}</p> : null}
-                {kind === 'waf' ? <p className="sp-editor-hint">{t('conditionFields.nodeHint')}</p> : null}
+                {kind === 'waf' ? <p className="sp-editor-hint">{t('conditionFields.nodeHint')} {t('conditionFields.v6Hint')}</p> : null}
+                {kind === 'waf' ? <UserAgentTryDialog open={tryingUA} accessToken={accessToken} onClose={() => setTryingUA(false)} /> : null}
               </div>
             </section>
           )}

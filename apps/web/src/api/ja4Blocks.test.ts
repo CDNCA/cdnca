@@ -88,6 +88,16 @@ describe('ja4BlocksApi', () => {
     expect(JSON.stringify(workflow)).not.toContain(rawJA4)
   })
 
+  it('sends no step-up header when the operator has no MFA (empty proof)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json(workflow, 202))
+
+    await ja4BlocksApi.createTenant('tenant-token', input, { ...metadata, stepUpToken: '' })
+
+    const headers = new Headers(fetchSpy.mock.calls[0]?.[1]?.headers)
+    expect(headers.has('X-Step-Up-Token')).toBe(false)
+    expect(headers.get('Idempotency-Key')).toBe(metadata.idempotencyKey)
+  })
+
   it('creates and reads an admin workflow with one explicit canonical tenant target', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(json(workflow, 202))
@@ -126,7 +136,6 @@ describe('ja4BlocksApi', () => {
       { ...metadata, unexpected: true },
       { ...metadata, requestId: 'contains spaces' },
       { ...metadata, idempotencyKey: '' },
-      { ...metadata, stepUpToken: '' },
       { ...metadata, stepUpToken: 'x'.repeat(8193) },
     ]) {
       await expect(ja4BlocksApi.createTenant('token', input, invalidMetadata as JA4BlockWriteMetadata))

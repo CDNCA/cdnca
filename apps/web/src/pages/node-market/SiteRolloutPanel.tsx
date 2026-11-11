@@ -269,7 +269,6 @@ export function SiteRollout({ site }: { site: PickedSite }) {
           <Descriptions size="small" column={{ xs: 1, sm: 2, md: 4 }} items={[
             { key: 'site', label: t('supplies.resultSite'), children: plan.domain },
             { key: 'version', label: t('supplies.siteVersion'), children: plan.site_version },
-            { key: 'revision', label: t('supplies.revision'), children: plan.revision || '—' },
             { key: 'at', label: t('supplies.resultAt'), children: current.at.toLocaleTimeString() },
           ]} />
           {changed ? <Alert type="warning" showIcon message={t('supplies.siteChanged')} /> : null}

@@ -735,7 +735,6 @@ function AccountIdentityVerificationContent({ owner }: { owner: Owner }) {
                   {t(`states.${currentCase.status}`)}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label={t('details.revision')}>v{currentCase.revision}</Descriptions.Item>
               <Descriptions.Item label={t('details.createdAt')}>{formatDateTime(currentCase.created_at, locale)}</Descriptions.Item>
               <Descriptions.Item label={t('details.changedAt')}>{formatDateTime(currentCase.state_changed_at, locale)}</Descriptions.Item>
               {currentCase.expires_at ? <Descriptions.Item label={t('details.expiresAt')}>{formatDateTime(currentCase.expires_at, locale)}</Descriptions.Item> : null}

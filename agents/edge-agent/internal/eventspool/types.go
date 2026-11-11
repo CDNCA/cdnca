@@ -20,6 +20,9 @@ const (
 	// EventSubscriptionMinute: ADR 0012 §6.2 per subscription minute
 	// statistics (subscription_minute.go).
 	EventSubscriptionMinute EventType = "subscription_minute.v1"
+	// EventRUMMinute: per site real user monitoring minute
+	// (rum_minute.go).
+	EventRUMMinute EventType = "rum_minute.v1"
 	// EventL4Checkpoint: L4-USAGE-01 usage of a TCP session still in
 	// progress since its previous checkpoint (internal/l4usage); published on
 	// the L4 session channel (agentv1.L4UsageCheckpointV1).
@@ -146,6 +149,8 @@ type Envelope struct {
 	// SubscriptionMinute is the payload of a subscription_minute.v1 record;
 	// nil otherwise.
 	SubscriptionMinute *SubscriptionMinute `json:"subscription_minute,omitempty"`
+	// RUMMinute is the payload of a rum_minute.v1 record; nil otherwise.
+	RUMMinute *RUMMinute `json:"rum_minute,omitempty"`
 	// l4Worker is the nginx worker pid of an l4_session.v1 source line
 	// ("pid"), only in memory: it matches the session to its live registry
 	// entry (L4WorkerConnection) and is never stored.
@@ -252,6 +257,31 @@ type Publication struct {
 	LastSequence  uint64
 	LastEventID   string
 	EventCount    int
+
+	// analytics is what encodePublication knows of the access/security v2
+	// envelope it built (Analytics); trusted only while the publication is
+	// the one it returned.
+	analytics *analyticsOrigin
+}
+
+// AnalyticsSummary is the identity of an access.v2/security.v2 envelope as
+// encodePublication built it: every event has this tenant, node, site and
+// config version, no installation and no package subscription.
+type AnalyticsSummary struct {
+	Type                                      string
+	TenantID, NodeID, SiteID, ConfigVersionID string
+	FirstEventID, LastEventID                 string
+	Events                                    int
+	ProducedAt                                time.Time
+}
+
+type analyticsOrigin struct {
+	summary                     AnalyticsSummary
+	payload                     *byte
+	payloadBytes                int
+	subject, messageID, lastID  string
+	firstSequence, lastSequence uint64
+	events                      int
 }
 
 type PublishAck struct {
@@ -355,6 +385,10 @@ type ResolvedLine struct {
 	Line          []byte
 	Identity      TrustedIdentity
 	CapturePolicy CapturePolicy
+	// Checked: Line is already known to be one JSON object without a
+	// duplicate key at any depth (the resolver checked these exact bytes),
+	// so parsing does not scan it again.
+	Checked bool
 }
 
 type BatchSink interface {

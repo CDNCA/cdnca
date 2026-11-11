@@ -86,3 +86,62 @@
   gap: 16px;
   min-width: 0;
 }
+
+/* 重新设计：一条工具栏（左所属用户、右搜索）+ 默认设置摘要卡。颜色全部取控制台 token，暗色跟随。 */
+.firewall-action-picker .firewall-action-owner {
+  width: 280px;
+  max-width: 100%;
+}
+
+.firewall-action-picker .cdnca-table-toolbar-filters > .ant-input-search {
+  width: 280px;
+  max-width: 100%;
+}
+
+.firewall-action-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+}
+
+.firewall-action-stat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.firewall-action-stat-label {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.firewall-action-stat-value {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.firewall-action-default-empty {
+  padding: 12px 16px;
+  color: var(--cdnca-color-text-secondary);
+  border: 1px dashed var(--cdnca-color-border-secondary);
+  border-radius: var(--cdnca-border-radius);
+}
+
+.firewall-action-default,
+.firewall-action-default-empty {
+  animation: firewall-action-card-in 160ms ease-out;
+}
+
+@keyframes firewall-action-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .firewall-action-default,
+  .firewall-action-default-empty {
+    animation: none;
+  }
+}

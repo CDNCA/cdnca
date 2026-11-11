@@ -220,7 +220,8 @@ func (handler *Handler) verify(
 		handler.writeServiceError(writer, requestID, err)
 		return
 	}
-	cookie, err := accountregistrationproof.NewReferenceCookie(result.Reference, result.ExpiresAt)
+	// One cookie per channel, so email and SMS can both be proved.
+	cookie, err := accountregistrationproof.NewChannelReferenceCookie(body.VerificationChannel, result.Reference, result.ExpiresAt)
 	if err != nil {
 		handler.writeServiceError(writer, requestID, accountregistrationchallenge.ErrChallengeUnavailable)
 		return

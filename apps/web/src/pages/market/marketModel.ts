@@ -101,10 +101,12 @@ const featurePages: Record<string, string> = {
 }
 
 // Where an administrator configures a plugin this controller owns (我的插件 去配置): its own admin menu page
-// (ui_page), the menu entry gated by its feature code, or the page of its kind. Null when it has none.
+// (ui_page), else its plugin_settings page (same /plugin-ui route, no menu item), the menu entry gated by its feature
+// code, or the page of its kind. Null when it has none.
 export function configPath(plugin: Pick<MarketPlugin, 'plugin_id' | 'kind' | 'applies_to' | 'feature_code'>,
   uiPages: readonly Pick<PluginUIPage, 'plugin_id' | 'page_id' | 'mount' | 'role'>[]): string | null {
-  const page = uiPages.find((p) => p.plugin_id === plugin.plugin_id && p.mount === 'menu' && p.role === 'admin')
+  const page = uiPages.find((p) => p.plugin_id === plugin.plugin_id && p.mount === 'menu' && p.role === 'admin') ??
+    uiPages.find((p) => p.plugin_id === plugin.plugin_id && p.mount === 'plugin_settings' && p.role === 'admin')
   if (page) return pluginPagePath(page)
   const code = plugin.feature_code
   return (code ? moduleRoutePath('admin', code) ?? featurePages[code] : undefined) ?? enablePath(plugin)

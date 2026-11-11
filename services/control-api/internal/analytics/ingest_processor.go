@@ -184,6 +184,9 @@ func (processor *IngestProcessor) Process(ctx context.Context, deliveries []Inge
 		for index := range decoded.SubscriptionMinutes {
 			decoded.SubscriptionMinutes[index].InstallationID = decoded.InstallationID
 		}
+		for index := range decoded.RUMMinutes {
+			decoded.RUMMinutes[index].InstallationID = decoded.InstallationID
+		}
 		identity := byMessageID[decoded.MessageID]
 		if identity != nil &&
 			(identity.decoded.PayloadDigest != decoded.PayloadDigest || identity.decoded.InstallationID != decoded.InstallationID) {
@@ -292,6 +295,12 @@ func (processor *IngestProcessor) processChunk(
 		} else {
 			writeErr = ErrInvalidInput
 		}
+	case RUMMinuteEnvelopeType:
+		if writer, ok := processor.writer.(RUMMinuteWriter); ok {
+			writeErr = writer.WriteRUMMinutes(operationCtx, token, item.decoded.RUMMinutes)
+		} else {
+			writeErr = ErrInvalidInput
+		}
 	default:
 		writeErr = ErrInvalidInput
 	}
@@ -356,7 +365,8 @@ func (processor *IngestProcessor) authorizeChunkWatermark(ctx context.Context, c
 	if processor == nil || !processor.watermarkPolicy.Enabled {
 		return nil
 	}
-	if chunk != nil && (chunk.kind == AccessWindowEnvelopeType || chunk.kind == SubscriptionMinuteEnvelopeType) {
+	if chunk != nil && (chunk.kind == AccessWindowEnvelopeType || chunk.kind == SubscriptionMinuteEnvelopeType ||
+		chunk.kind == RUMMinuteEnvelopeType) {
 		return nil
 	}
 	if ctx == nil || chunk == nil || len(chunk.items) != 1 || processor.watermarkAuthority == nil || processor.watermarkStateProvider == nil {

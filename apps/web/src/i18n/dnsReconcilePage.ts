@@ -100,7 +100,7 @@ const zhCN = {
   operationResults: { title: '服务商操作结果', empty: '还没有服务商操作结果。' },
   operationStatuses: {
     planned: '待执行', deferred_until_commit: '等待确认后执行', running: '执行中', succeeded: '成功', transient_failed: '暂时失败',
-    permanent_failed: '失败', revision_conflict: '与其他修改冲突', cancelled: '已取消', skipped: '已跳过',
+    permanent_failed: '失败', revision_conflict: '内容已被其他人修改，请刷新后再保存', cancelled: '已取消', skipped: '已跳过',
   },
   columns: {
     sequence: '序号', action: '动作', name: '名称', type: '类型', value: '值', line: '线路', weight: '权重', reason: '原因', status: '状态',
@@ -229,7 +229,7 @@ const enUS = {
   operationResults: { title: 'Provider results', empty: 'No provider results yet.' },
   operationStatuses: {
     planned: 'Pending', deferred_until_commit: 'Runs after you confirm', running: 'Running', succeeded: 'Succeeded', transient_failed: 'Temporary failure',
-    permanent_failed: 'Failed', revision_conflict: 'Conflicts with another change', cancelled: 'Cancelled', skipped: 'Skipped',
+    permanent_failed: 'Failed', revision_conflict: 'Someone else changed this content. Refresh before saving.', cancelled: 'Cancelled', skipped: 'Skipped',
   },
   columns: {
     sequence: 'No.', action: 'Action', name: 'Name', type: 'Type', value: 'Value', line: 'Line', weight: 'Weight', reason: 'Reason', status: 'Status',

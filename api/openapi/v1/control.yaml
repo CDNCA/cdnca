@@ -66,6 +66,16 @@ paths:
     $ref: '../../control-system-mail-settings.openapi.yaml#/paths/~1v1~1admin~1system-mail-settings'
   /v1/admin/system-other-settings:
     $ref: '../../control-system-other-settings.openapi.yaml#/paths/~1v1~1admin~1system-other-settings'
+  /v1/status-page/public:
+    $ref: '../../control-status-page.openapi.yaml#/paths/~1v1~1status-page~1public'
+  /v1/admin/status-page:
+    $ref: '../../control-status-page.openapi.yaml#/paths/~1v1~1admin~1status-page'
+  /v1/admin/status-page/incidents:
+    $ref: '../../control-status-page.openapi.yaml#/paths/~1v1~1admin~1status-page~1incidents'
+  /v1/admin/status-page/incidents/{incident_id}:
+    $ref: '../../control-status-page.openapi.yaml#/paths/~1v1~1admin~1status-page~1incidents~1{incident_id}'
+  /v1/admin/status-page/incidents/{incident_id}/updates:
+    $ref: '../../control-status-page.openapi.yaml#/paths/~1v1~1admin~1status-page~1incidents~1{incident_id}~1updates'
   /v1/admin/system-db-pool:
     $ref: '../../control-system-db-pool.openapi.yaml#/paths/~1v1~1admin~1system-db-pool'
   /v1/auth/register:
@@ -74,6 +84,8 @@ paths:
     $ref: './account-registration-challenge.yaml#/paths/~1v1~1auth~1registration-challenges'
   /v1/auth/registration-challenge-verifications:
     $ref: './account-registration-challenge.yaml#/paths/~1v1~1auth~1registration-challenge-verifications'
+  /v1/auth/registration-config:
+    $ref: './account-registration-challenge.yaml#/paths/~1v1~1auth~1registration-config'
   /v1/auth/login-methods:
     $ref: './account-login-challenge.yaml#/paths/~1v1~1auth~1login-methods'
   /v1/auth/login-challenges:
@@ -142,6 +154,10 @@ paths:
     $ref: '../../control-cc-stats.openapi.yaml#/paths/~1v1~1security~1cc-stats'
   /v1/admin/security/cc-stats:
     $ref: '../../control-cc-stats.openapi.yaml#/paths/~1v1~1admin~1security~1cc-stats'
+  /v1/analytics/rum:
+    $ref: '../../control-rum.openapi.yaml#/paths/~1v1~1analytics~1rum'
+  /v1/admin/analytics/rum:
+    $ref: '../../control-rum.openapi.yaml#/paths/~1v1~1admin~1analytics~1rum'
   /v1/analytics/market-security:
     $ref: '../../control-market-security.openapi.yaml#/paths/~1v1~1analytics~1market-security'
   /v1/admin/analytics/market-security:
@@ -3980,6 +3996,317 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /v1/security-string-sets:
+    get:
+      operationId: listSecurityStringSets
+      x-summary-zh: "列出字符串集合"
+      summary: List string sets
+      description: "Requires security_policies.read. Tenant identities only: the tenant's own sets (writable) and the platform sets (read only, platform true). Items carry no entries; reference_count counts the tenant's live policies referencing the set."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      responses:
+        '200':
+          description: Sets ordered own first, then by name.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSetPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createSecurityStringSet
+      x-summary-zh: "创建字符串集合"
+      summary: Create a string set
+      description: "Requires security_policies.manage. Entries are trimmed, deduplicated and byte ordered (A-Z lower-cased when not case sensitive); a refused entry is validation_error with details.field entries[i] and a reason (too_long, invalid_utf8, control_character, wildcard_too_many_stars, wildcard_only_wildcards, empty); the set as a whole entries with too_many_entries or too_large. match_mode and case_sensitive cannot change later. At most 200 live sets per scope (422 string_set_limit). Audit security.string_set.create."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityStringSetInput'}
+      responses:
+        '201':
+          description: Created, or an identical request replayed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSet'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/security-string-sets/{set_id}:
+    get:
+      operationId: getSecurityStringSet
+      x-summary-zh: "查看字符串集合"
+      summary: Get a string set
+      description: Requires security_policies.read. An own or platform set, with its canonical entries.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The set.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSet'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    put:
+      operationId: updateSecurityStringSet
+      x-summary-zh: "替换字符串集合"
+      summary: Replace a string set
+      description: "Requires security_policies.manage and the current revision; match_mode / case_sensitive in the body are refused. Every tenant whose bound WAF policy references the set is republished automatically (system trigger string_set). Audit security.string_set.update."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityStringSetUpdate'}
+      responses:
+        '200':
+          description: Replaced (revision + 1), or an identical request replayed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSet'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteSecurityStringSet
+      x-summary-zh: "删除字符串集合"
+      summary: Delete a string set
+      description: "Requires security_policies.manage and the current revision. A set any live policy version references is refused (409 string_set_in_use). Audit security.string_set.delete."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: expected_revision, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        '204': {description: Deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/security-string-sets/{set_id}/references:
+    get:
+      operationId: listSecurityStringSetReferences
+      x-summary-zh: "列出引用字符串集合的策略"
+      summary: List the policies referencing a string set
+      description: "Requires security_policies.read. The caller's live policies with a version referencing the set (the platform sees every scope); rule_count is from the latest referencing version."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Policies by name.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSetReferencePage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/security-policies/parse-user-agent:
+    post:
+      operationId: parseUserAgent
+      x-summary-zh: "解析 User-Agent"
+      summary: Parse a User-Agent
+      description: "Requires security_policies.read. Returns what the edge's browser / device conditions see for one User-Agent (edgeconfig.ParseUserAgent, the same table as the node; the first 512 bytes are parsed)."
+      x-required-permissions: [security_policies.read]
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [user_agent]
+              properties:
+                user_agent: {type: string, maxLength: 2048}
+      responses:
+        '200':
+          description: The detected browser, version (major.minor.patch, null without one) and device.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [browser, version, device]
+                properties:
+                  browser: {type: string}
+                  version: {type: [string, 'null']}
+                  device: {type: string, enum: [bot, desktop, mobile, tablet]}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/admin/security-string-sets:
+    get:
+      operationId: listAdminSecurityStringSets
+      x-summary-zh: "平台：列出字符串集合"
+      summary: List string sets
+      description: "Requires security_policies.read. Platform identities only: the platform's own sets (writable) and the platform sets (read only, platform true). Items carry no entries; reference_count counts every scope's live policies referencing the set."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      responses:
+        '200':
+          description: Sets ordered own first, then by name.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSetPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createAdminSecurityStringSet
+      x-summary-zh: "平台：创建字符串集合"
+      summary: Create a string set
+      description: "Requires security_policies.manage. Entries are trimmed, deduplicated and byte ordered (A-Z lower-cased when not case sensitive); a refused entry is validation_error with details.field entries[i] and a reason (too_long, invalid_utf8, control_character, wildcard_too_many_stars, wildcard_only_wildcards, empty); the set as a whole entries with too_many_entries or too_large. match_mode and case_sensitive cannot change later. At most 200 live sets per scope (422 string_set_limit). Audit security.string_set.create."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityStringSetInput'}
+      responses:
+        '201':
+          description: Created, or an identical request replayed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSet'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/admin/security-string-sets/{set_id}:
+    get:
+      operationId: getAdminSecurityStringSet
+      x-summary-zh: "平台：查看字符串集合"
+      summary: Get a string set
+      description: Requires security_policies.read. An own or platform set, with its canonical entries.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The set.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSet'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    put:
+      operationId: updateAdminSecurityStringSet
+      x-summary-zh: "平台：替换字符串集合"
+      summary: Replace a string set
+      description: "Requires security_policies.manage and the current revision; match_mode / case_sensitive in the body are refused. Every tenant whose bound WAF policy references the set is republished automatically (system trigger string_set). Audit security.string_set.update."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityStringSetUpdate'}
+      responses:
+        '200':
+          description: Replaced (revision + 1), or an identical request replayed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSet'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteAdminSecurityStringSet
+      x-summary-zh: "平台：删除字符串集合"
+      summary: Delete a string set
+      description: "Requires security_policies.manage and the current revision. A set any live policy version references is refused (409 string_set_in_use). Audit security.string_set.delete."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: expected_revision, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        '204': {description: Deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/admin/security-string-sets/{set_id}/references:
+    get:
+      operationId: listAdminSecurityStringSetReferences
+      x-summary-zh: "平台：列出引用字符串集合的策略"
+      summary: List the policies referencing a string set
+      description: "Requires security_policies.read. The caller's live policies with a version referencing the set (the platform sees every scope); rule_count is from the latest referencing version."
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - {name: set_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Policies by name.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityStringSetReferencePage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /v1/security-policies/batch:
     post:
       operationId: batchSecurityPolicies
@@ -4498,7 +4825,13 @@ paths:
       operationId: createURLAuthPolicy
       x-summary-zh: "创建绑定网站的 HMAC-SHA256 URL 鉴权策略"
       summary: Create a site-bound HMAC-SHA256 URL authentication policy
+      x-description-zh: >-
+        启用的策略随写入下发到声明 URL_AUTH 的节点，节点在缓存之前验签；未下发到的节点返回 503，不放行。
+        主控未开启边缘发布时，创建启用的策略返回 422 url_auth_unavailable，不创建策略。
       description: >-
+        An enabled policy is delivered to the scope's nodes that declare URL_AUTH with the write; they verify signed
+        URLs before the cache and answer 503 until the policy is installed. Without the edge publication runtime an
+        enabled policy returns 422 url_auth_unavailable and nothing is created.
         Requires url_auth_policies.manage. The generated key secret is returned exactly once on the first successful
         request. An identical idempotent replay returns the same policy with replayed=true and no secret. Legacy Type A,
         Type B, and MD5 are migration provenance only and cannot be selected for new execution. This endpoint records a
@@ -4525,6 +4858,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
         '500': {$ref: '#/components/responses/InternalError'}
   /v1/url-auth-policies/{id}:
@@ -4554,7 +4888,12 @@ paths:
       operationId: updateURLAuthPolicy
       x-summary-zh: "用乐观并发替换 URL 鉴权策略字段"
       summary: Replace URL authentication policy fields using optimistic concurrency
-      description: Requires url_auth_policies.manage. The algorithm remains fixed to hmac-sha256 and migration_marker is read-only.
+      x-description-zh: >-
+        启用状态的修改会重新下发到节点；主控未开启边缘发布时，带 enabled=true 的请求返回 422 url_auth_unavailable，策略不变。
+      description: >-
+        A write that leaves the policy enabled is delivered to its nodes again; without the edge publication runtime a
+        body with enabled=true returns 422 url_auth_unavailable and leaves the policy unchanged.
+        Requires url_auth_policies.manage. The algorithm remains fixed to hmac-sha256 and migration_marker is read-only.
       security:
         - bearerAuth: []
         - cdncaApiKey: []
@@ -4570,6 +4909,66 @@ paths:
       responses:
         '200':
           description: Updated policy and immutable snapshot, or a matching replay.
+          headers:
+            ETag: {$ref: '#/components/headers/RevisionETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/URLAuthWriteResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/url-auth-policies/{id}/enable:
+    post:
+      operationId: enableURLAuthPolicy
+      x-summary-zh: "启用 URL 鉴权策略"
+      summary: Enable a URL authentication policy
+      description: >-
+        Requires url_auth_policies.manage. Delivers the policy to the scope's nodes that declare URL_AUTH; without the
+        edge publication runtime returns 422 url_auth_unavailable and the policy stays disabled.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/URLAuthPolicyID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: Policy with its new enabled state.
+          headers:
+            ETag: {$ref: '#/components/headers/RevisionETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/URLAuthWriteResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/url-auth-policies/{id}/disable:
+    post:
+      operationId: disableURLAuthPolicy
+      x-summary-zh: "停用 URL 鉴权策略"
+      summary: Disable a URL authentication policy
+      description: >-
+        Requires url_auth_policies.manage. The sites stop requiring signed URLs once their nodes take the next
+        publication.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/URLAuthPolicyID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: Policy with its new enabled state.
           headers:
             ETag: {$ref: '#/components/headers/RevisionETag'}
           content:
@@ -6387,7 +6786,7 @@ components:
         page_id: {type: string}
         origin: {type: string, pattern: '^https://[a-z0-9.-]+$'}
         url: {type: string, description: origin + page path (the iframe src)}
-        mount: {enum: [menu, site_tab]}
+        mount: {enum: [menu, site_tab, plugin_settings], description: plugin_settings is shown in the plugin market detail (设置), not in a menu}
         menu_parent: {type: string}
         role: {enum: [admin, user]}
         title:
@@ -7041,21 +7440,22 @@ components:
       properties:
         field:
           type: string
-          description: "content_type, http_version and ip_list are WAF fields and need node CAPABILITY_NAME_WAF v4; multipart_field_names, multipart_part_count and multipart_field_max_length need v5; a release using them is refused for nodes below it."
+          description: "content_type, http_version and ip_list are WAF fields and need node CAPABILITY_NAME_WAF v4; multipart_field_names, multipart_part_count and multipart_field_max_length need v5; browser, browser_version, device, request_time and the string set operators need v6; a release using them is refused for nodes below it."
           enum: [client_ip, host, path, method, header, country, asn, ja4, port, distinct_user_agents, status_404_count,
             args, query, body, request_uri, cookie, user_agent, referer, carrier, ip_tag, province, city,
             upload_filename, upload_extension, header_names, request_length, body_length, uri_length, header_max_length,
             header_count, arg_count, content_type, http_version, ip_list, multipart_field_names, multipart_part_count,
-            multipart_field_max_length]
+            multipart_field_max_length, browser, browser_version, device, request_time]
         operator:
           type: string
-          description: "http_version takes equals / not_equals with values 1.0, 1.1, 2, 3 and no filters. ip_list takes in_ip_list / not_in_ip_list with exactly one value, the UUID of an IP list of the policy's tenant or of the platform (/v1/security-ip-lists); an unusable list is refused with 422 ip_list_unavailable."
+          description: "http_version takes equals / not_equals with values 1.0, 1.1, 2, 3 and no filters. ip_list takes in_ip_list / not_in_ip_list with exactly one value, the UUID of an IP list of the policy's tenant or of the platform (/v1/security-ip-lists); an unusable list is refused with 422 ip_list_unavailable. host, path, request_uri, user_agent, referer, header (key = header name) and ja4 take in_string_set / not_in_string_set with exactly one value, the UUID of a string set of the tenant or the platform (/v1/security-string-sets), no filters, at most 4 per rule (they may repeat); an unusable set is 422 string_set_unavailable, a ja4 condition on a set that is not exact, case-sensitive JA4 fingerprints 422 string_set_target_mismatch. browser and device take in / not_in with names from edgeconfig.WAFBrowserNames / WAFDeviceKinds; browser_version takes version_eq / version_gte / version_lt, key = the browser, one value like 100 or 119.0.6045; request_time takes in_time_range / not_in_time_range, key = an IANA zone (default Asia/Shanghai), values all weekly (mon,tue 09:00-18:00, at most 7) or all date ranges (2026-11-11T00:00:00 / 2026-11-12T00:00:00 local, at most 4); refusals name values with invalid_format, time_range_empty or key with unknown_time_zone."
           enum: [equals, not_equals, in, not_in, prefix, suffix, contains, not_contains, contains_all, regex, not_regex, detect,
-            number_eq, number_neq, number_gt, number_gte, number_lt, number_lte, ip_in_cidr, ip_not_in_cidr, in_ip_list, not_in_ip_list]
+            number_eq, number_neq, number_gt, number_gte, number_lt, number_lte, ip_in_cidr, ip_not_in_cidr, in_ip_list, not_in_ip_list,
+            in_string_set, not_in_string_set, version_eq, version_gte, version_lt, in_time_range, not_in_time_range]
         key:
           type: string
           maxLength: 128
-          description: Required only for header conditions; normalized to lowercase.
+          description: "Required for header conditions (normalized to lowercase), browser_version (the browser) and request_time (an IANA zone, case kept; empty is Asia/Shanghai)."
         filters:
           type: array
           maxItems: 5
@@ -7106,12 +7506,84 @@ components:
         revision: {type: integer, minimum: 1}
         platform: {type: boolean, description: A platform list (read only for tenants).}
         updated_at: {type: string, format: date-time}
+        reference_count: {type: integer, minimum: 0, description: "Live policies (the tenant's; every scope's for the platform) referencing the list; 0 outside the list operation."}
     SecurityIPListPage:
       type: object
       additionalProperties: false
       required: [items]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/SecurityIPList'}}
+    SecurityStringSetInput:
+      type: object
+      additionalProperties: false
+      required: [name, match_mode, case_sensitive, entries]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64}
+        description: {type: string, maxLength: 512}
+        match_mode: {type: string, enum: [exact, prefix, suffix, contains, wildcard], description: "Fixed at creation. prefix compares bytes (/api also matches /apiary); wildcard: * any bytes, ? one byte, at most 3 * and 2000 entries."}
+        case_sensitive: {type: boolean, description: Fixed at creation. When false A-Z are lower-cased (other letters compare as they are).}
+        entries: {type: array, minItems: 1, maxItems: 10000, items: {type: string, minLength: 1, maxLength: 512}, description: At most 256 KiB together.}
+    SecurityStringSetUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, name, entries]
+      properties:
+        expected_revision: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 64}
+        description: {type: string, maxLength: 512}
+        entries: {type: array, minItems: 1, maxItems: 10000, items: {type: string, minLength: 1, maxLength: 512}}
+    SecurityStringSetSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, match_mode, case_sensitive, entry_count, reference_count, revision, platform, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        match_mode: {type: string, enum: [exact, prefix, suffix, contains, wildcard]}
+        case_sensitive: {type: boolean}
+        entry_count: {type: integer, minimum: 1}
+        reference_count: {type: integer, minimum: 0}
+        revision: {type: integer, minimum: 1}
+        platform: {type: boolean, description: A platform set (read only for tenants).}
+        updated_at: {type: string, format: date-time}
+    SecurityStringSet:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, match_mode, case_sensitive, entry_count, reference_count, revision, platform, updated_at, entries]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        match_mode: {type: string, enum: [exact, prefix, suffix, contains, wildcard]}
+        case_sensitive: {type: boolean}
+        entry_count: {type: integer, minimum: 1}
+        reference_count: {type: integer, minimum: 0}
+        revision: {type: integer, minimum: 1}
+        platform: {type: boolean}
+        updated_at: {type: string, format: date-time}
+        entries: {type: array, items: {type: string}, description: Canonical entries in byte order.}
+    SecurityStringSetPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SecurityStringSetSummary'}}
+    SecurityStringSetReference:
+      type: object
+      additionalProperties: false
+      required: [policy_id, policy_name, policy_kind, rule_count]
+      properties:
+        policy_id: {type: string, format: uuid}
+        policy_name: {type: string}
+        policy_kind: {type: string}
+        rule_count: {type: integer, minimum: 0}
+    SecurityStringSetReferencePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SecurityStringSetReference'}}
     SecurityPolicyRateLimit:
       type: object
       additionalProperties: false
@@ -10110,8 +10582,11 @@ components:
           description: >-
             Only on POST /v1/nodes/{id}/enrollment-tokens. Direct Gateway entry the console writes into the
             reinstall command ("Reinstall this node") as --gateway-enrollment-address, --gateway-address and
-            --gateway-server-name, the same values as the registration-credential response. Absent when the
-            preferred entry is a WebSocket (CDN) tunnel or no Gateway entry is published.
+            --gateway-server-name (with --gateway-transport grpc). An initial token carries the
+            registration-credential response's entry (absent when the preferred entry is a WebSocket (CDN)
+            tunnel). A re_enrollment token carries it too, and when the preferred entry is a WebSocket tunnel
+            the first published grpc entry instead (the installer falls back to the 443 WebSocket tunnel when
+            that port does not answer). Absent when no usable grpc entry is published.
           type: object
           additionalProperties: false
           required: [enrollment_address, address, server_name]

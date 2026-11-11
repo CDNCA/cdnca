@@ -6,6 +6,17 @@
 - 独立 module，不进 `go.work`（与 `libs/themepack` 相同）。使用方在自己的 `go.mod` 里加 `require github.com/cdnca/cdnca/libs/sitetheme v0.0.0` 和 `replace github.com/cdnca/cdnca/libs/sitetheme => ../../libs/sitetheme`；带 Dockerfile 的服务还要 `COPY libs/sitetheme /src/libs/sitetheme`（control-api 已加）。
 - 依赖：`libs/edgeconfig`（重复键检测）、`golang.org/x/net/html`。
 
+
+## 注册与找回密码（所有主题必须遵守）
+
+- 注册和找回密码在主题自己的页面里完成：发码、倒计时、填码、提交都在本页，用主题自己的样式；不跳控制台、不另开页面、不弹控制台样式的界面。
+- 一律使用 `apps/control-site/src/lib/register.tsx`，不要自己调接口：
+  - `RegisterForm` / `RecoveryForm`：主题只提供 `renderField`（画输入框和旁边的「获取验证码」/图形验证码按钮，输入框属性用 `fieldProps(field)`）、`renderError`、`renderSubmit`（找回密码再加 `renderNote`）；`labels` 可用内容里的文字覆盖默认文案。
+  - 需要完全自定义布局时用 `useRegistrationConfig()` + `useRegistration(config)`（吉盾的写法），规则相同。
+- 显示什么由 `GET /v1/auth/registration-config` 决定：只显示 `required && available` 的验证码字段（邮箱验证开才有邮箱验证码，手机验证开且短信已配置才有短信验证码）；都开时两个都要填、都要通过；`ready=false` 时只提示「注册验证服务暂未配置」，不显示无法使用的字段；`human_check` 为 `builtin_captcha` 时显示图形验证码，为 `turnstile` 时用 `TurnstileBox`。
+- 找回密码页只显示 `recovery.channels` 里的方式；`recovery.enabled=false` 时显示「暂未开放在线找回密码」，不显示表单。服务端按账号发重置链接，页面只收账号。
+- 内容里旧的 `/dashboard/register`、`/dashboard/forgot-password` 链接由服务端在渲染时换成本站 `/register/`、`/forgot/`（`services/control-api/internal/controlsite/auth_pages.go`），存量内容不改写；新主题的种子直接写本站路径。
+
 ## 测试
 
 库不在 `go.work` 里，必须加 `GOWORK=off`，否则报 `directory ... is outside module roots`：

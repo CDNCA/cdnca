@@ -14,10 +14,13 @@ const zhCN = {
     websocket: 'WebSocket',
     websocketOrigins: 'Origin 白名单',
     searchEngineAddress: '回源地址',
+    rum: '真实用户体验上报',
+    rumSample: '采样率',
   },
   short: {
     websocket: '允许站点使用 WebSocket 长连接。',
     searchEngineOrigin: '搜索引擎爬虫请求固定回到指定源 IP。',
+    rum: '在 HTML 页面注入一行同源脚本，采集访客浏览器的性能指标和加载错误，在「统计 → 真实用户体验」查看。',
     acmePassthrough: '允许源站通过 CDN 代理完成证书申请校验。',
     responseRealtime: '节点收到源站数据后立即返回给客户端。',
     requestRealtime: '节点收到客户端数据后立即发送给源站。',
@@ -33,8 +36,24 @@ const zhCN = {
     defaultSite: '未匹配域名（含无 SNI 的 HTTPS，可用于 IP 证书）都使用此站点。全系统只有一个默认站点，开启后会自动取消原来的默认站点。仅管理员可设。',
     l2: '当前套餐：按线路组的 L2 配置回源；不配置：直接回源站；自定义：只使用所选 L2 配置中的节点。仅管理员可设。下发到节点市场供给的网站：当前套餐 = 使用卖家的 L2（卖家未提供时直连回源）；自定义不能下发到市场供给。',
   },
+  rum: {
+    sampleHint: '节点每 100 次页面请求约注入 {{percent}} 次',
+    privacy: '不采集 query string、IP、cookie，不生成访客标识。需要节点支持 SITE_RUM。',
+  },
   options: { package: '当前套餐配置', off: '不配置 L2', custom: '自定义 L2' },
   capability: '以上选项需要节点支持 SITE_EDGE_OPTIONS，未升级的节点会拒绝发布并给出原因。',
+  // saved on its own (ServerTimingSwitch)
+  serverTiming: {
+    label: 'Server-Timing 响应头',
+    help: '在响应里加上缓存状态、命中的缓存层、回源建连和首包耗时，方便在浏览器开发者工具里排查。默认关闭',
+    tip: '跨域脚本要读取时，在 HTTP 策略的响应头里加 Timing-Allow-Origin',
+    saved: '已保存，下次发布后生效',
+    saveFailed: 'Server-Timing 响应头保存失败',
+    errors: {
+      version_conflict: '网站配置已被其他操作修改，请刷新页面后重试。', site_locked: '网站已被锁定，不能修改。',
+      permission_denied: '当前账号缺少网站管理权限。', request_failed: '保存失败，请稍后重试。',
+    },
+  },
 }
 
 const enUS: typeof zhCN = {
@@ -51,10 +70,13 @@ const enUS: typeof zhCN = {
     websocket: 'WebSocket',
     websocketOrigins: 'Origin allowlist',
     searchEngineAddress: 'Origin address',
+    rum: 'Real user monitoring',
+    rumSample: 'Sample rate',
   },
   short: {
     websocket: 'Allow WebSocket connections to this site.',
     searchEngineOrigin: 'Search engine crawlers always go to a fixed origin.',
+    rum: 'Injects one same-origin script into HTML pages to collect visitors\' browser performance and loading errors; see Analytics → Real user monitoring.',
     acmePassthrough: 'Let the origin pass certificate challenges through the CDN.',
     responseRealtime: 'Send origin data to the client as it arrives.',
     requestRealtime: 'Send client data to the origin as it arrives.',
@@ -70,8 +92,23 @@ const enUS: typeof zhCN = {
     defaultSite: 'Serves every unknown host (and HTTPS without SNI, for IP certificates). One default site in the system: enabling it clears the previous one. Administrators only.',
     l2: 'Package: the line group L2; off: straight to the origin; custom: only the nodes of the chosen L2 configuration. Administrators only. A site rolled out to a node market supply: package = the seller\'s L2 (straight to the origin when the seller provides none); custom cannot be rolled out to a market supply.',
   },
+  rum: {
+    sampleHint: 'The node injects about {{percent}} of every 100 page requests',
+    privacy: 'No query string, IP address or cookie is collected and no visitor identifier is made. Needs nodes with SITE_RUM.',
+  },
   options: { package: 'Package', off: 'No L2', custom: 'Custom L2' },
   capability: 'These options need nodes with SITE_EDGE_OPTIONS; nodes without it refuse the publication with the reason.',
+  serverTiming: {
+    label: 'Server-Timing header',
+    help: 'Adds the cache status, the cache layer that served the response, and the origin connect and first-byte times, for debugging in browser developer tools. Off by default.',
+    tip: 'For cross-origin scripts, add Timing-Allow-Origin in the HTTP policy response headers.',
+    saved: 'Saved. Takes effect after the next publication.',
+    saveFailed: 'Could not save the Server-Timing header setting',
+    errors: {
+      version_conflict: 'The site was changed by another operation. Refresh the page and try again.', site_locked: 'The site is locked and cannot be changed.',
+      permission_denied: 'The current account lacks site management permission.', request_failed: 'Save failed. Try again later.',
+    },
+  },
 }
 
 type Messages = { [key: string]: string | Messages }

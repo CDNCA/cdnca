@@ -328,6 +328,11 @@ export interface SiteBasicConfig {
   // defaults it on; hidden by the node while the site is at attack
   // escalation level B or above. Omitted on update: unchanged.
   cache_status_header?: boolean
+  // Server-Timing 响应头. The server defaults it
+  // off; omitted on update: unchanged.
+  server_timing?: boolean
+  // 真实用户体验上报: null off; omitted keeps the stored value
+  rum?: { sample_percent: number } | null
   enabled: boolean
   status: SiteStatus
   // Response only (PJ-C02): the server derives it from the site's latest
@@ -1159,11 +1164,14 @@ function matchesCreatedBasic(actual: unknown, expected: CreateSiteBasic): boolea
   // Servers since 1.0.35 add the forced HTTPS facts.
   const keys = Object.keys(value).filter((key) =>
     key !== 'force_https' && key !== 'https_redirect_port' && key !== 'cache_shared_across_domains' &&
-    key !== 'cache_status_header' && key !== 'cname_failure_code' && key !== 'cname_pending_code' && !siteTLSProfileKeys.includes(key))
+    key !== 'cache_status_header' && key !== 'server_timing' && key !== 'rum' && key !== 'cname_failure_code' && key !== 'cname_pending_code' && !siteTLSProfileKeys.includes(key))
   if (keys.sort().join(',') !== siteBasicKeys.join(',')) return false
   if (value.force_https !== undefined && typeof value.force_https !== 'boolean') return false
   if (value.cache_shared_across_domains !== undefined && typeof value.cache_shared_across_domains !== 'boolean') return false
   if (value.cache_status_header !== undefined && typeof value.cache_status_header !== 'boolean') return false
+  if (value.server_timing !== undefined && typeof value.server_timing !== 'boolean') return false
+  if (value.rum !== undefined && value.rum !== null && !(typeof value.rum === 'object' &&
+    Number.isInteger((value.rum as { sample_percent?: unknown }).sample_percent))) return false
   if (value.https_redirect_port !== undefined && !Number.isInteger(value.https_redirect_port)) return false
   return (
     value.package_id === expected.package_id &&

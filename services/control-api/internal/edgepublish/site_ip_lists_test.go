@@ -19,7 +19,7 @@ func TestCompileSecurityRuleIPListCondition(t *testing.T) {
 		{Field: "method", Operator: "equals", Values: []string{"POST"}},
 		{Field: "ip_list", Operator: "not_in_ip_list", Values: []string{listID.String()}},
 	}
-	matches, err := compileSecurityRuleMatchesFor([]string{"a.example.test"}, 80, conditions, lists)
+	matches, err := compileSecurityRuleMatchesFor([]string{"a.example.test"}, 80, conditions, lists, nil)
 	if err != nil || len(matches) != 1 || len(matches[0].IPLists) != 1 {
 		t.Fatalf("%+v %v", matches, err)
 	}
@@ -30,7 +30,7 @@ func TestCompileSecurityRuleIPListCondition(t *testing.T) {
 	if !edgeconfig.WAFMatchUsesV4Conditions(matches[0]) {
 		t.Fatal("IP list must require WAF v4")
 	}
-	if _, err := compileSecurityRuleMatchesFor([]string{"a.example.test"}, 80, conditions, nil); !errors.Is(err, ErrUnsupportedSecurityPolicy) {
+	if _, err := compileSecurityRuleMatchesFor([]string{"a.example.test"}, 80, conditions, nil, nil); !errors.Is(err, ErrUnsupportedSecurityPolicy) {
 		t.Fatalf("unresolved list: %v", err)
 	}
 }

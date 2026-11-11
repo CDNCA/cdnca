@@ -394,7 +394,7 @@ func validateBatch(batch Batch, config Config) error {
 
 func validAnalyticsRecordKind(kind string) bool {
 	switch kind {
-	case "access.v1", "security.v1", "access.v2", "security.v2", "l4_session.v1", "access_window.v1", "subscription_minute.v1":
+	case "access.v1", "security.v1", "access.v2", "security.v2", "l4_session.v1", "access_window.v1", "subscription_minute.v1", "rum_minute.v1":
 		return true
 	default:
 		return false
@@ -481,11 +481,13 @@ func buildWireBatch(records []Record, limits sessionLimits) (*agentv1.TelemetryB
 			kind = agentv1.TelemetryKind_TELEMETRY_KIND_ACCESS_WINDOW_V1
 		case "subscription_minute.v1":
 			kind = agentv1.TelemetryKind_TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1
+		case "rum_minute.v1":
+			kind = agentv1.TelemetryKind_TELEMETRY_KIND_RUM_MINUTE_V1
 		default:
 			return nil, ErrInvalidPublication
 		}
 		subscriptionID := ""
-		if record.Kind != "l4_session.v1" {
+		if record.Kind != "l4_session.v1" && !record.trusted {
 			var err error
 			subscriptionID, err = packageSubscriptionFromPayload(record.Payload)
 			if err != nil {
@@ -499,7 +501,13 @@ func buildWireBatch(records []Record, limits sessionLimits) (*agentv1.TelemetryB
 			PackageSubscriptionId: subscriptionID,
 		}
 		if limits.scoped {
-			scopeID, err := recordScope(record, limits.scopeForSite)
+			var scopeID string
+			var err error
+			if record.trusted {
+				scopeID, err = siteScope(record.siteID, limits.scopeForSite)
+			} else {
+				scopeID, err = recordScope(record, limits.scopeForSite)
+			}
 			if err != nil {
 				return nil, err
 			}

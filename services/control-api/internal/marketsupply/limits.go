@@ -212,13 +212,11 @@ func (s *Service) republishLimits(ctx context.Context, tx pgx.Tx, tenantScope, s
 		tenantScope).Scan(&fromRevision); err != nil {
 		return err
 	}
-	tag, err := tx.Exec(ctx, `UPDATE sites SET revision=revision+1, updated_at=$3
-		WHERE scope_id=$1 AND package_subscription_id=$2 AND deleted_at IS NULL`, tenantScope, subscriptionID, now)
-	if err != nil {
+	// The limits live in the subscription's limit row, not in a site column the
+	// admin edits: advance only the scope's source revision and leave
+	// sites.revision (the admin's If-Match) alone.
+	if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, tenantScope); err != nil {
 		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return nil
 	}
 	var siteID uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT id FROM sites WHERE scope_id=$1 AND package_subscription_id=$2 AND deleted_at IS NULL
@@ -226,7 +224,7 @@ func (s *Service) republishLimits(ctx context.Context, tx pgx.Tx, tenantScope, s
 		return err
 	}
 	requestID := fmt.Sprintf("market-limits:%s:%d:%d:%d", subscriptionID, row.hold.Revision, row.nodes, now.UnixNano())
-	_, err = edgeautopublish.RequestRepublicationTx(ctx, tx, edgeautopublish.RepublishRequest{
+	_, err := edgeautopublish.RequestRepublicationTx(ctx, tx, edgeautopublish.RepublishRequest{
 		ScopeID: tenantScope, Trigger: edgepublish.SystemTriggerMarketLimits, SourceResourceID: siteID,
 		SourceRequestID: requestID, FromRevision: fromRevision, Immediate: true,
 	})

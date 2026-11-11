@@ -55,7 +55,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     await user.click(screen.getByText('自定义 HTTPS 网关', { selector: '.ant-select-item-option-content' }))
     expect(screen.getByRole('button', { name: '保存SMTP设置' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '保存短信设置' }))
-    await screen.findByText('修订版本 4')
+    await screen.findAllByText('发信配置已保存')
     expect(put.mock.calls[0][2].sms_provider).toBe('https_json')
     expect(screen.getByRole('button', { name: '保存SMTP设置' })).toBeEnabled()
     expect(screen.getByText('自定义 HTTPS 网关', { selector: '.ant-select-selection-item' })).toBeInTheDocument()
@@ -74,7 +74,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     await user.type(sms, '短信草稿')
     await user.click(screen.getByRole('button', { name: section === 'smtp' ? '保存SMTP设置' : '保存短信设置' }))
 
-    await screen.findByText('修订版本 4')
+    await screen.findAllByText('发信配置已保存')
     expect(put).toHaveBeenCalledTimes(1)
     expect(put.mock.calls[0][2]).toEqual({ ...initial.value,
       ...(section === 'smtp' ? { smtp_address: 'smtp.changed.test' } : { sms_signature_name: '短信草稿' }),
@@ -83,7 +83,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     expect(sms).toHaveValue('短信草稿')
 
     await user.click(screen.getByRole('button', { name: section === 'smtp' ? '保存短信设置' : '保存SMTP设置' }))
-    await screen.findByText('修订版本 5')
+    await screen.findAllByText('发信配置已保存')
     expect(put.mock.calls[1][1]).toBe(4)
     expect(put.mock.calls[1][2]).toEqual({ ...initial.value, smtp_address: 'smtp.changed.test', sms_signature_name: '短信草稿' })
   })
@@ -109,7 +109,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     expect(smtp).toHaveValue('smtp.newer.test')
     expect(screen.getByRole('textbox', { name: '签名名称' })).toHaveValue('较新短信草稿')
     await user.click(screen.getByRole('button', { name: '保存SMTP设置' }))
-    await screen.findByText('修订版本 5')
+    await screen.findAllByText('发信配置已保存')
     expect(put.mock.calls[1][2].smtp_address).toBe('smtp.newer.test')
     expect(put.mock.calls[1][2].sms_signature_name).toBe('')
   })
@@ -126,7 +126,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     await user.type(screen.getByRole('textbox', { name: '签名名称' }), '待保存短信')
     await user.click(screen.getByRole('button', { name: '保存SMTP设置' }))
     await user.click(await screen.findByRole('button', { name: '使用同一请求重试' }))
-    await screen.findByText('修订版本 4')
+    await screen.findAllByText('发信配置已保存')
     expect(put.mock.calls[1]).toEqual(put.mock.calls[0])
     expect(screen.getByRole('textbox', { name: '签名名称' })).toHaveValue('待保存短信')
   })
@@ -159,7 +159,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     expect(put.mock.calls[2][2]).toEqual({ ...initial.value, smtp_address: 'smtp.latest.test', sms_signature_name: '保留短信草稿' })
     expect(new Set(put.mock.calls.map((call) => call[4])).size).toBe(3)
     await act(async () => resolve({ ...initial, revision: 6, value: put.mock.calls[2][2] }))
-    await screen.findByText('修订版本 6')
+    await screen.findAllByText('发信配置已保存')
     for (const name of ['保存SMTP设置', '保存短信设置']) {
       expect(screen.getByRole('button', { name })).toBeEnabled()
       expect(screen.getByRole('button', { name })).toHaveAttribute('aria-busy', 'false')
@@ -181,7 +181,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     await user.click(screen.getByRole('textbox', { name: '模板映射' }))
     await user.paste(map)
     await user.click(screen.getByRole('button', { name: '保存短信设置' }))
-    await screen.findByText('修订版本 4')
+    await screen.findAllByText('发信配置已保存')
     const [, , value, , , secret] = put.mock.calls[0]
     expect(secret).toEqual({ smsAccessKeySecret: 'plain-secret', mailSecret: undefined })
     expect(JSON.stringify(value)).not.toContain('plain-secret')
@@ -208,7 +208,7 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     await user.clear(smtp)
     await user.type(smtp, 'smtp.draft.test')
     await user.click(screen.getByRole('button', { name: '保存发信服务商' }))
-    await screen.findByText('修订版本 4')
+    await screen.findAllByText('发信配置已保存')
     const [, , value, , , secrets] = put.mock.calls[0]
     expect(value).toEqual({ ...initial.value, mail_provider: 'sendgrid', mail_from: 'noreply@example.com' })
     expect(JSON.stringify(value)).not.toContain('SG.secret')

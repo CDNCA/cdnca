@@ -156,6 +156,47 @@ func (runtime *Runtime) SubscriptionMinutes(ctx context.Context) ([]dyntelemetry
 	return ParseSubscriptionMinutes(raw)
 }
 
+// RUMMinutes takes the finished RUM site minutes over the control socket.
+// A skeleton without a site with rum has no such location
+// (404): nothing to take.
+func (runtime *Runtime) RUMMinutes(ctx context.Context) ([]dyntelemetry.NodeRUMMinute, error) {
+	raw, err := runtime.controlGet(ctx, edgeskeleton.RUMMinutesLocation)
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "404 ") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("rum minutes: %w", err)
+	}
+	return ParseRUMMinutes(raw)
+}
+
+// ParseRUMMinutes decodes GET /rum-minutes.
+func ParseRUMMinutes(raw []byte) ([]dyntelemetry.NodeRUMMinute, error) {
+	var answer struct {
+		Minutes []struct {
+			Schema string `json:"schema"`
+			Minute int64  `json:"minute"`
+			SiteID string `json:"site_id"`
+			edgeconfig.RUMMinuteData
+		} `json:"minutes"`
+	}
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		return nil, fmt.Errorf("rum minutes: %w", err)
+	}
+	result := make([]dyntelemetry.NodeRUMMinute, 0, len(answer.Minutes))
+	for _, item := range answer.Minutes {
+		if item.Schema != edgeconfig.RUMMinuteNodeSchema || item.Minute <= 0 || item.Minute%60 != 0 || item.SiteID == "" {
+			return nil, fmt.Errorf("rum minutes: invalid record %q at %d", item.SiteID, item.Minute)
+		}
+		if item.Errors == nil {
+			item.Errors = []edgeconfig.RUMError{}
+		}
+		result = append(result, dyntelemetry.NodeRUMMinute{SiteID: item.SiteID, Minute: time.Unix(item.Minute, 0).UTC(),
+			RUMMinuteData: item.RUMMinuteData})
+	}
+	return result, nil
+}
+
 // ParseSubscriptionMinutes decodes GET /subscription-minutes.
 func ParseSubscriptionMinutes(raw []byte) ([]dyntelemetry.NodeMinute, error) {
 	var answer struct {

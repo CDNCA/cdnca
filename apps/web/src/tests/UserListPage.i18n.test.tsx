@@ -113,6 +113,8 @@ describe('UserListPage internationalization', () => {
       if (String(input).includes('/v1/admin/user-groups')) {
         return Promise.resolve(json({ items: [], page: 1, limit: 100, total: 0 }))
       }
+      // 页面还会读 /v1/account/mfa，同样不计入用户列表读取次数。
+      if (!String(input).includes('/v1/admin/users')) return Promise.resolve(json({}))
       userReads += 1
       return Promise.resolve(userReads === 1
         ? json({ error: { code: 'directory_unavailable', message: 'private directory shard' } }, 503)
@@ -289,9 +291,12 @@ describe('UserListPage internationalization', () => {
   it('localizes list and forbidden errors without server message leakage', async () => {
     await changeLocale('en-US')
     authenticateAdmin()
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({
-      error: { code: 'directory_unavailable', message: 'internal replica topology' },
-    }, 503))
+    // 只让用户列表请求失败；页面同时发出的 mfa/代理商/用户组请求不能抢走这次 503。
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => Promise.resolve(
+      String(input).includes('/v1/admin/users')
+        ? json({ error: { code: 'directory_unavailable', message: 'internal replica topology' } }, 503)
+        : json({ items: [] }),
+    ))
 
     const first = renderWithProviders(<UserListPage />, ['/sys/user'])
     expect(await screen.findByText('Failed to load the user list')).toBeInTheDocument()
@@ -343,6 +348,7 @@ describe('UserListPage internationalization', () => {
           error: { code: 'version_conflict', message: 'internal stale revision' },
         }, 409))
       }
+      if (!String(_).includes('/v1/admin/users')) return Promise.resolve(json({ items: [] }))
       reads += 1
       return Promise.resolve(listResponse([
         reads > 1 ? { ...managedUser, display_name: 'Alice Fresh', revision: 2 } : managedUser,

@@ -76,7 +76,15 @@ const (
 	itemRoute
 	enableRoute
 	disableRoute
+	externalCredentialRoute
 )
+
+type externalCredentialBody struct {
+	Provider    string `json:"provider"`
+	AppID       string `json:"app_id"`
+	Secret      string `json:"secret"`
+	Environment string `json:"environment"`
+}
 
 func NewHandler(service *Service, authenticator Authenticator) (*Handler, error) {
 	if isNilDependency(service) || service.store == nil || isNilDependency(authenticator) {
@@ -87,6 +95,8 @@ func NewHandler(service *Service, authenticator Authenticator) (*Handler, error)
 	handler.mux.HandleFunc("/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}", handler.item)
 	handler.mux.HandleFunc("/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/enable", handler.enable)
 	handler.mux.HandleFunc("/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/disable", handler.disable)
+	handler.mux.HandleFunc("/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/external-credential",
+		handler.externalCredential)
 	return handler, nil
 }
 
@@ -234,6 +244,53 @@ func (handler *Handler) item(response http.ResponseWriter, request *http.Request
 		handler.writeResult(response, request, result)
 	default:
 		handler.writeMethodNotAllowed(response, request, "DELETE, GET, PATCH")
+	}
+}
+
+// externalCredential is GET the credential status (never the
+// secret), PUT a new credential. If-Match is the policy revision; a PUT moves
+// the policy to a new revision so publishing it ships the new secret.
+func (handler *Handler) externalCredential(response http.ResponseWriter, request *http.Request) {
+	actor, targetScopeID, policyID, ok := handler.authorizeResource(response, request)
+	if !ok {
+		return
+	}
+	switch request.Method {
+	case http.MethodGet:
+		status, err := handler.service.GetExternalCredential(request.Context(), actor, targetScopeID, policyID)
+		if err != nil {
+			handler.writeError(response, request, err)
+			return
+		}
+		handler.writeJSON(response, request, http.StatusOK, status)
+	case http.MethodPut:
+		metadata, ok := handler.writeMetadata(response, request)
+		if !ok {
+			return
+		}
+		revision, err := expectedRevision(request)
+		if err != nil {
+			handler.writeError(response, request, err)
+			return
+		}
+		var body externalCredentialBody
+		if err := decodeBody(response, request, &body); err != nil {
+			handler.writeError(response, request, err)
+			return
+		}
+		secret := []byte(body.Secret)
+		defer clear(secret)
+		result, err := handler.service.PutExternalCredential(request.Context(), actor, ExternalCredentialRequest{
+			TargetScopeID: targetScopeID, ID: policyID, ExpectedRevision: revision, Provider: body.Provider,
+			AppID: body.AppID, Secret: secret, Environment: body.Environment, WriteMetadata: metadata,
+		})
+		if err != nil {
+			handler.writeError(response, request, err)
+			return
+		}
+		handler.writeResult(response, request, result)
+	default:
+		handler.writeMethodNotAllowed(response, request, "GET, PUT")
 	}
 }
 
@@ -532,6 +589,8 @@ func classifyHandlerRoute(request *http.Request) handlerRoute {
 			return enableRoute
 		case "disable":
 			return disableRoute
+		case "external-credential":
+			return externalCredentialRoute
 		}
 	}
 	return 0
@@ -539,7 +598,8 @@ func classifyHandlerRoute(request *http.Request) handlerRoute {
 
 func requiresJSONContentType(request *http.Request, route handlerRoute) bool {
 	if route == collectionRoute && request.Method == http.MethodPost ||
-		route == itemRoute && request.Method == http.MethodPatch {
+		route == itemRoute && request.Method == http.MethodPatch ||
+		route == externalCredentialRoute && request.Method == http.MethodPut {
 		return true
 	}
 	return (route == enableRoute || route == disableRoute) && request.Method == http.MethodPost && requestHasBody(request)
@@ -592,6 +652,9 @@ func (handler *Handler) writeError(response http.ResponseWriter, request *http.R
 		handler.writeAPIError(response, request, http.StatusUnauthorized, "authentication_required", "authentication is required")
 	case errors.Is(err, ErrInvalidInput):
 		handler.writeAPIError(response, request, http.StatusBadRequest, "invalid_request", "request is invalid")
+	case errors.Is(err, ErrProviderMismatch):
+		handler.writeAPIError(response, request, http.StatusUnprocessableEntity, "provider_mismatch",
+			"the credential provider does not match the policy's external provider")
 	case errors.Is(err, ErrValidation):
 		handler.writeAPIError(response, request, http.StatusUnprocessableEntity, "validation_error", "request fields are invalid")
 	case errors.Is(err, ErrPermissionDenied):

@@ -95,6 +95,11 @@ Node status is shown in the admin console under the node list and real-time moni
 - Nodes, line groups, layer-4 forwarding, node monitoring
 - Unified DNS management across multiple DNS providers
 - WAF, CC protection, ACL, JS challenge, rule pack engine (your own rule packs), quick block
+- String sets for WAF and CC rules, and conditions on browser, device and time of day
+- URL authentication: nodes verify signatures, and the previous key keeps working during a key rotation
+- Cloudflare Turnstile and Google reCAPTCHA v3 as third-party human verification in challenge policies
+- Per-site Server-Timing response header, content rewriting and real user monitoring (RUM)
+- Customer status page: edit components and incidents in system settings, shown on the public /status/ page
 - Automatic site defense: CC auto-switching, automatic bans on WAF attacks and on WAF hits
 - Ban list: manual and automatic bans per site; for a site served by subscribed market nodes the list goes through the market to the supplier's nodes, and each ban shows its delivery
 - Tenant and user management, tickets, notifications

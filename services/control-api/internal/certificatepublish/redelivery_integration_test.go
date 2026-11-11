@@ -397,6 +397,104 @@ func TestCertificateRedeliveryFailedRoundBacksOff(t *testing.T) {
 	}
 }
 
+// The backoff is in memory, per scope and node ID;
+// a reinstall keeps the ID, so a node (an hour of backoff from failed rounds of
+// the old agent) got their certificates 35-60 minutes after the new host
+// enrolled. A newer enrollment of the node starts its backoff over, in the
+// same process: the new host is tried at the next sweep.
+func TestCertificateRedeliveryReinstallResetsTheBackoff(t *testing.T) {
+	f := newRedeliveryFixture(t)
+	f.serving = []uuid.UUID{f.nodeA.id, f.nodeB.id}
+	f.ready[f.nodeB.id] = true
+	f.seedInitialEnrollment(t, f.nodeB.id, f.clock.now().Add(-time.Hour))
+	redeliverer := f.newRedeliverer(t)
+	first := f.delivered(t, f.sweep(t, redeliverer), f.nodeB)
+	f.project(t, first.Deployments[0], false)
+	f.clock.advance(1500 * time.Millisecond)
+	retry := f.delivered(t, f.sweep(t, redeliverer), f.nodeB)
+	f.project(t, retry.Deployments[0], false)
+	f.clock.advance(100 * time.Millisecond)
+	if result := f.sweep(t, redeliverer); len(result.Rollouts) != 0 {
+		t.Fatalf("failed round retried within its backoff: %+v", result)
+	}
+	// "重装此节点": a new host enrolls under the same node ID
+	f.seedInitialEnrollment(t, f.nodeB.id, f.clock.now())
+	f.clock.advance(100 * time.Millisecond)
+	reinstalled := f.delivered(t, f.sweep(t, redeliverer), f.nodeB)
+	if reinstalled.ID == retry.ID || reinstalled.ID == first.ID {
+		t.Fatal("the reinstalled host was given a previous rollout")
+	}
+	// its own failure backs off from the start (one base delay), not from
+	// the previous host's count
+	f.project(t, reinstalled.Deployments[0], false)
+	f.clock.advance(1500 * time.Millisecond)
+	if result := f.sweep(t, redeliverer); len(result.Rollouts) != 1 {
+		t.Fatalf("the new host's first failure did not back off from the base delay: %+v", result)
+	}
+}
+
+// Once the redelivery carried the certificates
+// to the reinstalled nodes the console still showed the four publications permanent_failed
+// (the redeliverer never wrote the intent state); the operator had to bind
+// each site again. A failed publication whose binding every serving node now
+// holds through a redelivery is settled as succeeded, naming that rollout
+// (migration 650), once; the status store reads it back.
+func TestCertificateRedeliverySettlesTheFailedPublication(t *testing.T) {
+	f := newRedeliveryFixture(t)
+	latest := func() (string, *uuid.UUID) {
+		var state string
+		var recovered *uuid.UUID
+		if err := f.pool.QueryRow(t.Context(), `SELECT state,recovered_by_rollout_id FROM certificate_publication_intent_state_facts
+			WHERE tenant_scope_id=$1 AND site_id=$2 ORDER BY binding_revision DESC,sequence DESC LIMIT 1`,
+			f.tenant.scopeID, f.tenant.siteID).Scan(&state, &recovered); err != nil {
+			t.Fatal(err)
+		}
+		return state, recovered
+	}
+	f.serving = []uuid.UUID{f.nodeA.id, f.nodeB.id}
+	f.ready[f.nodeB.id] = true
+	redeliverer := f.newRedeliverer(t)
+	rollout := f.delivered(t, f.sweep(t, redeliverer), f.nodeB)
+	if state, _ := latest(); state != "permanent_failed" {
+		t.Fatalf("settled before node B held the certificate: %s", state)
+	}
+	f.clock.advance(time.Second)
+	f.project(t, rollout.Deployments[0], true)
+	f.clock.advance(time.Second)
+	f.sweep(t, redeliverer)
+	state, recovered := latest()
+	if state != "succeeded" || recovered == nil || *recovered != rollout.ID {
+		t.Fatalf("after every node held the certificate: %s recovered by %v, want succeeded by %s", state, recovered, rollout.ID)
+	}
+	f.clock.advance(5 * time.Second)
+	f.sweep(t, redeliverer)
+	if got := f.count(t, `SELECT count(*) FROM certificate_publication_intent_state_facts WHERE tenant_scope_id=$1
+		AND state='succeeded'`, f.tenant.scopeID); got != 1 {
+		t.Fatalf("succeeded facts = %d, want one", got)
+	}
+	statuses, err := certificateasset.NewPublicationStatusStore(f.pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := statuses.List(t.Context(), f.tenant.certificateActor, f.tenant.scopeID, certificateasset.PublicationStatusFilter{},
+		certificateasset.PublicationStatusCursor{}, 10)
+	if err != nil || len(page.Items) == 0 || page.Items[0].State != "succeeded" || page.Items[0].RecoveredByRolloutID == nil ||
+		*page.Items[0].RecoveredByRolloutID != rollout.ID || page.Items[0].RolloutID != nil {
+		t.Fatalf("status store: %+v %v", page.Items, err)
+	}
+	// a hand-written recovery naming a rollout that is no redelivery is refused (657 trigger)
+	_, err = f.pool.Exec(t.Context(), `INSERT INTO certificate_publication_intent_state_facts(tenant_scope_id,site_id,
+		binding_revision,sequence,state,attempt,idempotency_key,lease_owner,lease_token,lease_expires_at,occurred_at,
+		recovered_by_rollout_id)
+		SELECT tenant_scope_id,site_id,binding_revision,sequence+1,'succeeded',attempt,idempotency_key,
+		  'certificate-redelivery',gen_random_uuid(),transaction_timestamp(),transaction_timestamp(),gen_random_uuid()
+		FROM certificate_publication_intent_state_facts WHERE tenant_scope_id=$1 ORDER BY sequence DESC LIMIT 1`,
+		f.tenant.scopeID)
+	if err == nil {
+		t.Fatal("a recovery after succeeded, or naming no redelivery rollout, was accepted")
+	}
+}
+
 // seedInitialEnrollment records an initial node certificate issued at
 // issuedAt (the enrollment of a host); FKs are off while seeding.
 func (f *redeliveryFixture) seedInitialEnrollment(t *testing.T, nodeID uuid.UUID, issuedAt time.Time) {

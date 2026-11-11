@@ -27,7 +27,7 @@ func TestHelloCapabilityLimitIsShared128(t *testing.T) {
 	hello := validHello(testNodeID, versionRange(1, 0), 1).GetHello()
 	hello.Capabilities.Features = allNamedCapabilities()
 	if err := gateway.validateHello(hello); err != nil && strings.Contains(err.Error(), sizeError) {
-		t.Fatalf("76 capabilities hit the size limit: %v", err)
+		t.Fatalf("79 capabilities hit the size limit: %v", err)
 	}
 	hello.Capabilities.Features = sequentialCapabilities(agentv1.MaxCapabilities + 1)
 	if err := gateway.validateHello(hello); err == nil || !strings.Contains(err.Error(), sizeError) {
@@ -39,8 +39,8 @@ func TestSessionFactsCapabilityLimit(t *testing.T) {
 	hello := validHello(testNodeID, versionRange(1, 0), 1).GetHello()
 	hello.Capabilities = &agentv1.AgentCapabilities{AgentVersion: "1.0.35", BuildId: "build", OperatingSystem: "linux", Architecture: "amd64", Features: allNamedCapabilities()}
 	selected := versionRange(1, 0).Maximum
-	if facts := newGatewaySessionFacts(nodeIdentity{NodeID: testNodeID, SerialNumber: "10"}, 1, selected, hello); facts == nil || len(facts.GetCapabilities().GetFeatures()) != 76 {
-		t.Fatal("76 capabilities did not produce session facts")
+	if facts := newGatewaySessionFacts(nodeIdentity{NodeID: testNodeID, SerialNumber: "10"}, 1, selected, hello); facts == nil || len(facts.GetCapabilities().GetFeatures()) != 81 {
+		t.Fatal("81 capabilities did not produce session facts")
 	}
 	hello.Capabilities.Features = sequentialCapabilities(agentv1.MaxCapabilities + 1)
 	if facts := newGatewaySessionFacts(nodeIdentity{NodeID: testNodeID, SerialNumber: "10"}, 1, selected, hello); facts != nil {
@@ -48,8 +48,8 @@ func TestSessionFactsCapabilityLimit(t *testing.T) {
 	}
 }
 
-// allNamedCapabilities lists every named capability; 1.0.35 nodes report all 76 (CHALLENGE_POW 81, SITE_SELECTION 82,
-// PACKAGING_TOOLSET_REPORT 83).
+// allNamedCapabilities lists every named capability; 1.0.35 nodes report all 81 (SITE_CONTENT_REWRITE 90, SITE_RUM 89, CHALLENGE_EXTERNAL 86, CHALLENGE_POW 81, SITE_SELECTION 82,
+// PACKAGING_TOOLSET_REPORT 83, SITE_SERVER_TIMING 84, URL_AUTH 87).
 func allNamedCapabilities() []*agentv1.Capability {
 	names := make([]int, 0, len(agentv1.CapabilityName_name))
 	for name := range agentv1.CapabilityName_name {

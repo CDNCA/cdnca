@@ -98,6 +98,12 @@ func Validate(site Site) error {
 	if site.Access != nil && edgeconfig.ValidateSiteAccess(*site.Access, append([]string{site.Hosts.Primary}, site.Hosts.Aliases...), len(ports) != 0) != nil {
 		return fmt.Errorf("%w: access", ErrInvalid)
 	}
+	if site.RUM != nil && !site.RUM.Valid() {
+		return fmt.Errorf("%w: rum", ErrInvalid)
+	}
+	if site.ContentRewrite != nil && !site.ContentRewrite.Valid() {
+		return fmt.Errorf("%w: content_rewrite", ErrInvalid)
+	}
 	if site.Schedule302 != nil && (!sched302.ValidSite(*site.Schedule302) || !hasPlainListener(site.Listeners)) {
 		return fmt.Errorf("%w: schedule302", ErrInvalid)
 	}
@@ -451,6 +457,12 @@ func validateSecurity(security Security, ports map[int]bool) error {
 	if security.Challenge != nil && (security.Challenge.Kind != RefChallenge || !validRef(*security.Challenge, false)) {
 		return fmt.Errorf("%w: challenge", ErrInvalid)
 	}
+	if security.URLAuth != nil && (security.URLAuth.Kind != RefURLAuth || !validRef(*security.URLAuth, false)) {
+		return fmt.Errorf("%w: url auth", ErrInvalid)
+	}
+	if security.URLAuthFallbackFloor != 0 && (security.URLAuth == nil || security.URLAuthFallbackFloor < 1 || security.URLAuthFallbackFloor >= security.URLAuth.Revision) {
+		return fmt.Errorf("%w: url auth fallback floor", ErrInvalid)
+	}
 	if security.FirewallAction != nil && (security.FirewallAction.Kind != RefFirewallAction || !validRef(*security.FirewallAction, true)) {
 		return fmt.Errorf("%w: firewall action", ErrInvalid)
 	}
@@ -469,6 +481,46 @@ func validateSecurity(security Security, ports map[int]bool) error {
 			mount.Layer != "system" && mount.Layer != "developer" && mount.Layer != "user" {
 			return fmt.Errorf("%w: mount", ErrInvalid)
 		}
+	}
+	return validateStringSets(security)
+}
+
+// validateStringSets: security.string_sets is exactly the sets the rules
+// reference, one revision each, valid and within the site bounds, and every
+// condition's target accepts its set.
+func validateStringSets(security Security) error {
+	sets := security.StringSets
+	if len(sets) > edgeconfig.MaxSiteStringSets {
+		return fmt.Errorf("%w: more than %d string sets", ErrInvalid, edgeconfig.MaxSiteStringSets)
+	}
+	byID := make(map[string]StringSet, len(sets))
+	size := 0
+	for index, set := range sets {
+		if err := edgeconfig.ValidateWAFStringSet(set); err != nil || index > 0 && sets[index-1].ID >= set.ID {
+			return fmt.Errorf("%w: string set %s", ErrInvalid, set.ID)
+		}
+		byID[set.ID] = set
+		for _, member := range set.Members {
+			size += len(member)
+		}
+	}
+	if size > edgeconfig.MaxSiteStringSetBytes {
+		return fmt.Errorf("%w: string set members exceed %d bytes", ErrInvalid, edgeconfig.MaxSiteStringSetBytes)
+	}
+	used := make(map[string]bool, len(sets))
+	for _, policy := range security.Rules.Policies {
+		for _, rule := range policy.Rules {
+			for _, ref := range rule.Match.StringSets {
+				set, ok := byID[ref.SetID]
+				if !ok || set.Revision != ref.Revision || !edgeconfig.StringSetTargetAccepts(ref.Target, set) {
+					return fmt.Errorf("%w: rule %s string set %s revision %d", ErrInvalid, rule.RuleID, ref.SetID, ref.Revision)
+				}
+				used[ref.SetID] = true
+			}
+		}
+	}
+	if len(used) != len(sets) {
+		return fmt.Errorf("%w: a string set no rule references", ErrInvalid)
 	}
 	return nil
 }

@@ -18,6 +18,12 @@ const ChallengeArtifactMediaType = "application/vnd.cdnca.edge-challenge-bundle+
 // pow_difficulty (challenge.MinPoWDifficulty..MaxPoWDifficulty).
 const challengePoWAPIVersion = 1
 
+// challengeExternalAPIVersion is CAPABILITY_NAME_CHALLENGE_EXTERNAL v1 (ADR
+// 0028 C3): providers turnstile / recaptcha-v3, external_provider fields
+// score_threshold / unavailable, verifier 204 / 403 / 503. The engine and the
+// verifier ship in the same package, so the consumer declares it with POW.
+const challengeExternalAPIVersion = 1
+
 var ErrInvalidChallengeArtifact = errors.New("invalid challenge artifact")
 
 type ChallengeConsumer interface {

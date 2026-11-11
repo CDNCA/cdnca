@@ -3,6 +3,7 @@ package challengepolicy
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"math"
 	"path"
 	"reflect"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/challengepublication"
 	"github.com/google/uuid"
 )
 
@@ -70,11 +72,22 @@ func normalizeConfig(config *Config) error {
 		if config.MinDelaySeconds != 0 || config.ExternalProvider == nil {
 			return ErrValidation
 		}
-		config.ExternalProvider.Provider = strings.TrimSpace(config.ExternalProvider.Provider)
-		config.ExternalProvider.AppReference = strings.TrimSpace(config.ExternalProvider.AppReference)
-		if (config.ExternalProvider.Provider != ProviderTencent && config.ExternalProvider.Provider != ProviderGeetest4) ||
-			!appReferencePattern.MatchString(config.ExternalProvider.AppReference) {
+		external := config.ExternalProvider
+		external.Provider = strings.TrimSpace(external.Provider)
+		external.AppReference = strings.TrimSpace(external.AppReference)
+		external.Unavailable = strings.TrimSpace(external.Unavailable)
+		if !challengepublication.ValidExternalProvider(external.Provider) ||
+			external.AppReference != "" && !appReferencePattern.MatchString(external.AppReference) ||
+			external.ScoreThreshold != nil && (external.Provider != ProviderRecaptchaV3 ||
+				!challengepublication.ValidScoreThreshold(*external.ScoreThreshold)) ||
+			external.Unavailable != "" && external.Unavailable != ExternalUnavailableBuiltin &&
+				external.Unavailable != ExternalUnavailableClosed {
 			return ErrValidation
+		}
+		if external.ScoreThreshold != nil {
+			// Stored as numeric(2,1): keep exactly one decimal.
+			value := math.Round(*external.ScoreThreshold*10) / 10
+			external.ScoreThreshold = &value
 		}
 	default:
 		return ErrValidation

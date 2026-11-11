@@ -177,7 +177,6 @@ function ReviewQueueContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
       title: t('columns.reviewer'), dataIndex: 'reviewer_user_id', width: 290,
       render: (value?: string) => value ?? t('values.unassigned'),
     },
-    { title: t('columns.revision'), dataIndex: 'revision', width: 90 },
     {
       title: t('columns.changedAt'), dataIndex: 'state_changed_at', width: 190,
       render: (value: string) => formatDateTime(value, language) || value,

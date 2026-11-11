@@ -385,6 +385,12 @@ export async function responseApiError(response: Response): Promise<ApiError> {
     if (typeof domain === 'string' && /^[a-z0-9*][a-z0-9.*-]{0,252}$/.test(domain)) error.domain = domain
   }
   attachFieldRefusal(error, body?.error?.details)
+  // package publish/withdraw refusals name the spec field / state reason.
+  if (code.startsWith('package_offer_')) {
+    const details = body?.error?.details as { field?: unknown; reason?: unknown } | undefined
+    if (details && typeof details.field === 'string' && /^[a-z][a-z0-9_.]{0,127}$/.test(details.field)) error.field = details.field
+    if (details && typeof details.reason === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(details.reason)) error.reason = details.reason
+  }
   return error
 }
 

@@ -2098,3 +2098,42 @@
   font-weight: inherit;
   line-height: inherit;
 }
+
+/* Condition inputs: variables only, dark.css repoints them. */
+.sp-editor-cond-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.sp-time-window {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sp-time-slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+/* Day buttons: the checkbox mark stays, so a chosen day is not shown by color alone. */
+.sp-weekday-group .ant-checkbox-wrapper {
+  margin-inline-end: 0;
+  padding: 0 6px;
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 4px;
+}
+
+.sp-weekday-group .ant-checkbox-wrapper-checked {
+  border-color: var(--cdnca-color-primary);
+}
+
+.sp-cond-help,
+.sp-ua-result {
+  color: var(--cdnca-color-text);
+}

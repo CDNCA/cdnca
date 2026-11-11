@@ -24,7 +24,7 @@ func TestSiteFieldsCarrySiteSettings(t *testing.T) {
 	cfg := settingsConfig()
 	cfg.TLS = &siteconf.TLSOptions{Protocols: []string{"TLSv1.2"}, CipherPreset: "custom",
 		CipherSuites: []string{"ECDHE-RSA-AES128-GCM-SHA256"}, OCSPStapling: true, PreferServerCiphers: &off, HTTP2Off: true}
-	cfg.IPv6, cfg.CacheSharedAcrossDomains, cfg.CacheStatusHeaderOff = true, true, true
+	cfg.IPv6, cfg.CacheSharedAcrossDomains, cfg.CacheStatusHeaderOff, cfg.ServerTiming = true, true, true, true
 	cfg.Forwarding = &siteconf.Forwarding{L2Off: true}
 	if err := cfg.Normalize(); err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ func TestSiteFieldsCarrySiteSettings(t *testing.T) {
 		fields.TLSPreferServerCiphers == nil || *fields.TLSPreferServerCiphers || fields.TLSPreferServerCiphersReset {
 		t.Fatalf("tls fields = %+v", fields)
 	}
-	if !fields.IPv6Enabled || !*fields.CacheSharedAcrossDomains || *fields.CacheStatusHeader || pool.L2Mode != site.SiteL2Off {
+	if !fields.IPv6Enabled || !*fields.CacheSharedAcrossDomains || *fields.CacheStatusHeader || fields.ServerTiming == nil || !*fields.ServerTiming || pool.L2Mode != site.SiteL2Off {
 		t.Fatalf("fields = %+v l2 = %q", fields, pool.L2Mode)
 	}
 }
@@ -50,7 +50,8 @@ func TestSiteFieldsWriteDefaultSettings(t *testing.T) {
 	fields, pool := siteFields(cfg, true)
 	if !slices.Equal(fields.TLSProtocols, edgeconfig.BaselineTLSProtocols()) || *fields.TLSCipherPreset != edgeconfig.TLSCipherModern ||
 		fields.TLSCipherSuites != nil || *fields.TLSOCSPStapling || !*fields.HTTP2Enabled || !fields.TLSPreferServerCiphersReset ||
-		fields.IPv6Enabled || *fields.CacheSharedAcrossDomains || !*fields.CacheStatusHeader || pool.L2Mode != site.SiteL2Package {
+		fields.IPv6Enabled || *fields.CacheSharedAcrossDomains || !*fields.CacheStatusHeader || fields.ServerTiming == nil || *fields.ServerTiming ||
+		pool.L2Mode != site.SiteL2Package {
 		t.Fatalf("fields = %+v l2 = %q", fields, pool.L2Mode)
 	}
 }

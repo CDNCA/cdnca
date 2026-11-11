@@ -11,7 +11,7 @@ const zhCN = {
   notices: { saved: '防火墙配置已保存', recovered: '已创建误杀恢复修订' },
   errors: {
     save: '防火墙配置保存失败', recover: '防火墙恢复失败', forbidden: '当前账号无权查看防火墙配置',
-    unknown: '操作失败，请稍后重试', revisionConflict: '配置已被其他操作更新，已重新加载最新版本',
+    unknown: '操作失败，请稍后重试', revisionConflict: '内容已被其他人修改，请刷新后再保存',
     invalidResponse: '服务返回了无法识别的数据', outcomeUnknown: '提交结果暂时无法确认，请重试原请求或刷新核对',
     saveFailed: '配置保存失败',
   },
@@ -37,7 +37,7 @@ const zhCN = {
     },
     errors: {
       forbidden: '当前账号无权查看防火墙配置', loadFailed: '防火墙配置加载失败',
-      unknown: '操作失败，请稍后重试', revisionConflict: '配置已被其他操作更新，已重新加载最新版本',
+      unknown: '操作失败，请稍后重试', revisionConflict: '内容已被其他人修改，请刷新后再保存',
       invalidResponse: '服务返回了无法识别的数据', outcomeUnknown: '提交结果暂时无法确认，请重试原请求或刷新核对',
       saveFailed: '配置保存失败',
     },
@@ -226,7 +226,7 @@ const enUS = {
   notices: { saved: 'Firewall configuration saved', recovered: 'False-positive recovery revision created' },
   errors: {
     save: 'Failed to save firewall configuration', recover: 'Firewall recovery failed', forbidden: 'Firewall access denied',
-    unknown: 'The operation failed. Try again later.', revisionConflict: 'The configuration changed and the latest revision was reloaded.',
+    unknown: 'The operation failed. Try again later.', revisionConflict: 'Someone else changed this content. Refresh before saving.',
     invalidResponse: 'The service returned unrecognized data.', outcomeUnknown: 'The submission result is unknown. Retry the exact request or refresh to verify.',
     saveFailed: 'Failed to save the configuration.',
   },
@@ -241,7 +241,7 @@ const enUS = {
     },
     units: { seconds: 'seconds', blocksPerSecond: 'blocks / sec', perMinute: 'times / 60 sec', perFiveSeconds: 'times / 5 sec', enableAtQPS: 'req/s to enable', requestsPerSecond: 'req/s', items: 'items', times: 'times', levels: 'levels' },
     notices: { saved: 'Configuration saved and queued for distribution', imageQueued: 'CC image update queued', overrideSaved: 'Override saved', overrideDeleted: 'Override deleted' },
-    errors: { forbidden: 'Firewall access denied', loadFailed: 'Failed to load firewall configuration', unknown: 'The operation failed. Try again later.', revisionConflict: 'The configuration changed and the latest revision was reloaded.', invalidResponse: 'The service returned unrecognized data.', outcomeUnknown: 'The submission result is unknown. Retry the exact request or refresh to verify.', saveFailed: 'Failed to save the configuration.' },
+    errors: { forbidden: 'Firewall access denied', loadFailed: 'Failed to load firewall configuration', unknown: 'The operation failed. Try again later.', revisionConflict: 'Someone else changed this content. Refresh before saving.', invalidResponse: 'The service returned unrecognized data.', outcomeUnknown: 'The submission result is unknown. Retry the exact request or refresh to verify.', saveFailed: 'Failed to save the configuration.' },
     uncertainty: { title: 'Previous submission outcome is unknown', description: 'The server may have received the request before the connection failed. Retry with the same idempotency identity, or discard it and reload the current configuration.' },
     validation: { integerRange: 'Enter a whole number from {{minimum}} to {{maximum}}' },
     cc: {

@@ -4,6 +4,7 @@ package securitybinding
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -79,8 +80,9 @@ func TestWAFLibraryScopeFilterAndBatch(t *testing.T) {
 		t.Fatalf("disable = %+v", first)
 	}
 	replay := batch("scope-batch-disable", securitypolicy.BatchDisable, disable...)
-	if replay[0].Status != "ok" || !replay[0].Replayed || replay[0].Version != 2 {
-		t.Fatalf("replay = %+v", replay)
+	// 同键同体重放原样返回首次存储的批次结果（不再逐项标 Replayed）。
+	if !reflect.DeepEqual(replay, first) || replay[0].Status != "ok" || replay[0].Version != 2 {
+		t.Fatalf("replay = %+v want the stored %+v", replay, first)
 	}
 	if again := batch("scope-batch-disable-2", securitypolicy.BatchDisable, securitypolicy.BatchItem{ID: global, Version: 2}); again[0].Status != "unchanged" {
 		t.Fatalf("already disabled = %+v", again)
@@ -99,7 +101,7 @@ func TestWAFLibraryScopeFilterAndBatch(t *testing.T) {
 		t.Fatalf("delete = %+v", deleted)
 	}
 	if replayed := batch("scope-batch-delete", securitypolicy.BatchDelete,
-		securitypolicy.BatchItem{ID: global, Version: 2}, securitypolicy.BatchItem{ID: copied.ID, Version: copied.Revision}); replayed[0].Status != "ok" || !replayed[0].Replayed {
+		securitypolicy.BatchItem{ID: global, Version: 2}, securitypolicy.BatchItem{ID: copied.ID, Version: copied.Revision}); !reflect.DeepEqual(replayed, deleted) {
 		t.Fatalf("delete replay = %+v", replayed)
 	}
 	if got := ids(securitypolicy.ScopeGlobal); len(got) != 0 {

@@ -219,7 +219,7 @@ export const zhCNNodeScheduling = {
     node_scheduling_platform_write_forbidden: '平台会话不能写入租户线路配置',
     node_scheduling_not_found: '线路组或版本不存在',
     node_scheduling_name_conflict: '线路组名称已存在',
-    node_scheduling_revision_conflict: '线路组已被其他操作修改，请刷新后重试',
+    node_scheduling_revision_conflict: '内容已被其他人修改，请刷新后再保存',
     node_scheduling_idempotency_conflict: '幂等键已绑定到不同请求，请重新操作',
     node_scheduling_reference_conflict: '线路组正被其他活动配置引用，请先解除引用',
     lineGroupInUse: {
@@ -649,7 +649,7 @@ export const enUSNodeScheduling = {
     node_scheduling_platform_write_forbidden: 'Platform sessions cannot change tenant line configuration',
     node_scheduling_not_found: 'The line group or revision does not exist',
     node_scheduling_name_conflict: 'A line group with this name already exists',
-    node_scheduling_revision_conflict: 'Another operation changed this line group. Refresh and try again.',
+    node_scheduling_revision_conflict: 'Someone else changed this content. Refresh before saving.',
     node_scheduling_idempotency_conflict: 'This idempotency key is already bound to a different request. Start the operation again.',
     node_scheduling_reference_conflict: 'This line group is referenced by another active configuration. Remove the reference first.',
     lineGroupInUse: {

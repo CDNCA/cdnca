@@ -241,8 +241,8 @@ describe('NodeRegionManagement', () => {
 
     const conflictAlert = await waitFor(() => { const node = document.querySelector<HTMLElement>('.cdnca-feedback-error'); expect(node).not.toBeNull(); return node! })
     // fix-feedbackui: a server sentence keeps its first clause as the title, the rest goes to the body.
-    expect(conflictAlert.querySelector('.cdnca-feedback-title')).toHaveTextContent('区域已被其他操作修改')
-    expect(conflictAlert.querySelector('.cdnca-feedback-detail')).toHaveTextContent('列表已刷新')
+    expect(conflictAlert.querySelector('.cdnca-feedback-title')).toHaveTextContent('内容已被其他人修改')
+    expect(conflictAlert.querySelector('.cdnca-feedback-detail')).toHaveTextContent('请刷新后再保存')
     expect(conflictAlert).toHaveTextContent('请求 ID：request-1')
     expect(conflictAlert).not.toHaveTextContent('private database revision')
     await waitFor(() => expect(listReads).toBeGreaterThan(1))

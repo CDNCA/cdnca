@@ -12,7 +12,7 @@ export interface PluginUIPage {
   page_id: string
   origin: string
   url: string
-  mount: 'menu' | 'site_tab'
+  mount: 'menu' | 'site_tab' | 'plugin_settings'
   menu_parent?: string
   role: 'admin' | 'user'
   title: { 'zh-CN': string; 'en-US'?: string }
@@ -28,7 +28,7 @@ function validPage(value: unknown): value is PluginUIPage {
   return typeof page.plugin_id === 'string' && typeof page.page_id === 'string' &&
     typeof page.origin === 'string' && originPattern.test(page.origin) &&
     typeof page.url === 'string' && page.url.startsWith(`${page.origin}/`) &&
-    (page.mount === 'menu' || page.mount === 'site_tab') && (page.role === 'admin' || page.role === 'user') &&
+    (page.mount === 'menu' || page.mount === 'site_tab' || page.mount === 'plugin_settings') && (page.role === 'admin' || page.role === 'user') &&
     typeof title?.['zh-CN'] === 'string' && typeof page.has_api === 'boolean'
 }
 

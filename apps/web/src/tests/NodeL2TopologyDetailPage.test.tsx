@@ -626,7 +626,7 @@ describe('canonical line resolution', () => {
     )
     renderLineDetail()
     await disableLine(userEvent.setup())
-    expect(await screen.findByText('线路组已被其他操作修改，请刷新后重试')).toBeInTheDocument()
+    expect(await screen.findByText('内容已被其他人修改，请刷新后再保存')).toBeInTheDocument()
     expect(screen.queryByText('操作结果待确认')).not.toBeInTheDocument()
     expect(screen.queryByText('private conflict')).not.toBeInTheDocument()
   })

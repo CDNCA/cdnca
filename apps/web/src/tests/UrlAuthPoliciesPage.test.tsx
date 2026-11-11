@@ -152,6 +152,27 @@ describe('UrlAuthPoliciesPage', () => {
     expect(screen.queryByText('one-time-secret')).not.toBeInTheDocument()
   }, 60_000)
 
+  // 主控在节点验签接通前拒绝创建/启用，页面写明原因而不是“请求失败”。
+  it('explains that URL authentication is not yet enforced on nodes when the control plane refuses a create', async () => {
+    authenticate()
+    vi.spyOn(urlAuthPoliciesApi, 'list').mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
+    mockSites()
+    const create = vi.spyOn(urlAuthPoliciesApi, 'create').mockRejectedValueOnce(
+      new ApiError('URL 鉴权尚未在节点生效，暂不可用', 422, 'url_auth_unavailable', 'req-url-auth-off'))
+    const user = userEvent.setup()
+    renderWithProviders(<UrlAuthPoliciesPage />, ['/site/url-auth'])
+    expect(await screen.findByText('暂无URL鉴权策略')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '创建策略' }))
+    const dialog = screen.getByRole('dialog', { name: '创建URL鉴权策略' })
+    await user.click(within(dialog).getByLabelText('绑定网站'))
+    await user.click(await screen.findByText(site.domain))
+    await user.type(within(dialog).getByLabelText('名称'), 'Protected downloads')
+    await user.click(within(dialog).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('URL 鉴权尚未在节点生效，暂不可用')).toBeInTheDocument()
+    expect(screen.queryByText('请求失败，请稍后重试')).not.toBeInTheDocument()
+  }, 60_000)
+
   // fix-fielderr-be4：服务端拒绝某个可信代理网段时标在该文本框下并写出是哪一项，弹窗不关、不弹错误窗
   it('marks a refused trusted proxy entry under its box with the entry value', async () => {
     authenticate()

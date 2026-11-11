@@ -2918,6 +2918,13 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_ENDPOINT_MIGRATION, ApiVersion: 1,
 		})
 	}
+	// the URL auth consumer installs policies and dynamic
+	// routing verifies site objects' security.url_auth against them.
+	if c.urlAuth != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_URL_AUTH) {
+		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_URL_AUTH, ApiVersion: 1,
+		})
+	}
 	if c.sched302 != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_SCHED302) {
 		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_SCHED302, ApiVersion: sched302.APIVersion,
@@ -2955,6 +2962,11 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 	if c.challenge != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW) {
 		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW, ApiVersion: challengePoWAPIVersion,
+		})
+	}
+	if c.challenge != nil && !hasCapability(capabilities, agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_EXTERNAL) {
+		capabilities.Features = append(capabilities.Features, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_EXTERNAL, ApiVersion: challengeExternalAPIVersion,
 		})
 	}
 	// Declared only; the heartbeat carries the report.

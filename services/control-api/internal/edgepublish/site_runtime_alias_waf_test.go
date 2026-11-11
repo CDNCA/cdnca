@@ -80,15 +80,15 @@ func TestSiteRuntimeV2WAFHostConditionOnSeveralDomainsIsRefused(t *testing.T) {
 		"exact alias":    {"cdn.example.test", "www.example.test"},
 		"wildcard alias": {"cdn.example.test", "*.example.test"},
 	} {
-		if _, err := compileSecurityRuleMatchesFor(domains, 8443, host, nil); !errors.Is(err, ErrUnsupportedSecurityPolicy) {
+		if _, err := compileSecurityRuleMatchesFor(domains, 8443, host, nil, nil); !errors.Is(err, ErrUnsupportedSecurityPolicy) {
 			t.Fatalf("%s: host condition error = %v", name, err)
 		}
 	}
-	if matches, err := compileSecurityRuleMatchesFor([]string{"www.example.test"}, 8443, host, nil); err != nil ||
+	if matches, err := compileSecurityRuleMatchesFor([]string{"www.example.test"}, 8443, host, nil, nil); err != nil ||
 		len(matches) != 1 || matches[0].Host != "www.example.test" {
 		t.Fatalf("single domain host condition = %+v, %v", matches, err)
 	}
-	if matches, err := compileSecurityRuleMatchesFor([]string{"cdn.example.test"}, 8443, host, nil); err != nil || len(matches) != 0 {
+	if matches, err := compileSecurityRuleMatchesFor([]string{"cdn.example.test"}, 8443, host, nil, nil); err != nil || len(matches) != 0 {
 		t.Fatalf("single domain unmatched host condition = %+v, %v", matches, err)
 	}
 	// Through the whole v2 listener compile the rule is refused too.

@@ -562,7 +562,6 @@ function PluginWebhooksPageContent({ accessToken, principal, ownerKey }: {
       title: t('columns.status'), dataIndex: 'status', key: 'status', width: 120,
       render: (value: PluginWebhookSubscription['status']) => <Tag color={statusColor(value)}>{t(`states.${value}`)}</Tag>,
     },
-    { title: t('columns.revision'), dataIndex: 'revision', key: 'revision', width: 100 },
     {
       title: t('columns.updatedAt'), dataIndex: 'updated_at', key: 'updated_at', width: 190,
       render: (value: string) => formatDateTime(value, i18n.resolvedLanguage ?? 'zh-CN') || value,
@@ -845,7 +844,6 @@ function PluginWebhooksPageContent({ accessToken, principal, ownerKey }: {
       {drawerSubscription ? <>
         <Descriptions bordered size="small" column={2}>
           <Descriptions.Item label={t('detail.status')}><Tag color={statusColor(drawerSubscription.status)}>{t(`states.${drawerSubscription.status}`)}</Tag></Descriptions.Item>
-          <Descriptions.Item label={t('detail.revision')}>{drawerSubscription.revision}</Descriptions.Item>
           <Descriptions.Item label={t('detail.target')} span={2}><code className="plugin-webhook-target">{drawerSubscription.target_url}</code></Descriptions.Item>
           <Descriptions.Item label={t('detail.events')} span={2}>{drawerSubscription.event_types.join(', ')}</Descriptions.Item>
           <Descriptions.Item label={t('detail.siteFilter')} span={2}>{drawerSubscription.site_ids?.join(', ') ?? t('detail.allSites')}</Descriptions.Item>

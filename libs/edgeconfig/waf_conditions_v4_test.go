@@ -55,8 +55,9 @@ func TestListenerSecurityWAFAPIVersionConditions(t *testing.T) {
 			t.Fatalf("%s %d", target, got)
 		}
 	}
-	// The node now implements v5 (multipart targets).
-	if WAFNodeAPIVersion != WAFMultipartAPIVersion {
+	// v5 (multipart targets); v6 (string sets, browser / device / time
+	// conditions).
+	if WAFNodeAPIVersion != WAFStringSetAPIVersion {
 		t.Fatalf("node advertises WAF v%d", WAFNodeAPIVersion)
 	}
 }

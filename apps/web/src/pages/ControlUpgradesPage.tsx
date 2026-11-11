@@ -275,6 +275,7 @@ function MaintenanceOverview({
   const rows = canNodeRead ? [...new Map((nodeQuery.data?.pages ?? []).flatMap((page) => page.items).map((node) => [node.id, node])).values()] : []
   const nodeStates = new Map((canNodeRead ? nodeStatusQueries : []).flatMap((query) => query.isError ? [] : query.data?.nodes ?? []).map((node) => [node.node_id, node]))
   const control = controlQuery.isError ? undefined : controlQuery.data?.control
+  const nodeDownloads = controlQuery.isError ? undefined : controlQuery.data?.node_downloads
   const knownReasons = new Set<string>(maintenanceUpgradeReasons)
   const now = Date.now()
   const [, updateClock] = useState(0)
@@ -509,6 +510,10 @@ function MaintenanceOverview({
         { key: 'binary', label: mt('binarySHA256'), children: <code>{control?.build?.binary_sha256 ?? mt('buildFactUnavailable')}</code> },
       ]} />
       {control?.configured_version_matches === false ? <Alert type="warning" showIcon message={mt('configuredVersionMismatch')} /> : null}
+      {nodeDownloads?.state === 'failed' ? <Alert type="warning" showIcon message={mt('nodeDownloadsFailed')}
+        description={`${nodeDownloads.reason ?? ''}${nodeDownloads.checked_at ? ` · ${nodeDownloads.checked_at}` : ''}`} /> : null}
+      {nodeDownloads?.state === 'waiting_for_control_upgrade' ? <Alert type="info" showIcon
+        message={`${mt('nodeDownloadsWaiting')}${nodeDownloads.source_version ? ` (${nodeDownloads.source_version})` : ''}`} /> : null}
     </Drawer>
   </section>
 }

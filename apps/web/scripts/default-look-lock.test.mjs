@@ -11,7 +11,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 
-import { declarations, defaultVariables, expandFallbacks, leftoverColors, normalizeValue, removedOnPurpose, scriptVariable, wrappedVariable } from './defaultLook.mjs'
+import { declarations, defaultVariables, expandFallbacks, leftoverColors, normalizeValue, removedOnPurpose, scriptVariable, standaloneStylesheets, wrappedVariable } from './defaultLook.mjs'
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url))
 const base = process.env.DEFAULT_LOOK_BASE ?? 'b3150d535'
@@ -33,6 +33,7 @@ function ownRootClass(line) {
 test(`apps/web CSS keeps the default look of ${base}`, () => {
   let compared = 0
   for (const file of files) {
+    if (standaloneStylesheets.includes(file)) continue
     let before
     try { before = git('show', `${base}:${file}`) } catch { before = null }
     const after = readFileSync(repo + file, 'utf8')

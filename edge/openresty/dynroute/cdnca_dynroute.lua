@@ -28,6 +28,19 @@ local cdnca_autodefense = ngx.shared.cdnca_autodefense and require("cdnca_autode
 -- WebP conversion: only when the skeleton renders its
 -- dictionary and thread pool (a site with access.webp)
 local cdnca_webp = ngx.shared.cdnca_webp and require("cdnca_webp")
+-- URL auth: only when the skeleton renders its dictionary
+-- (a site has security.url_auth); the engine is security/url_auth.lua
+local cdnca_url_auth = ngx.shared.cdnca_url_auth_state and require("url_auth")
+-- Real user monitoring: only when the skeleton renders its
+-- dictionary (a site with rum); then only sites whose object carries rum
+local cdnca_rum = ngx.shared.cdnca_rum and require("cdnca_rum")
+-- Plain fetch: a request RUM sampled or a content rewrite rule matched is
+-- fetched without Accept-Encoding, so the origin answers plain text the body
+-- filters can change. Only on a node where some site has one of them.
+-- Content rewrite: loaded by configure when the skeleton says some site has
+-- content_rewrite (no dictionary to test)
+local cdnca_rewrite
+local plain_fetch = cdnca_rum ~= nil
 
 local _M = { _VERSION = "d11" }
 
@@ -302,6 +315,8 @@ end
 -- configure(opts): init_by_lua (the skeleton writes the paths). One call
 -- for every module the skeleton serves.
 function _M.configure(opts)
+    cdnca_rewrite = opts.content_rewrite == true and require("cdnca_rewrite") or nil
+    plain_fetch = cdnca_rum ~= nil or cdnca_rewrite ~= nil
     site_gzip = opts.site_gzip or false
     site_brotli = opts.site_brotli == true
     node_networks = false
@@ -340,6 +355,10 @@ function _M.configure(opts)
         buckets = opts.managed_waf_buckets, cookie_variants = opts.managed_waf_cookie == true })
     -- aggregated CC challenge / 429 security lines (sec-log-agg, telemetry only)
     if opts.security_aggregate then cdnca_telemetry.configure_aggregate(opts.security_aggregate) end
+    if cdnca_url_auth then
+        cdnca_url_auth.preload({ state_dict = "cdnca_url_auth_state", root = opts.url_auth_root,
+            policies = opts.url_auth_policies or {} })
+    end
     cdnca_security.configure({
         challenge_root = opts.challenge_root,
         challenge_lua = opts.challenge_lua,
@@ -356,6 +375,10 @@ function _M.configure(opts)
 end
 
 function _M.init_worker()
+    if plain_fetch then
+        -- RUM sampling draws math.random per request: no two workers alike
+        math.randomseed(ngx.now() * 1000 + ngx.worker.pid())
+    end
     cdnca_site.init_worker()
     cdnca_telemetry.init_worker_aggregate()
     cdnca_limits.init_worker() -- market supply limits: TCP connection release
@@ -469,12 +492,73 @@ local function client_pass()
     return not ngx.req.is_internal() or ngx.var.cdnca_waf_pass == "tier"
 end
 
+-- strip_encoding(): the visitor's Accept-Encoding waits in $cdnca_plain_ae
+-- ("-": none) for header_filter; the origin is asked without it.
+local function strip_encoding()
+    if (ngx.var.cdnca_plain_ae or "") ~= "" then
+        return
+    end
+    local encoding = ngx.var.http_accept_encoding
+    ngx.var.cdnca_plain_ae = encoding and encoding ~= "" and encoding or "-"
+    ngx.req.clear_header("Accept-Encoding")
+end
+
+-- plain_decide(site): the client pass decides once what the request wants
+-- plain ($cdnca_plain_want, survives ngx.exec): "w" a content rewrite rule's
+-- path matches (Accept-Encoding goes at once: every visitor of the path
+-- alike, so the cache holds one plain copy), "r" RUM sampled it. A
+-- non-empty value (or "-": nothing) is never decided again.
+local function plain_decide(site)
+    if (ngx.var.cdnca_plain_want or "") ~= "" then
+        return
+    end
+    local want = ""
+    if cdnca_rewrite and site.content_rewrite and cdnca_rewrite.wants(site) then
+        want = "w"
+        strip_encoding()
+    end
+    if cdnca_rum and site.rum and cdnca_rum.sampled(site) then
+        want = want .. "r"
+    end
+    ngx.var.cdnca_plain_want = want ~= "" and want or "-"
+end
+
+-- plain_commit(): after the cache dispatch (it returned: no cache module, a
+-- bypass in location /, or the access pass of the variant it moved to). A
+-- RUM-only request served from the cache ($cdnca_cache_zone set) keeps its
+-- Accept-Encoding: stripping it would store a plain variant other visitors
+-- get (an origin without Vary) or split the variants (with Vary); it is not
+-- sampled any more unless its answer is plain anyway.
+local function plain_commit()
+    local want = ngx.var.cdnca_plain_want or ""
+    if want == "" or want == "-" or (ngx.var.cdnca_plain_ae or "") ~= "" then
+        return
+    end
+    if (ngx.var.cdnca_cache_zone or "") ~= "" then
+        return
+    end
+    strip_encoding()
+end
+
+-- plain_restore(): header_filter, before the compression gate.
+local function plain_restore()
+    local saved = ngx.var.cdnca_plain_ae
+    if saved and saved ~= "" and saved ~= "-" then
+        ngx.req.set_header("Accept-Encoding", saved)
+    end
+end
+
 -- rewrite_by_lua: the managed WAF first (a site with one is moved to its
 -- tier location: ModSecurity phase 1 runs there, then this phase again),
 -- then the ACL/WAF rule plan (v7: the location's rewrite_by_lua).
 function _M.rewrite()
     local site = cdnca_site.current()
     if site and client_pass() and not trusted() then
+        -- the RUM script and collect paths: after CC and the
+        -- package limits (server_rewrite), before the WAF
+        if cdnca_rum and site.rum then
+            cdnca_rum.rewrite(site)
+        end
         cdnca_managed_waf.rewrite(site)
         return cdnca_security.rewrite(site)
     end
@@ -505,6 +589,17 @@ function _M.access()
         cdnca_managed_waf.access()
         -- maintenance page, basic auth: first in v7's location access
         site_access(site)
+        -- URL auth: signed URLs, before every security
+        -- decision and the cache; a site whose policy the node has not
+        -- loaded answers 503 (never served unsigned)
+        local url_auth = site.security and site.security.url_auth
+        if url_auth then
+            if not cdnca_url_auth then
+                ngx.log(ngx.ERR, "cdnca url auth: site ", tostring(site.site_id), " references a policy, none loaded")
+                return ngx.exit(ngx.HTTP_SERVICE_UNAVAILABLE)
+            end
+            cdnca_url_auth.access_site(site)
+        end
         -- firewall action -> JS challenge -> HTTP policy (v7
         -- writeRuntimePolicyLocation); a decision ends the request here
         local result = cdnca_security.access(site)
@@ -525,6 +620,11 @@ function _M.access()
             cdnca_sched302.access(schedule302_opts(site))
         end
     end
+    -- plain fetch (content rewrite, RUM sampling): decided on the client pass, committed
+    -- after the cache dispatch
+    if plain_fetch and site and not hop and client_pass() then
+        plain_decide(site)
+    end
     -- origin redirect following (ge36): a follow location re-entered with
     -- the origin's redirect moves to its Location (or returns it) before
     -- the origin is chosen again
@@ -533,7 +633,16 @@ function _M.access()
     end
     cdnca_origin.access()
     if cdnca_cache then
-        return cdnca_cache.access()
+        -- ngx.exec into a cache variant does not return here (its own
+        -- access pass commits); any other return does
+        local result = cdnca_cache.access()
+        if plain_fetch then
+            plain_commit()
+        end
+        return result
+    end
+    if plain_fetch then
+        plain_commit()
     end
     if site and (ngx.var.cdnca_follow_hops or "") == "" and cdnca_origin.follows(site) then
         ngx.var.cdnca_follow_hops = "0"
@@ -578,6 +687,26 @@ function _M.header_filter()
             if not ok then ngx.log(ngx.ERR, "cdnca webp header filter: ", err) end
         end
     end
+    if plain_fetch then
+        -- before the compression gate: the visitor's Accept-Encoding back
+        plain_restore()
+    end
+    if cdnca_rewrite then
+        -- the rewrite decision (an L1's hop: the L1 rewrites)
+        local site = cdnca_site.current()
+        if site and site.content_rewrite and not trusted() then
+            local ok, err = pcall(cdnca_rewrite.header_filter, site)
+            if not ok then ngx.log(ngx.ERR, "cdnca rewrite header filter: ", err) end
+        end
+    end
+    if cdnca_rum then
+        -- the injection decision (an L1's hop: the L1 injects)
+        local site = cdnca_site.current()
+        if site and site.rum and not trusted() then
+            local ok, err = pcall(cdnca_rum.header_filter, site)
+            if not ok then ngx.log(ngx.ERR, "cdnca rum header filter: ", err) end
+        end
+    end
     if site_gzip and not ngx.is_subrequest then
         local site = cdnca_site.current()
         if site then
@@ -593,6 +722,15 @@ end
 -- body the client receives (response body fields of a capture policy).
 function _M.body_filter()
     cdnca_filters.body_filter()
+    -- rewrite before RUM: the script is placed in the rewritten page
+    if cdnca_rewrite and ngx.ctx.cdnca_rewrite then
+        local ok, err = pcall(cdnca_rewrite.body_filter)
+        if not ok then ngx.log(ngx.ERR, "cdnca rewrite body filter: ", err) end
+    end
+    if cdnca_rum and ngx.ctx.cdnca_rum then
+        local ok, err = pcall(cdnca_rum.body_filter)
+        if not ok then ngx.log(ngx.ERR, "cdnca rum body filter: ", err) end
+    end
     if cdnca_webp then
         local ok, err = pcall(cdnca_webp.body_filter)
         if not ok then ngx.log(ngx.ERR, "cdnca webp body filter: ", err) end

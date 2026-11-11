@@ -77,6 +77,10 @@ const (
 	// references changed or was deleted; the rules carry
 	// the list's contents, so the scope's sites go out again.
 	SystemTriggerIPList = "ip_list"
+	// SystemTriggerStringSet: a named string set a bound WAF policy
+	// references changed; the site objects carry the set at
+	// the revision the rules name, so the scope's sites go out again.
+	SystemTriggerStringSet = "string_set"
 	// SystemTriggerAttackEscalation: attack escalation (migration 460) put a
 	// site on a high defense / unlimited line group: that group's nodes must
 	// hold the site before DNS moves to them.
@@ -141,7 +145,7 @@ func validSystemTrigger(value string) bool {
 		SystemTriggerChallengeDelivery, SystemTriggerModuleEntitlement, SystemTriggerThemeActivation,
 		SystemTriggerAccountSuspension, SystemTriggerNodeNetworks, SystemTriggerErrorPagePublished,
 		SystemTriggerOriginAuthPublished, SystemTriggerOriginFailover, SystemTriggerMarketLimits, SystemTriggerIPList,
-		SystemTriggerAttackEscalation, SystemTriggerPackageExpiry, SystemTriggerNodeStorage,
+		SystemTriggerStringSet, SystemTriggerAttackEscalation, SystemTriggerPackageExpiry, SystemTriggerNodeStorage,
 		SystemTriggerPackageSuspension, SystemTriggerCertificateRenewal:
 		return true
 	}
@@ -848,6 +852,7 @@ func systemContentTrigger(triggers []string) bool {
 		slices.Contains(triggers, SystemTriggerNodeNetworks) || slices.Contains(triggers, SystemTriggerErrorPagePublished) ||
 		slices.Contains(triggers, SystemTriggerOriginAuthPublished) || slices.Contains(triggers, SystemTriggerOriginFailover) ||
 		slices.Contains(triggers, SystemTriggerMarketLimits) || slices.Contains(triggers, SystemTriggerIPList) ||
+		slices.Contains(triggers, SystemTriggerStringSet) ||
 		slices.Contains(triggers, SystemTriggerPackageExpiry) || slices.Contains(triggers, SystemTriggerNodeStorage) ||
 		slices.Contains(triggers, SystemTriggerPackageSuspension) || slices.Contains(triggers, SystemTriggerCertificateRenewal)
 }

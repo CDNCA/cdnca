@@ -54,12 +54,12 @@ describe('N17 publish refusal reasons', () => {
     expect((await rulePackRefusal()).rulePacks?.auto_resume).toBeUndefined()
   })
 
-  it('keeps the generic text when the structured field is missing or invalid', async () => {
+  it('shows only the refusal and its code (no raw message) when the structured field is missing or invalid', async () => {
     await i18n.changeLanguage('zh-CN')
     const error = await responseApiError(new Response(JSON.stringify({ error: {
       code: 'rule_pack_unavailable', message: 'raw', rule_packs: { node_id: 'https://x', sha256: [], other_node_ids: [] },
     } }), { status: 422 }))
-    expect(localizedUnknownApiError(error, '请求失败，请稍后重试')).toBe('请求失败，请稍后重试')
+    expect(localizedUnknownApiError(error, '请求失败，请稍后重试')).toBe('操作被拒绝（错误码 rule_pack_unavailable）')
   })
 
   it('shows the reason in the WAF auto-publish feedback dialog', async () => {

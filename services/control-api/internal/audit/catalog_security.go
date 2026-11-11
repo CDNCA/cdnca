@@ -31,6 +31,7 @@ func init() {
 		e("challenge_policy.enable", CategorySecurity, "启用人机验证策略 {resource}", "enabled challenge policy {resource}"),
 		e("challenge_policy.disable", CategorySecurity, "停用人机验证策略 {resource}", "disabled challenge policy {resource}"),
 		e("challenge_policy.delete", CategorySecurity, "删除人机验证策略 {resource}", "deleted challenge policy {resource}"),
+		e("challenge_policy.external_credential.update", CategorySecurity, "修改人机验证策略 {resource} 的外部验证凭据（{provider}）", "updated the external verification credential of challenge policy {resource} ({provider})").f("provider", "app_id", "environment", "credential_revision"),
 		e("http_policy.create", CategorySecurity, "新增 HTTP 访问策略 {resource}", "created HTTP policy {resource}"),
 		e("http_policy.update", CategorySecurity, "修改 HTTP 访问策略 {resource}{changes}", "updated HTTP policy {resource}{changes}"),
 		e("http_policy.enable", CategorySecurity, "启用 HTTP 访问策略 {resource}", "enabled HTTP policy {resource}"),
@@ -176,6 +177,9 @@ func init() {
 		e("security.ip_list.create", CategorySecurity, "新建 IP 名单 {name}", "created IP list {name}").f("name", "entries", "revision", "list_id"),
 		e("security.ip_list.update", CategorySecurity, "修改 IP 名单 {name}（版本 {revision}，重新发布 {republished_scopes} 个租户）", "updated IP list {name} (revision {revision}, republished {republished_scopes} tenants)").f("name", "from_revision", "revision", "entries_before", "entries", "republished_scopes", "list_id"),
 		e("security.ip_list.delete", CategorySecurity, "删除 IP 名单 {name}", "deleted IP list {name}").f("name", "revision", "list_id"),
+		e("security.string_set.create", CategorySecurity, "新建字符串集合 {name}", "created string set {name}").f("name", "match_mode", "entries", "revision", "set_id"),
+		e("security.string_set.update", CategorySecurity, "修改字符串集合 {name}（版本 {revision}，重新发布 {republished_scopes} 个租户）", "updated string set {name} (revision {revision}, republished {republished_scopes} tenants)").f("name", "from_revision", "revision", "entries_before", "entries", "republished_scopes", "set_id"),
+		e("security.string_set.delete", CategorySecurity, "删除字符串集合 {name}", "deleted string set {name}").f("name", "revision", "set_id"),
 		e("certificate.publication.publish", CategoryCert, "发布证书 {resource} 到节点", "published certificate rollout {resource} to nodes"),
 		e("certificate.publication.complete", CategoryCert, "网站 {resource} 的证书发布已结束", "certificate publication of site {resource} finished"),
 	)

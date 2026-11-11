@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+// @ts-expect-error plain ESM helper shared with node --test
+import { standaloneStylesheets } from '../../scripts/defaultLook.mjs'
+
 // Page stylesheets read shared colours through --cdnca-* variables
 // (packages/cdnca-ui/src/styles.css). Visual tests assert the variable name;
 // this file pins what each variable resolves to and keeps hard-coded copies of
@@ -27,7 +30,10 @@ describe('shared --cdnca-* colour variables', () => {
   it('keeps apps/web stylesheets on the variables instead of hard-coded shared colours', () => {
     const hex = new RegExp(`#(${Object.values(sharedColors).map((v) => v.slice(1)).join('|')})(?![0-9a-f])`, 'gi')
     const offenders: string[] = []
+    // The public status page (own palette, no console theme) is not governed by the shared variables.
+    const standalone = (standaloneStylesheets as string[]).map((file) => file.replace('apps/web/src/', '../'))
     for (const [file, css] of Object.entries(webCSS)) {
+      if (standalone.includes(file)) continue
       css.split('\n').forEach((line, index) => {
         // var(--x, #hex) fallbacks are allowed; only bare values are offenders.
         const bare = line.replace(/var\(--[\w-]+,\s*#[0-9a-f]{3,8}\)/gi, '')

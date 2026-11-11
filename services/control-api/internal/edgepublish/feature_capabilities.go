@@ -132,10 +132,18 @@ func gatedFeature(capability *agentv1.Capability) (string, bool) {
 		return "HTTPS origins that do not verify the origin certificate (回源 HTTPS 选了「不校验源站证书」，需要节点支持 ORIGIN_TLS_NO_VERIFY（原生补丁 29），节点版本过低；请升级节点或改回校验源站证书)", true
 	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_ORIGIN_FOLLOW_REDIRECT:
 		return "following origin redirects (回源跟随跳转需要节点支持 ORIGIN_FOLLOW_REDIRECT；请升级节点或关闭该网站的回源跟随跳转)", true
+	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_SITE_SERVER_TIMING:
+		return "the Server-Timing response header (Server-Timing 响应头需要节点支持 SITE_SERVER_TIMING；请升级节点或关闭该网站的 Server-Timing 响应头)", true
+	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_SITE_CONTENT_REWRITE:
+		return "content rewrite (内容改写需要节点支持 SITE_CONTENT_REWRITE；请升级节点或停用该网站的内容改写规则)", true
+	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_SITE_RUM:
+		return "real user monitoring (真实用户体验上报需要节点支持 SITE_RUM；请升级节点或关闭该网站的真实用户体验上报)", true
 	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_SCHED302:
 		return "HTTP 302 scheduling (302 调度；请升级节点或关闭该网站的 302 调度)", true
 	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_SITE_QUIC:
 		return "HTTP/3 over QUIC (网站开启了 HTTP/3，节点 OpenResty 未编入 HTTP/3 模块 --with-http_v3_module，未声明 SITE_QUIC；请升级节点运行时或关闭该网站的 HTTP/3)", true
+	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_WAF && capability.GetApiVersion() >= edgeconfig.WAFStringSetAPIVersion:
+		return "WAF rules on a string set, the browser, its version, the device type or the request time (WAF 字符串集合/浏览器/浏览器版本/设备类型/请求时间条件需要节点支持 WAF v6，节点版本过低；请升级节点或删除这些条件)", true
 	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_WAF && capability.GetApiVersion() >= edgeconfig.WAFMultipartAPIVersion:
 		return "WAF rules on multipart field names, part count or field length (WAF multipart 字段名/分段数/字段长度条件，含 PHP2Shell 虚拟补丁，需要节点升级)", true
 	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_WAF && capability.GetApiVersion() >= edgeconfig.WAFConditionsAPIVersion:
@@ -188,6 +196,9 @@ func gatedFeature(capability *agentv1.Capability) (string, bool) {
 	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW:
 		// Only JS challenge secret rollouts require it.
 		return "a JS challenge policy with an explicit proof-of-work difficulty (挑战策略设置了工作量证明难度，需要节点支持 CHALLENGE_POW；未升级的节点不下发，保留上一份策略；请升级节点或把难度改回默认)", true
+	case capability.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_EXTERNAL:
+		// only JS challenge secret rollouts require it.
+		return "a JS challenge policy using Cloudflare Turnstile / Google reCAPTCHA v3 or the external fallback settings (挑战策略使用了 Turnstile / reCAPTCHA v3 或外部验证的分数阈值、不可用时策略，需要节点支持 CHALLENGE_EXTERNAL；未升级的节点不下发，保留上一份策略；请升级节点)", true
 	}
 	return "", false
 }

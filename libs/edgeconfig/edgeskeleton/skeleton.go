@@ -76,6 +76,9 @@ const (
 	// SubscriptionMinutesLocation (control socket) hands out the finished
 	// minutes' per subscription statistics (cdnca.edge.subscription-minute/v1).
 	SubscriptionMinutesLocation = "/subscription-minutes"
+	// RUMMinutesLocation (control socket, a node with SiteRUM) hands out the
+	// finished real user monitoring minutes once.
+	RUMMinutesLocation = "/rum-minutes"
 	// ConnectionsLocation is the control socket path the agent reads the
 	// sites' in-flight counts from (JSON {"<site_id>|<port>": n}, D13-b2).
 	ConnectionsLocation = "/connections"
@@ -142,6 +145,14 @@ var Variables = append([]string{
 	"cdnca_limits_site_key",   // the site + public port a request is counted in flight for (D13-b2)
 }, slices.Concat(edgecache.Variables, // dynamic routing cache (D8): cdnca_cache_zone, key, TTL table, ...
 	SecurityVariables)...)
+
+// PlainVariables are the plain fetch variables: declared only
+// when a site has RUM or content rewrite (the dynroute module reads them as
+// "" when absent, and writes them only then).
+var PlainVariables = []string{
+	"cdnca_plain_ae",   // the visitor's Accept-Encoding while the origin is asked without it ("-" none, survives ngx.exec)
+	"cdnca_plain_want", // what the request wants plain, "r" RUM sampled, "w" a content rewrite rule ("-" nothing; survives ngx.exec)
+}
 
 // SecurityVariables are the D7 security telemetry variables (cdnca_security,
 // docs/edge/dynroute-security.md): what the CC engine and the rule plan
@@ -214,6 +225,10 @@ type Input struct {
 	// selection), realip from the loopback landing hop and the size
 	// dictionary. Off: no landing and cdnca_sched302 is never called.
 	Schedule302 bool
+	// URLAuth renders URL auth: its state dictionary and the
+	// policy versions the master preloads; nil when no site has
+	// security.url_auth (no dictionary, url_auth.lua is never loaded).
+	URLAuth *URLAuth
 	// AutoDefense renders the auto defense dictionaries (fixed sizes,
 	// ADR 0010 §10.4) and the gate location on the control socket
 	// (AD-04, cdnca_autodefense). Off: the module is never loaded.
@@ -256,6 +271,14 @@ type Input struct {
 	// EDGE_WEBP): the conversion thread pool (main context), the variant
 	// dictionary and cdnca_webp.
 	SiteWebP bool
+	// SiteRUM: a site has real user monitoring (site.rum, SITE_RUM, ADR
+	// 0031): the beacon dictionary, cdnca_rum and the control socket's
+	// RUMMinutesLocation.
+	SiteRUM bool
+	// ContentRewrite: a site has content rewrite rules (site.content_rewrite,
+	// SITE_CONTENT_REWRITE, ): configure loads cdnca_rewrite; no
+	// dictionary, no location.
+	ContentRewrite bool
 	// NodeNetworks are the platform's node addresses (system.ddos
 	// node_networks, merged over the scopes; canonical prefixes): a request
 	// marked as an L2 hop (X-Cdnca-L2-Hop) from one of them is an L1's and is
@@ -667,7 +690,7 @@ func Render(input Input) ([]byte, error) {
 		input.Node.IngressSourceIPv6, input.System != nil && input.System.Nginx.ServerAddrOutgoing, strings.Join(quoted, ", "), cache.Zones,
 		filepath.Join(paths.StateRoot, ChallengeDirectory), filepath.Join(paths.LuaRoot, "challenge"), challengeList(input.Challenges),
 		systemCABundle(input.Node), filepath.Join(paths.StateRoot, OriginAuthDirectory), nodePageLua(input.UnknownSite), nodePageLua(input.NoHost),
-		slotPagesLua(input.SlotPages), cacheZoneSuffixConfigure(paths)+cacheChunkConfigure(cache)+schedule302Configure(input)+rulePlanConfigure(paths)+managedWAFConfigure(input)+siteGzipConfigure(input)+siteBrotliConfigure(input)+securityAggregateConfigure(input)+nodeNetworksConfigure(input))
+		slotPagesLua(input.SlotPages), cacheZoneSuffixConfigure(paths)+cacheChunkConfigure(cache)+schedule302Configure(input)+rulePlanConfigure(paths)+managedWAFConfigure(input)+siteGzipConfigure(input)+siteBrotliConfigure(input)+contentRewriteConfigure(input)+securityAggregateConfigure(input)+nodeNetworksConfigure(input)+urlAuthConfigure(input))
 	fmt.Fprintf(&output, "  init_worker_by_lua_block { require(%q).init_worker() }\n", EntryModule)
 	if waf := input.ManagedWAF; waf != nil {
 		// The node rules are the parent of every tier location's rule set
@@ -682,6 +705,9 @@ func Render(input Input) ([]byte, error) {
 	if input.MarketProbe && input.MarketBenchmark {
 		output.WriteString(benchmarkZones)
 	}
+	if input.URLAuth != nil {
+		fmt.Fprintf(&output, "  lua_shared_dict %s %dm;\n", URLAuthStateDictionary, URLAuthStateDictionaryBytes>>20)
+	}
 	if input.Schedule302 {
 		fmt.Fprintf(&output, "  lua_shared_dict %s %dm;\n", Schedule302SizesDictionary, Schedule302SizesDictionaryBytes>>20)
 	}
@@ -694,6 +720,9 @@ func Render(input Input) ([]byte, error) {
 	}
 	if input.SiteWebP {
 		fmt.Fprintf(&output, "  lua_shared_dict %s %dm;\n", WebPDictionary, WebPDictionaryBytes>>20)
+	}
+	if input.SiteRUM {
+		fmt.Fprintf(&output, "  lua_shared_dict %s %dm;\n", RUMDictionary, RUMDictionaryBytes>>20)
 	}
 	if input.AutoDefense {
 		fmt.Fprintf(&output, "  lua_shared_dict %s %dm;\n  lua_shared_dict %s %dm;\n", AutoDefenseGateDictionary,
@@ -727,7 +756,7 @@ func Render(input Input) ([]byte, error) {
 		writeSecurityFlushServer(&output, paths)
 	}
 	writeControlServer(&output, paths, input.Telemetry, input.Schedule302, input.AutoDefense, input.ManagedWAF != nil,
-		input.MarketProbe && input.MarketBenchmark, input.SiteBrotli)
+		input.MarketProbe && input.MarketBenchmark, input.SiteBrotli, input.SiteRUM, input.SiteRUM || input.ContentRewrite)
 	output.WriteString("}\n")
 	return output.Bytes(), nil
 }
@@ -1122,7 +1151,7 @@ func writeNodeLocationMap(output *bytes.Buffer, input Input) {
 // location that never runs, the declaration of every variable (a
 // server-level set would run in SERVER_REWRITE and overwrite what Lua wrote,
 // PoC section 5; variables are http-wide, one declaration serves all).
-func writeControlServer(output *bytes.Buffer, paths Paths, telemetry, schedule302, autoDefense, managedWAF, benchmark, brotli bool) {
+func writeControlServer(output *bytes.Buffer, paths Paths, telemetry, schedule302, autoDefense, managedWAF, benchmark, brotli, rum, plain bool) {
 	fmt.Fprintf(output, "  server {\n    listen %s;\n", quote("unix:"+filepath.Join(paths.StateRoot, ControlSocket)))
 	output.WriteString("    client_max_body_size 4m;\n    client_body_buffer_size 4m;\n    access_log off;\n")
 	output.WriteString("    location / { content_by_lua_block { require(\"cdnca_site_admin\").handle() } }\n")
@@ -1134,6 +1163,9 @@ func writeControlServer(output *bytes.Buffer, paths Paths, telemetry, schedule30
 	}
 	if managedWAF {
 		fmt.Fprintf(output, "    location ^~ %s { content_by_lua_block { require(\"cdnca_managed_waf\").admin() } }\n", WAFAdaptLocation)
+	}
+	if rum {
+		fmt.Fprintf(output, "    location = %s { content_by_lua_block { require(\"cdnca_rum\").admin() } }\n", RUMMinutesLocation)
 	}
 	output.WriteString("    location = /__cdnca_site_vars {\n      internal;\n")
 	for _, name := range SiteVariables {
@@ -1165,6 +1197,9 @@ func writeControlServer(output *bytes.Buffer, paths Paths, telemetry, schedule30
 	}
 	if brotli {
 		module = append(append([]string(nil), module...), CompressVariables...)
+	}
+	if plain {
+		module = append(append([]string(nil), module...), PlainVariables...)
 	}
 	for _, name := range module {
 		if declared[name] {
@@ -1346,6 +1381,18 @@ func validate(input Input) ([]edgesite.PortProfile, error) {
 			return nil, fmt.Errorf("%w: challenge %q revision %d (sorted, unique)", ErrInvalid, ref.ID, ref.Revision)
 		}
 	}
+	if auth := input.URLAuth; auth != nil {
+		if !validPath(auth.Root) {
+			return nil, fmt.Errorf("%w: URL auth root %q", ErrInvalid, auth.Root)
+		}
+		for index, ref := range auth.Policies {
+			if !uuidPattern.MatchString(ref.ID) || ref.Revision < 1 || ref.Revision > 1<<53-1 ||
+				index > 0 && (auth.Policies[index-1].ID > ref.ID ||
+					auth.Policies[index-1].ID == ref.ID && auth.Policies[index-1].Revision >= ref.Revision) {
+				return nil, fmt.Errorf("%w: URL auth policy %q revision %d (sorted, unique)", ErrInvalid, ref.ID, ref.Revision)
+			}
+		}
+	}
 	if input.ACMEOverlayRoot != "" && !validPath(input.ACMEOverlayRoot) {
 		return nil, fmt.Errorf("%w: ACME overlay root %q", ErrInvalid, input.ACMEOverlayRoot)
 	}
@@ -1411,6 +1458,86 @@ func challengeList(refs []edgesite.Ref) string {
 		parts = append(parts, fmt.Sprintf("{ id = %q, revision = %d }", ref.ID, ref.Revision))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// URLAuth is the node's URL auth input (URLAuthFromSites).
+type URLAuth struct {
+	// Root is the URL auth secret rollout's root (the agent's <deployment
+	// root>/urlauth: policies/<id>/versions/<v>.json, keys/<id>/<key>.key),
+	// root-only like the challenge policies: the master reads it at init.
+	Root string
+	// Policies are the referenced versions installed under Root, sorted by
+	// (ID, revision), unique. A site whose version is not among them answers
+	// 503; an installed version changes the skeleton, so the node reloads.
+	Policies []edgesite.Ref
+}
+
+// URLAuthFallbackSteps bounds how many older versions a site may fall back
+// over (keep equal to FALLBACK_STEPS in urlauth/engine.lua).
+const URLAuthFallbackSteps = 64
+
+// URLAuthStateDictionary holds URL auth signature use counters and metrics.
+const (
+	URLAuthStateDictionary      = "cdnca_url_auth_state"
+	URLAuthStateDictionaryBytes = 16 << 20
+)
+
+// URLAuthFromSites is the skeleton's URL auth: nil when no site has
+// security.url_auth; otherwise the referenced versions installed reports as
+// present (sorted, unique).
+func URLAuthFromSites(sites []edgesite.Site, root string, installed func(edgesite.Ref) bool) *URLAuth {
+	var result *URLAuth
+	seen := map[string]bool{}
+	for _, site := range sites {
+		ref := site.Security.URLAuth
+		if ref == nil {
+			continue
+		}
+		if result == nil {
+			result = &URLAuth{Root: root, Policies: []edgesite.Ref{}}
+		}
+		// The site's own version when installed; else (key rotation, the
+		// artifact is still on its way) the newest installed version down
+		// to the control plane's fallback floor. The Lua side walks the
+		// same range (urlauth/engine.lua access_site).
+		revision := int64(0)
+		if installed != nil {
+			low := ref.Revision
+			if site.Security.URLAuthFallbackFloor > 0 {
+				low = max(site.Security.URLAuthFallbackFloor, ref.Revision-URLAuthFallbackSteps)
+			}
+			for candidate := ref.Revision; candidate >= low; candidate-- {
+				if installed(edgesite.Ref{Kind: edgesite.RefURLAuth, ID: ref.ID, Revision: candidate}) {
+					revision = candidate
+					break
+				}
+			}
+		}
+		key := ref.ID + "@" + strconv.FormatInt(revision, 10)
+		if revision == 0 || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result.Policies = append(result.Policies, edgesite.Ref{Kind: edgesite.RefURLAuth, ID: ref.ID, Revision: revision})
+	}
+	if result != nil {
+		slices.SortFunc(result.Policies, func(a, b edgesite.Ref) int {
+			if a.ID != b.ID {
+				return strings.Compare(a.ID, b.ID)
+			}
+			return int(a.Revision - b.Revision)
+		})
+	}
+	return result
+}
+
+// urlAuthConfigure is the configure options of URL auth (Input.URLAuth).
+func urlAuthConfigure(input Input) string {
+	if input.URLAuth == nil {
+		return ""
+	}
+	return fmt.Sprintf("      url_auth_root = %q,\n      url_auth_policies = { %s },\n",
+		input.URLAuth.Root, challengeList(input.URLAuth.Policies))
 }
 
 // ChallengesFromSites is the sorted, unique challenge versions the sites
@@ -1626,6 +1753,13 @@ const (
 	WebPDictionaryBytes = 256 << 20
 )
 
+// RUM: the per (site, minute) beacon histograms; keys
+// expire after 6 minutes, a full dictionary evicts the oldest.
+const (
+	RUMDictionary      = "cdnca_rum"
+	RUMDictionaryBytes = 64 << 20
+)
+
 // CompressVariables are the per-site compression levels the header_filter
 // gate writes ("" = the node default).
 var CompressVariables = []string{"cdnca_compress_gzip_level", "cdnca_compress_brotli_level"}
@@ -1675,6 +1809,34 @@ func SiteBrotliFromSites(sites []edgesite.Site) bool {
 func SiteWebPFromSites(sites []edgesite.Site) bool {
 	for _, site := range sites {
 		if site.Access != nil && site.Access.WebP != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// contentRewriteConfigure tells cdnca_dynroute to load cdnca_rewrite.
+func contentRewriteConfigure(input Input) string {
+	if !input.ContentRewrite {
+		return ""
+	}
+	return "      content_rewrite = true,\n"
+}
+
+// ContentRewriteFromSites: any site the node composes has content rewrite rules.
+func ContentRewriteFromSites(sites []edgesite.Site) bool {
+	for _, site := range sites {
+		if site.ContentRewrite != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// SiteRUMFromSites: any site the node composes has rum.
+func SiteRUMFromSites(sites []edgesite.Site) bool {
+	for _, site := range sites {
+		if site.RUM != nil {
 			return true
 		}
 	}

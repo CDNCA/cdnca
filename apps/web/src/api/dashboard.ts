@@ -167,6 +167,8 @@ export interface AdminDashboard {
     expires_at?: string
     grace_until?: string
     last_verified_at?: string
+    /** Always null in the community edition (permanent). */
+    license_expires_at?: null
   }>
   node_health: DashboardSection<{
     total: number
@@ -400,13 +402,14 @@ function isAdminProfile(value: unknown): value is AdminProfileStats {
 
 function isEntitlement(value: unknown): value is AdminDashboard['entitlement'] extends DashboardSection<infer T> ? T : never {
   if (!isRecord(value) || !hasExactKeys(value, ['installation_id', 'status', 'lease_status'], [
-    'current_serial', 'node_limit', 'expires_at', 'grace_until', 'last_verified_at',
+    'current_serial', 'node_limit', 'expires_at', 'grace_until', 'last_verified_at', 'license_expires_at',
   ]) || typeof value.installation_id !== 'string' || value.installation_id.length > 256 ||
     typeof value.status !== 'string' || !entitlementStatuses.has(value.status) ||
     !(value.lease_status === null || typeof value.lease_status === 'string' && leaseStatuses.has(value.lease_status)) ||
     !isOptionalDate(value, 'expires_at') || !isOptionalDate(value, 'grace_until') || !isOptionalDate(value, 'last_verified_at')) return false
   return (!('current_serial' in value) || isCount(value.current_serial) && value.current_serial > 0) &&
-    (!('node_limit' in value) || isCount(value.node_limit))
+    (!('node_limit' in value) || isCount(value.node_limit)) &&
+    (!('license_expires_at' in value) || value.license_expires_at === null)
 }
 
 function isNodeHealth(value: unknown): value is AdminDashboard['node_health'] extends DashboardSection<infer T> ? T : never {

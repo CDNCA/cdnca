@@ -28,7 +28,7 @@ describe('customRolesPageMessages', () => {
       for (const key of required) expect(messages[key], `${locale}:${key}`).toEqual(expect.any(String))
     }
     expect(zh.title).toBe('自定义角色')
-    expect(zh['errors.revisionConflict']).toBe('角色版本已变化，请刷新后重试')
+    expect(zh['errors.revisionConflict']).toBe('内容已被其他人修改，请刷新后再保存')
     expect(zh['errors.stepUpRequired']).toBe('此操作需要有效且未使用的二次认证证明')
     expect(zh['errors.permissionNotDelegable']).toBe('所选权限不能委派给租户自定义角色')
     expect(flatten(customRolesPageMessages['qps-ploc']).title!.length).toBeGreaterThan(zh.title.length)

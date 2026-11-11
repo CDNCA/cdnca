@@ -104,10 +104,25 @@ func (s *Server) nodeRegistrationCredentialResponse(ctx context.Context, credent
 // installGateway is the direct Gateway entry of a copied install command; a
 // failed read only drops it (install-node.sh still reads node-install-defaults).
 func (s *Server) installGateway(ctx context.Context) *NodeInstallGateway {
-	if s.nodeInstallGateway == nil {
+	return s.gatewayFrom(ctx, s.nodeInstallGateway)
+}
+
+// issuedEnrollmentTokenResponse: a re_enrollment token (重装此节点) carries
+// the reinstall entry (a ws console names its first grpc
+// entry too), any other token the install command's entry.
+func (s *Server) issuedEnrollmentTokenResponse(ctx context.Context, issued node.IssuedToken) issuedEnrollmentTokenResponse {
+	source := s.nodeInstallGateway
+	if issued.Purpose == node.PurposeReEnrollment {
+		source = s.nodeReinstallGateway
+	}
+	return issuedEnrollmentTokenResponse{IssuedToken: issued, Gateway: s.gatewayFrom(ctx, source)}
+}
+
+func (s *Server) gatewayFrom(ctx context.Context, source func(context.Context) (NodeInstallGateway, bool, error)) *NodeInstallGateway {
+	if source == nil {
 		return nil
 	}
-	gateway, ok, err := s.nodeInstallGateway(ctx)
+	gateway, ok, err := source(ctx)
 	if err != nil {
 		s.logger.Warn("node install command without the Gateway entry", "error", err)
 		return nil
@@ -119,7 +134,7 @@ func (s *Server) installGateway(ctx context.Context) *NodeInstallGateway {
 }
 
 // issuedEnrollmentTokenResponse: the console builds the reinstall command
-// ("重装此节点") from the token and the same Gateway entry.
+// ("重装此节点") from the token and its Gateway entry.
 type issuedEnrollmentTokenResponse struct {
 	node.IssuedToken
 	Gateway *NodeInstallGateway `json:"gateway,omitempty"`
@@ -127,7 +142,8 @@ type issuedEnrollmentTokenResponse struct {
 
 // NodeInstallGateway is the direct Gateway entry the console writes into the
 // node install command (the node connects to the Gateway IP
-// directly); absent for a ws (CDN tunnel) console.
+// directly); absent for a ws (CDN tunnel) console, except in the reinstall
+// command (first grpc entry).
 type NodeInstallGateway struct {
 	EnrollmentAddress string `json:"enrollment_address"`
 	Address           string `json:"address"`

@@ -24,7 +24,7 @@ const zhCN = {
   errors: {
     forbiddenTitle: '无权查看登录设备', forbiddenDescription: '当前身份不能访问该账户的登录设备。',
     unavailable: '登录设备服务暂不可用，请稍后重试。', unauthenticated: '登录状态已失效，请重新登录。',
-    revisionConflict: '设备会话已更新，请刷新后重试。', idempotencyConflict: '请求标识与原操作不一致，请放弃并刷新。',
+    revisionConflict: '内容已被其他人修改，请刷新后再保存', idempotencyConflict: '请求标识与原操作不一致，请放弃并刷新。',
     notFound: '设备会话不存在或已不可访问。', alreadyRevoked: '该设备会话已经撤销。', requestFailed: '无法完成登录设备操作，请稍后重试。',
   },
 } as const
@@ -53,7 +53,7 @@ const enUS = {
   errors: {
     forbiddenTitle: 'Device access denied', forbiddenDescription: 'The current identity cannot access this account\'s signed-in devices.',
     unavailable: 'The device session service is temporarily unavailable. Try again later.', unauthenticated: 'Your sign-in has expired. Sign in again.',
-    revisionConflict: 'The device session changed. Refresh and try again.', idempotencyConflict: 'The request identity differs from the original operation. Abandon and refresh.',
+    revisionConflict: 'Someone else changed this content. Refresh before saving.', idempotencyConflict: 'The request identity differs from the original operation. Abandon and refresh.',
     notFound: 'The device session does not exist or is no longer accessible.', alreadyRevoked: 'This device session has already been revoked.', requestFailed: 'The device session operation could not be completed. Try again later.',
   },
 } as const

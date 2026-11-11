@@ -2061,7 +2061,7 @@ func payloadMatchesAuthority(payload []byte, authority ingestAuthority) bool {
 	v1 := probe.SchemaVersion == IngestSchemaVersion &&
 		(probe.Type == AccessEnvelopeType || probe.Type == SecurityEnvelopeType)
 	window := probe.SchemaVersion == IngestSchemaVersion &&
-		(probe.Type == AccessWindowEnvelopeType || probe.Type == SubscriptionMinuteEnvelopeType)
+		(probe.Type == AccessWindowEnvelopeType || probe.Type == SubscriptionMinuteEnvelopeType || probe.Type == RUMMinuteEnvelopeType)
 	if !v1 && !v2 && !window {
 		return true
 	}

@@ -116,6 +116,18 @@ type FactKeyResolver struct {
 	source   KeyFactSource
 	cipher   BoundFactCipher
 	verifier FactSignatureVerifier
+	// external is the app credential entered in the console
+	// (challenge_external_credentials), used when the facts carry none.
+	external ExternalCredentialSource
+}
+
+// WithExternalCredentials adds the console credential table as the fallback
+// for role=app.
+func (resolver *FactKeyResolver) WithExternalCredentials(source ExternalCredentialSource) *FactKeyResolver {
+	if resolver != nil && !nilFactDependency(source) {
+		resolver.external = source
+	}
+	return resolver
 }
 
 func NewFactKeyResolver(source KeyFactSource, factCipher BoundFactCipher,
@@ -189,7 +201,7 @@ func (resolver *FactKeyResolver) ResolveChallengeKeys(
 			eofErr := decoder.Decode(&extra)
 			if snapshot.ExternalProvider == nil || fact.Reference != snapshot.ExternalProvider.AppReference ||
 				decodeErr != nil || !errors.Is(eofErr, io.EOF) || credential.SchemaVersion != ExternalCredentialSchemaVersion ||
-				credential.Provider != snapshot.ExternalProvider.Provider || !validIdentifier(credential.AppID) ||
+				credential.Provider != snapshot.ExternalProvider.Provider || !ValidExternalAppID(credential.AppID) ||
 				len(credential.Secret) < 16 || len(credential.Secret) > 256 ||
 				(credential.Environment != "sandbox" && credential.Environment != "production") {
 				clear(plaintext)
@@ -204,6 +216,14 @@ func (resolver *FactKeyResolver) ResolveChallengeKeys(
 			clearResolvedKeys(&result)
 			return ResolvedKeys{}, ErrKeyUnavailable
 		}
+	}
+	if snapshot.ExternalProvider != nil && result.ExternalCredential == nil && resolver.external != nil {
+		credential, loadErr := resolver.external.LoadExternalCredential(ctx, snapshot)
+		if loadErr != nil {
+			clearResolvedKeys(&result)
+			return ResolvedKeys{}, ErrKeyUnavailable
+		}
+		result.ExternalCredential = credential
 	}
 	if _, ok := seen[KeyRoleCurrent]; !ok || snapshot.ExternalProvider != nil && result.ExternalCredential == nil ||
 		snapshot.ExternalProvider == nil && result.ExternalCredential != nil || !validResolvedKeys(result) {

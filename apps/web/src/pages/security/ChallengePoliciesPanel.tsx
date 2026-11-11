@@ -8,6 +8,7 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Radio,
   Result,
   Select,
   Space,
@@ -32,7 +33,14 @@ import {
   type ChallengePolicyConfig,
   type ChallengePublicationStatus,
   type CreateChallengePolicyInput,
+  type ExternalCredentialInput,
+  type ExternalCredentialStatus,
+  type ExternalProvider,
+  type ExternalUnavailable,
   type IPBinding,
+  externalAppIDPattern,
+  externalSecretPattern,
+  globalProviders,
   powDifficultyRange,
 } from '../../api/challengePolicies'
 import { useSessionStore } from '../../auth/session'
@@ -43,7 +51,6 @@ import { formatDateTime } from '../../i18n/formatters'
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const hostPattern = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$/
 const keyPattern = /^(?:keyref|vault|kms):[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$/
-const appPattern = /^appref:[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$/
 
 interface PolicyForm {
   site_id: string
@@ -61,8 +68,13 @@ interface PolicyForm {
   bind_user_agent: boolean
   bypass_routes: string
   key_reference: string
-  provider?: 'tencent' | 'geetest-v4'
-  app_reference?: string
+  provider?: ExternalProvider
+  /** Provider app id / site key (public). */
+  app_id: string
+  /** Write-only; empty keeps the stored secret. */
+  secret: string
+  score_threshold: number
+  unavailable: ExternalUnavailable
   /** 0 = edge default (field omitted). */
   pow_difficulty: number
 }
@@ -139,8 +151,11 @@ function initialForm(item: ChallengePolicy | null, intent?: SiteIntent | null): 
     bind_user_agent: item?.bind_user_agent ?? true,
     bypass_routes: item?.bypass_routes.map((route) => `${route.kind} ${route.path}`).join('\n') ?? '',
     key_reference: '',
-    provider: undefined,
-    app_reference: '',
+    provider: item?.external_provider_summary?.provider,
+    app_id: '',
+    secret: '',
+    score_threshold: item?.external_provider_summary?.score_threshold ?? 0.5,
+    unavailable: item?.external_provider_summary?.unavailable ?? 'builtin',
     pow_difficulty: item?.pow_difficulty ?? 0,
   }
 }
@@ -163,9 +178,8 @@ function configFromForm(values: PolicyForm): ChallengePolicyConfig {
     values.key_reference.length < 8 || values.key_reference.length > 128 || !keyPattern.test(values.key_reference)) {
     throw new Error('invalid challenge config')
   }
-  if (values.mode === 'external' && (!values.provider || !values.app_reference ||
-    values.app_reference.length < 8 || values.app_reference.length > 128 || !appPattern.test(values.app_reference))) {
-    throw new Error('invalid external provider reference')
+  if (values.mode === 'external' && !values.provider) {
+    throw new Error('invalid external provider')
   }
   return {
     priority: values.priority,
@@ -181,26 +195,104 @@ function configFromForm(values: PolicyForm): ChallengePolicyConfig {
     bind_user_agent: values.bind_user_agent,
     bypass_routes: parseBypassRoutes(values.bypass_routes),
     key_reference: values.key_reference,
+    // Defaults (score 0.5, unavailable builtin) stay unset so tencent /
+    // geetest-v4 policies keep working on nodes without CHALLENGE_EXTERNAL.
     ...(values.mode === 'external' ? {
-      external_provider: { provider: values.provider!, app_reference: values.app_reference! },
+      external_provider: {
+        provider: values.provider!,
+        ...(values.provider === 'recaptcha-v3' && values.score_threshold !== 0.5 ? { score_threshold: values.score_threshold } : {}),
+        ...(values.unavailable === 'closed' ? { unavailable: 'closed' as const } : {}),
+      },
     } : {}),
     ...(values.mode !== 'external' && values.pow_difficulty ? { pow_difficulty: values.pow_difficulty } : {}),
   }
 }
 
+const providerLabelKeys: Record<ExternalProvider, string> = {
+  tencent: 'providers.tencent', 'geetest-v4': 'providers.geetest', turnstile: 'providers.turnstile', 'recaptcha-v3': 'providers.recaptcha',
+}
+const scoreThresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+/** Whether this save must PUT the credential: a new provider, a new app id or a typed secret. */
+function credentialChanged(values: PolicyForm, credential: ExternalCredentialStatus | undefined): boolean {
+  return values.mode === 'external' && (values.secret !== '' || !credential?.secret_configured ||
+    credential.provider !== values.provider || credential.app_id !== values.app_id)
+}
+
+function ExternalProviderSection({ form, credential, credentialError, onProviderChange }: {
+  form: ReturnType<typeof Form.useForm<PolicyForm>>[0]
+  credential: ExternalCredentialStatus | undefined
+  credentialError: 'secret' | 'provider' | null
+  onProviderChange: () => void
+}) {
+  const { t } = useTranslation('challengePolicies')
+  const provider = Form.useWatch('provider', form) as ExternalProvider | undefined
+  const host = Form.useWatch('host', form) as string | undefined
+  const global = provider !== undefined && globalProviders.includes(provider)
+  const providerName = provider ? t(providerLabelKeys[provider]) : ''
+  const keepsSecret = Boolean(credential?.secret_configured && credential.provider === provider)
+  const option = (value: ExternalProvider) => <Radio value={value}>{t(providerLabelKeys[value])}</Radio>
+  return <section aria-label={t('external.section')}>
+    <Form.Item name="provider" label={t('editor.provider')} rules={[{ required: true, message: t('validation.required') }]}
+      validateStatus={credentialError === 'provider' ? 'error' : undefined}
+      help={credentialError === 'provider' ? t('external.providerMismatch') : undefined}>
+      <Radio.Group onChange={onProviderChange}>
+        <Space direction="vertical" size={4}>{option('tencent')}{option('geetest-v4')}{option('turnstile')}{option('recaptcha-v3')}</Space>
+      </Radio.Group>
+    </Form.Item>
+    {provider ? <Space size={12} wrap align="start">
+      <Form.Item name="app_id" label={t(global ? 'external.siteKey' : 'external.appID')}
+        rules={[{ required: true, message: t('validation.required') }, { pattern: externalAppIDPattern, message: t('external.appIDInvalid') }]}>
+        <Input autoComplete="off" spellCheck={false} style={{ width: 320 }} />
+      </Form.Item>
+      <Form.Item name="secret" label={t('external.secret')}
+        validateStatus={credentialError === 'secret' ? 'error' : undefined}
+        rules={[
+          { required: !keepsSecret, message: t('validation.required') },
+          { validator: async (_, value: string) => { if (value && !externalSecretPattern.test(value)) throw new Error(t('external.secretInvalid')) } },
+        ]}
+        help={credentialError === 'secret' ? t('external.secretInvalid') : undefined}>
+        <Input.Password autoComplete="new-password" style={{ width: 320 }} placeholder={keepsSecret ? t('external.secretConfigured') : undefined} />
+      </Form.Item>
+    </Space> : null}
+    {provider === 'recaptcha-v3' ? <Form.Item name="score_threshold" label={t('external.scoreThreshold')} extra={t('external.scoreHint')}>
+      <Select style={{ width: 120 }} options={scoreThresholds.map((value) => ({ value, label: value.toFixed(1) }))} />
+    </Form.Item> : null}
+    {provider ? <Form.Item name="unavailable" label={t('external.unavailable')}>
+      <Radio.Group options={[
+        { value: 'builtin', label: t('external.unavailableBuiltin') },
+        { value: 'closed', label: t('external.unavailableClosed') },
+      ]} />
+    </Form.Item> : null}
+    {global ? <Alert type="info" showIcon style={{ marginBottom: 16 }}
+      message={t('external.domainHint', { provider: providerName, host: host || '-' })}
+      description={t('external.privacy', { provider: providerName })} /> : null}
+  </section>
+}
+
 function PolicyEditor({
-  item, intent, pending, canSubmit, onCancel, onSubmit,
+  item, intent, pending, canSubmit, credential, credentialRetry, credentialError, onCancel, onSubmit,
 }: {
   item: ChallengePolicy | null
   intent?: SiteIntent | null
   pending: boolean
   canSubmit: boolean
+  credential?: ExternalCredentialStatus
+  /** The policy is saved; only the credential PUT is left. */
+  credentialRetry: boolean
+  credentialError: 'secret' | 'provider' | null
   onCancel: () => void
   onSubmit: (values: PolicyForm) => void
 }) {
   const { t } = useTranslation('challengePolicies')
   const [form] = Form.useForm<PolicyForm>()
   const mode = Form.useWatch('mode', form) ?? item?.mode ?? intent?.mode ?? 'click'
+  // The app id comes from the credential status, loaded after the form.
+  useEffect(() => {
+    if (credential?.app_id && !form.getFieldValue('app_id') && form.getFieldValue('provider') === credential.provider) {
+      form.setFieldValue('app_id', credential.app_id)
+    }
+  }, [credential, form])
   return (
     <Modal
       className="identity-modal challenge-policy-modal"
@@ -209,7 +301,7 @@ function PolicyEditor({
       width={820}
       confirmLoading={pending}
       okButtonProps={{ disabled: !canSubmit }}
-      okText={t('actions.save')}
+      okText={credentialRetry ? t('external.retryCredential') : t('actions.save')}
       cancelText={t('actions.cancel')}
       onCancel={onCancel}
       onOk={() => void form.validateFields().then(onSubmit).catch(() => undefined)}
@@ -285,14 +377,9 @@ function PolicyEditor({
         <Form.Item name="key_reference" label={t('editor.keyReference')} rules={[{ required: true, message: t('validation.required') }, { min: 8, max: 128, message: t('validation.key') }, { pattern: keyPattern, message: t('validation.key') }]}>
           <Input.Password autoComplete="off" placeholder={t('editor.keyPlaceholder')} />
         </Form.Item>
-        {mode === 'external' ? <Space size={12} wrap align="start">
-          <Form.Item name="provider" label={t('editor.provider')} rules={[{ required: true, message: t('validation.required') }]}>
-            <Select style={{ width: 180 }} options={[{ value: 'tencent', label: t('providers.tencent') }, { value: 'geetest-v4', label: t('providers.geetest') }]} />
-          </Form.Item>
-          <Form.Item name="app_reference" label={t('editor.appReference')} rules={[{ required: true, message: t('validation.required') }, { min: 8, max: 128, message: t('validation.app') }, { pattern: appPattern, message: t('validation.app') }]}>
-            <Input.Password autoComplete="off" style={{ width: 320 }} placeholder={t('editor.appPlaceholder')} />
-          </Form.Item>
-        </Space> : null}
+        {mode === 'external' ? <ExternalProviderSection form={form} credential={credential} credentialError={credentialError}
+          onProviderChange={() => form.setFieldsValue({ app_id: '', secret: '' })} /> : null}
+        {credentialRetry ? <Alert type="error" showIcon role="alert" message={t('external.credentialFailed')} style={{ marginBottom: 16 }} /> : null}
       </Form>
     </Modal>
   )
@@ -344,6 +431,12 @@ export default function ChallengePoliciesPanel() {
   const [writeError, setWriteError] = useState<ApiError | null>(null)
   const [publications, setPublications] = useState<Record<string, ChallengePublicationStatus>>({})
   const [publicationBusy, setPublicationBusy] = useState('')
+  // §8 two-step save: the credential to PUT after the policy write
+  // (in memory only, keyed by the write attempt), and the saved policy whose
+  // credential PUT failed (the editor then only retries that step).
+  const pendingCredentialRef = useRef<{ key: string; input: ExternalCredentialInput } | null>(null)
+  const [credentialStep, setCredentialStep] = useState<{ policy: ChallengePolicy; input: ExternalCredentialInput; error: 'secret' | 'provider' | null } | null>(null)
+  const [credentialBusy, setCredentialBusy] = useState(false)
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = useFeedbackMessage()
   const feedback = useFeedback()
@@ -363,6 +456,15 @@ export default function ChallengePoliciesPanel() {
   const activePublications = ownerChanged ? {} : publications
   const cursor = activeCursorStack.at(-1)
   const scopeReady = uuidPattern.test(scopeID)
+
+  // A leftover second step only applies while its editor is open.
+  const activeCredentialStep = activeEditor === null ? null : credentialStep
+  const editedPolicy = activeCredentialStep?.policy ?? (activeEditor !== null && activeEditor !== 'create' ? activeEditor : null)
+  const credentialQuery = useQuery({
+    queryKey: ['challenge-policies', ownerKey, scopeID, 'external-credential', editedPolicy?.id, editedPolicy?.revision],
+    queryFn: ({ signal }) => challengePoliciesApi.externalCredential(accessToken!, scopeID, editedPolicy!.id, signal),
+    enabled: Boolean(ownerKey && scopeReady && editedPolicy?.mode === 'external'),
+  })
 
   const query = useQuery({
     queryKey: ['challenge-policies', ownerKey, scopeID, activeLimit, cursor, activeFilters],
@@ -398,13 +500,20 @@ export default function ChallengePoliciesPanel() {
       if (next.kind === 'delete') return challengePoliciesApi.remove(currentToken, next.scopeID, next.id, next.revision, next.key)
       return challengePoliciesApi[next.kind](currentToken, next.scopeID, next.id, next.revision, next.key)
     },
-    onSuccess: (_, completedKey) => {
+    onSuccess: (policy, completedKey) => {
       const completed = attemptRef.current
       if (!completed || completed.key !== completedKey) return
       attemptRef.current = null
       setAttempt((current) => current?.key === completedKey ? null : current)
+      const credential = pendingCredentialRef.current?.key === completedKey ? pendingCredentialRef.current.input : null
+      pendingCredentialRef.current = null
       if (completed.ownerKey !== ownerKeyRef.current || completed.scopeID !== scopeIDRef.current) return
       setWriteError(null)
+      if (credential && (completed.kind === 'create' || completed.kind === 'update')) {
+        void queryClient.invalidateQueries({ queryKey: ['challenge-policies', completed.ownerKey, completed.scopeID] })
+        void saveCredential(policy, credential)
+        return
+      }
       setEditor(null)
       void queryClient.invalidateQueries({ queryKey: ['challenge-policies', completed.ownerKey, completed.scopeID] })
       messageApi.success(t(`notices.${completed.kind}`))
@@ -477,8 +586,44 @@ export default function ChallengePoliciesPanel() {
     mutation.mutate(next.key)
   }
 
+  async function saveCredential(policy: ChallengePolicy, input: ExternalCredentialInput) {
+    const token = currentSessionTokenForManage(ownerKey, scopeID)
+    if (!token) return
+    setCredentialBusy(true)
+    try {
+      await challengePoliciesApi.putExternalCredential(token, scopeID, policy.id, policy.revision, input, writeKey('update'))
+      setCredentialStep(null)
+      setEditor(null)
+      void queryClient.invalidateQueries({ queryKey: ['challenge-policies', ownerKey, scopeID] })
+      messageApi.success(t('external.saved'))
+    } catch (error) {
+      const apiError = error instanceof ApiError ? error : new ApiError('request failed')
+      if (apiError.status === 412 || apiError.code === 'revision_conflict') {
+        setCredentialStep(null)
+        setEditor(null)
+        void query.refetch()
+        feedback.error(t('notices.conflict'))
+        return
+      }
+      const field = apiError.code === 'provider_mismatch' ? 'provider' : apiError.code === 'validation_error' ? 'secret' : null
+      // The policy is saved: the editor stays open on it and only retries this step.
+      setCredentialStep({ policy, input, error: field })
+      if (!field) feedback.error(localError(apiError, t))
+    } finally {
+      setCredentialBusy(false)
+    }
+  }
+
   function submit(values: PolicyForm) {
-    if (!currentSessionTokenForManage(ownerKey, scopeID) || writesLocked) return
+    if (!currentSessionTokenForManage(ownerKey, scopeID) || writesLocked || credentialBusy) return
+    const credentialInput: ExternalCredentialInput | null = values.mode === 'external' && values.provider &&
+      credentialChanged(values, credentialQuery.data)
+      ? { provider: values.provider, app_id: values.app_id, secret: values.secret }
+      : null
+    if (activeCredentialStep) {
+      if (credentialInput) void saveCredential(activeCredentialStep.policy, credentialInput)
+      return
+    }
     let config: ChallengePolicyConfig
     try {
       config = configFromForm(values)
@@ -488,6 +633,7 @@ export default function ChallengePoliciesPanel() {
     const next: WriteAttempt = activeEditor === 'create'
       ? { kind: 'create', ownerKey, scopeID, input: { site_id: values.site_id, host: values.host, enabled: values.enabled, config }, key: writeKey('create') }
       : { kind: 'update', ownerKey, scopeID, id: activeEditor!.id, revision: activeEditor!.revision, config, enabled: activeEditor!.enabled, key: writeKey('update') }
+    pendingCredentialRef.current = credentialInput ? { key: next.key, input: credentialInput } : null
     begin(next)
   }
 
@@ -548,7 +694,6 @@ export default function ChallengePoliciesPanel() {
       const color = status.state === 'active' ? 'success' : status.state === 'failed' ? 'error' : status.state === 'healthy' ? 'processing' : 'warning'
       return <Space size={4} wrap><Tag color={color}>{t(`publication.states.${status.state}`)}</Tag><span>{t('publication.progress', { healthy: status.healthy, total: status.total })}</span>{status.superseded > 0 ? <span>{t('publication.superseded', { n: status.superseded })}</span> : null}</Space>
     } },
-    { title: t('columns.revision'), dataIndex: 'revision', width: 80 },
     { title: t('columns.updatedAt'), dataIndex: 'updated_at', width: 180, render: (value: string) => formatDateTime(value, i18n.resolvedLanguage) || value },
     ...(canManage ? [{
       title: t('columns.actions'), key: 'actions', fixed: 'right' as const, width: 205,
@@ -609,6 +754,6 @@ export default function ChallengePoliciesPanel() {
       </div>
     </> : null}
 
-    {activeEditor !== null ? <PolicyEditor item={activeEditor === 'create' ? null : activeEditor} intent={intent} pending={mutationPending} canSubmit={canManage && !writesLocked} onCancel={() => { if (!writesLocked) setEditor(null) }} onSubmit={submit} /> : null}
+    {activeEditor !== null ? <PolicyEditor item={activeCredentialStep?.policy ?? (activeEditor === 'create' ? null : activeEditor)} intent={intent} pending={mutationPending || credentialBusy} canSubmit={canManage && !writesLocked && !(editedPolicy?.mode === 'external' && credentialQuery.isPending)} credential={credentialQuery.data} credentialRetry={activeCredentialStep !== null} credentialError={activeCredentialStep?.error ?? null} onCancel={() => { if (!writesLocked && !credentialBusy) { setCredentialStep(null); setEditor(null) } }} onSubmit={submit} /> : null}
   </section>
 }

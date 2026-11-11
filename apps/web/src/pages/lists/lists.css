@@ -1,0 +1,68 @@
+/* 列表与对象: only --cdnca-* variables and antd tokens; dark.css repoints them. */
+.string-set-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.string-set-description {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+.string-set-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.string-set-mode-name {
+  display: inline-block;
+  min-width: 5em;
+  font-weight: 500;
+}
+
+/* Help text uses the body color, not the 3.64:1 secondary gray. */
+.string-set-mode-example,
+.string-set-form .ant-form-item-extra {
+  color: var(--cdnca-color-text);
+}
+
+.string-set-members-label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  width: 100%;
+}
+
+.string-set-counter {
+  font-variant-numeric: tabular-nums;
+  color: var(--cdnca-color-text);
+}
+
+.string-set-counter-over {
+  color: var(--cdnca-color-error);
+  font-weight: 500;
+}
+
+.string-set-members {
+  font-family: var(--cdnca-font-family-mono);
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-field);
+}
+
+.string-set-form .ant-form-item-label > label {
+  width: 100%;
+}
+
+.lists-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--cdnca-color-text);
+}
+
+.lists-empty .ant-typography {
+  color: inherit;
+}

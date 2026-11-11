@@ -161,10 +161,17 @@ func compileRule(input Rule) (Rule, error) {
 		return Rule{}, fmt.Errorf("unsupported mode %q", input.Mode)
 	}
 	if input.Mode == ModeExternal {
-		if input.ExternalProvider == nil ||
-			(input.ExternalProvider.Provider != ProviderTencent && input.ExternalProvider.Provider != ProviderGeetestV4) ||
-			validateIdentifier(input.ExternalProvider.AppID, MaxIdentifierBytes) != nil {
+		external := input.ExternalProvider
+		if external == nil || !validProvider(external.Provider) || validateAppID(external.AppID) != nil {
 			return Rule{}, fmt.Errorf("external_provider must bind a supported provider and app_id")
+		}
+		// CHALLENGE_EXTERNAL v1.
+		if external.ScoreThreshold != nil && (external.Provider != ProviderRecaptchaV3 ||
+			!validScoreThreshold(*external.ScoreThreshold)) {
+			return Rule{}, fmt.Errorf("external_provider score_threshold is recaptcha-v3 only, 0.1 to 0.9")
+		}
+		if external.Unavailable != "" && external.Unavailable != "builtin" && external.Unavailable != "closed" {
+			return Rule{}, fmt.Errorf("external_provider unavailable must be builtin or closed")
 		}
 	} else if input.ExternalProvider != nil {
 		return Rule{}, fmt.Errorf("external_provider is only valid for external mode")

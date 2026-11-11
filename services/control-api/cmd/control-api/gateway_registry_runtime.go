@@ -209,6 +209,14 @@ func nodeInstallGatewayForAPI(service *gatewayregistry.Service) func(context.Con
 	}
 }
 
+// nodeReinstallGatewayForAPI: the 重装此节点 command's entry (D-b).
+func nodeReinstallGatewayForAPI(service *gatewayregistry.Service) func(context.Context) (httpapi.NodeInstallGateway, bool, error) {
+	return func(ctx context.Context) (httpapi.NodeInstallGateway, bool, error) {
+		d, ok, err := service.NodeReinstallGateway(ctx)
+		return httpapi.NodeInstallGateway{EnrollmentAddress: d.EnrollmentAddress, Address: d.Address, ServerName: d.ServerName}, ok, err
+	}
+}
+
 func nodeInstallGatewayForSSH(service *gatewayregistry.Service) func(context.Context) (nodesshinstall.Gateway, bool) {
 	return func(ctx context.Context) (nodesshinstall.Gateway, bool) {
 		d, ok, err := service.NodeInstallGateway(ctx)

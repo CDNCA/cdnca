@@ -1,0 +1,8 @@
+2026/10/18 14:51:18 [emerg] 10#10: close() socket 127.0.0.1:18443 failed (9: Bad file descriptor)
+2026/10/18 14:51:18 [emerg] 10#10: close() socket [::1]:18443 failed (9: Bad file descriptor)
+2026/10/18 14:51:18 [emerg] 11#11: close() socket 127.0.0.1:18443 failed (9: Bad file descriptor)
+2026/10/18 14:51:18 [emerg] 11#11: close() socket [::1]:18443 failed (9: Bad file descriptor)
+2026/10/18 14:51:19 [emerg] 15#15: close() socket 127.0.0.1:18443 failed (9: Bad file descriptor)
+2026/10/18 14:51:19 [emerg] 15#15: close() socket [::1]:18443 failed (9: Bad file descriptor)
+2026/10/18 14:51:19 [emerg] 16#16: close() socket 127.0.0.1:18443 failed (9: Bad file descriptor)
+2026/10/18 14:51:19 [emerg] 16#16: close() socket [::1]:18443 failed (9: Bad file descriptor)

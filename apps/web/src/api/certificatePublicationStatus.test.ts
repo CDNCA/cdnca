@@ -82,6 +82,17 @@ describe('Certificate publication status', () => {
     expect(parseCertificatePublication({ ...noop, current: { ...noop.current, noop_reason: 'other' } })).toBe(false)
   })
 
+  // 迁移 657：发布永久失败后证书补发送到了全部节点，以 succeeded 结束、带补发 rollout，无发布结果。
+  it('treats a publication recovered by certificate redelivery as complete', () => {
+    const recovered = { current: { ...current, recovered_by_rollout_id: '01a1c40e-0000-4000-8000-000000000657', publication_id: undefined,
+      publication_revision: undefined, config_version_id: undefined, rollout_id: undefined, rollout_revision: undefined }, history: publication.history }
+    expect(parseCertificatePublication(recovered)).toBe(true)
+    expect(certificateBindingPublicationState(binding, recovered)).toBe('complete')
+    expect(parseCertificatePublication({ ...recovered, current: { ...recovered.current, operation: 'unpublish' } })).toBe(false)
+    expect(parseCertificatePublication({ ...recovered, current: { ...recovered.current, rollout_id: current.rollout_id } })).toBe(false)
+    expect(parseCertificatePublication({ ...recovered, current: { ...recovered.current, recovered_by_rollout_id: 'x' } })).toBe(false)
+  })
+
   it('matches unpublish receipts only to the same unbound revision', () => {
     const receipt = { ...publication, current: { ...current, operation: 'unpublish' } }
     expect(certificateBindingPublicationState({ ...binding, bound: false }, receipt, rollout)).toBe('complete')

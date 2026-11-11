@@ -1,0 +1,45 @@
+--- a/headers/modsecurity/rules_exceptions.h
++++ b/headers/modsecurity/rules_exceptions.h
+@@ -23,6 +23,7 @@
+ #include <sstream>
+ #include <string>
+ #include <unordered_map>
++#include <unordered_set>
+ #include <utility>
+ #include <vector>
+ #include <memory>
+@@ -87,7 +88,9 @@
+ 
+  private:
+     std::list<std::pair<int, int> > m_ranges;
+-    std::list<int> m_numbers;
++    // CDNCA: hashed, RulesSet::evaluate asks contains() for every rule of
++    // every transaction (upstream scans a std::list, O(rules x removed ids)).
++    std::unordered_set<int> m_numbers;
+ };
+ 
+ }  // namespace modsecurity
+--- a/src/rules_exceptions.cc
++++ b/src/rules_exceptions.cc
+@@ -177,7 +177,7 @@
+ 
+ 
+ bool RulesExceptions::addNumber(int a) {
+-    m_numbers.push_back(a);
++    m_numbers.insert(a);
+     return true;
+ }
+ 
+@@ -189,10 +189,8 @@
+ 
+ 
+ bool RulesExceptions::contains(int a) {
+-    for (int z : m_numbers) {
+-        if (a == z) {
+-            return true;
+-        }
++    if (m_numbers.count(a) != 0) {
++        return true;
+     }
+ 
+     for (auto z : m_ranges) {

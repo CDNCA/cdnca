@@ -15,6 +15,8 @@ export interface SecurityIPList {
   revision: number
   platform: boolean
   updated_at: string
+  /** Live policies referencing the list (list operation only; decision 8). */
+  reference_count?: number
 }
 
 export interface SecurityIPListInput {

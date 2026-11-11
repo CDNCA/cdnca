@@ -69,8 +69,10 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/securityban"
 	"github.com/cdnca/cdnca/services/control-api/internal/securityiplist"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
+	"github.com/cdnca/cdnca/services/control-api/internal/securitystringset"
 	"github.com/cdnca/cdnca/services/control-api/internal/site"
 	"github.com/cdnca/cdnca/services/control-api/internal/siteaccess"
+	"github.com/cdnca/cdnca/services/control-api/internal/sitecontentrewrite"
 	"github.com/cdnca/cdnca/services/control-api/internal/sitecrs"
 	"github.com/cdnca/cdnca/services/control-api/internal/sitegroup"
 	"github.com/cdnca/cdnca/services/control-api/internal/sitequickblock"
@@ -96,6 +98,7 @@ type Server struct {
 	nodes                                *node.Service
 	nodeRegistrationLimiter              *registrationLimiter
 	nodeInstallGateway                   func(context.Context) (NodeInstallGateway, bool, error)
+	nodeReinstallGateway                 func(context.Context) (NodeInstallGateway, bool, error)
 	pluginWriteLimiter                   *pluginWriteLimiter
 	nodeInventory                        *nodepresence.Inventory
 	nodeMetrics                          NodeMetricsReader
@@ -118,9 +121,11 @@ type Server struct {
 	siteQuickBlocks                      *sitequickblock.Service
 	securityBans                         *securityban.Service
 	securityIPLists                      *securityiplist.Store
+	securityStringSets                   *securitystringset.Store
 	siteAccess                           *siteaccess.Service
 	siteCRS                              *sitecrs.Service
 	siteSchedule302                      *siteschedule302.Service
+	siteContentRewrite                   *sitecontentrewrite.Service
 	siteTrafficLimits                    *sitetrafficlimit.Service
 	originFailover                       *originfailover.Service
 	wafSubscriptions                     *wafsubscription.Service
@@ -177,6 +182,7 @@ type Server struct {
 	systemConfigurationHandler           http.Handler
 	systemSettingsHandler                http.Handler
 	brandAssetHandler                    http.Handler
+	statusPageHandler                    http.Handler
 	themeHandler                         http.Handler
 	pluginUIHandler                      http.Handler
 	pluginProviderHandler                http.Handler
@@ -201,10 +207,13 @@ type Server struct {
 	accountRegistrationHandler           http.Handler
 	accountLoginHandler                  http.Handler
 	builtInRegistration                  BuiltInRegistration
+	builtInRegistrationChallenges        http.Handler
+	registrationConfig                   RegistrationConfigSource
 	securityCoordinationMetricsHandler   http.Handler
 	ja4BlockHandler                      http.Handler
 	autoDefenseHandler                   http.Handler
 	ccStatsHandler                       http.Handler
+	rumReportHandler                     http.Handler
 	marketSecurityHandler                http.Handler
 	controlPlaneUpgradeHandler           http.Handler
 	controlPlaneUpgradeGate              func(http.Handler) http.Handler
@@ -255,6 +264,9 @@ type Config struct {
 	MaintenanceUpgradeRuntime controlupgrade.MaintenanceRuntime
 	DNSCredentialCipher       dnsacme.CredentialCipher
 	DNSProviderVerifier       dnsacme.ProviderVerifier
+	// URLAuthPublisher delivers enabled URL auth policies to their nodes
+	//; nil: enabling a policy answers url_auth_unavailable.
+	URLAuthPublisher urlauthpolicy.Publisher
 	// DNSZoneApexResolver finds the hosted domain of a saved CNAME zone
 	// (migration 473); nil stores zones without an apex (filled on first use).
 	DNSZoneApexResolver dnsproviderremote.ZoneApexResolver
@@ -326,7 +338,9 @@ type Config struct {
 	SystemConfigurationHandlerFactory          MountedHandlerFactory
 	SystemSettingsHandlerFactory               MountedHandlerFactory
 	BrandAssetHandlerFactory                   MountedHandlerFactory
-	ThemeHandlerFactory                        MountedHandlerFactory
+	// StatusPageHandlerFactory serves the public status page and its editor.
+	StatusPageHandlerFactory MountedHandlerFactory
+	ThemeHandlerFactory      MountedHandlerFactory
 	// PluginUIHandlerFactory (PA-19) serves ui_page plugin pages and the
 	// restricted plugin backend proxy.
 	PluginUIHandlerFactory MountedHandlerFactory
@@ -363,14 +377,27 @@ type Config struct {
 	NodeSSHInstallHandlerFactory  MountedHandlerFactory
 	// NodeInstallGateway is the direct Gateway entry of the copied node install
 	// command (gatewayregistry DirectNodeInstallGateway; nil or ok=false: none).
-	NodeInstallGateway                        func(context.Context) (NodeInstallGateway, bool, error)
-	AccountRegistrationHandlerFactory         MountedHandlerFactory
-	AccountLoginHandlerFactory                MountedHandlerFactory
+	NodeInstallGateway func(context.Context) (NodeInstallGateway, bool, error)
+	// NodeReinstallGateway is the Gateway entry of the 重装此节点 command
+	// (gatewayregistry ReinstallNodeInstallGateway: on a ws console the first
+	// published grpc entry; nil or ok=false: none).
+	NodeReinstallGateway              func(context.Context) (NodeInstallGateway, bool, error)
+	AccountRegistrationHandlerFactory MountedHandlerFactory
+	AccountLoginHandlerFactory        MountedHandlerFactory
+	// BuiltInRegistration registers with the built-in CAPTCHA while the
+	// Turnstile registration runtime is not mounted (nil: off).
 	BuiltInRegistration BuiltInRegistration
+	// BuiltInRegistrationChallengeHandler sends and checks the email / SMS
+	// codes of built-in registration (nil: no codes).
+	BuiltInRegistrationChallengeHandler http.Handler
+	// RegistrationConfig answers GET /v1/auth/registration-config (nil: closed).
+	RegistrationConfig                        RegistrationConfigSource
 	SecurityCoordinationMetricsHandlerFactory MountedHandlerFactory
 	JA4BlockHandlerFactory                    MountedHandlerFactory
 	AutoDefenseHandlerFactory                 MountedHandlerFactory
 	CCStatsHandlerFactory                     MountedHandlerFactory
+	// RUMReportHandlerFactory serves the real user monitoring report (rumhttp).
+	RUMReportHandlerFactory MountedHandlerFactory
 	// MarketSecurityHandlerFactory serves relayed market attack logs (ML-21).
 	MarketSecurityHandlerFactory     MountedHandlerFactory
 	ControlUpgradePlanHandlerFactory MountedHandlerFactory
@@ -424,48 +451,52 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 	}
 	streamService := l4forward.NewService(l4forward.NewStoreWithClock(pool, config.Now))
 	server := &Server{
-		marketRuntime:           config.MarketRuntime,
-		pool:                    pool,
-		now:                     config.Now,
-		entitlementTrust:        config.EntitlementTrust,
-		identity:                identityService,
-		nodes:                   node.NewService(node.NewStoreWithClock(pool, config.Now, config.EntitlementTrust).SetLineGroupPublications(edgeautopublish.LineGroupPublisher{})),
-		nodeInventory:           nodepresence.NewInventory(pool, config.NodePresenceLeases, config.NodePresenceOfflineAfter, config.Now, logger),
-		nodeMetrics:             config.NodeMetricsReader,
-		nodePortTransitions:     nodeporttransition.NewService(nodeporttransition.NewPostgresStore(pool, config.Now), config.Now, uuid.New),
-		nodeMonitoringOverrides: newNodeMonitoringOverrideStore(pool, config.Now),
-		nodeServing:             newNodeServingStore(pool),
-		nodePortTransitionReady: config.NodePortTransitionReady,
-		sites:                   site.NewService(site.NewStoreWithClock(pool, config.Now, config.EntitlementTrust).WithTransferCertificates(config.SiteTransferCertificates).WithNodeOfflineAfter(config.NodePresenceOfflineAfter)),
-		siteGroups:              config.SiteGroupService,
-		streams:                 streamService,
-		streamGroups:            streamService,
-		dnsacme:                 newDNSACMEService(pool, config),
-		certificateDefaults:     certdefaults.NewService(certdefaults.NewStore(pool, config.Now)),
-		dnsCredentialCipher:     config.DNSCredentialCipher,
-		dnsSettings:             dnssettings.NewService(pool, config.Now),
-		dnsRecordLister:         config.DNSRecordLister,
-		controlUpgrades:         controlUpgradeService,
-		apiKeys:                 apikey.NewServiceWithPepperKeyring(pool, apiKeyPepper, config.Now),
-		apiKeyUsageRecorder:     config.APIKeyUsageRecorder,
-		apiKeySourceIP:          apiKeySourceIP,
-		builtInRegistration:     config.BuiltInRegistration,
-		adminInbox:              admininbox.NewStore(pool),
-		securityPolicies:        securitypolicy.NewService(securitypolicy.NewStoreWithClock(pool, config.Now)),
-		siteQuickBlocks:         sitequickblock.NewService(sitequickblock.NewStore(pool, config.Now)),
-		securityBans:            securityban.NewService(securityBanStore(pool, config)),
-		securityIPLists:         securityiplist.NewStore(pool, config.Now),
-		siteAccess:              siteaccess.NewService(pool, config.Now),
-		siteCRS:                 sitecrs.NewService(sitecrs.NewStore(pool, config.Now)),
-		siteSchedule302:         siteschedule302.NewService(siteschedule302.NewStore(pool, config.Now)),
-		siteTrafficLimits:       sitetrafficlimit.NewService(sitetrafficlimit.NewStore(pool, config.Now)),
-		originFailover:          originfailover.NewService(originfailover.NewStore(pool, nil, config.Now)),
-		platformPolicyState:     config.PlatformPolicyState,
-		ccReferences:            ccreference.NewService(ccreference.NewStoreWithClock(pool, config.Now)),
-		urlAuthPolicies:         urlauthpolicy.NewService(urlauthpolicy.NewStoreWithClock(pool, config.Now), config.DNSCredentialCipher),
-		cookieSecure:            config.CookieSecure,
-		cookieDomain:            config.CookieDomain,
-		logger:                  logger,
+		marketRuntime:                 config.MarketRuntime,
+		pool:                          pool,
+		now:                           config.Now,
+		entitlementTrust:              config.EntitlementTrust,
+		identity:                      identityService,
+		nodes:                         node.NewService(node.NewStoreWithClock(pool, config.Now, config.EntitlementTrust).SetLineGroupPublications(edgeautopublish.LineGroupPublisher{})),
+		nodeInventory:                 nodepresence.NewInventory(pool, config.NodePresenceLeases, config.NodePresenceOfflineAfter, config.Now, logger),
+		nodeMetrics:                   config.NodeMetricsReader,
+		nodePortTransitions:           nodeporttransition.NewService(nodeporttransition.NewPostgresStore(pool, config.Now), config.Now, uuid.New),
+		nodeMonitoringOverrides:       newNodeMonitoringOverrideStore(pool, config.Now),
+		nodeServing:                   newNodeServingStore(pool),
+		nodePortTransitionReady:       config.NodePortTransitionReady,
+		sites:                         site.NewService(site.NewStoreWithClock(pool, config.Now, config.EntitlementTrust).WithTransferCertificates(config.SiteTransferCertificates).WithNodeOfflineAfter(config.NodePresenceOfflineAfter)),
+		siteGroups:                    config.SiteGroupService,
+		streams:                       streamService,
+		streamGroups:                  streamService,
+		dnsacme:                       newDNSACMEService(pool, config),
+		certificateDefaults:           certdefaults.NewService(certdefaults.NewStore(pool, config.Now)),
+		dnsCredentialCipher:           config.DNSCredentialCipher,
+		dnsSettings:                   dnssettings.NewService(pool, config.Now),
+		dnsRecordLister:               config.DNSRecordLister,
+		controlUpgrades:               controlUpgradeService,
+		apiKeys:                       apikey.NewServiceWithPepperKeyring(pool, apiKeyPepper, config.Now),
+		apiKeyUsageRecorder:           config.APIKeyUsageRecorder,
+		apiKeySourceIP:                apiKeySourceIP,
+		builtInRegistration:           config.BuiltInRegistration,
+		builtInRegistrationChallenges: config.BuiltInRegistrationChallengeHandler,
+		registrationConfig:            config.RegistrationConfig,
+		adminInbox:                    admininbox.NewStore(pool),
+		securityPolicies:              securitypolicy.NewService(securitypolicy.NewStoreWithClock(pool, config.Now)),
+		siteQuickBlocks:               sitequickblock.NewService(sitequickblock.NewStore(pool, config.Now)),
+		securityBans:                  securityban.NewService(securityBanStore(pool, config)),
+		securityIPLists:               securityiplist.NewStore(pool, config.Now),
+		securityStringSets:            securitystringset.NewStore(pool, config.Now),
+		siteAccess:                    siteaccess.NewService(pool, config.Now),
+		siteCRS:                       sitecrs.NewService(sitecrs.NewStore(pool, config.Now)),
+		siteSchedule302:               siteschedule302.NewService(siteschedule302.NewStore(pool, config.Now)),
+		siteContentRewrite:            sitecontentrewrite.NewService(sitecontentrewrite.NewStore(pool, config.Now)),
+		siteTrafficLimits:             sitetrafficlimit.NewService(sitetrafficlimit.NewStore(pool, config.Now)),
+		originFailover:                originfailover.NewService(originfailover.NewStore(pool, nil, config.Now)),
+		platformPolicyState:           config.PlatformPolicyState,
+		ccReferences:                  ccreference.NewService(ccreference.NewStoreWithClock(pool, config.Now)),
+		urlAuthPolicies:               urlauthpolicy.NewService(urlauthpolicy.NewStoreWithClock(pool, config.Now), config.DNSCredentialCipher),
+		cookieSecure:                  config.CookieSecure,
+		cookieDomain:                  config.CookieDomain,
+		logger:                        logger,
 	}
 	server.wafSubscriptions = wafsubscription.NewService(pool, config.Now, logger)
 	server.rulePacks = rulepackcontrol.NewService(pool, config.Now)
@@ -474,6 +505,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 	server.maintenanceUpgradeRuntime = config.MaintenanceUpgradeRuntime
 	server.nodeRegistrationLimiter = newRegistrationLimiter(config.Now)
 	server.nodeInstallGateway = config.NodeInstallGateway
+	server.nodeReinstallGateway = config.NodeReinstallGateway
 	server.pluginWriteLimiter = newPluginWriteLimiter(config.Now)
 	// Self-registration derives its credential MAC from the API key pepper; a
 	// missing pepper leaves the endpoints failing closed (503).
@@ -482,6 +514,9 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 			server.initializationErr = fmt.Errorf("configure node registration: %w", err)
 			return server
 		}
+	}
+	if config.URLAuthPublisher != nil {
+		server.urlAuthPolicies.SetPublisher(config.URLAuthPublisher)
 	}
 	if pool != nil && identityService != nil {
 		server.regionCatalogHandler, err = regioncataloghttp.NewHandler(
@@ -742,6 +777,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 		{name: "system configuration", factory: config.SystemConfigurationHandlerFactory, target: &server.systemConfigurationHandler},
 		{name: "system settings", factory: config.SystemSettingsHandlerFactory, target: &server.systemSettingsHandler},
 		{name: "brand assets", factory: config.BrandAssetHandlerFactory, target: &server.brandAssetHandler},
+		{name: "status page", factory: config.StatusPageHandlerFactory, target: &server.statusPageHandler},
 		{name: "themes", factory: config.ThemeHandlerFactory, target: &server.themeHandler},
 		{name: "plugin ui", factory: config.PluginUIHandlerFactory, target: &server.pluginUIHandler},
 		{name: "plugin providers", factory: config.PluginProviderHandlerFactory, target: &server.pluginProviderHandler},
@@ -768,6 +804,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 		{name: "JA4 block", factory: config.JA4BlockHandlerFactory, target: &server.ja4BlockHandler},
 		{name: "auto defense", factory: config.AutoDefenseHandlerFactory, target: &server.autoDefenseHandler},
 		{name: "CC statistics", factory: config.CCStatsHandlerFactory, target: &server.ccStatsHandler},
+		{name: "RUM report", factory: config.RUMReportHandlerFactory, target: &server.rumReportHandler},
 		{name: "market security", factory: config.MarketSecurityHandlerFactory, target: &server.marketSecurityHandler},
 		{name: "control upgrade plan", factory: config.ControlUpgradePlanHandlerFactory, target: &server.controlUpgradePlanHandler},
 		{name: "entitlement refresh", factory: config.EntitlementRefreshHandlerFactory, target: &server.entitlementRefreshHandler},
@@ -887,6 +924,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/sites/{id}/origin-routing", s.handlePutSiteConditionalOrigin)
 	mux.HandleFunc("GET /v1/sites/{id}/schedule302", s.handleGetSiteSchedule302)
 	mux.HandleFunc("PUT /v1/sites/{id}/schedule302", s.handlePutSiteSchedule302)
+	// 内容改写
+	mux.HandleFunc("GET /v1/sites/{id}/content-rewrite", s.handleGetSiteContentRewrite)
+	mux.HandleFunc("PUT /v1/sites/{id}/content-rewrite", s.handlePutSiteContentRewrite)
+	mux.HandleFunc("POST /v1/sites/{id}/content-rewrite/test", s.handlePostSiteContentRewriteTest)
 	mux.HandleFunc("POST /v1/sites/{id}/auto-dns/sync", s.handleSyncSiteAutoDNS)
 	mux.HandleFunc("POST /v1/sites/{id}/access-check", s.handleCheckSiteAccess)
 	mux.HandleFunc("POST /v1/sites/{id}/republish", s.handleRepublishSite)
@@ -1050,6 +1091,15 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("PUT "+base+"/{list_id}", s.handleUpdateSecurityIPList)
 		mux.HandleFunc("DELETE "+base+"/{list_id}", s.handleDeleteSecurityIPList)
 	}
+	for _, base := range []string{"/v1/security-string-sets", "/v1/admin/security-string-sets"} {
+		mux.HandleFunc("GET "+base, s.handleListSecurityStringSets)
+		mux.HandleFunc("POST "+base, s.handleCreateSecurityStringSet)
+		mux.HandleFunc("GET "+base+"/{set_id}", s.handleGetSecurityStringSet)
+		mux.HandleFunc("GET "+base+"/{set_id}/references", s.handleListSecurityStringSetReferences)
+		mux.HandleFunc("PUT "+base+"/{set_id}", s.handleUpdateSecurityStringSet)
+		mux.HandleFunc("DELETE "+base+"/{set_id}", s.handleDeleteSecurityStringSet)
+	}
+	mux.HandleFunc("POST /v1/security-policies/parse-user-agent", s.handleParseUserAgent)
 	mux.HandleFunc("GET /v1/sites/{site_id}/access", s.handleGetSiteAccess)
 	mux.HandleFunc("PUT /v1/sites/{site_id}/access", s.handlePutSiteAccess)
 	mux.HandleFunc("GET /v1/sites/{site_id}/crs", s.handleGetSiteCRS)
@@ -1062,6 +1112,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/url-auth-policies", s.handleListURLAuthPolicies)
 	mux.HandleFunc("GET /v1/url-auth-policies/{id}", s.handleGetURLAuthPolicy)
 	mux.HandleFunc("PATCH /v1/url-auth-policies/{id}", s.handleUpdateURLAuthPolicy)
+	mux.HandleFunc("POST /v1/url-auth-policies/{id}/enable", s.handleEnableURLAuthPolicy)
+	mux.HandleFunc("POST /v1/url-auth-policies/{id}/disable", s.handleDisableURLAuthPolicy)
 	mux.HandleFunc("POST /v1/url-auth-policies/{id}/rotate", s.handleRotateURLAuthPolicy)
 	mux.HandleFunc("POST /v1/url-auth-policies/{id}/revoke", s.handleRevokeURLAuthPolicyKey)
 	mux.HandleFunc("GET /v1/url-auth-policies/{id}/edge-snapshot", s.handleGetURLAuthPolicySnapshot)
@@ -1551,6 +1603,7 @@ func (s *Server) Handler() http.Handler {
 		}},
 		{handler: s.autoDefenseHandler, patterns: []string{"/v1/security/autodefense/", "/v1/admin/security/autodefense/"}},
 		{handler: s.ccStatsHandler, patterns: []string{"/v1/security/cc-stats", "/v1/admin/security/cc-stats"}},
+		{handler: s.rumReportHandler, patterns: []string{"GET /v1/analytics/rum", "GET /v1/admin/analytics/rum"}},
 		{handler: s.marketSecurityHandler, patterns: []string{"GET /v1/analytics/market-security", "GET /v1/admin/analytics/market-security"}},
 		{handler: s.edgePublishHandler, patterns: []string{
 			"/v1/admin/site-publications", "/v1/admin/site-publications/",
@@ -1609,6 +1662,9 @@ func (s *Server) Handler() http.Handler {
 		}},
 		{handler: s.brandAssetHandler, preserveRaw: true, patterns: []string{
 			"/v1/admin/brand-assets", "/v1/admin/brand-assets/", "/v1/brand-assets/",
+		}},
+		{handler: s.statusPageHandler, preserveRaw: true, patterns: []string{
+			"/v1/status-page/public", "/v1/admin/status-page", "/v1/admin/status-page/",
 		}},
 		{handler: s.themeHandler, preserveRaw: true, patterns: []string{
 			"/v1/admin/themes", "/v1/admin/themes/", "/v1/theme/",
@@ -1718,7 +1774,12 @@ func (s *Server) Handler() http.Handler {
 	if s.accountRegistrationHandler == nil && s.builtInRegistration != nil {
 		// builtin registration: no Turnstile runtime, so the built-in CAPTCHA flow.
 		mux.HandleFunc("POST /v1/auth/register", s.handleBuiltInRegister)
+		if s.builtInRegistrationChallenges != nil {
+			mux.HandleFunc("POST /v1/auth/registration-challenges", s.handleBuiltInRegistrationChallenge)
+			mux.HandleFunc("POST /v1/auth/registration-challenge-verifications", s.handleBuiltInRegistrationChallenge)
+		}
 	}
+	mux.HandleFunc("GET /v1/auth/registration-config", s.handleRegistrationConfig)
 	var gated http.Handler = mux
 	var full http.Handler
 	if s.approvalCenter != nil {
@@ -2282,7 +2343,7 @@ func (s *Server) handleIssueEnrollmentToken(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSONStatus(w, http.StatusCreated, issuedEnrollmentTokenResponse{IssuedToken: issued, Gateway: s.installGateway(r.Context())})
+	writeJSONStatus(w, http.StatusCreated, s.issuedEnrollmentTokenResponse(r.Context(), issued))
 }
 
 func (s *Server) authenticatedSessionPrincipal(r *http.Request) (identity.Principal, error) {
@@ -2715,6 +2776,12 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, securitypolicy.ErrIPListUnavailable):
 		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "ip_list_unavailable",
 			"an ip_list condition names an IP list that does not exist or that this tenant cannot use")
+	case errors.Is(err, securitypolicy.ErrStringSetUnavailable):
+		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "string_set_unavailable",
+			"a string set condition names a string set that does not exist or that this tenant cannot use")
+	case errors.Is(err, securitypolicy.ErrStringSetTargetMismatch):
+		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "string_set_target_mismatch",
+			"a ja4 condition needs an exact, case-sensitive string set of JA4 fingerprints")
 	case errors.Is(err, securitypolicy.ErrInvalidInput):
 		s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "security policy request fields are invalid")
 	case errors.Is(err, securitypolicy.ErrPermissionDenied):
@@ -2944,11 +3011,32 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (s *Server) writeAPIError(w http.ResponseWriter, r *http.Request, status int, code string, message string) {
+	s.logClientError(r, status, code)
 	writeJSONStatus(w, status, errorEnvelope{Error: apiError{
 		Code:      code,
 		Message:   message,
 		RequestID: requestID(r.Context()),
 	}})
+}
+
+// logClientError records a 4xx refusal at info level so a
+// request ID shown on a page can be looked up in the journal. Only the route
+// template is logged: no path values, query or body.
+func (s *Server) logClientError(r *http.Request, status int, code string) {
+	if status < 400 || status >= 500 || s.logger == nil {
+		return
+	}
+	route := r.Pattern
+	if route == "" {
+		route = "(unrouted)"
+	}
+	s.logger.InfoContext(r.Context(), "request refused",
+		"request_id", requestID(r.Context()),
+		"status", status,
+		"code", code,
+		"method", r.Method,
+		"route", route,
+	)
 }
 
 // writeOrderDomainError is the 422 of a certificate order the dispatcher
@@ -2960,6 +3048,7 @@ func (s *Server) writeOrderDomainError(w http.ResponseWriter, r *http.Request, e
 	if errors.As(err, &refused) {
 		domain = refused.Domain
 	}
+	s.logClientError(r, http.StatusUnprocessableEntity, code)
 	writeJSONStatus(w, http.StatusUnprocessableEntity, map[string]any{"error": map[string]any{
 		"code": code, "message": message, "request_id": requestID(r.Context()), "domain": domain,
 		"details": siteFieldErrorDetails{Field: field, Reason: fielderr.Invalid},
@@ -2969,6 +3058,7 @@ func (s *Server) writeOrderDomainError(w http.ResponseWriter, r *http.Request, e
 // writeFieldError is the 400 validation_error of one refused request field
 // (details.field is the JSON path as sent, details.reason a fielderr reason).
 func (s *Server) writeFieldError(w http.ResponseWriter, r *http.Request, field, reason string) {
+	s.logClientError(r, http.StatusBadRequest, "validation_error")
 	writeJSONStatus(w, http.StatusBadRequest, errorEnvelope{Error: apiError{
 		Code: "validation_error", Message: "request field " + field + " is invalid: " + reason,
 		RequestID: requestID(r.Context()), Details: siteFieldErrorDetails{Field: field, Reason: reason},

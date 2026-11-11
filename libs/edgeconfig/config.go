@@ -329,6 +329,20 @@ type WAFMatch struct {
 	// list (WAFIPList). Bound security policies only; it
 	// needs CAPABILITY_NAME_WAF v4.
 	IPLists []WAFIPList `json:"ip_lists,omitempty"`
+	// StringSets: a request value is (or, negated, is not) matched by a
+	// member of a named string set (WAFStringSetRef); the set's
+	// members travel in the site object (security.string_sets). Bound
+	// security policies only; it needs CAPABILITY_NAME_WAF v6.
+	StringSets []WAFStringSetRef `json:"string_sets,omitempty"`
+	// Browser, BrowserVersion, Device: what the User-Agent claims
+	// (ParseUserAgent); Time: the request time
+	// (WAFTimeMatch). Bound security policies only; they need
+	// CAPABILITY_NAME_WAF v6. Every new field is omitted when unset, so a
+	// match without them encodes as before.
+	Browser        *WAFBrowserMatch   `json:"browser,omitempty"`
+	BrowserVersion *WAFBrowserVersion `json:"browser_version,omitempty"`
+	Device         *WAFDeviceMatch    `json:"device,omitempty"`
+	Time           *WAFTimeMatch      `json:"time,omitempty"`
 }
 
 type WAFPathMatch struct {
@@ -1822,9 +1836,10 @@ func normalizeWAF(policy WAFPolicy) (WAFPolicy, error) {
 		if err != nil {
 			return WAFPolicy{}, err
 		}
-		if match.JA4 != nil || match.NotJA4 != nil || match.IPIntel != nil {
-			// The legacy site WAF renderer has no JA4 / IP intelligence
-			// condition; dropping it would widen the rule to every client.
+		if match.JA4 != nil || match.NotJA4 != nil || match.IPIntel != nil || WAFMatchUsesV6Conditions(match) {
+			// The legacy site WAF renderer has no JA4 / IP intelligence /
+			// WAF v6 (string set, browser, device, time) condition;
+			// dropping it would widen the rule to every client.
 			return WAFPolicy{}, ErrInvalidConfig
 		}
 		for _, previous := range normalized.Rules {
@@ -2111,7 +2126,22 @@ func normalizeWAFMatch(match WAFMatch) (WAFMatch, error) {
 	if err != nil {
 		return WAFMatch{}, err
 	}
-	if normalized.Host == "" && normalized.Port == 0 && normalized.Method == "" && normalized.Path == nil && normalized.Header == nil && normalized.SourceCIDR == "" && normalized.Inspect == nil && normalized.JA4 == nil && normalized.NotJA4 == nil && normalized.IPIntel == nil && normalized.IPLists == nil {
+	if normalized.StringSets, err = normalizeWAFStringSetRefs(match.StringSets); err != nil {
+		return WAFMatch{}, err
+	}
+	if normalized.Browser, err = normalizeWAFBrowserMatch(match.Browser); err != nil {
+		return WAFMatch{}, err
+	}
+	if normalized.BrowserVersion, err = normalizeWAFBrowserVersion(match.BrowserVersion); err != nil {
+		return WAFMatch{}, err
+	}
+	if normalized.Device, err = normalizeWAFDeviceMatch(match.Device); err != nil {
+		return WAFMatch{}, err
+	}
+	if normalized.Time, err = normalizeWAFTimeMatch(match.Time); err != nil {
+		return WAFMatch{}, err
+	}
+	if normalized.Host == "" && normalized.Port == 0 && normalized.Method == "" && normalized.Path == nil && normalized.Header == nil && normalized.SourceCIDR == "" && normalized.Inspect == nil && normalized.JA4 == nil && normalized.NotJA4 == nil && normalized.IPIntel == nil && normalized.IPLists == nil && !WAFMatchUsesV6Conditions(normalized) {
 		return WAFMatch{}, ErrInvalidConfig
 	}
 	return normalized, nil
@@ -2183,7 +2213,7 @@ func normalizeWAFHeader(header WAFHeaderMatch) (WAFHeaderMatch, error) {
 }
 
 func wafMatchCovers(previous, current WAFMatch) bool {
-	if len(previous.Inspect) != 0 {
+	if len(previous.Inspect) != 0 || WAFMatchUsesV6Conditions(previous) {
 		return false
 	}
 	if previous.Method != "" && (current.Method == "" || previous.Method != current.Method) {

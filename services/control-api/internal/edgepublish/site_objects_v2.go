@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
+	"github.com/cdnca/cdnca/libs/edgeconfig/contentrewrite"
 	"github.com/cdnca/cdnca/libs/edgeconfig/edgesite"
 	"github.com/cdnca/cdnca/libs/edgeconfig/siteobject"
 	"github.com/cdnca/cdnca/services/control-api/internal/httppolicycontrol"
@@ -49,6 +50,18 @@ type siteObjectV2Facts struct {
 	// CacheStatusHeader: the site's 响应头显示缓存状态, off while it is at
 	// attack escalation level B or above (loadSiteCacheStatusHeaders).
 	CacheStatusHeader bool
+	// ServerTiming: the site's Server-Timing 响应头, off at attack
+	// escalation level B or above like CacheStatusHeader (B1-control-site
+	// fills it from sites.server_timing, migration 651).
+	ServerTiming bool
+	// StringSets: the string sets the site's rules reference, in id order
+	//, published as security.string_sets.
+	StringSets []edgesite.StringSet
+	// RUM: the site's 真实用户体验上报 (loadSiteRUM), nil when off.
+	RUM *edgeconfig.SiteRUM
+	// ContentRewrite: the site's 内容改写 settings with an enabled rule
+	// (loadSiteContentRewrite), compiled against the site's domains.
+	ContentRewrite *contentrewrite.Settings
 }
 
 // siteRuleMounts is site_security_mounts.security (rulepack.Security).
@@ -148,6 +161,8 @@ func convertSiteObjectV2(entry siteObjectsV2SourceSite, scopeID, tenantID string
 		Hosts:     edgesite.Hosts{Primary: runtime.Domains[0], Aliases: slices.Sorted(slices.Values(runtime.Domains[1:]))},
 		WebSocket: *runtime.WebSocket, Range: *runtime.Range,
 		CacheStatusHeader: facts.CacheStatusHeader,
+		ServerTiming:      facts.ServerTiming,
+		RUM:               facts.RUM,
 		Errors:            []edgesite.ErrorPage{},
 	}
 	if site.Hosts.Aliases == nil {
@@ -237,6 +252,9 @@ func convertSiteObjectV2(entry siteObjectsV2SourceSite, scopeID, tenantID string
 	if site.Security, err = convertSiteSecurityV2(runtime, listeners, tenantID, files, referenced); err != nil {
 		return edgesite.Site{}, err
 	}
+	if len(facts.StringSets) > 0 {
+		site.Security.StringSets = slices.Clone(facts.StringSets)
+	}
 	if facts.Mounts != nil && len(facts.Mounts.Mounts) > 0 {
 		site.Security.Mounts = slices.Clone(facts.Mounts.Mounts)
 		site.Security.ResolvedSHA256 = facts.Mounts.ResolvedSHA256
@@ -302,6 +320,14 @@ func convertSiteObjectV2(entry siteObjectsV2SourceSite, scopeID, tenantID string
 			}
 		}
 		site.Telemetry = &edgesite.Telemetry{PackageSubscriptionID: entry.Telemetry.PackageSubscriptionID, Capture: capture}
+	}
+	if facts.ContentRewrite != nil {
+		// https rules with include_site_domains add the site's names
+		node, err := contentrewrite.Compile(*facts.ContentRewrite, runtime.Domains)
+		if err != nil {
+			return edgesite.Site{}, fmt.Errorf("content rewrite: %v", err)
+		}
+		site.ContentRewrite = node
 	}
 	return site, nil
 }
@@ -661,6 +687,10 @@ func convertSiteSecurityV2(runtime siteRuntimeV2Site, listeners []siteRuntimeV2L
 		referenced[digest] = bytes.Clone(content)
 		security.FirewallAction = &edgesite.Ref{Kind: edgesite.RefFirewallAction, ID: action.PolicyID,
 			Revision: action.PolicyRevision, SHA256: digest}
+	}
+	if auth := runtime.URLAuth; auth != nil {
+		security.URLAuth = &edgesite.Ref{Kind: edgesite.RefURLAuth, ID: auth.PolicyID, Revision: auth.PolicyVersion}
+		security.URLAuthFallbackFloor = auth.FallbackFloor
 	}
 	return security, nil
 }

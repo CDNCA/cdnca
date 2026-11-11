@@ -139,7 +139,6 @@ function TransitionPanel({
       <header className="identity-page-header">
         <div>
           <Typography.Title level={4} id="node-port-transition-title">{t('transition.title')}</Typography.Title>
-          <Typography.Paragraph type="secondary">{t('transition.revision', { revision: transition.revision })}</Typography.Paragraph>
         </div>
         <Tag color={transition.state === 'failed' ? 'error' : transition.state === 'finalized' ? 'success' : 'processing'}>
           {t(`transition.states.${transition.state}`)}
@@ -384,7 +383,6 @@ function DetailContent({ owner, ownerKey, nodeID }: { owner: Owner; ownerKey: st
         <Descriptions.Item label={t('fields.adminState')}>
           <Tag color={stateColors[item.admin_state]}>{t(`states.${item.admin_state}`)}</Tag>
         </Descriptions.Item>
-        <Descriptions.Item label={t('fields.revision')}>{t('telemetry.revision', { revision: item.revision })}</Descriptions.Item>
         <Descriptions.Item label={t('fields.region')}>{item.region || t('telemetry.notSet')}</Descriptions.Item>
         <Descriptions.Item label={t('fields.ipv4')}>{item.ipv4 || t('telemetry.notSet')}</Descriptions.Item>
         <Descriptions.Item label={t('fields.ipv6')}>{item.ipv6 || t('telemetry.notSet')}</Descriptions.Item>

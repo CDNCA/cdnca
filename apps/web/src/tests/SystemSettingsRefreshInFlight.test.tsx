@@ -10,7 +10,7 @@ import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
 
 // MC01/B01（Codex 双角色审测 10-27）：保存在途时不能用普通刷新丢掉写入；结果未知只能原样重试或明确放弃；
-// 已有草稿后的刷新失败保留草稿与原修订。
+// 已有草稿后的刷新失败保留草稿。
 
 const initial: PlatformSystemSettingsDocument = {
   schema: 'cdnca.platform-system-settings/v1', revision: 3,
@@ -71,6 +71,5 @@ describe('MC01/B01 系统设置刷新与在途写入', () => {
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
     expect(await screen.findByText(/刷新失败/)).toBeInTheDocument()
     expect(within(panel).getByLabelText('系统名称')).toHaveValue('本地草稿')
-    expect(within(panel).getByText(/修订版本|revision/i).parentElement).toHaveTextContent('3')
   })
 })

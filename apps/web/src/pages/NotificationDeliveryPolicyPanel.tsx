@@ -314,7 +314,6 @@ function PolicyContent({ owner, canManage }: { owner: string; canManage: boolean
     <div className="notification-policy-footer"><Space wrap>
       <Button type="primary" icon={<Save size={14} />} disabled={disabled || !dirty || value.events.length === 0} loading={mutation.isPending} onClick={save}>{t('save')}</Button>
       <Button icon={<RefreshCw size={14} />} disabled={mutation.isPending || pending !== null} loading={query.isFetching} onClick={refresh}>{t('refresh')}</Button>
-      <Typography.Text type="secondary">{t('revision', { revision: query.data.revision })}</Typography.Text>
     </Space></div>
   </section>
 }

@@ -31,6 +31,9 @@
 //   - per-node websites (SITE_SELECTION): a withheld plain and
 //     TLS website answer like an unknown host / SNI, their certificate
 //     leaves the pool, the node's other websites keep 200 (sitesel.go);
+//   - purge and reinstall of a managed WAF node: the
+//     configuration left behind names the removed engine and fails nginx -t;
+//     Recover sets it aside, the next publication serves and blocks;
 //   - error.log: counts and recent lines, the reuseport reload noise
 //     filtered.
 package main
@@ -962,13 +965,20 @@ func main() {
 	// -------------------------------------------- error page slot pages (errpage-5, 待出包前全量跑)
 	again = checkSlotPages(h, config, again, origin, objectsSites(h.input.Objects)...)
 
+	// -------------------------------------------- purge and reinstall of a managed WAF node
+	logShared := config.SharedRoot
+	if *modSecurity != "" {
+		again, logShared = checkPurgeReinstall(h, config, again, dynroute.Input{CRSText: h.input.CRSText, Profiles: h.input.Profiles,
+			ScopeVersions: h.input.ScopeVersions})
+	}
+
 	// -------------------------------------------------------- error.log
 	stats, err := again.ReadErrorLog()
 	check("error-log-read", err == nil, "severe %d noise %d recent %d %v", stats.SevereTotal, stats.NoiseTotal, len(stats.Recent), err)
 	for _, line := range stats.Recent {
 		fmt.Println("LOG", line)
 	}
-	logPath := filepath.Join(config.SharedRoot, "error.log")
+	logPath := filepath.Join(logShared, "error.log")
 	appendLog(logPath, "[emerg] 1#1: close() socket 0.0.0.0:443 failed (9: Bad file descriptor)")
 	appendLog(logPath, "[crit] 1#1: *1 d13 synthetic critical line")
 	next, err := again.ReadErrorLog()

@@ -425,6 +425,17 @@ func (runtime *Runtime) syncCertificates(ctx context.Context, sites []edgesite.S
 // UnavailableCertificates are the certificate versions of the running
 // sites the last sync could not give (missing, or outside their validity
 // window): those sites serve no HTTPS; the rest of the node is unaffected.
+// urlAuthInstalled reports whether the URL auth rollout installed ref's
+// version (urlauth.Publisher's versions/<v>.json): only installed versions
+// are preloaded, so an arriving version changes the skeleton.
+func (runtime *Runtime) urlAuthInstalled(ref edgesite.Ref) bool {
+	if runtime.config.URLAuthRoot == "" {
+		return false
+	}
+	info, err := os.Lstat(filepath.Join(runtime.config.URLAuthRoot, "policies", ref.ID, "versions", fmt.Sprintf("%020d.json", ref.Revision)))
+	return err == nil && info.Mode().IsRegular()
+}
+
 func (runtime *Runtime) UnavailableCertificates() []dyntls.Unavailable {
 	if current := runtime.unavailable.Load(); current != nil {
 		return append([]dyntls.Unavailable(nil), (*current)...)
@@ -492,7 +503,7 @@ func (runtime *Runtime) render(sites []edgesite.Site, waf dynwaf.Result, system 
 		Node: node, Cache: pool, Telemetry: runtime.config.Telemetry, HealthPort: runtime.config.HealthPort,
 		Challenges: edgeskeleton.ChallengesFromSites(sites), ManagedWAF: waf.Skeleton, AutoDefense: runtime.config.AutoDefense,
 		SiteGzip: edgeskeleton.SiteGzipFromSites(sites), SiteBrotli: edgeskeleton.SiteBrotliFromSites(sites),
-		SiteWebP: edgeskeleton.SiteWebPFromSites(sites), UnknownSite: unknown, NoHost: noHost, SlotPages: slotPages,
+		SiteWebP: edgeskeleton.SiteWebPFromSites(sites), SiteRUM: edgeskeleton.SiteRUMFromSites(sites), ContentRewrite: edgeskeleton.ContentRewriteFromSites(sites), URLAuth: edgeskeleton.URLAuthFromSites(sites, runtime.config.URLAuthRoot, runtime.urlAuthInstalled), UnknownSite: unknown, NoHost: noHost, SlotPages: slotPages,
 		Paths: edgeskeleton.Paths{SharedRoot: runtime.config.SharedRoot, CacheRoot: runtime.cacheRoot(), LogRoot: runtime.logRoot, LuaRoot: runtime.config.LuaRoot, StateRoot: runtime.config.StateRoot,
 			ObjectsRoot: runtime.config.ObjectsRoot, PlaceholderCertificate: placeholder, PlaceholderKey: placeholderPath(runtime.config, ".key"), OriginTrustPlaceholder: placeholder,
 			RulePlanRoot: rulePlanRoot, MuxRoot: runtime.muxRoot()}, DispatchedPorts: dispatched,

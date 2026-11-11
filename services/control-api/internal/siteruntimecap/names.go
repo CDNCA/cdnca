@@ -117,6 +117,10 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// CHALLENGE_POW gates JS challenge policies with an explicit
 	// pow_difficulty, a challenge secret rollout feature.
 	agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW: true,
+	// CHALLENGE_EXTERNAL gates JS challenge policies with Turnstile /
+	// reCAPTCHA v3 or the external fallback fields, a challenge
+	// secret rollout feature.
+	agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_EXTERNAL: true,
 	// PACKAGING_TOOLSET_REPORT marks the heartbeat packaging toolset report,
 	// node status only.
 	agentv1.CapabilityName_CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT: true,

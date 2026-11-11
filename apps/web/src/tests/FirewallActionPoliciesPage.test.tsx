@@ -157,7 +157,9 @@ describe('FirewallActionPoliciesPage', () => {
     renderPage('/config/firewall-action')
     const card = await screen.findByRole('region', { name: '默认设置' })
     expect(await within(card).findByText('继承系统默认')).toBeInTheDocument()
-    expect(within(card).getByText(/没有单独设置的网站（12 个）使用系统内置默认/)).toBeInTheDocument()
+    expect(within(card).getByText('继承此默认的网站')).toBeInTheDocument()
+    expect(within(card).getByText('12 个')).toBeInTheDocument()
+    expect(within(card).getByText(/尚未保存默认设置，使用系统内置默认/)).toBeInTheDocument()
     await user.click(within(card).getByRole('button', { name: '编辑默认设置' }))
     await user.clear(within(card).getByLabelText('触发阈值'))
     await user.type(within(card).getByLabelText('触发阈值'), '250')
@@ -172,7 +174,7 @@ describe('FirewallActionPoliciesPage', () => {
     useSessionStore.setState({ principal: { ...useSessionStore.getState().principal!, scope_kind: 'platform',
       scope_id: '66666666-6666-4666-8666-666666666666', tenant_id: null, permissions: ['platform.admin'] } })
     const first = renderPage('/config/firewall-action')
-    expect(await screen.findByRole('combobox', { name: '默认设置所属用户' })).toBeInTheDocument()
+    expect(await screen.findByRole('combobox', { name: '所属用户' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: '默认设置' })).not.toBeInTheDocument()
     expect(firewallActionApi.getDefault).not.toHaveBeenCalled()
     first.unmount()
@@ -180,6 +182,52 @@ describe('FirewallActionPoliciesPage', () => {
     const card = await screen.findByRole('region', { name: '默认设置' })
     expect(await within(card).findByText('继承系统默认')).toBeInTheDocument()
     expect(firewallActionApi.getDefault).toHaveBeenCalledWith('token', policy.tenant_scope_id)
+  })
+
+  const platform = () => useSessionStore.setState({ principal: { ...useSessionStore.getState().principal!, scope_kind: 'platform',
+    scope_id: '66666666-6666-4666-8666-666666666666', tenant_id: null, permissions: ['platform.admin'] } })
+
+  // 重新设计：所属用户与搜索在同一条工具栏，网站列不再显示内部编号 display_id，有别名时显示数量。
+  it('puts the owner filter and the search in one toolbar and hides the internal display id', async () => {
+    platform()
+    vi.mocked(sitesApi.list).mockResolvedValue({ items: [{ id: policy.site_id, display_id: 'S100', domain: 'shop.example.test',
+      domains: ['shop.example.test', 'www.example.test', 'm.example.test'],
+      owner: { id: '55555555-5555-4555-8555-555555555555', display_name: 'Alice' } }] as never, total: 1, page: 1, limit: 20 })
+    renderPage('/config/firewall-action')
+    expect(await screen.findByText('shop.example.test')).toBeInTheDocument()
+    expect(screen.queryByText('S100')).not.toBeInTheDocument()
+    expect(screen.getByText('另有 2 个域名')).toBeInTheDocument()
+    const owner = screen.getByRole('combobox', { name: '所属用户' })
+    const search = screen.getByRole('searchbox', { name: '按域名搜索网站' })
+    const toolbar = owner.closest('.cdnca-table-toolbar')
+    expect(toolbar).not.toBeNull()
+    expect(toolbar!.contains(search)).toBe(true)
+    expect(toolbar!.querySelector('.cdnca-table-toolbar-actions')!.contains(owner)).toBe(true)
+    expect(toolbar!.querySelector('.cdnca-table-toolbar-filters')!.contains(search)).toBe(true)
+    expect(screen.getByText('在下方选择所属用户，查看并编辑该用户的默认设置')).toBeInTheDocument()
+  })
+
+  it('filters the site list by the owner kept in the URL and keeps it after going back from a site', async () => {
+    platform()
+    const user = userEvent.setup()
+    const ownerId = '55555555-5555-4555-8555-555555555555'
+    renderPage(`/config/firewall-action?target_scope_id=${policy.tenant_scope_id}&owner_id=${ownerId}`)
+    expect(await screen.findByRole('region', { name: '默认设置' })).toBeInTheDocument()
+    expect(sitesApi.list).toHaveBeenCalledWith('token', expect.objectContaining({ owner: ownerId }))
+    await user.click(await screen.findByRole('button', { name: '配置 shop.example.test 的动作策略' }))
+    await screen.findByText('候选策略下发失败，当前稳定版本继续生效')
+    await user.click(screen.getByRole('button', { name: '返回网站列表' }))
+    expect(await screen.findByRole('region', { name: '默认设置' })).toBeInTheDocument()
+    expect(vi.mocked(sitesApi.list).mock.calls.at(-1)![1]).toEqual(expect.objectContaining({ owner: ownerId }))
+  })
+
+  it('says what to try when a domain search matches nothing', async () => {
+    vi.mocked(sitesApi.list).mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
+    const user = userEvent.setup()
+    renderPage('/config/firewall-action')
+    expect(await screen.findByText('没有网站')).toBeInTheDocument()
+    await user.type(screen.getByRole('searchbox', { name: '按域名搜索网站' }), 'nope{Enter}')
+    expect(await screen.findByText('没有匹配「nope」的网站，换个域名关键字试试')).toBeInTheDocument()
   })
 
   it('shows an inheriting site as such, saves its own policy at its revision, and restores inheritance', async () => {

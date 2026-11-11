@@ -48,6 +48,18 @@ func (s *Service) dynamicRoutingPublication(ctx context.Context, tx pgx.Tx, scop
 	if err := loadSiteCacheStatusHeaders(ctx, tx, scopeID, facts); err != nil {
 		return siteobject.Publication{}, nil, err
 	}
+	withoutServerTimingCapability(source, facts)
+	if err := loadSiteStringSets(ctx, tx, scopeID, source, facts); err != nil {
+		return siteobject.Publication{}, nil, err
+	}
+	if err := loadSiteRUM(ctx, tx, scopeID, facts); err != nil {
+		return siteobject.Publication{}, nil, err
+	}
+	withoutRUMCapability(source, facts)
+	if err := loadSiteContentRewrite(ctx, tx, scopeID, facts); err != nil {
+		return siteobject.Publication{}, nil, err
+	}
+	withoutContentRewriteCapability(source, facts)
 	var nodePages []siteobject.NodePageV2
 	nodeAssets := map[string][]byte{}
 	if pages != nil {

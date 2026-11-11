@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: cdnca Real User Monitoring Report API
+  version: 1.0.0
+  description: >-
+    真实用户体验: Web Vitals p75 (LCP, INP, CLS, FCP, TTFB) of the sampled page views
+    of one site, per step and per page / country / device, the good / needs improvement / poor shares and
+    the top resource and request errors. Computed from per minute histograms the nodes report (within 4%).
+    No query string, IP address or visitor identifier is stored.
+paths:
+  /v1/analytics/rum:
+    get:
+      operationId: getSiteRUMReport
+      x-summary-zh: "读取会话租户网站的真实用户体验报表"
+      summary: Read the real user monitoring report of a site of the session tenant
+      security: [{bearerSession: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/Range'}
+      responses:
+        '200': {$ref: '#/components/responses/Report'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/analytics/rum:
+    get:
+      operationId: getAdminSiteRUMReport
+      x-summary-zh: "读取任意租户网站的真实用户体验报表"
+      summary: Read the real user monitoring report of a site of any tenant scope
+      security: [{bearerSession: []}]
+      x-required-permissions: [platform.admin, sites.read]
+      parameters:
+        - {name: tenant_scope_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/Range'}
+      responses:
+        '200': {$ref: '#/components/responses/Report'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerSession: {type: http, scheme: bearer, bearerFormat: opaque-session}
+  parameters:
+    SiteID: {name: site_id, in: query, required: true, schema: {type: string, format: uuid}}
+    Range:
+      name: range
+      in: query
+      required: false
+      description: 1h (1 minute steps), 24h (1 hour, default), 7d (6 hours), 30d (1 day).
+      schema: {type: string, enum: ['1h', '24h', '7d', '30d'], default: '24h'}
+  schemas:
+    P75:
+      type: object
+      description: p75 of the measured metrics only (milliseconds; cls a score).
+      additionalProperties: {type: number}
+    Breakdown:
+      type: object
+      required: [value, views, p75]
+      properties:
+        value: {type: string, description: 'page path, country code (-- unknown) or device; (other) folds the rest'}
+        views: {type: integer}
+        p75: {$ref: '#/components/schemas/P75'}
+    Report:
+      type: object
+      required: [tenant_scope_id, range, rum_sample_percent, site_id, from, to, step_seconds, views, dropped,
+        thresholds, summary, series, pages, countries, devices, errors]
+      properties:
+        tenant_scope_id: {type: string, format: uuid}
+        range: {type: string}
+        rum_sample_percent: {type: [integer, 'null'], description: the site's current setting; null is off}
+        site_id: {type: string, format: uuid}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        step_seconds: {type: integer}
+        views: {type: integer}
+        dropped: {type: integer, description: beacons the nodes refused or could not count}
+        thresholds:
+          type: object
+          additionalProperties: {type: array, items: {type: number}, minItems: 2, maxItems: 2}
+        summary:
+          type: object
+          additionalProperties:
+            type: object
+            required: [p75, samples, good, needs_improvement, poor]
+            properties:
+              p75: {type: number}
+              samples: {type: integer}
+              good: {type: number}
+              needs_improvement: {type: number}
+              poor: {type: number}
+        series:
+          type: array
+          items:
+            type: object
+            required: [at, views, p75]
+            properties:
+              at: {type: string, format: date-time}
+              views: {type: integer}
+              p75: {$ref: '#/components/schemas/P75'}
+        pages: {type: array, items: {$ref: '#/components/schemas/Breakdown'}}
+        countries: {type: array, items: {$ref: '#/components/schemas/Breakdown'}}
+        devices: {type: array, items: {$ref: '#/components/schemas/Breakdown'}}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [kind, element, target, status, count]
+            properties:
+              kind: {type: string, enum: [resource, navigation, fetch, xhr]}
+              element: {type: string}
+              target: {type: string}
+              status: {type: integer, description: 0 is a network failure}
+              count: {type: integer}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            request_id: {type: string}
+  responses:
+    Report:
+      description: The site's report.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Report'}
+    Error:
+      description: An error.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}

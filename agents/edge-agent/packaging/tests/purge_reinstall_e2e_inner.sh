@@ -112,12 +112,34 @@ systemctl is-active --quiet cdnca-edge-agent.service || fail 'refused purge stop
 systemctl is-enabled --quiet cdnca-edge-agent.service || fail 'refused purge disabled the agent'
 rm -f -- "${active_state}/unsafe-link"
 
+step 'managed WAF node: dynamic routing state naming the WAF engine'
+waf_version=/var/lib/cdnca-edge/extensions/waf-crs/versions/$(printf '%064d' 1)
+install -d -m 0750 "${waf_version}/modules" /var/lib/dynroute/shared/cache/0 /var/lib/dynroute/state/site-objects \
+  /var/lib/dynroute/state/managed-waf/v1/tiers
+printf 'elf\n' >"${waf_version}/modules/ngx_http_modsecurity_module.so"
+printf 'load_module "%s/modules/ngx_http_modsecurity_module.so";\n' "${waf_version}" >/var/lib/dynroute/shared/nginx.conf
+printf 'Include %s/rules/REQUEST-901-INITIALIZATION.conf\n' "${waf_version}" >/var/lib/dynroute/state/managed-waf/v1/tiers/pl1.conf
+printf 'object\n' >/var/lib/dynroute/state/site-objects/fixture
+printf 'cached\n' >/var/lib/dynroute/shared/cache/0/entry
+chown -R nobody /var/lib/dynroute/shared/cache
+# An operator cache disk mounted inside dynroute (tmpfs stands in for it).
+install -d /var/lib/dynroute/shared/cache/disk1
+mount -t tmpfs -o size=4m cdnca-purge-test /var/lib/dynroute/shared/cache/disk1
+printf 'kept\n' >/var/lib/dynroute/shared/cache/disk1/entry
+
 step 'uninstall.sh --purge with the L4 runtime pointer the agent writes'
 l4_version=dynroute-l4-none-$(printf '%064d' 0)
 install -d -m 0700 "${active_state}/l4-runtime" "${active_state}/l4-runtime/versions"
 install -d -m 0500 "${active_state}/l4-runtime/versions/${l4_version}"
 ln -s "versions/${l4_version}" "${active_state}/l4-runtime/current"
-/usr/libexec/cdnca-edge-agent/uninstall.sh --purge --non-interactive --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE
+/usr/libexec/cdnca-edge-agent/uninstall.sh --purge --non-interactive --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE \
+  2>"${work}/purge.err" || { cat "${work}/purge.err" >&2; fail 'purge stopped at the mount inside /var/lib/dynroute'; }
+grep -Fq '/var/lib/dynroute/shared/cache/disk1 is a mount point; purge left it' "${work}/purge.err" || fail 'purge did not report the kept mount'
+[ "$(cat /var/lib/dynroute/shared/cache/disk1/entry)" = kept ] || fail 'purge deleted the mounted content'
+[ ! -e /var/lib/dynroute/shared/nginx.conf ] && [ ! -e /var/lib/dynroute/state ] && [ ! -e /var/lib/dynroute/shared/cache/0 ] ||
+  fail 'purge left dynroute state around the mount'
+umount /var/lib/dynroute/shared/cache/disk1
+rm -r /var/lib/dynroute
 [ ! -e /var/lib/cdnca-edge-agent-backups ] || fail 'state backups left after purge'
 for unit in cdnca-edge-agent.service cdnca-edge-agent-helper.service cdnca-edge-agent-helper.socket; do
   [ "$(systemctl show "${unit}" --property=LoadState --value)" = not-found ] || fail "${unit} still loaded after purge"
@@ -126,7 +148,8 @@ done
 [ ! -e /etc/systemd/system/sockets.target.wants/cdnca-edge-agent-helper.socket ] || fail 'socket wants link left'
 pgrep -f 'cdnca-edge-agent-helper serve' >/dev/null && fail 'helper process still running'
 for path in /usr/libexec/cdnca-edge-agent-helper /var/lib/cdnca-edge-agent-helper /opt/cdnca-node /usr/local/openresty \
-  /usr/local/share/cdnca /opt/cdnca/l4geo /var/lib/cdnca-node-install /var/lib/cdnca-node-monitoring /etc/cdnca-edge-agent; do
+  /usr/local/share/cdnca /opt/cdnca/l4geo /var/lib/cdnca-node-install /var/lib/cdnca-node-monitoring /etc/cdnca-edge-agent \
+  /var/lib/cdnca-edge /var/lib/dynroute; do
   [ ! -e "${path}" ] && [ ! -L "${path}" ] || fail "${path} left after purge"
 done
 

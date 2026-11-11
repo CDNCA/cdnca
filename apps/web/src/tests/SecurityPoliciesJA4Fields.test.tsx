@@ -42,7 +42,7 @@ describe('WAF 规则条件字段：JA4 与地理', () => {
   it('groups the field options and offers JA4 and the IP intelligence fields with a one-line help', async () => {
     const { editor } = await openWAFEditor()
     openSelect(within(editor).getByRole('combobox', { name: '匹配字段' }))
-    for (const group of ['基础', '客户端', '请求头与内容', 'Bot 与指纹', '地理与网络']) {
+    for (const group of ['基础', '客户端与设备', '请求头与内容', 'Bot 与指纹', '地理与网络']) {
       expect(await screen.findByText(group, { selector: '.ant-select-item-group' })).toBeInTheDocument()
     }
     for (const label of ['TLS 指纹（JA4）', '国家/地区', 'ASN', '省份', '城市', '运营商', 'IDC 机房']) {

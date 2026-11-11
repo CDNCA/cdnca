@@ -16,6 +16,14 @@ export function mfaStepUpErrorText(error: unknown): string | null {
   return error instanceof ApiError && mfaStepUpRefusals.has(error.code) ? i18n.t(`errors:${error.code}`) : null
 }
 
+// 408 / 429 really are "try again later"; other 4xx are refusals.
+function isClientRefusal(error: ApiError): boolean {
+  return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429
+}
+
+// The generic fallbacks pages pass (请求失败，请稍后重试 / Try again later …).
+const genericRetryText = /稍后重试|稍後重試|稍后再试|稍後再試|try again later/i
+
 export function localizedUnknownApiError(error: unknown, fallback: string): string {
   const stepUp = mfaStepUpErrorText(error)
   if (stepUp) return stepUp
@@ -29,6 +37,20 @@ export function localizedUnknownApiError(error: unknown, fallback: string): stri
   // A structured publish refusal (rule packs / capability) names the nodes
   // instead of a generic failure (ui-errmsg-1024 N17).
   if (error instanceof ApiError) fallback = publishRefusalText(error) ?? fallback
+  // a 4xx is a definite refusal, so "try again later" is wrong.
+  // Only a generic retry fallback is replaced; page-specific texts stay.
+  if (error instanceof ApiError && isClientRefusal(error) && genericRetryText.test(fallback)) {
+    // Only registered texts are shown; the server's own message is never displayed.
+    if (i18n.exists(`errors:${error.code}`)) {
+      const reason = i18n.t(`errors:${error.code}`)
+      return error.requestId
+        ? i18n.t('errors:refusedWithRequestId', { reason, code: error.code, requestId: error.requestId })
+        : i18n.t('errors:refused', { reason, code: error.code })
+    }
+    return error.requestId
+      ? i18n.t('errors:refusedUnregisteredWithRequestId', { code: error.code, requestId: error.requestId })
+      : i18n.t('errors:refusedUnregistered', { code: error.code })
+  }
   return error instanceof ApiError && error.requestId
     ? `${fallback}（${i18n.t('errors:requestId', { requestId: error.requestId })}）`
     : fallback

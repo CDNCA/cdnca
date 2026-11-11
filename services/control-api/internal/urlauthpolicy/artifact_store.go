@@ -68,65 +68,15 @@ func (service *ArtifactPublicationService) loadMaterial(
 		if configurationScopeID != targetScopeID {
 			return ErrConflict
 		}
-		var raw []byte
-		var revision int64
-		var enabled bool
-		err = tx.QueryRow(ctx, `SELECT p.tenant_id,p.site_id,p.revision,p.enabled,v.edge_snapshot
-			FROM url_auth_policies p JOIN url_auth_policy_versions v ON v.policy_id=p.id AND v.revision=p.revision
-			WHERE p.id=$1 FOR SHARE OF p`, policyID).Scan(
-			&material.TenantID, &material.SiteID, &revision, &enabled, &raw,
-		)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
+		loaded, err := loadMaterialTx(ctx, tx, service.cipher, policyID)
 		if err != nil {
 			return err
 		}
-		if !enabled || revision <= 0 || material.TenantID != authorizedTenantID {
+		material = loaded
+		if material.TenantID != authorizedTenantID {
 			return ErrConflict
 		}
-		material.PolicyID, material.Revision = policyID, uint64(revision)
-		if err := json.Unmarshal(raw, &material.Snapshot); err != nil {
-			return ErrUnavailable
-		}
-		rows, err := tx.Query(ctx, `SELECT key_id,role,kek_key_id,ciphertext,secret_digest
-			FROM url_auth_policy_keys WHERE policy_id=$1 AND role IN ('current','previous')
-			ORDER BY CASE role WHEN 'current' THEN 0 ELSE 1 END`, policyID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var keyID, role, kekID string
-			var ciphertext, digest []byte
-			if err := rows.Scan(&keyID, &role, &kekID, &ciphertext, &digest); err != nil {
-				return err
-			}
-			associatedData := []byte("cdnca-control-url-auth/key-envelope/v1\x00" + policyID.String() + "\x00" + keyID + "\x00current")
-			secret, err := service.cipher.DecryptBound(kekID, ciphertext, associatedData)
-			zeroBytes(ciphertext)
-			if err != nil {
-				zeroBytes(secret)
-				return ErrEncryptionUnavailable
-			}
-			calculated := service.cipher.SecretDigest(secret)
-			if len(digest) != len(calculated) || !hmac.Equal(digest, calculated[:]) {
-				zeroBytes(secret)
-				return ErrEncryptionUnavailable
-			}
-			keyFile, ok := artifactKeyFile(material.Snapshot, role, keyID)
-			if !ok {
-				zeroBytes(secret)
-				return ErrConflict
-			}
-			material.Keys = append(material.Keys, ArtifactSecret{KeyID: keyID, KeyFile: keyFile, Secret: secret})
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		if len(material.Keys) == 0 || len(material.Keys) > 2 {
-			return ErrConflict
-		}
+		revision := int64(material.Revision)
 		item, err := selectPolicy(ctx, tx, policyID)
 		if err != nil {
 			return err
@@ -152,4 +102,75 @@ func artifactKeyFile(snapshot EdgePolicy, role, keyID string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// loadMaterialTx reads an enabled policy's current version and decrypted
+// keys in tx (no authorization: the caller authorized the policy).
+func loadMaterialTx(ctx context.Context, tx pgx.Tx, cipher BoundSecretCipher, policyID uuid.UUID) (material ArtifactMaterial, err error) {
+	defer func() {
+		if err != nil {
+			clearArtifactSecrets(material.Keys)
+			material = ArtifactMaterial{}
+		}
+	}()
+	var raw []byte
+	var revision int64
+	var enabled bool
+	err = tx.QueryRow(ctx, `SELECT p.tenant_id,p.site_id,p.revision,p.enabled,v.edge_snapshot
+		FROM url_auth_policies p JOIN url_auth_policy_versions v ON v.policy_id=p.id AND v.revision=p.revision
+		WHERE p.id=$1 FOR SHARE OF p`, policyID).Scan(
+		&material.TenantID, &material.SiteID, &revision, &enabled, &raw,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ArtifactMaterial{}, ErrNotFound
+	}
+	if err != nil {
+		return ArtifactMaterial{}, err
+	}
+	if !enabled || revision <= 0 {
+		return ArtifactMaterial{}, ErrConflict
+	}
+	material.PolicyID, material.Revision = policyID, uint64(revision)
+	if err := json.Unmarshal(raw, &material.Snapshot); err != nil {
+		return ArtifactMaterial{}, ErrUnavailable
+	}
+	rows, err := tx.Query(ctx, `SELECT key_id,role,kek_key_id,ciphertext,secret_digest
+		FROM url_auth_policy_keys WHERE policy_id=$1 AND role IN ('current','previous')
+		ORDER BY CASE role WHEN 'current' THEN 0 ELSE 1 END`, policyID)
+	if err != nil {
+		return ArtifactMaterial{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var keyID, role, kekID string
+		var ciphertext, digest []byte
+		if err := rows.Scan(&keyID, &role, &kekID, &ciphertext, &digest); err != nil {
+			return ArtifactMaterial{}, err
+		}
+		associatedData := []byte("cdnca-control-url-auth/key-envelope/v1\x00" + policyID.String() + "\x00" + keyID + "\x00current")
+		secret, err := cipher.DecryptBound(kekID, ciphertext, associatedData)
+		zeroBytes(ciphertext)
+		if err != nil {
+			zeroBytes(secret)
+			return ArtifactMaterial{}, ErrEncryptionUnavailable
+		}
+		calculated := cipher.SecretDigest(secret)
+		if len(digest) != len(calculated) || !hmac.Equal(digest, calculated[:]) {
+			zeroBytes(secret)
+			return ArtifactMaterial{}, ErrEncryptionUnavailable
+		}
+		keyFile, ok := artifactKeyFile(material.Snapshot, role, keyID)
+		if !ok {
+			zeroBytes(secret)
+			return ArtifactMaterial{}, ErrConflict
+		}
+		material.Keys = append(material.Keys, ArtifactSecret{KeyID: keyID, KeyFile: keyFile, Secret: secret})
+	}
+	if err := rows.Err(); err != nil {
+		return ArtifactMaterial{}, err
+	}
+	if len(material.Keys) == 0 || len(material.Keys) > 2 {
+		return ArtifactMaterial{}, ErrConflict
+	}
+	return material, nil
 }

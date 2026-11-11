@@ -230,7 +230,7 @@ func TestPublicationCoordinatorDefersNodesWithoutChallengePoW(t *testing.T) {
 	}
 	planner := &publicationPlannerStub{plan: PublicationPlan{NodeIDs: []uuid.UUID{capable},
 		UnsupportedNodeIDs:   []uuid.UUID{unsupported},
-		RequiredCapabilities: challengepublication.RequiredCapabilities(true),
+		RequiredCapabilities: challengepublication.RequiredCapabilities(true, false),
 		HealthCheck: edgedeployment.HealthCheckPolicy{ActivationTimeout: time.Second,
 			ObservationWindow: time.Second, RequiredConsecutiveSuccesses: 1}, Deadline: time.Now().Add(time.Minute)}}
 	verifier := &publicationVerifierStub{nodes: []uuid.UUID{capable}}

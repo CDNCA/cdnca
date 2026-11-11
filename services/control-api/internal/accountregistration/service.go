@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/mail"
 	"regexp"
@@ -58,6 +57,7 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 	if err != nil {
 		return RegisterResult{}, err
 	}
+	var required []string
 	if err := normalizeRegistrationInput(&input, phoneCode); err != nil {
 		return RegisterResult{}, err
 	}
@@ -76,6 +76,11 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 			policy.EmailVerificationRequired && input.Email == "" || policy.PhoneVerificationRequired && input.Phone == "" {
 			return RegisterResult{}, ErrInvalidInput
 		}
+		required = RequiredProofChannels(policy)
+	}
+	if len(required) == 0 {
+		// No verification required (or no policy reader): the chosen channel.
+		required = []string{input.VerificationChannel}
 	}
 	subjectDigest, err := service.subjectDigest(input)
 	if err != nil {
@@ -90,25 +95,13 @@ func (service *Service) Register(ctx context.Context, input RegisterInput) (Regi
 	if !allowed {
 		return RegisterResult{}, ErrRateLimited
 	}
-	destination := input.Email
-	if input.VerificationChannel == VerificationSMS {
-		destination = input.Phone
-	}
-	proof, err := service.proofs.VerifyAndConsume(ctx, RegistrationProofRequest{
-		Reference: input.ProofReference, Channel: input.VerificationChannel, Destination: destination,
-		Source: input.Source, IdempotencyKey: input.IdempotencyKey, SubjectDigest: subjectDigest,
-	})
-	if err != nil {
-		if errors.Is(err, ErrProofInvalid) {
-			return RegisterResult{}, ErrProofInvalid
-		}
-		return RegisterResult{}, fmt.Errorf("%w: %v", ErrProofUnavailable, err)
-	}
 	now := service.now().UTC().Truncate(time.Microsecond)
-	if !validRegistrationProof(proof, input.VerificationChannel, destination, now) {
-		return RegisterResult{}, ErrProofInvalid
+	evidence, err := consumeProofs(ctx, service.proofs, input, required, subjectDigest, now)
+	if err != nil {
+		return RegisterResult{}, err
 	}
-	requestDigest, err := service.requestDigest(input, proof.EvidenceID)
+	input.VerificationChannel = required[0]
+	requestDigest, err := service.requestDigest(input, evidence)
 	if err != nil {
 		return RegisterResult{}, fmt.Errorf("digest account registration request: %w", err)
 	}
@@ -155,8 +148,7 @@ func (service *Service) phoneCountryCode(ctx context.Context, input RegisterInpu
 }
 
 func normalizeRegistrationInput(input *RegisterInput, phoneCode string) error {
-	if len(input.ProofReference) < 22 || len(input.ProofReference) > 4096 ||
-		!registrationProofPattern.MatchString(input.ProofReference) || strings.TrimSpace(input.ProofReference) != input.ProofReference {
+	if !validProofReferences(*input) {
 		return ErrInvalidInput
 	}
 	return normalizeRegistrationFields(input, phoneCode)
@@ -211,7 +203,9 @@ func normalizeRegistrationFields(input *RegisterInput, phoneCode string) error {
 	return nil
 }
 
-func (service *Service) requestDigest(input RegisterInput, proofEvidenceID uuid.UUID) ([32]byte, error) {
+// requestDigest binds the request to its evidence: the proof evidence id(s)
+// joined by "," (consumeProofs), or the built-in CAPTCHA id.
+func (service *Service) requestDigest(input RegisterInput, proofEvidenceID string) ([32]byte, error) {
 	request, err := json.Marshal(struct {
 		Username            string `json:"username"`
 		Password            string `json:"password"`
@@ -223,7 +217,7 @@ func (service *Service) requestDigest(input RegisterInput, proofEvidenceID uuid.
 		ProofEvidenceID     string `json:"proof_evidence_id"`
 	}{
 		input.Username, input.Password, input.DisplayName, input.Email, input.Phone,
-		input.TermsVersion, input.VerificationChannel, proofEvidenceID.String(),
+		input.TermsVersion, input.VerificationChannel, proofEvidenceID,
 	})
 	if err != nil {
 		return [32]byte{}, err

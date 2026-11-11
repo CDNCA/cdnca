@@ -24,7 +24,7 @@ const RulePlanSchema = "cdnca.edge.rule-plan/v1"
 // two-policy / MaxSecurityRulesPerSite limits of bound site policies.
 const (
 	MaxRulePlanSegments = 32
-	// MaxRulePlanRules: official rules only accumulate (ADR 0011 §6.5); a
+	// MaxRulePlanRules: official rules only accumulate (ADR 0011); a
 	// plan this large is run through its match index (libs/rulepack
 	// CompileMatchIndex), whose compiled cost budget is the real bound.
 	MaxRulePlanRules = 65536
@@ -83,6 +83,10 @@ const (
 	RuleOpIPIntel       = "ip_intel"        // value: cdnca_iplib.match(value) spec
 	RuleOpInspect       = "inspect"         // value: cdnca_waf.inspect(value) JSON
 	RuleOpIPList        = "ip_list"         // value: cdnca_waf.ip_list(value) spec (IPListConditionSpec)
+	// WAF v6: RuleOpStringSet (StringSetConditionSpec, the
+	// set itself in RulePlan.StringSets), RuleOpBrowserIn, RuleOpBrowserVersion,
+	// RuleOpDeviceIn and RuleOpTimeWindow (the condition's Spec) are declared
+	// in waf_string_set.go and waf_client_conditions.go.
 )
 
 type RulePlan struct {
@@ -94,6 +98,11 @@ type RulePlan struct {
 	// Index is the compiled match index (libs/rulepack MatchIndex,
 	// cdnca.edge.rule-index/v1); without it the interpreter tries every rule.
 	Index json.RawMessage `json:"index,omitempty"`
+	// StringSets are the sets the string_set conditions reference (the site
+	// object's security.string_sets); the interpreter refuses
+	// the plan when a referenced (id, revision) is missing. Absent without
+	// string set conditions.
+	StringSets []WAFStringSet `json:"string_sets,omitempty"`
 }
 
 type RulePlanSegment struct {
@@ -145,17 +154,37 @@ type RulePlanSegmentInput struct {
 // overflowBlocks is headerOverflowBlocks of the site (managed WAF inspection
 // limit action block); telemetry is SecurityListener.Telemetry.
 func CompileSecurityRulePlan(policies []SecurityPolicy, overflowBlocks, telemetry bool) (RulePlan, error) {
-	return CompileSiteSecurityRulePlan("", policies, overflowBlocks, telemetry)
+	return CompileSiteSecurityRulePlan("", policies, nil, overflowBlocks, telemetry)
 }
 
 // CompileSiteSecurityRulePlan is CompileSecurityRulePlan for the listener of
 // site siteID (the WAF v2 ban scope, as RenderSecurityFragmentsAt renders it).
-func CompileSiteSecurityRulePlan(siteID string, policies []SecurityPolicy, overflowBlocks, telemetry bool) (RulePlan, error) {
+// stringSets is the site object's security.string_sets: the plan carries it
+// as is, and every string set condition must name one of its (id, revision).
+func CompileSiteSecurityRulePlan(siteID string, policies []SecurityPolicy, stringSets []WAFStringSet, overflowBlocks, telemetry bool) (RulePlan, error) {
 	normalized, err := normalizeSecurityPolicies(policies)
 	if err != nil {
 		return RulePlan{}, err
 	}
-	return buildRulePlan(normalized, nil, overflowBlocks, telemetry, siteID)
+	plan, err := buildRulePlan(normalized, nil, overflowBlocks, telemetry, siteID)
+	if err != nil {
+		return RulePlan{}, err
+	}
+	revisions := make(map[string]int64, len(stringSets))
+	for _, set := range stringSets {
+		revisions[set.ID] = set.Revision
+	}
+	for _, policy := range normalized {
+		for _, rule := range policy.Rules {
+			for _, ref := range rule.Match.StringSets {
+				if revision, ok := revisions[ref.SetID]; !ok || revision != ref.Revision {
+					return RulePlan{}, ErrInvalidConfig
+				}
+			}
+		}
+	}
+	plan.StringSets = stringSets
+	return plan, nil
 }
 
 // CompileLayeredRulePlan compiles ordered rule-pack segments. Each segment
@@ -294,11 +323,28 @@ func rulePlanConditions(rule WAFRule) ([]RulePlanCondition, error) {
 	if match.NotJA4 != nil {
 		conditions = append(conditions, RulePlanCondition{Op: RuleOpJA4NotIn, Values: append([]string(nil), match.NotJA4...)})
 	}
+	// WAF v6 client conditions: after ja4_not_in, before ip_intel.
+	if match.Browser != nil {
+		conditions = append(conditions, RulePlanCondition{Op: RuleOpBrowserIn, Value: match.Browser.Spec()})
+	}
+	if match.BrowserVersion != nil {
+		conditions = append(conditions, RulePlanCondition{Op: RuleOpBrowserVersion, Value: match.BrowserVersion.Spec()})
+	}
+	if match.Device != nil {
+		conditions = append(conditions, RulePlanCondition{Op: RuleOpDeviceIn, Value: match.Device.Spec()})
+	}
+	if match.Time != nil {
+		conditions = append(conditions, RulePlanCondition{Op: RuleOpTimeWindow, Value: match.Time.Spec()})
+	}
 	for _, condition := range match.IPIntel {
 		conditions = append(conditions, RulePlanCondition{Op: RuleOpIPIntel, Value: IPIntelConditionSpec(condition)})
 	}
 	for _, list := range match.IPLists {
 		conditions = append(conditions, RulePlanCondition{Op: RuleOpIPList, Value: IPListConditionSpec(list)})
+	}
+	// WAF v6 string sets: after ip_list, before inspect.
+	for _, ref := range match.StringSets {
+		conditions = append(conditions, RulePlanCondition{Op: RuleOpStringSet, Value: StringSetConditionSpec(ref)})
 	}
 	for _, inspect := range match.Inspect {
 		conditions = append(conditions, RulePlanCondition{Op: RuleOpInspect, Value: wafInspectJSON(inspect)})

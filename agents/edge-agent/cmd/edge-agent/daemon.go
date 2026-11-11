@@ -480,10 +480,11 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 			return nil
 		}
 	}
-	urlAuthRuntime, err := urlauth.NewArtifactRuntime(filepath.Join(config.DeploymentRoot, "urlauth"))
+	urlAuthArtifacts, err := urlauth.NewArtifactRuntime(filepath.Join(config.DeploymentRoot, "urlauth"))
 	if err != nil {
 		return nil, fmt.Errorf("configure URL auth artifact runtime: %w", err)
 	}
+	urlAuthRuntime := urlAuthReapplyingRuntime{runtime: urlAuthArtifacts, reapply: dynamicManager.Reapply}
 	cacheTaskConfig, err := config.CacheTask.config()
 	if err != nil {
 		return nil, err
@@ -566,6 +567,13 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		// The key document's withheld websites are left out
 		// (gatewayclient SelectNodeSites)
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_SITE_SELECTION, ApiVersion: siteobject.SiteSelectionAPIVersion},
+		// the site object's server_timing; cdnca_filters
+		// answers Server-Timing (slot 3b) and an L2 its X-Cdnca-L2-Cache.
+		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_SITE_SERVER_TIMING, ApiVersion: siteobject.ServerTimingAPIVersion},
+		// Site objects with rum (cdnca_rum, /rum-minutes)
+		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_SITE_RUM, ApiVersion: siteobject.RUMAPIVersion},
+		// Site objects with content_rewrite (cdnca_rewrite)
+		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_SITE_CONTENT_REWRITE, ApiVersion: siteobject.ContentRewriteAPIVersion},
 		// fz-x12: the node's region is the key document's node_region
 		// (dynroute.Input.NodeRegion); the agent has no region setting.
 		&agentv1.Capability{Name: agentv1.CapabilityName_CAPABILITY_NAME_NODE_REGION, ApiVersion: siteobject.NodeRegionAPIVersion},
@@ -829,6 +837,11 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if dynamicManager != nil {
 		clientOptions = append(clientOptions, gatewayclient.WithDynamicRouting(dynamicManager))
 	}
+	challengeConsumer, err := dynamicRoutingChallengeConsumer(config)
+	if err != nil {
+		return nil, fmt.Errorf("initialize challenge consumer: %w", err)
+	}
+	clientOptions = append(clientOptions, gatewayclient.WithChallengeConsumer(challengeConsumer))
 	clientOptions = append(clientOptions, gatewayclient.WithGatewayEndpointLearner(dialer.Learn))
 	client, err := gatewayclient.New(clientConfig, dialer, manager, trust, clientOptions...)
 	if err != nil {

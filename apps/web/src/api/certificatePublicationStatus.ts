@@ -13,6 +13,8 @@ export interface CertificatePublicationDetail {
     rollout_id?: string; rollout_revision?: number
     // 迁移 612：解绑时证书从未下发到节点，无 rollout 直接完成
     noop_reason?: 'never_published'
+    // 迁移 657：发布曾永久失败，证书补发送到全部节点后以 succeeded 结束，无发布结果
+    recovered_by_rollout_id?: string
   }
   history: PublicationEvent[]
 }
@@ -44,6 +46,11 @@ export function parseCertificatePublication(value: unknown): value is Certificat
   const last = history[history.length - 1]
   if (last.sequence !== current.state_sequence || last.state !== current.state || last.attempt !== current.attempt ||
     last.occurred_at !== current.occurred_at || last.failure_code !== current.failure_code || last.next_attempt_at !== current.next_attempt_at) return false
+  if (current.recovered_by_rollout_id !== undefined) {
+    return typeof current.recovered_by_rollout_id === 'string' && uuid.test(current.recovered_by_rollout_id) &&
+      current.state === 'succeeded' && current.operation === 'publish' && current.noop_reason === undefined &&
+      [current.publication_id, current.publication_revision, current.config_version_id, current.rollout_id, current.rollout_revision].every((field) => field === undefined)
+  }
   if (current.noop_reason !== undefined) {
     return current.noop_reason === 'never_published' && current.state === 'succeeded' && current.operation === 'unpublish' &&
       [current.publication_id, current.publication_revision, current.config_version_id, current.rollout_id, current.rollout_revision].every((field) => field === undefined)
@@ -77,7 +84,7 @@ export function certificateBindingPublicationState(
     current.default !== binding.default || current.operation !== (binding.bound ? 'publish' : 'unpublish')) return 'unknown'
   if (current.state === 'permanent_failed') return 'failed'
   if (current.state !== 'succeeded') return 'pending'
-  if (current.noop_reason === 'never_published') return 'complete'
+  if (current.noop_reason === 'never_published' || current.recovered_by_rollout_id !== undefined) return 'complete'
   if (!parseCertificateRollout(rollout) || rollout.id !== current.rollout_id || rollout.config_version_id !== current.config_version_id ||
     (rollout.configuration_scope_id !== undefined && rollout.configuration_scope_id !== binding.tenant_scope_id) ||
     rollout.revision !== current.rollout_revision || rollout.action !== 'apply' || rollout.state !== 'succeeded' || rollout.progress.succeeded !== rollout.progress.total) return 'unknown'

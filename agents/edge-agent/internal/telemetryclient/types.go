@@ -29,6 +29,11 @@ type Record struct {
 	LastEventID   string
 	EventCount    int
 	Payload       []byte
+
+	// trusted: built by Publisher.trustedRecord from an event spool
+	// envelope whose events all have siteID and no package subscription.
+	trusted bool
+	siteID  string
 }
 
 // ConnectionsRecord is the in-memory form of one eventspool connections

@@ -14,6 +14,48 @@ security: []
 tags:
   - name: Account registration challenge
 paths:
+  /v1/auth/registration-config:
+    get:
+      tags: [Account registration challenge]
+      operationId: getAccountRegistrationConfig
+      x-summary-zh: "注册与找回密码页面的公开配置：要求哪些验证、各通道能否发码、人机校验方式"
+      summary: Public sign-up and password-reset configuration
+      description: >-
+        What every sign-up and password-reset page (console and website themes) shows. email / sms
+        "required" follows the email / phone verification switches; "available" means a code can be
+        sent now (sender configured and the channel switched on). human_check guards sending a code:
+        builtin_captcha (POST /v1/auth/login-captchas; human_token = "captcha:<id>:<answer>") or
+        turnstile. ready is false while a required verification cannot be sent.
+      responses:
+        '200':
+          description: The configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [registration_enabled, mode, human_check, turnstile_site_key, terms_version, email, sms, email_required, phone_required, ready, recovery]
+                    properties:
+                      registration_enabled: {type: boolean}
+                      mode: {type: string, enum: [builtin, verified, closed]}
+                      human_check: {type: string, enum: [builtin_captcha, turnstile]}
+                      turnstile_site_key: {type: string}
+                      terms_version: {type: string}
+                      email: {$ref: '#/components/schemas/RegistrationChannel'}
+                      sms: {$ref: '#/components/schemas/RegistrationChannel'}
+                      email_required: {type: boolean}
+                      phone_required: {type: boolean}
+                      ready: {type: boolean}
+                      recovery:
+                        type: object
+                        required: [enabled, channels]
+                        properties:
+                          enabled: {type: boolean}
+                          channels: {type: array, items: {type: string, enum: [email, sms]}}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
   /v1/auth/registration-challenges:
     post:
       tags: [Account registration challenge]
@@ -62,7 +104,10 @@ paths:
           headers:
             X-Request-ID: {$ref: '#/components/headers/RequestID'}
             Set-Cookie:
-              description: Secure, HttpOnly, SameSite=Strict, host-only registration proof cookie.
+              description: >-
+                Secure, HttpOnly, SameSite=Strict, host-only registration proof cookie, one per
+                verified channel (__Host-cdnca_registration_proof_email / _sms) so that several
+                required verifications can all be proved; registration reads both.
               schema: {type: string}
         '409': {$ref: '#/components/responses/ErrorResponse'}
         '422': {$ref: '#/components/responses/ErrorResponse'}
@@ -110,6 +155,12 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}
   schemas:
+    RegistrationChannel:
+      type: object
+      required: [required, available]
+      properties:
+        required: {type: boolean}
+        available: {type: boolean}
     ChallengeRequest:
       type: object
       additionalProperties: false

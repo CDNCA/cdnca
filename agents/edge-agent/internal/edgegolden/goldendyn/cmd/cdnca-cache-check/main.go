@@ -64,7 +64,7 @@ var (
 	// chunked: every node with cache zones caches large objects in chunks
 	// (ADR 0021, on by default), unless a part sets its own pool
 	chunked = flag.Bool("chunked", false, "nodes run the chunked range cache")
-	only    = flag.String("only", "", "comma separated parts: functional,extensions,rulematch,ruleextras,follow,statusheader,scale; rangebase, chunk, chunkbase, chunksizes, slicebg, purgeindex only when named")
+	only    = flag.String("only", "", "comma separated parts: functional,extensions,rulematch,ruleextras,follow,statusheader,servertiming,scale; rangebase, chunk, chunkbase, chunksizes, slicebg, purgeindex only when named")
 	// purgeindex: rounds of fill + purge, each fillTime long
 	rounds    = flag.Int("rounds", 5, "purgeindex rounds")
 	fillTime  = flag.Duration("fill", 20*time.Second, "purgeindex traffic per round")
@@ -147,6 +147,12 @@ func (o *originServer) ServeHTTP(writer http.ResponseWriter, request *http.Reque
 		writer.Header().Set("Cache-Control", "max-age=60")
 	case strings.HasPrefix(path, "/nostore/"):
 		writer.Header().Set("Cache-Control", "no-store")
+	case strings.HasPrefix(path, "/st-origin/"):
+		// an origin with its own Server-Timing (servertiming: appended to)
+		writer.Header().Set("Server-Timing", "app;dur=7")
+	case strings.HasPrefix(path, "/l2forge/"):
+		// an origin answering the L2's own cache status header
+		writer.Header().Set("X-Cdnca-L2-Cache", "HIT")
 	case strings.HasPrefix(path, "/forge/"):
 		// an origin answering the edge's own cache headers
 		writer.Header().Set("X-CDN-Cache", "HIT-FORGED")
@@ -263,19 +269,25 @@ func startNode(sites []edgesite.Site, pool edgecache.Pool) (*node, error) {
 // startNodeWith: referenced objects (error page bodies) are supplied with
 // every site object.
 func startNodeWith(sites []edgesite.Site, pool edgecache.Pool, referenced map[string][]byte) (*node, error) {
+	return startNodeAt(*state, nil, sites, pool, referenced)
+}
+
+// startNodeAt: a node under its own state root (a second node beside the
+// first, servertiming's L2), with the given node networks.
+func startNodeAt(root string, nodeNetworks []string, sites []edgesite.Site, pool edgecache.Pool, referenced map[string][]byte) (*node, error) {
 	if *chunked && pool.Zones > 0 && pool.ChunkBytes == 0 {
 		pool.ChunkBytes = edgecache.ChunkBytes
 	}
-	n := &node{root: *state, pool: pool}
+	n := &node{root: root, pool: pool}
 	_ = n.openresty("-s", "stop")
 	time.Sleep(200 * time.Millisecond)
-	_ = os.RemoveAll(*state)
+	_ = os.RemoveAll(root)
 	for _, dir := range []string{"logs", "run", "site-index", "site-objects", "temp", "shared/cache"} {
-		if err := os.MkdirAll(filepath.Join(*state, dir), 0o777); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o777); err != nil {
 			return nil, err
 		}
 	}
-	_ = os.Chmod(filepath.Join(*state, "shared", "cache"), 0o777)
+	_ = os.Chmod(filepath.Join(root, "shared", "cache"), 0o777)
 	ports, err := edgesite.PortProfiles(sites)
 	if err != nil {
 		return nil, err
@@ -284,20 +296,20 @@ func startNodeWith(sites []edgesite.Site, pool edgecache.Pool, referenced map[st
 	for _, s := range sites {
 		keys += len(s.IndexEntries())
 	}
-	conf, err := goldendyn.Config(goldendyn.ConfigInput{Root: *state, LuaRoot: *luaRoot, Ports: ports, IndexKeys: keys, Workers: *workers, Cache: pool})
+	conf, err := goldendyn.Config(goldendyn.ConfigInput{Root: root, LuaRoot: *luaRoot, Ports: ports, IndexKeys: keys, Workers: *workers, Cache: pool, NodeNetworks: nodeNetworks})
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(*state, "nginx.conf"), conf, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "nginx.conf"), conf, 0o644); err != nil {
 		return nil, err
 	}
 	if err := n.openresty(); err != nil {
 		return nil, err
 	}
-	control := siteindex.NewControl(filepath.Join(*state, "run", "cdnca-site-admin.sock"))
+	control := siteindex.NewControl(filepath.Join(root, "run", "cdnca-site-admin.sock"))
 	n.activator = &siteindex.Activator{Control: control,
-		Files:   siteindex.Files{Root: filepath.Join(*state, "site-index"), Access: siteindex.Access{GID: workerGID()}},
-		Objects: siteindex.ObjectDir{Root: filepath.Join(*state, "site-objects"), Access: siteindex.Access{GID: workerGID()}}}
+		Files:   siteindex.Files{Root: filepath.Join(root, "site-index"), Access: siteindex.Access{GID: workerGID()}},
+		Objects: siteindex.ObjectDir{Root: filepath.Join(root, "site-objects"), Access: siteindex.Access{GID: workerGID()}}}
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		if _, err := control.Status(context.Background()); err == nil {
 			break
@@ -325,8 +337,8 @@ func startNodeWith(sites []edgesite.Site, pool edgecache.Pool, referenced map[st
 	if err := n.activator.WaitGeneration(context.Background(), activation.Generation); err != nil {
 		return nil, err
 	}
-	n.control = dyncache.UnixControl{Socket: filepath.Join(*state, "run", "cdnca-site-admin.sock")}
-	n.generations = &dyncache.Generations{Path: filepath.Join(*state, "generations.json"), Control: n.control}
+	n.control = dyncache.UnixControl{Socket: filepath.Join(root, "run", "cdnca-site-admin.sock")}
+	n.generations = &dyncache.Generations{Path: filepath.Join(root, "generations.json"), Control: n.control}
 	n.prewarmer = dyncache.Prewarmer{Token: strings.Repeat("ab", 32), Address: "127.0.0.1", Timeout: 10 * time.Second, MaxBytes: 64 << 20}
 	return n, nil
 }
@@ -1253,6 +1265,10 @@ func main() {
 	if len(parts) == 0 || parts["statusheader"] {
 		fmt.Println("== statusheader")
 		statusHeader(o)
+	}
+	if len(parts) == 0 || parts["servertiming"] {
+		fmt.Println("== servertiming")
+		serverTiming(o)
 	}
 	// large object runs only on request (minutes, GiBs through the cache)
 	if parts["rangebase"] || parts["chunk"] || parts["chunkbase"] || parts["chunksizes"] || parts["slicebg"] {

@@ -450,6 +450,12 @@ type ConfigInput struct {
 	SiteGzip bool
 	// Telemetry renders the node-level access/security logs (D12).
 	Telemetry bool
+	// NodeNetworks are the platform's node networks (edgeskeleton
+	// Input.NodeNetworks): an L2 hop from one of them is trusted.
+	NodeNetworks []string
+	// SiteRUM renders the real user monitoring dictionary and control
+	// location (edgeskeleton.SiteRUMFromSites).
+	SiteRUM bool
 }
 
 // SharedDirectory (under Root) holds the error log, pid, temp and cache
@@ -488,6 +494,7 @@ func Config(input ConfigInput) ([]byte, error) {
 	conf, err := edgeskeleton.Render(edgeskeleton.Input{Ports: input.Ports, IndexKeys: input.IndexKeys, Node: node,
 		Cache: input.Cache, Challenges: input.Challenges, HealthPort: input.HealthPort, ManagedWAF: input.ManagedWAF,
 		Schedule302: input.Schedule302, UnknownSite: input.UnknownSite, AutoDefense: input.AutoDefense, SiteGzip: input.SiteGzip, Telemetry: input.Telemetry,
+		NodeNetworks: input.NodeNetworks, SiteRUM: input.SiteRUM,
 		// the ACME overlay as v7 renders it (no token is ever published in
 		// the golden: a matching token answers 404 from the empty overlay)
 		ACMEOverlayRoot: input.Root,

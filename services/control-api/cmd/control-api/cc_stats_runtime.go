@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -10,8 +11,10 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/httpapi"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketsecurityhttp"
+	"github.com/cdnca/cdnca/services/control-api/internal/rumhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/securityanalytics"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,6 +26,8 @@ type ccStatsRuntime struct {
 	handler httpapi.MountedHandlerFactory
 	// market serves relayed market attack logs (ML-21) from the same reader.
 	market httpapi.MountedHandlerFactory
+	// rum serves the real user monitoring report from the same reader.
+	rum httpapi.MountedHandlerFactory
 }
 
 func openCCStatsRuntime(cfg config.Config, pool *pgxpool.Pool, authenticate func(context.Context, string) (identity.AuthenticatedSession, error)) (*ccStatsRuntime, error) {
@@ -44,6 +49,20 @@ func openCCStatsRuntime(cfg config.Config, pool *pgxpool.Pool, authenticate func
 			return nil, err
 		}
 		runtime.handler = func() (http.Handler, error) { return handler, nil }
+		rum, err := rumhttp.NewHandler(rumhttp.Dependencies{Reader: reader, AuthenticateSession: authenticate,
+			SiteRUM: func(ctx context.Context, tenant, site uuid.UUID) (bool, *int, error) {
+				var percent *int
+				err := pool.QueryRow(ctx, `SELECT rum_sample_percent FROM sites WHERE scope_id=$1 AND id=$2 AND deleted_at IS NULL`,
+					tenant, site).Scan(&percent)
+				if errors.Is(err, pgx.ErrNoRows) {
+					return false, nil, nil
+				}
+				return err == nil, percent, err
+			}})
+		if err != nil {
+			return nil, err
+		}
+		runtime.rum = func() (http.Handler, error) { return rum, nil }
 		market, err := marketsecurityhttp.NewHandler(reader, authenticate)
 		if err != nil {
 			return nil, err

@@ -174,9 +174,10 @@ func TestHTTPPolicyHTTPCRUDIsolationAndRBAC(t *testing.T) {
 	response = fixture.request(t, "owner-b", http.MethodPatch, itemPath(fixture.tenantA, platformCreated.ID),
 		map[string]any{"config": config}, "cross-tenant-update", `"1"`)
 	assertHTTPError(t, response, http.StatusNotFound, "not_found")
+	// platform.admin 通配符身份可操作任何租户资源（含读取站点 HTTP 策略）。
 	if _, err := fixture.service.List(context.Background(), fixture.legacyPlatform, ListFilter{
 		TargetScopeID: fixture.tenantA, Limit: 10,
-	}); !errors.Is(err, ErrPermissionDenied) {
+	}); err != nil {
 		t.Fatalf("platform.admin wildcard list error=%v", err)
 	}
 

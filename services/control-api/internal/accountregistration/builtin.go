@@ -15,14 +15,20 @@ import (
 // (ACCOUNT_REGISTRATION_ENABLED=false, the fresh-install default) registers
 // with the built-in image CAPTCHA (POST /v1/auth/login-captchas, the same
 // "本地验证码" the sign-in throttle uses) instead of Turnstile plus a contact
-// code. It is still gated by the 开放注册 switch, and refused while the
-// platform asks for a verified email or phone, which it cannot prove.
+// code. It is still gated by the 开放注册 switch.
+//
+// while the platform asks for a verified email and/or
+// phone, the human check moves to sending the code (the challenge service
+// spends the image CAPTCHA) and the registration must carry one verified
+// proof per required channel (EnableContactVerification); without the
+// contact verification runtime (no notification runtime) such a policy is
+// refused with ErrContactVerificationUnavailable.
 
 var (
 	// ErrCaptchaInvalid: the built-in CAPTCHA was wrong, expired or used.
 	ErrCaptchaInvalid = errors.New("account registration captcha invalid")
 	// ErrContactVerificationUnavailable: the policy requires a verified
-	// contact, which built-in registration cannot provide.
+	// contact and no contact verification runtime is mounted.
 	ErrContactVerificationUnavailable = errors.New("account registration contact verification unavailable")
 )
 
@@ -46,8 +52,22 @@ type BuiltInService struct {
 	store     BuiltInStore
 	policy    PublicSettingsReader
 	captcha   CaptchaVerifier
+	proofs    ProofAuthority
 	digestKey []byte
 	now       func() time.Time
+}
+
+// EnableContactVerification lets built-in registration accept verified
+// email / SMS proofs issued by the challenge service sharing its digest key.
+func (service *BuiltInService) EnableContactVerification(proofs ProofAuthority) {
+	if service != nil {
+		service.proofs = proofs
+	}
+}
+
+// ContactVerificationAvailable reports whether verified proofs are accepted.
+func (service *BuiltInService) ContactVerificationAvailable() bool {
+	return service != nil && service.proofs != nil
 }
 
 // BuiltInInput is a registration proved by a solved built-in CAPTCHA.
@@ -80,9 +100,6 @@ func (service *BuiltInService) Register(ctx context.Context, input BuiltInInput)
 	if service == nil || service.store == nil || service.policy == nil || service.captcha == nil || len(service.digestKey) < 32 {
 		return RegisterResult{}, ErrInvalidService
 	}
-	if input.Captcha.ID == uuid.Nil || input.Captcha.Answer == "" {
-		return RegisterResult{}, ErrCaptchaInvalid
-	}
 	policy, err := service.policy.GetPublic(ctx, uuid.Nil)
 	if err != nil {
 		return RegisterResult{}, ErrRegistrationPolicyUnavailable
@@ -90,11 +107,20 @@ func (service *BuiltInService) Register(ctx context.Context, input BuiltInInput)
 	if !policy.RegistrationEnabled {
 		return RegisterResult{}, ErrRegistrationDisabled
 	}
+	required := RequiredProofChannels(policy)
+	if len(required) > 0 && service.proofs == nil {
+		return RegisterResult{}, ErrContactVerificationUnavailable
+	}
+	if len(required) == 0 && (input.Captcha.ID == uuid.Nil || input.Captcha.Answer == "") {
+		return RegisterResult{}, ErrCaptchaInvalid
+	}
 	phoneCode := ""
 	if input.Phone != "" {
 		phoneCode = policy.DefaultPhoneCountryCode
 	}
-	if input.VerificationChannel == "" {
+	if len(required) > 0 {
+		input.VerificationChannel = required[0]
+	} else if input.VerificationChannel == "" {
 		input.VerificationChannel = VerificationEmail
 		if input.Email == "" && input.Phone != "" {
 			input.VerificationChannel = VerificationSMS
@@ -106,17 +132,31 @@ func (service *BuiltInService) Register(ctx context.Context, input BuiltInInput)
 	if policy.EmailRequired && input.Email == "" || policy.PhoneRequired && input.Phone == "" {
 		return RegisterResult{}, ErrInvalidInput
 	}
-	if policy.EmailVerificationRequired || policy.PhoneVerificationRequired {
-		return RegisterResult{}, ErrContactVerificationUnavailable
+	if policy.EmailVerificationRequired && input.Email == "" || policy.PhoneVerificationRequired && input.Phone == "" {
+		return RegisterResult{}, ErrInvalidInput
 	}
 	digester := &Service{digestKey: service.digestKey}
 	subjectDigest, err := digester.subjectDigest(input.RegisterInput)
 	if err != nil {
 		return RegisterResult{}, fmt.Errorf("digest account registration subject: %w", err)
 	}
+	if len(required) > 0 {
+		// The human check was spent when the codes were sent; the proofs are
+		// replayable per idempotency key, so the receipt check comes after.
+		evidence, err := consumeProofs(ctx, service.proofs, input.RegisterInput, required, subjectDigest,
+			service.now().UTC().Truncate(time.Microsecond))
+		if err != nil {
+			return RegisterResult{}, err
+		}
+		requestDigest, err := digester.requestDigest(input.RegisterInput, evidence)
+		if err != nil {
+			return RegisterResult{}, fmt.Errorf("digest account registration request: %w", err)
+		}
+		return service.storeRegistration(ctx, input.RegisterInput, requestDigest, subjectDigest)
+	}
 	// The CAPTCHA id stands in for the proof evidence: the same key with
 	// another CAPTCHA or other details is an idempotency conflict.
-	requestDigest, err := digester.requestDigest(input.RegisterInput, input.Captcha.ID)
+	requestDigest, err := digester.requestDigest(input.RegisterInput, input.Captcha.ID.String())
 	if err != nil {
 		return RegisterResult{}, fmt.Errorf("digest account registration request: %w", err)
 	}
@@ -133,6 +173,11 @@ func (service *BuiltInService) Register(ctx context.Context, input BuiltInInput)
 		}
 		return RegisterResult{}, fmt.Errorf("%w: %v", ErrProofUnavailable, err)
 	}
+	return service.storeRegistration(ctx, input.RegisterInput, requestDigest, subjectDigest)
+}
+
+// store_ hashes the password and writes the registration.
+func (service *BuiltInService) storeRegistration(ctx context.Context, input RegisterInput, requestDigest, subjectDigest [32]byte) (RegisterResult, error) {
 	passwordHash, err := identity.HashPassword(input.Password)
 	if err != nil {
 		return RegisterResult{}, ErrInvalidInput

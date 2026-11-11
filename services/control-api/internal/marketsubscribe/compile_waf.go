@@ -58,6 +58,11 @@ func compileWAF(p securitypolicy.Policy, crs *sitecrs.Library, apps []string, li
 		if securitypolicy.IsQuickBlockRuleID(r.ID) {
 			continue // the leaf's SetQuickBlock rebuilds them
 		}
+		if len(securitypolicy.StringSetReferences([]securitypolicy.Rule{r})) != 0 {
+			// the leaf has no copy of this platform's string sets
+			// (not carried like IP lists); refused rather than widened.
+			return nil, "waf_string_set"
+		}
 		for _, id := range securitypolicy.IPListReferences([]securitypolicy.Rule{r}) {
 			list, ok := lists[id]
 			if !ok {

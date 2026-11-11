@@ -295,12 +295,18 @@ describe('RegisterPage', () => {
   // verification service; the page used to show "人机验证暂不可用" at once and
   // could never register. It now follows registration_mode "builtin".
   it('registers with the built-in image CAPTCHA when the server has no Turnstile service', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(json({ data: { registration_enabled: true, registration_mode: 'builtin', email_enabled: false,
-        sms_enabled: false, email_anti_abuse_mode: '', sms_anti_abuse_mode: '', captcha_provider: '', captcha_app_id: '' } }, 200))
-      .mockResolvedValueOnce(json({ id: '33333333-3333-4333-8333-333333333333', image: 'data:image/png;base64,iVBORw0KGgo=',
-        expires_at: '2099-01-01T00:00:00Z' }, 201))
-      .mockResolvedValueOnce(json({ accepted: true, replayed: false }, 202))
+    // Routed by URL: the page also reads /v1/auth/registration-config
+    //; 404 here is a controller without it.
+    const routes: Record<string, () => Response> = {
+      '/v1/auth/login-methods': () => json({ data: { registration_enabled: true, registration_mode: 'builtin', email_enabled: false,
+        sms_enabled: false, email_anti_abuse_mode: '', sms_anti_abuse_mode: '', captcha_provider: '', captcha_app_id: '' } }, 200),
+      '/v1/auth/registration-config': () => json({ error: { code: 'not_found' } }, 404),
+      '/v1/auth/login-captchas': () => json({ id: '33333333-3333-4333-8333-333333333333', image: 'data:image/png;base64,iVBORw0KGgo=',
+        expires_at: '2099-01-01T00:00:00Z' }, 201),
+      '/v1/auth/register': () => json({ accepted: true, replayed: false }, 202),
+    }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      (routes[new URL(String(input), 'http://localhost').pathname] ?? (() => json({}, 404)))())
     const user = userEvent.setup()
     renderWithProviders(<RegisterPage turnstileSiteKey="" />, ['/register'])
 
@@ -313,17 +319,18 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByText('注册请求已受理。')).toBeInTheDocument()
     expect(screen.queryByText('人机验证暂不可用，请刷新后重试。')).not.toBeInTheDocument()
-    expect(String(fetchSpy.mock.calls[0]?.[0])).toMatch(/\/v1\/auth\/login-methods$/)
-    expect(String(fetchSpy.mock.calls[1]?.[0])).toMatch(/\/v1\/auth\/login-captchas$/)
-    expect(String(fetchSpy.mock.calls[2]?.[0])).toMatch(/\/v1\/auth\/register$/)
-    expect(JSON.parse(String(fetchSpy.mock.calls[2]?.[1]?.body))).toEqual({
+    const calls = fetchSpy.mock.calls.filter((call) => !String(call[0]).endsWith('/v1/auth/registration-config'))
+    expect(String(calls[0]?.[0])).toMatch(/\/v1\/auth\/login-methods$/)
+    expect(String(calls[1]?.[0])).toMatch(/\/v1\/auth\/login-captchas$/)
+    expect(String(calls[2]?.[0])).toMatch(/\/v1\/auth\/register$/)
+    expect(JSON.parse(String(calls[2]?.[1]?.body))).toEqual({
       username: 'alice', password: 'correct-horse-battery-staple', display_name: 'Alice',
       email: 'alice@example.com', phone: '+8613812345678', terms_accepted: true,
       terms_version: 'terms-2026-08', verification_channel: 'email',
       captcha: { id: '33333333-3333-4333-8333-333333333333', answer: 'ab2cd' },
     })
-    expect(headersAt(fetchSpy.mock.calls[2]!).get('Idempotency-Key')).toMatch(/^registration-/)
-    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    expect(headersAt(calls[2]!).get('Idempotency-Key')).toMatch(/^registration-/)
+    expect(calls).toHaveLength(3)
   })
 
   it('says registration is closed instead of a human verification error when 开放注册 is off', async () => {

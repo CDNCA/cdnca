@@ -198,7 +198,6 @@ function ReviewDecisionContent({ owner, caseID }: { owner: Owner; caseID: string
                   {t(`states.${currentCase.status}`)}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label={t('details.revision')}>v{currentCase.revision}</Descriptions.Item>
               <Descriptions.Item label={t('details.changedAt')}>
                 {formatDateTime(currentCase.state_changed_at, locale)}
               </Descriptions.Item>

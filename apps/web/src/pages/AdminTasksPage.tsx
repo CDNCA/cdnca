@@ -1333,7 +1333,6 @@ function AdminTasksPageContent({
           <Descriptions.Item label={t('columns.resource')} span="filled">{detail?.related_resource.reference ?? placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('details.requestID')}>{detail?.request_id ?? placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('details.traceID')}>{detail?.trace_id ?? placeholder}</Descriptions.Item>
-			<Descriptions.Item label={t('details.revision')} span="filled">{detail?.revision ?? placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('columns.createdAt')}>{detail ? formatDateTime(detail.created_at, locale) : placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('columns.startedAt')}>{detail?.started_at ? formatDateTime(detail.started_at, locale) : placeholder}</Descriptions.Item>
           <Descriptions.Item label={t('details.updatedAt')}>{detail ? formatDateTime(detail.updated_at, locale) : placeholder}</Descriptions.Item>

@@ -236,6 +236,63 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '412': {$ref: '#/components/responses/PreconditionFailed'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/external-credential:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Challenge policies]
+      operationId: getChallengeExternalCredential
+      x-summary-zh: "查看挑战策略外部验证凭据的状态"
+      security: [{bearerAuth: []}]
+      summary: Read whether the external verification credential is set
+      description: Requires challenge_policies.read. Never returns the secret.
+      x-required-permissions: [challenge_policies.read]
+      responses:
+        '200':
+          description: Credential status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExternalCredentialStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      tags: [Challenge policies]
+      operationId: putChallengeExternalCredential
+      x-summary-zh: "设置挑战策略外部验证凭据（site key 与 secret）"
+      security: [{bearerAuth: []}]
+      summary: Set the external verification credential with policy revision CAS
+      description: >-
+        Requires challenge_policies.manage. If-Match is the policy revision. The secret is stored
+        encrypted and the policy moves to a new revision in the same transaction, so publishing that
+        revision delivers the new credential. Changing the policy's provider or leaving external mode
+        drops the stored credential.
+      x-required-permissions: [challenge_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExternalCredentialInput'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications:
     parameters:
       - $ref: '#/components/parameters/TenantScopeID'
@@ -688,18 +745,83 @@ components:
     ExternalProviderReference:
       type: object
       additionalProperties: false
-      required: [provider, app_reference]
+      required: [provider]
       properties:
         provider:
           type: string
-          enum: [tencent, geetest-v4]
+          enum: [tencent, geetest-v4, turnstile, recaptcha-v3]
+          description: >-
+            turnstile (Cloudflare Turnstile) and recaptcha-v3 (Google reCAPTCHA v3) are services outside
+            mainland China; visitors and nodes in mainland China may be unable to reach them. Policies using
+            them, or carrying score_threshold / unavailable, are delivered only to nodes declaring
+            CAPABILITY_NAME_CHALLENGE_EXTERNAL v1; other nodes keep their previous policy.
         app_reference:
           type: string
           minLength: 8
           maxLength: 128
           pattern: '^appref:[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$'
+          description: Optional; the server keeps the stored one or sets appref:policy:<policy_id>.
+        score_threshold:
+          type: number
+          minimum: 0.1
+          maximum: 0.9
+          multipleOf: 0.1
+          description: recaptcha-v3 only (absent = 0.5); a token with a lower score is refused.
+        unavailable:
+          type: string
+          enum: [builtin, closed]
+          description: >-
+            What a visitor gets when the provider widget does not load or the node cannot reach the
+            provider: builtin (the node's own click + proof of work page, the default when absent) or
+            closed (503, retry later). Neither counts as a failed attempt.
       writeOnly: true
-      description: Opaque configured-app reference; not evidence of provider integration.
+      description: >-
+        External provider of an external mode policy. The provider credential (site key and secret) is
+        set with PUT .../external-credential.
+    ExternalProviderSummary:
+      type: object
+      additionalProperties: false
+      readOnly: true
+      required: [provider, unavailable]
+      properties:
+        provider: {type: string, enum: [tencent, geetest-v4, turnstile, recaptcha-v3]}
+        score_threshold: {type: number, minimum: 0.1, maximum: 0.9}
+        unavailable: {type: string, enum: [builtin, closed]}
+    ExternalCredentialStatus:
+      type: object
+      additionalProperties: false
+      required: [provider, secret_configured, revision]
+      description: Never contains the secret.
+      properties:
+        provider: {type: string}
+        app_id: {type: string, maxLength: 128}
+        environment: {type: string, enum: [sandbox, production]}
+        secret_configured: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 0, description: Credential revision; 0 when none is set.}
+        updated_at: {type: string, format: date-time}
+    ExternalCredentialInput:
+      type: object
+      additionalProperties: false
+      required: [provider, app_id, secret]
+      properties:
+        provider:
+          type: string
+          enum: [tencent, geetest-v4, turnstile, recaptcha-v3]
+          description: Must equal the policy's external provider (otherwise 422 provider_mismatch).
+        app_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:_-]{0,127}$'
+          description: Provider app id / site key (public; rendered into the challenge page).
+        secret:
+          type: string
+          minLength: 16
+          maxLength: 256
+          pattern: '^[\x21-\x7e][\x20-\x7e]*[\x21-\x7e]$'
+          writeOnly: true
+          description: Provider secret; stored encrypted and never returned.
+        environment: {type: string, enum: [sandbox, production], default: production}
     ChallengePolicy:
       type: object
       additionalProperties: false
@@ -754,6 +876,7 @@ components:
           description: Present only when set explicitly; absent means the edge default 18.
         key_reference_configured: {type: boolean}
         external_provider_configured: {type: boolean}
+        external_provider_summary: {$ref: '#/components/schemas/ExternalProviderSummary'}
         enabled: {type: boolean}
         deleted: {type: boolean}
         revision: {type: integer, format: int64, minimum: 1}

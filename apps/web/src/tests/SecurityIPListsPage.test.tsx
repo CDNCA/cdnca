@@ -47,7 +47,9 @@ describe('ge36-waf W2 IP list page', () => {
     })
     renderWithProviders(<AppRoutes />, ['/site/ip-lists'])
 
-    expect(await screen.findByRole('heading', { name: 'IP 名单' })).toBeInTheDocument()
+    // the old route lands on 列表与对象, IP 名单 tab.
+    expect(await screen.findByRole('heading', { name: '列表与对象' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'IP 名单', selected: true })).toBeInTheDocument()
     const own = (await screen.findByText('office')).closest('tr') as HTMLElement
     const shared = screen.getByText('scanners').closest('tr') as HTMLElement
     expect(within(own).getByText('本账号')).toBeInTheDocument()
@@ -81,7 +83,7 @@ describe('ge36-waf W2 IP list page', () => {
     })
     renderWithProviders(<AppRoutes />, ['/site/ip-lists'])
 
-    fireEvent.click(await screen.findByRole('button', { name: /新建名单/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /添加IP 名单/ }))
     fireEvent.change(await screen.findByLabelText('名称'), { target: { value: 'bad bots' } })
     fireEvent.change(screen.getByLabelText('地址与网段'), { target: { value: '203.0.113.7\n2001:db8::/32' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
@@ -90,8 +92,8 @@ describe('ge36-waf W2 IP list page', () => {
 
     const row = (await screen.findByText('scanners')).closest('tr') as HTMLElement
     fireEvent.click(within(row).getByRole('button', { name: /删除/ }))
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: /删除/ }))
+    const confirm = await screen.findByRole('tooltip')
+    fireEvent.click(within(confirm).getByRole('button', { name: /删除/ }))
     expect(await screen.findByText('仍有安全策略引用这个名单，先从规则里移除再删除。')).toBeInTheDocument()
   })
 
@@ -110,7 +112,7 @@ describe('ge36-waf W2 IP list page', () => {
       return json({ items: [] })
     })
     renderWithProviders(<AppRoutes />, ['/site/ip-lists'])
-    fireEvent.click(await screen.findByRole('button', { name: /新建名单/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /添加IP 名单/ }))
     const dialog = within(await screen.findByRole('dialog'))
     fireEvent.change(dialog.getByLabelText('名称'), { target: { value: 'lab' } })
     fireEvent.change(dialog.getByLabelText('地址与网段'), { target: { value: '192.0.2.1\n192.0.2.999\n2001:db8::/129' } })
@@ -134,11 +136,11 @@ describe('ge36-waf W2 IP list page', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json({ items: [list()] }))
     renderWithProviders(<AppRoutes />, ['/site/ip-lists'])
     expect(await screen.findByText('office')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /新建名单/ })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /添加IP 名单/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /编辑/ })).not.toBeInTheDocument()
     for (const role of ['admin', 'user'] as const) {
       const site = getNavigation(role, undefined, ['security_policies.read']).find((item) => item.key === 'site')
-      expect(site?.children?.some((item) => item.key === '/site/ip-lists')).toBe(true)
+      expect(site?.children?.some((item) => item.key === '/site/lists')).toBe(true)
     }
   })
 

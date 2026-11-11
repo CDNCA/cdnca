@@ -1387,7 +1387,7 @@ describe('NodeLineGroupsPage', () => {
     [403, 'node_scheduling_permission_denied', '当前账号没有执行此操作的权限'],
     [409, 'node_scheduling_name_conflict', '线路组名称已存在'],
     [409, 'node_scheduling_reference_conflict', '线路组正被其他活动配置引用，请先解除引用'],
-    [412, 'node_scheduling_revision_conflict', '线路组已被其他操作修改，请刷新后重试'],
+    [412, 'node_scheduling_revision_conflict', '内容已被其他人修改，请刷新后再保存'],
     [500, 'node_scheduling_invalid_request', '请求字段、拓扑或前置条件无效'],
   ])('shows a localized deterministic write failure for HTTP %i', async (status, code, localizedMessage) => {
     authenticate()

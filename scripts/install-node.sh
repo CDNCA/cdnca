@@ -389,6 +389,8 @@ load_console_defaults() {
   [ -z "$UPGRADE_TRUST_SHA256" ] || return 0
   valid_url "$CONTROL_PLANE" || return 0
   local body key value
+  # 首选入口的四个字段先收在这里：命令行显式指定的传输与主控首选入口不同时它们描述的是另一种传输，整体丢弃（D-a）。
+  local console_enrollment='' console_address='' console_server='' console_transport=grpc console_tunnel='' dropped=''
   # curl_download adds --control-plane-ca-file for the console origin (a
   # console on a private-CA or temporary self-signed certificate); the origin
   # is otherwise only set later by normalise_defaults.
@@ -402,14 +404,13 @@ load_console_defaults() {
         UPGRADE_TRUST_SHA256=$value ;;
       gateway_enrollment_address|gateway_address)
         [[ "$value" =~ ^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$ ]] || fail 'console node install defaults are invalid'
-        if [ "$key" = gateway_address ]; then GATEWAY_ADDRESS=${GATEWAY_ADDRESS:-$value}
-        else GATEWAY_ENROLLMENT_ADDRESS=${GATEWAY_ENROLLMENT_ADDRESS:-$value}; fi ;;
+        if [ "$key" = gateway_address ]; then console_address=$value; else console_enrollment=$value; fi ;;
       gateway_server_name) [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$ ]] || fail 'console node install defaults are invalid'
-        GATEWAY_SERVER_NAME=${GATEWAY_SERVER_NAME:-$value} ;;
+        console_server=$value ;;
       gateway_transport) [[ "$value" =~ ^(grpc|ws)$ ]] || fail 'console node install defaults are invalid'
-        GATEWAY_TRANSPORT=${GATEWAY_TRANSPORT:-$value} ;;
+        console_transport=$value ;;
       gateway_tunnel_host) [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || fail 'console node install defaults are invalid'
-        GATEWAY_TUNNEL_HOST=${GATEWAY_TUNNEL_HOST:-$value} ;;
+        console_tunnel=$value ;;
       # Bracket list in a variable: an inline '\[\]' made bash close the list early and accept ';' etc.
       gateway_endpoints) local endpoints_re='^[]A-Za-z0-9.:[| -]*$'
         # 长度单独判：musl/BSD regex 不接受 {0,2048} 这类超过 255 的重复次数。
@@ -427,6 +428,23 @@ load_console_defaults() {
     esac
   done <<<"$body"
   [ -n "$UPGRADE_TRUST_SHA256" ] || fail 'console node install defaults do not carry the upgrade trust pin'
+  if [ -n "$GATEWAY_TRANSPORT" ] && [ "$GATEWAY_TRANSPORT" != "$console_transport" ]; then
+    # 例：控制台首选 ws 经 443 隧道，命令行要 grpc 直连；拿 :443 和 tunnel host 去拨 grpc 必然失败。
+    # 备用入口列表（gateway_endpoints）每条自带传输，照常保留。
+    [ -n "$GATEWAY_ENROLLMENT_ADDRESS" ] || [ -z "$console_enrollment" ] || dropped+="${dropped:+、}gateway_enrollment_address"
+    [ -n "$GATEWAY_ADDRESS" ] || [ -z "$console_address" ] || dropped+="${dropped:+、}gateway_address"
+    [ -n "$GATEWAY_SERVER_NAME" ] || [ -z "$console_server" ] || dropped+="${dropped:+、}gateway_server_name"
+    [ -n "$GATEWAY_TUNNEL_HOST" ] || [ -z "$console_tunnel" ] || dropped+="${dropped:+、}gateway_tunnel_host"
+    [ -z "$dropped" ] || warn "$(msg "主控默认入口是 ${console_transport}，命令行指定 ${GATEWAY_TRANSPORT}，已忽略主控下发的 ${dropped}（它们属于 ${console_transport} 入口）" \
+      "the console default entry is ${console_transport} but the command line asks for ${GATEWAY_TRANSPORT}; ignored the console ${dropped//、/, } (they belong to the ${console_transport} entry)")"
+    return 0
+  fi
+  GATEWAY_ENROLLMENT_ADDRESS=${GATEWAY_ENROLLMENT_ADDRESS:-$console_enrollment}
+  GATEWAY_ADDRESS=${GATEWAY_ADDRESS:-$console_address}
+  GATEWAY_SERVER_NAME=${GATEWAY_SERVER_NAME:-$console_server}
+  GATEWAY_TUNNEL_HOST=${GATEWAY_TUNNEL_HOST:-$console_tunnel}
+  # 原来只有主控写了 gateway_transport=ws 才赋值；grpc 主控不写这一行，保持为空由 normalise_defaults 取 grpc。
+  [ "$console_transport" != ws ] || GATEWAY_TRANSPORT=${GATEWAY_TRANSPORT:-ws}
 }
 
 require_commands() {
@@ -2023,13 +2041,13 @@ PACKAGING_DATA = {
 }
 REQUIRED_DATA = {
     'runtime/openresty/lualib/resty/ipmatcher.lua',
-    'lua/share/cdnca/range/guard.lua', 'lua/share/cdnca/security/cdnca_waf.lua', 'lua/share/cdnca/security/cdnca_rule_interp.lua', 'lua/share/cdnca/security/cdnca_banlist.lua', 'lua/share/cdnca/dynroute/cdnca_site.lua', 'lua/share/cdnca/dynroute/cdnca_site_admin.lua', 'lua/share/cdnca/dynroute/cdnca_tls.lua', 'lua/share/cdnca/dynroute/cdnca_origin.lua', 'lua/share/cdnca/dynroute/cdnca_originauth.lua', 'lua/share/cdnca/dynroute/cdnca_origintls.lua', 'lua/share/cdnca/dynroute/cdnca_cache.lua', 'lua/share/cdnca/dynroute/cdnca_filters.lua', 'lua/share/cdnca/dynroute/cdnca_limits.lua',
+    'lua/share/cdnca/range/guard.lua', 'lua/share/cdnca/security/cdnca_waf.lua', 'lua/share/cdnca/security/cdnca_rule_interp.lua', 'lua/share/cdnca/security/cdnca_ua.lua', 'lua/share/cdnca/security/cdnca_banlist.lua', 'lua/share/cdnca/dynroute/cdnca_site.lua', 'lua/share/cdnca/dynroute/cdnca_site_admin.lua', 'lua/share/cdnca/dynroute/cdnca_tls.lua', 'lua/share/cdnca/dynroute/cdnca_origin.lua', 'lua/share/cdnca/dynroute/cdnca_originauth.lua', 'lua/share/cdnca/dynroute/cdnca_origintls.lua', 'lua/share/cdnca/dynroute/cdnca_cache.lua', 'lua/share/cdnca/dynroute/cdnca_filters.lua', 'lua/share/cdnca/dynroute/cdnca_limits.lua',
     'lua/share/cdnca/security/cc.lua', 'lua/share/cdnca/security/cc_adaptive.lua',
     'lua/share/cdnca/security/url_auth.lua', 'lua/share/cdnca/challenge/engine.lua',
     'lua/share/cdnca/challenge/crypto.lua', 'lua/share/cdnca/challenge/ip.lua',
     'lua/l4geo/engine.lua', 'lua/l4geo/cdnca_l4_geo.lua',
     'lua/share/cdnca/security/cdnca_iplib.lua', 'lua/l4geo/cdnca_iplib.lua',
-    'lua/share/cdnca/httppolicy/engine.lua', 'lua/share/cdnca/firewallaction/engine.lua', 'lua/share/cdnca/siteaccess/engine.lua', 'lua/share/cdnca/errorpage/handler.lua', 'lua/share/cdnca/originauth/engine.lua', 'lua/share/cdnca/originauth/crypto.lua', 'lua/share/cdnca/dynroute/cdnca_dynroute.lua', 'lua/share/cdnca/sched302/cdnca_sched302.lua', 'lua/share/cdnca/dynroute/cdnca_telemetry.lua', 'lua/share/cdnca/dynroute/cdnca_webp.lua', 'lua/share/cdnca/dynroute/cdnca_webp_codec.lua', 'lua/share/cdnca/dynroute/cdnca_security.lua', 'lua/share/cdnca/dynroute/cdnca_managed_waf.lua', 'lua/share/cdnca/dynroute/cdnca_rule_plan.lua', 'lua/share/cdnca/dynroute/cdnca_bot.lua',
+    'lua/share/cdnca/httppolicy/engine.lua', 'lua/share/cdnca/firewallaction/engine.lua', 'lua/share/cdnca/siteaccess/engine.lua', 'lua/share/cdnca/errorpage/handler.lua', 'lua/share/cdnca/originauth/engine.lua', 'lua/share/cdnca/originauth/crypto.lua', 'lua/share/cdnca/dynroute/cdnca_dynroute.lua', 'lua/share/cdnca/sched302/cdnca_sched302.lua', 'lua/share/cdnca/dynroute/cdnca_telemetry.lua', 'lua/share/cdnca/dynroute/cdnca_webp.lua', 'lua/share/cdnca/dynroute/cdnca_rum.lua', 'lua/share/cdnca/dynroute/cdnca_rewrite.lua', 'lua/share/cdnca/dynroute/cdnca_webp_codec.lua', 'lua/share/cdnca/dynroute/cdnca_security.lua', 'lua/share/cdnca/dynroute/cdnca_managed_waf.lua', 'lua/share/cdnca/dynroute/cdnca_rule_plan.lua', 'lua/share/cdnca/dynroute/cdnca_bot.lua',
 }
 
 def require(condition, reason):

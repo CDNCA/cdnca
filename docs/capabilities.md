@@ -34,6 +34,38 @@ Feature plugins take effect once paid or claimed. Themes, rule packs, UI page pl
 - Where: admin console, Marketplace → Plugin store.
 - Details: [plugin market](https://www.cdnca.com/en/docs/capabilities/plugin-market/)
 
+## Sites and experience
+
+### URL authentication
+
+Protect downloads, video and other paths with signed links: nodes verify the signature and refuse expired or wrongly signed requests. During a key rotation the previous key keeps working, so links already issued do not fail at the moment of rotation.
+
+- Where: Sites → URL authentication.
+
+### Server-Timing header
+
+Turned on per site, the node adds a Server-Timing header with the cache result, the hit layer, the origin connect time and the origin first-byte time, visible in the browser's network panel.
+
+- Where: the "Server-Timing header" switch in the advanced settings of a site.
+
+### Content rewriting
+
+Rewrite the origin response body in a stream by rule, without changing the origin.
+
+- Where: Sites → Content rewriting.
+
+### Real user monitoring (RUM)
+
+A collection script is injected into sampled visitor pages to measure real page-load performance, reported per site.
+
+- Where: Monitoring → Real user experience.
+
+### Customer status page
+
+Maintain service components and incidents in system settings; visitors see the current state and past incidents on the public /status/ page.
+
+- Where: admin console, System settings → Status page.
+
 ## Security
 
 ### WAF and CC protection
@@ -42,6 +74,9 @@ A WAF rule library (platform and tenant rules), CC rule sets counting by client 
 
 - Where: admin console, Sites → WAF rules / CC rules / Rule packs, and the CC protection, WAF protection and Automatic defense tabs of a site.
 - Browser challenges (JS challenge and CC verification): the built-in delayed, click, slider and CAPTCHA modes all require the browser to run JavaScript and complete a proof of work; the node draws the click, slider and CAPTCHA images itself and never puts the answer in the page. Scripts that only read the page without running JavaScript cannot pass; real browser automation (headless browsers) can, so use external verification when you need more. Slider and CAPTCHA pages offer "Use wait verification instead" for screen reader users. The proof-of-work difficulty can be set per challenge policy from 12 to 24 (default 18, worst case about 0.4 s on a low-end phone); an explicit difficulty is sent only to nodes that support it.
+- String sets: put the UAs, paths or domains that several rules share into one set; WAF and CC rules match "in set / not in set". Sets are kept under Sites → Lists and objects → String sets and travel to nodes with the site configuration.
+- Conditions: besides the existing fields, rules can match on browser and its version, device type and time of day. The "Try it" box in the condition editor parses a User-Agent and shows what the node makes of it.
+- Third-party human verification: a challenge policy can use Cloudflare Turnstile or Google reCAPTCHA v3 with the site key and secret key entered in the policy, a score threshold, and a choice between the built-in check and blocking when the provider is unavailable.
 - Official rule packs (OWASP CRS levels, advanced CC rule groups, in-house detection rules) can be bought on the plugin marketplace.
 - Details: [WAF and CC protection](https://www.cdnca.com/en/docs/capabilities/waf-cc/)
 

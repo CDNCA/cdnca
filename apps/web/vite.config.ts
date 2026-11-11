@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib'
 
 import react from '@vitejs/plugin-react'
@@ -64,6 +65,11 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), precompress()],
     build: {
       rollupOptions: {
+        // 第二个入口：公开状态页 /status/，原生 TS，不带控制台的 React/antd。
+        input: {
+          main: fileURLToPath(new URL('./index.html', import.meta.url)),
+          status: fileURLToPath(new URL('./status/index.html', import.meta.url)),
+        },
         // @cdnca/ui modules only declare (reviewRules.ts builds a Map at load,
         // FormGrid.Full is a property): treat them as side-effect free so unused
         // ones, e.g. review-rules.json from apps/www, stay out of the first load

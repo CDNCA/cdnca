@@ -89,7 +89,7 @@ describe('NotificationDeliveryPolicyPanel', () => {
     await user.click(screen.getByRole('button', { name: '刷新策略' }))
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
     expect(await screen.findByRole('textbox', { name: '通知时间段' })).toHaveValue('8-22')
-    expect(screen.getByText('修订版本 5')).toBeInTheDocument()
+    expect(screen.queryByText(/修订/)).not.toBeInTheDocument()
   })
 
   it('rejects invalid custom windows and empty counts before any write, preserving supported event values', async () => {
@@ -190,7 +190,8 @@ describe('NotificationDeliveryPolicyPanel', () => {
     expect(screen.queryByRole('button', { name: '使用同一请求重试' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '保存通知策略' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '刷新策略' }))
-    await screen.findByText('修订版本 9')
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText(/修订/)).not.toBeInTheDocument()
     expect(read).toHaveBeenCalledTimes(2)
   })
 
@@ -237,7 +238,7 @@ describe('NotificationDeliveryPolicyPanel', () => {
     await act(async () => pending.resolve({ ...policy, revision: 5, changed: true, events: [{ ...policy.events[0], sms_enabled: true }, policy.events[1]] }))
     expect(screen.getByRole('checkbox', { name: '公告发布 短信' })).not.toBeChecked()
     expect(screen.queryByText('通知策略已保存')).not.toBeInTheDocument()
-    expect(screen.getByText('修订版本 4')).toBeInTheDocument()
+    expect(screen.queryByText(/修订/)).not.toBeInTheDocument()
   })
 
   it('keeps an unknown outcome unwriteable after manage permission is revoked in the same epoch', async () => {

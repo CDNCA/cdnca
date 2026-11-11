@@ -41,6 +41,11 @@ var (
 type ExternalProviderReference struct {
 	Provider     string
 	AppReference string
+	// ScoreThreshold (recaptcha-v3 only) and Unavailable ("" = engine default
+	// builtin, or builtin / closed) are C3; either one requires
+	// CHALLENGE_EXTERNAL.
+	ScoreThreshold *float64
+	Unavailable    string
 }
 
 type PublicationSnapshot struct {
@@ -308,7 +313,7 @@ func validExternalResolvedKeys(snapshot PublicationSnapshot, keys ResolvedKeys) 
 	credential := keys.ExternalCredential
 	return snapshot.ExternalProvider != nil && credential != nil &&
 		credential.SchemaVersion == ExternalCredentialSchemaVersion &&
-		credential.Provider == snapshot.ExternalProvider.Provider && validIdentifier(credential.AppID) &&
+		credential.Provider == snapshot.ExternalProvider.Provider && ValidExternalAppID(credential.AppID) &&
 		len(credential.Secret) >= 16 && len(credential.Secret) <= 256 &&
 		(credential.Environment == "sandbox" || credential.Environment == "production")
 }
@@ -419,6 +424,11 @@ func buildArtifactMaterial(snapshot PublicationSnapshot, keys ResolvedKeys) Arti
 	if snapshot.ExternalProvider != nil && keys.ExternalCredential != nil {
 		result.Policy.Rules[0].ExternalProvider = &ExternalProvider{
 			Provider: keys.ExternalCredential.Provider, AppID: keys.ExternalCredential.AppID,
+			Unavailable: snapshot.ExternalProvider.Unavailable,
+		}
+		if snapshot.ExternalProvider.ScoreThreshold != nil {
+			value := *snapshot.ExternalProvider.ScoreThreshold
+			result.Policy.Rules[0].ExternalProvider.ScoreThreshold = &value
 		}
 		result.ExternalCredentials = []ExternalCredential{{TenantID: snapshot.TenantID.String(),
 			SiteID: snapshot.SiteID.String(), Provider: keys.ExternalCredential.Provider,

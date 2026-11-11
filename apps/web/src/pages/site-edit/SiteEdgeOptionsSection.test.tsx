@@ -65,4 +65,20 @@ describe('SiteEdgeOptionsSection (tp-b3c)', () => {
     expect(onBasicChange).toHaveBeenLastCalledWith(expect.objectContaining({ is_default: true }))
     expect(screen.getByRole('radio', { name: '当前套餐配置' })).toBeChecked()
   })
+
+  it('性能与协议 places the Server-Timing switch after WebSocket and 搜索引擎回源; 其它 does not', () => {
+    const { rerender } = render(<QueryClientProvider client={new QueryClient()}>
+      <SiteEdgeOptionsSection part="performance" pool={pool()} basic={basic} admin={false} accessToken="token"
+        serverTiming={<span>server-timing-slot</span>} onChange={vi.fn()} onBasicChange={vi.fn()} />
+    </QueryClientProvider>)
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
+    expect(headings).toEqual(['WebSocket', '搜索引擎回源', '真实用户体验上报'])
+    expect(screen.getByText('server-timing-slot').compareDocumentPosition(screen.getByRole('heading', { name: '搜索引擎回源' })))
+      .toBe(Node.DOCUMENT_POSITION_PRECEDING)
+    rerender(<QueryClientProvider client={new QueryClient()}>
+      <SiteEdgeOptionsSection part="other" pool={pool()} basic={basic} admin={false} accessToken="token"
+        serverTiming={<span>server-timing-slot</span>} onChange={vi.fn()} onBasicChange={vi.fn()} />
+    </QueryClientProvider>)
+    expect(screen.queryByText('server-timing-slot')).toBeNull()
+  })
 })

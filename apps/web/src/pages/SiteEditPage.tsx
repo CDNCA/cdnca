@@ -65,6 +65,7 @@ const CacheStatusHeaderSwitch = retryableLazy(() => import('./site-edit/CacheSta
 const SitePluginTab = retryableLazy(() =>
   import('../pluginui/SitePluginTab').then((module) => ({ default: module.SitePluginTab })))
 const SiteEdgeOptionsSection = retryableLazy(() => import('./site-edit/SiteEdgeOptionsSection'))
+const ServerTimingSwitch = retryableLazy(() => import('./site-edit/ServerTimingSwitch'))
 const AdvancedSiteTab = retryableLazy(() =>
   import('./site-edit/AdvancedSiteTab'),
 )
@@ -80,7 +81,7 @@ const tabChunks: Record<VisibleTabKey, { preload: () => void }[]> = {
   cc: [SiteCCTab],
   waf: [SiteWAFTab],
   autodefense: [SiteAutoDefenseTab],
-  advanced: [AdvancedSiteTab, SiteEdgeOptionsSection],
+  advanced: [AdvancedSiteTab, SiteEdgeOptionsSection, ServerTimingSwitch],
 }
 
 function preloadTab(tab: VisibleTabKey) {
@@ -1633,6 +1634,16 @@ function SiteEditPageContent({
               <SiteEdgeOptionsSection part={part} pool={originDraft} basic={draft} admin={role === 'admin'} accessToken={accessToken}
                 readOnly={!canManage || lockedForTenant || uncertainWrite || batchWriteLocked}
                 basicReadOnly={!canManage || lockedForTenant || uncertainWrite || batchWriteLocked}
+                serverTiming={detail ? (
+                  <ServerTimingSwitch detail={detail} accessToken={accessToken}
+                    disabled={!canManage || lockedForTenant || uncertainWrite || batchWriteLocked || saveMutation.isPending}
+                    onSaved={(saved) => {
+                      // only this field: unsaved basic edits stay in the draft
+                      setDetail(saved)
+                      setDraft((current) => current && { ...current, server_timing: saved.basic.server_timing })
+                      queryClient.setQueryData(detailQueryKey, saved)
+                    }} />
+                ) : undefined}
                 onChange={updateOriginDraft} onBasicChange={updateDraft} />
             ) : undefined}
           />

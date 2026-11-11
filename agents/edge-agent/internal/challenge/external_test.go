@@ -62,7 +62,8 @@ func TestVerifyExternalRejectsContextCanceledByAdapter(t *testing.T) {
 		result:       ExternalResult{Valid: true, AppID: request.AppID, ReplayKey: "provider-one-time-id"},
 		beforeReturn: cancel,
 	}
-	if _, err := VerifyExternal(ctx, request, stub); !errors.Is(err, ErrExternalVerification) || stub.calls != 1 {
+	// 适配器返回时 ctx 已取消/超时：按 归为供应商不可用（503、计入熔断），而非验证失败（403）。
+	if _, err := VerifyExternal(ctx, request, stub); !errors.Is(err, ErrExternalUnavailable) || stub.calls != 1 {
 		t.Fatalf("canceled adapter result = (%v, calls=%d)", err, stub.calls)
 	}
 }

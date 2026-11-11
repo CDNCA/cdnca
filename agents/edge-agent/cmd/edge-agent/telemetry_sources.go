@@ -225,6 +225,9 @@ type dynamicRoutingTelemetry struct {
 	// SubscriptionMinutes moves cdnca_limits' per subscription minutes into
 	// the spool (ADR 0012 §6.2); nil disables them.
 	SubscriptionMinutes *dyntelemetry.SubscriptionMinutes
+	// RUMMinutes moves cdnca_rum's site minutes into the spool;
+	// nil disables them.
+	RUMMinutes *dyntelemetry.RUMMinutes
 }
 
 type telemetrySourceRegistration struct {
@@ -413,6 +416,11 @@ func (r *telemetrySourceRunner) syncOnce(ctx context.Context) error {
 			firstError = err
 		}
 	}
+	if shared := r.config.DynamicRouting; shared != nil && shared.RUMMinutes != nil {
+		if err := shared.RUMMinutes.Sync(ctx, r.sink, r.config.MaxBatchEvents); err != nil && firstError == nil {
+			firstError = err
+		}
+	}
 	if firstError == nil && expired > 0 {
 		// The tail moved past them; report the loss for this round.
 		firstError = errTelemetryEventsExpired
@@ -577,6 +585,8 @@ func (r *telemetrySourceRunner) setError(err error) {
 		r.lastError = "TELEMETRY_SOURCE_EVENTS_EXPIRED"
 	case errors.Is(err, eventspool.ErrQuarantineLimit):
 		r.lastError = "TELEMETRY_SOURCE_QUARANTINE_FULL"
+	case errors.Is(err, eventspool.ErrCorruptState):
+		r.lastError = "TELEMETRY_SPOOL_CORRUPT"
 	default:
 		r.lastError = "TELEMETRY_SOURCE_UNAVAILABLE"
 	}
@@ -839,6 +849,15 @@ func (p *telemetryPipeline) Snapshot() telemetryclient.WorkerSnapshot {
 	if code := p.sources.ErrorCode(); code != "" {
 		snapshot.Degraded = true
 		snapshot.LastErrorCode = code
+	}
+	// A spool that cannot be read (no longer an Agent startup
+	// failure, the node keeps serving) is the cause of whatever the worker
+	// and the sources report, so the control plane sees it first.
+	if p.spool != nil {
+		if code := p.spool.FailureCode(); code != "" {
+			snapshot.Degraded = true
+			snapshot.LastErrorCode = code
+		}
 	}
 	return snapshot
 }

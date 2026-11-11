@@ -283,12 +283,12 @@ func (s *Store) createTx(ctx context.Context, tx pgx.Tx, actor Actor, request Cr
 					ipv6_enabled, ipv6_runtime_state, ipv6_runtime_source_revision,
 				created_by_user_id,updated_by_user_id,force_https,https_redirect_port,cache_shared_across_domains,
 				tls_cipher_preset,tls_ocsp_stapling,tls_client_auth,tls_client_ca_pem,cache_status_header,
-				http2_enabled,http3_enabled,tls_prefer_server_ciphers,tls_cipher_suites
+				http2_enabled,http3_enabled,tls_prefer_server_ciphers,tls_cipher_suites,server_timing,rum_sample_percent
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 				$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,$30,$31,$32,0,$33,$33,$34,$35,
 				COALESCE($36::boolean,false),$37,$38,$39,NULLIF($40,''),COALESCE($41::boolean,true),
-				COALESCE($42::boolean,true),COALESCE($43::boolean,true),$44::boolean,$45::text[]
+				COALESCE($42::boolean,true),COALESCE($43::boolean,true),$44::boolean,$45::text[],COALESCE($46::boolean,false),$47::smallint
 			)`,
 			siteID,
 			displayID,
@@ -320,7 +320,7 @@ func (s *Store) createTx(ctx context.Context, tx pgx.Tx, actor Actor, request Cr
 			tls.cipherPreset, tls.ocspStapling, tls.clientAuth, tls.clientCAPEM,
 			request.Fields.CacheStatusHeader,
 			request.Fields.HTTP2Enabled, request.Fields.HTTP3Enabled, request.Fields.TLSPreferServerCiphers,
-			tls.cipherSuites,
+			tls.cipherSuites, request.Fields.ServerTiming, rumCreateValue(request.Fields),
 		)
 		if err != nil {
 			if isUniqueViolation(err) {
@@ -452,12 +452,13 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 		if err != nil {
 			return err
 		}
-		var cacheSharedBefore, defaultBefore, cacheStatusBefore bool
+		var cacheSharedBefore, defaultBefore, cacheStatusBefore, serverTimingBefore bool
+		var rumBefore *int
 		var tlsBefore siteTLSAudit
-		if err := tx.QueryRow(ctx, `SELECT cache_shared_across_domains,cache_status_header,tls_protocols,tls_cipher_preset,tls_ocsp_stapling,
+		if err := tx.QueryRow(ctx, `SELECT cache_shared_across_domains,cache_status_header,server_timing,rum_sample_percent,tls_protocols,tls_cipher_preset,tls_ocsp_stapling,
 			tls_client_auth,COALESCE(encode(sha256(convert_to(tls_client_ca_pem,'UTF8')),'hex'),''),is_default,
 			http2_enabled,http3_enabled,tls_prefer_server_ciphers,tls_cipher_suites FROM sites WHERE id=$1`,
-			request.ID).Scan(&cacheSharedBefore, &cacheStatusBefore, &tlsBefore.Protocols, &tlsBefore.CipherPreset, &tlsBefore.OCSPStapling,
+			request.ID).Scan(&cacheSharedBefore, &cacheStatusBefore, &serverTimingBefore, &rumBefore, &tlsBefore.Protocols, &tlsBefore.CipherPreset, &tlsBefore.OCSPStapling,
 			&tlsBefore.ClientAuth, &tlsBefore.ClientCASHA256, &defaultBefore,
 			&tlsBefore.HTTP2, &tlsBefore.HTTP3, &tlsBefore.PreferServerCiphers, &tlsBefore.CipherSuites); err != nil {
 			return err
@@ -588,6 +589,8 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 						THEN COALESCE($27::integer,https_redirect_port) ELSE 0 END,
 					cache_shared_across_domains=COALESCE($28::boolean,cache_shared_across_domains),
 					cache_status_header=COALESCE($33::boolean,cache_status_header),
+					server_timing=COALESCE($39::boolean,server_timing),
+					rum_sample_percent=CASE WHEN $40::boolean THEN $41::smallint ELSE rum_sample_percent END,
 					tls_cipher_preset=COALESCE($29::text,tls_cipher_preset),
 					tls_cipher_suites=CASE WHEN $29::text IS NULL THEN tls_cipher_suites ELSE $38::text[] END,
 					tls_ocsp_stapling=COALESCE($30::boolean,tls_ocsp_stapling),
@@ -650,7 +653,8 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 			request.Fields.TLSCipherPreset, request.Fields.TLSOCSPStapling, request.Fields.TLSClientAuth,
 			request.Fields.TLSClientCAPEM, request.Fields.CacheStatusHeader,
 			request.Fields.HTTP2Enabled, request.Fields.HTTP3Enabled, request.Fields.TLSPreferServerCiphers,
-			request.Fields.TLSPreferServerCiphersReset, request.Fields.TLSCipherSuites,
+			request.Fields.TLSPreferServerCiphersReset, request.Fields.TLSCipherSuites, request.Fields.ServerTiming,
+			request.Fields.RUMSet, request.Fields.RUMSamplePercent,
 		))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRevisionConflict
@@ -741,6 +745,46 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 					"actor_scope_id": actor.ScopeID.String(), "target_scope_id": scopeID.String(),
 					"changes": map[string]any{"cache_status_header": map[string]any{
 						"from": cacheStatusBefore, "to": item.CacheStatusHeader,
+					}},
+				},
+			}); err != nil {
+				return err
+			}
+		}
+		if item.ServerTiming != serverTimingBefore {
+			if err := s.auditor.Append(ctx, tx, audit.Event{
+				ScopeID:      scopeID,
+				ActorUserID:  &actor.UserID,
+				Action:       "site.server_timing.update",
+				ResourceType: "site",
+				ResourceID:   item.ID.String(),
+				RequestID:    request.RequestID,
+				Result:       "success",
+				Payload: map[string]any{
+					"ip": request.SourceIP, "site_domain": item.Domain, "version": item.Revision,
+					"actor_scope_id": actor.ScopeID.String(), "target_scope_id": scopeID.String(),
+					"changes": map[string]any{"server_timing": map[string]any{
+						"from": serverTimingBefore, "to": item.ServerTiming,
+					}},
+				},
+			}); err != nil {
+				return err
+			}
+		}
+		if !sameRUMSamplePercent(item.RUMSamplePercent, rumBefore) {
+			if err := s.auditor.Append(ctx, tx, audit.Event{
+				ScopeID:      scopeID,
+				ActorUserID:  &actor.UserID,
+				Action:       "site.rum.update",
+				ResourceType: "site",
+				ResourceID:   item.ID.String(),
+				RequestID:    request.RequestID,
+				Result:       "success",
+				Payload: map[string]any{
+					"ip": request.SourceIP, "site_domain": item.Domain, "version": item.Revision,
+					"actor_scope_id": actor.ScopeID.String(), "target_scope_id": scopeID.String(),
+					"changes": map[string]any{"rum_sample_percent": map[string]any{
+						"from": rumBefore, "to": item.RUMSamplePercent,
 					}},
 				},
 			}); err != nil {
@@ -2555,6 +2599,10 @@ func activeDomainsExpression(alias string) string {
 	), ARRAY[` + alias + `.domain]::text[])`
 }
 
+// ActiveDomainsSQL is activeDomainsExpression for other packages (the
+// content rewrite tester compiles https rules against the same names).
+func ActiveDomainsSQL(alias string) string { return activeDomainsExpression(alias) }
+
 func siteColumns(alias string) string {
 	domains := activeDomainsExpression(alias)
 	originPool := `(SELECT jsonb_build_object(
@@ -2623,7 +2671,7 @@ func siteColumns(alias string) string {
 		alias + ".ipv6_enabled", alias + ".ipv6_runtime_state",
 		alias + ".ipv6_runtime_source_revision",
 		alias + ".tls_protocols", alias + ".force_https", alias + ".https_redirect_port",
-		alias + ".cache_shared_across_domains", alias + ".cache_status_header",
+		alias + ".cache_shared_across_domains", alias + ".cache_status_header", alias + ".server_timing", alias + ".rum_sample_percent",
 		alias + ".tls_cipher_preset", alias + ".tls_ocsp_stapling", alias + ".tls_client_auth",
 		"COALESCE(" + alias + ".tls_client_ca_pem,'')",
 		alias + ".http2_enabled", alias + ".http3_enabled", alias + ".tls_prefer_server_ciphers", alias + ".tls_cipher_suites",
@@ -2694,6 +2742,8 @@ func scanSite(row rowScanner) (Site, error) {
 		&item.HTTPSRedirectPort,
 		&item.CacheSharedAcrossDomains,
 		&item.CacheStatusHeader,
+		&item.ServerTiming,
+		&item.RUMSamplePercent,
 		&item.TLSCipherPreset,
 		&item.TLSOCSPStapling,
 		&item.TLSClientAuth,

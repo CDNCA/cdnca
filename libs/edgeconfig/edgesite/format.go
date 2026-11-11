@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
+	"github.com/cdnca/cdnca/libs/edgeconfig/contentrewrite"
 	"github.com/cdnca/cdnca/libs/edgeconfig/sched302"
 	"github.com/cdnca/cdnca/libs/edgeconfig/siteobject"
 )
@@ -95,6 +96,22 @@ type Site struct {
 	// except on the agent's own prewarm; an origin's own headers of those
 	// names are removed either way (cdnca_cache sets $cdnca_cache_show).
 	CacheStatusHeader bool `json:"cache_status_header,omitempty"`
+	// ServerTiming (Server-Timing 响应头): the node appends the
+	// Server-Timing entries cdn-cache, cdn-hit-layer, cdn-connect and
+	// cdn-ttfb. Published off at attack escalation level B or above, like
+	// CacheStatusHeader. Omitted when off; a site with it requires
+	// siteobject.ServerTimingCapability (CAPABILITY_NAME_SITE_SERVER_TIMING).
+	ServerTiming bool `json:"server_timing,omitempty"`
+	// RUM (real user monitoring): the node injects the same-origin
+	// RUM script into the site's HTML documents and serves its script and
+	// collect paths. Omitted when off; a site with it requires
+	// siteobject.RUMCapability (CAPABILITY_NAME_SITE_RUM).
+	RUM *edgeconfig.SiteRUM `json:"rum,omitempty"`
+	// ContentRewrite: the enabled rules the node runs
+	// on the site's HTML/CSS/JS responses (cdnca_rewrite.lua). Omitted when
+	// no rule is enabled; a site with it requires
+	// siteobject.ContentRewriteCapability (CAPABILITY_NAME_SITE_CONTENT_REWRITE).
+	ContentRewrite *contentrewrite.Node `json:"content_rewrite,omitempty"`
 
 	Origin   Origin      `json:"origin"`
 	Cache    *Cache      `json:"cache,omitempty"`
@@ -475,7 +492,31 @@ type Security struct {
 	// store, not referenced objects; both fields are absent without mounts.
 	Mounts         []RuleMount `json:"mounts,omitempty"`
 	ResolvedSHA256 string      `json:"resolved_sha256,omitempty"`
+	// StringSets are the string sets the site's rules
+	// reference (edgeconfig.WAFMatch.StringSets), each once, in id order:
+	// exactly the referenced (id, revision) pairs, at most
+	// edgeconfig.MaxSiteStringSets with edgeconfig.MaxSiteStringSetBytes of
+	// members together. Absent without string set conditions.
+	StringSets []StringSet `json:"string_sets,omitempty"`
+	// URLAuth is the site's enabled URL auth policy version
+	// (Kind RefURLAuth, ID the policy, Revision its version): the node
+	// verifies signed URLs before the cache from the policy the URL auth
+	// secret rollout installed, and answers 503 while it is not installed.
+	// Absent without an enabled policy; requires siteobject.URLAuthCapability.
+	URLAuth *Ref `json:"url_auth,omitempty"`
+	// URLAuthFallbackFloor is the lowest older version of the
+	// same policy a node may verify with while URLAuth's own version is not
+	// installed yet (a key rotation reaches the node's artifact rollout and
+	// the site object at different moments). The control plane sets it only
+	// over versions that differ from URLAuth's by nothing but keys it still
+	// trusts, so a revocation or any other change raises it to URLAuth's
+	// version (no fallback: the node answers 503 until the version lands).
+	// 0 = no fallback; otherwise 1 <= floor < URLAuth.Revision.
+	URLAuthFallbackFloor int64 `json:"url_auth_fallback_floor,omitempty"`
 }
+
+// StringSet is one set's published content (the edgeconfig shape).
+type StringSet = edgeconfig.WAFStringSet
 
 // RuleMount is one mounted pack (rulepack.Mount, same JSON).
 type RuleMount struct {
@@ -546,6 +587,7 @@ const (
 	RefHTTPPolicy       = "http_policy"
 	RefFirewallAction   = "firewall_action"
 	RefChallenge        = "challenge_policy"
+	RefURLAuth          = "url_auth_policy"
 	RefOriginAuthSecret = "origin_auth_secret"
 	RefErrorPageAsset   = "error_page_asset"
 	// RefClientCA is a site's client CA bundle (PEM); ID and revision are the

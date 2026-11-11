@@ -118,6 +118,9 @@ type analyticsEventIdentity struct {
 }
 
 func (p *Publisher) record(publication eventspool.Publication) (Record, error) {
+	if summary, ok := publication.Analytics(); ok {
+		return p.trustedRecord(publication, summary)
+	}
 	if eventspool.ValidAccessWindowPublication(publication) {
 		if publication.Subject != analyticsSubjectPrefix+strings.ToLower(p.nodeID) {
 			return Record{}, ErrInvalidPublication
@@ -130,6 +133,13 @@ func (p *Publisher) record(publication eventspool.Publication) (Record, error) {
 			return Record{}, ErrInvalidPublication
 		}
 		return Record{Kind: "subscription_minute.v1", MessageID: publication.MessageID, FirstSequence: publication.FirstSequence,
+			LastSequence: publication.LastSequence, LastEventID: publication.LastEventID, EventCount: 1, Payload: append([]byte(nil), publication.Payload...)}, nil
+	}
+	if eventspool.ValidRUMMinutePublication(publication) {
+		if publication.Subject != analyticsSubjectPrefix+strings.ToLower(p.nodeID) {
+			return Record{}, ErrInvalidPublication
+		}
+		return Record{Kind: "rum_minute.v1", MessageID: publication.MessageID, FirstSequence: publication.FirstSequence,
 			LastSequence: publication.LastSequence, LastEventID: publication.LastEventID, EventCount: 1, Payload: append([]byte(nil), publication.Payload...)}, nil
 	}
 	if strings.HasPrefix(publication.Subject, l4SubjectPrefix) {
@@ -210,3 +220,26 @@ func batchID(records []Record) string {
 }
 
 var _ eventspool.Publisher = (*Publisher)(nil)
+
+// trustedRecord is record for a publication the event spool encoded
+// (eventspool.Publication.Analytics): the header checks of the decoding path
+// on the envelope's known identity. Its message id is the content-bound one
+// by construction, and every event has the site, config version, no
+// installation and no package subscription.
+func (p *Publisher) trustedRecord(publication eventspool.Publication, summary eventspool.AnalyticsSummary) (Record, error) {
+	if publication.Subject != analyticsSubjectPrefix+strings.ToLower(p.nodeID) || publication.MessageID == "" ||
+		publication.FirstSequence == 0 || publication.LastSequence < publication.FirstSequence || publication.EventCount < 1 ||
+		publication.EventCount != int(publication.LastSequence-publication.FirstSequence+1) || publication.LastEventID == "" ||
+		len(publication.Payload) > 1<<20 || summary.Type != "access.v2" && summary.Type != "security.v2" ||
+		summary.NodeID != p.nodeID || !canonicalUUID(summary.TenantID) || summary.Events != publication.EventCount ||
+		summary.ProducedAt.IsZero() || summary.FirstEventID == "" || !canonicalUUID(summary.SiteID) ||
+		!canonicalUUID(summary.ConfigVersionID) || summary.LastEventID != publication.LastEventID {
+		return Record{}, ErrInvalidPublication
+	}
+	return Record{
+		Kind: summary.Type, MessageID: publication.MessageID,
+		FirstSequence: publication.FirstSequence, LastSequence: publication.LastSequence,
+		LastEventID: publication.LastEventID, EventCount: publication.EventCount,
+		Payload: append([]byte(nil), publication.Payload...), siteID: summary.SiteID, trusted: true,
+	}, nil
+}

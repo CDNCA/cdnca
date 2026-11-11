@@ -106,7 +106,7 @@ func checkCapture(n *node) {
 	tailer, err := eventspool.NewTailer(eventspool.TailConfig{
 		SourcePath: filepath.Join(n.shared, "telemetry", "dynroute", "access.jsonl"), StateDir: filepath.Join(n.prefix, "agent", "tail"),
 		Identity: eventspool.TrustedIdentity{EnrollmentNodeID: nodeID}, MaxLineBytes: 1 << 20, MaxBatchEvents: 100, MaxQuarantineBytes: 1 << 20,
-		Resolve: (&dyntelemetry.Resolver{Registry: n.registry, Sites: sites, NodeID: nodeID}).Resolve,
+		Resolve: (&dyntelemetry.Resolver{Registry: n.registry, Sites: sites, NodeID: nodeID}).ResolveTail,
 	})
 	if err != nil {
 		check("capture-tailer", false, "%v", err)

@@ -125,6 +125,8 @@ const typeTranslationKeys: Record<string, string> = {
   'security.waf.auto_exclusion_active': 'wafAutoExclusionActive',
   'security.waf.auto_exclusion_revoked': 'wafAutoExclusionRevoked',
   'security.waf.auto_exclusion_expired': 'wafAutoExclusionExpired',
+  'security.jwt_key_set.fetch_failing': 'jwtKeySetFetchFailing',
+  'security.jwt_key_set.fetch_recovered': 'jwtKeySetFetchRecovered',
   'certificate.expiring': 'certificateExpiring',
   'certificate.expired': 'certificateExpired',
   'node.availability.offline': 'nodeOffline',

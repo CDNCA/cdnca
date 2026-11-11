@@ -15,9 +15,22 @@ import (
 // policy with an explicit difficulty requires the capability.
 const ChallengePoWAPIVersion uint32 = 1
 
+// ChallengeExternalAPIVersion is CAPABILITY_NAME_CHALLENGE_EXTERNAL v1
+//: the providers turnstile / recaptcha-v3, the external_provider
+// fields score_threshold / unavailable and the 204/403/503 verifier.
+const ChallengeExternalAPIVersion uint32 = 1
+
+// ExternalNeedsCapability tells whether a policy's external provider needs
+// CHALLENGE_EXTERNAL: tencent / geetest-v4 without the new fields are byte for
+// byte what older agents accept and need nothing.
+func ExternalNeedsCapability(reference *ExternalProviderReference) bool {
+	return reference != nil && (reference.Provider == ProviderTurnstile || reference.Provider == ProviderRecaptchaV3 ||
+		reference.ScoreThreshold != nil || reference.Unavailable != "")
+}
+
 // RequiredCapabilities are the capabilities a challenge secret rollout of
 // one policy requires (publication and redelivery alike).
-func RequiredCapabilities(explicitPoW bool) []*agentv1.Capability {
+func RequiredCapabilities(explicitPoW, external bool) []*agentv1.Capability {
 	result := []*agentv1.Capability{
 		{Name: agentv1.CapabilityName_CAPABILITY_NAME_ATOMIC_RELEASE, ApiVersion: 1},
 		{Name: agentv1.CapabilityName_CAPABILITY_NAME_CONFIG_PRECHECK, ApiVersion: 1},
@@ -25,6 +38,11 @@ func RequiredCapabilities(explicitPoW bool) []*agentv1.Capability {
 	if explicitPoW {
 		result = append(result, &agentv1.Capability{
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW, ApiVersion: ChallengePoWAPIVersion,
+		})
+	}
+	if external {
+		result = append(result, &agentv1.Capability{
+			Name: agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_EXTERNAL, ApiVersion: ChallengeExternalAPIVersion,
 		})
 	}
 	return result

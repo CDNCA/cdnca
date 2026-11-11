@@ -123,7 +123,7 @@ remove_tree() {
   candidate=$1
   case "${candidate}" in
     */usr/lib/cdnca-edge-agent|*/usr/libexec/cdnca-edge-agent|*/usr/share/doc/cdnca-edge-agent|\
-    */etc/cdnca-edge-agent|*/var/lib/cdnca-edge-agent|*/var/lib/cdnca-edge|\
+    */etc/cdnca-edge-agent|*/var/lib/cdnca-edge-agent|*/var/lib/cdnca-edge|*/var/lib/dynroute|\
     */var/lib/cdnca-edge-agent-backups|*/var/lib/cdnca-edge-agent-helper|*/var/log/cdnca-edge-agent|\
     */opt/cdnca-node|*/var/lib/cdnca-node-install|*/var/lib/cdnca-node-monitoring) ;;
     *) die "unsafe uninstall target: ${candidate}" ;;
@@ -131,8 +131,39 @@ remove_tree() {
   assert_safe_tree "${candidate}"
   if [ -e "${candidate}" ] || [ -L "${candidate}" ]; then
     [ -d "${candidate}" ] && [ ! -L "${candidate}" ] || die "uninstall target is not a trusted directory"
-    rm -rf --one-file-system -- "${candidate}"
+    tree_mounts=$(mounts_at_or_below "${candidate}")
+    if [ -z "${tree_mounts}" ]; then
+      rm -rf --one-file-system -- "${candidate}"
+    else
+      # A disk the operator mounted inside (e.g. a cache disk under
+      # /var/lib/dynroute): rm --one-file-system would stop the purge there.
+      # Keep each mount point and its content, remove everything around it.
+      remove_around_mounts "${candidate}"
+    fi
   fi
+}
+
+# Mount points at or below $1 (/proc/self/mountinfo field 5, octal escapes decoded).
+mounts_at_or_below() {
+  [ -r /proc/self/mountinfo ] || return 0
+  awk -v root="$1" '{ m = $5; gsub(/\\040/, " ", m); gsub(/\\011/, "\t", m); gsub(/\\134/, "\\", m)
+    if (m == root || index(m, root "/") == 1) print m }' /proc/self/mountinfo
+}
+
+remove_around_mounts() {
+  if printf '%s\n' "${tree_mounts}" | grep -Fqx -- "$1"; then
+    printf 'cdnca-edge-agent packaging: warning: %s is a mount point; purge left it and its content in place (unmount it and remove it by hand if it is no longer needed)\n' "$1" >&2
+    return 0
+  fi
+  for entry in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+    [ -e "${entry}" ] || [ -L "${entry}" ] || continue
+    if [ -d "${entry}" ] && [ ! -L "${entry}" ] &&
+      printf '%s\n' "${tree_mounts}" | awk -v e="${entry}" '$0 == e || index($0, e "/") == 1 { found = 1 } END { exit !found }'; then
+      remove_around_mounts "${entry}"
+    else
+      rm -rf --one-file-system -- "${entry}"
+    fi
+  done
 }
 
 acquire_lock
@@ -242,6 +273,10 @@ if [ "${purge}" = true ]; then
   remove_tree "$(root_path /etc/cdnca-edge-agent)"
   remove_tree "$(root_path /var/lib/cdnca-edge-agent)"
   remove_tree "$(root_path /var/lib/cdnca-edge)"
+  # Dynamic routing state (nginx.conf, site index, objects, TLS pool, default
+  # cache): left behind, the next install's Agent recovered it and started
+  # OpenResty from a configuration naming the WAF engine removed above (D-e).
+  remove_tree "$(root_path /var/lib/dynroute)"
   remove_tree "$(root_path /var/lib/cdnca-edge-agent-backups)"
   remove_tree "$(root_path /var/log/cdnca-edge-agent)"
   toolset_record=$(root_path /var/lib/cdnca-edge-agent-packaging/toolset-refresh)

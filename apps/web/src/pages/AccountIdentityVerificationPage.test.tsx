@@ -438,7 +438,7 @@ describe('AccountIdentityVerificationPage', () => {
     expect(await screen.findByText('待审核')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '撤回申请' }))
     await user.click(await screen.findByRole('button', { name: '确认撤回' }))
-    expect(await screen.findByText('案件版本已变化，请刷新后重试。')).toBeInTheDocument()
+    expect(await screen.findByText('内容已被其他人修改，请刷新后再保存')).toBeInTheDocument()
     expect(screen.queryByText('操作结果待确认')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '撤回申请' }))

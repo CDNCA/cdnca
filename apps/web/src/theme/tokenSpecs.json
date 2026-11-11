@@ -114,6 +114,7 @@
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
       "pages/CnameAllocationsPage.css",
+      "pages/ContentRewritePage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
       "pages/DnsReconcilePage.css",
@@ -132,6 +133,7 @@
       "pages/NodeSchedulingPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
       "pages/RegisterPage.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
       "pages/SiteAnalysisPage.css",
@@ -148,6 +150,7 @@
       "pages/WafLogsPage.css",
       "pages/WafLogsV2.css",
       "pages/dns-hub/DnsHubPage.css",
+      "pages/lists/lists.css",
       "pages/node-market/NodeMarketV2.css",
       "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/plugin-webhooks/PluginWebhooksPage.css",
@@ -193,6 +196,7 @@
       "pages/DDoSProtectionV2.css",
       "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
+      "pages/FirewallActionPoliciesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
       "pages/L4RealtimeMonitorPage.css",
@@ -258,6 +262,7 @@
       "pages/AdminMessageQueryPage.css",
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
+      "pages/ContentRewritePage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
@@ -267,6 +272,7 @@
       "pages/NodeMonitorSettingsPage.css",
       "pages/NodeSchedulingPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
       "pages/SiteAnalysisPage.css",
@@ -336,6 +342,7 @@
       "pages/NodeSchedulingPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
       "pages/RegisterPage.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
       "pages/SiteAnalysisPage.css",
@@ -380,6 +387,7 @@
     "used_in": [
       "@cdnca/ui/styles.css",
       "pages/FirewallActionPoliciesPage.css",
+      "pages/RumReportPage.css",
       "pages/dns-hub/DnsHubPage.css",
       "pages/node-market/SubscribedNodes.css",
       "pages/site-edit/CacheSiteTab.css",
@@ -566,6 +574,7 @@
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
       "pages/CnameAllocationsPage.css",
+      "pages/ContentRewritePage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
       "pages/DnsReconcilePage.css",
@@ -584,6 +593,7 @@
       "pages/NodeSchedulingPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
       "pages/RegisterPage.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteGroupsPage.css",
       "pages/SystemGlobalSettingsPage.css",
@@ -627,6 +637,7 @@
       "pages/NodeMonitorSettingsPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
       "pages/RegisterPage.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteGroupsPage.css",
       "pages/StreamDetailPage.css",
@@ -660,6 +671,7 @@
       "pages/NodeL2TopologyPage.css",
       "pages/NodeListPage.css",
       "pages/RegisterPage.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/StreamListPage.css",
@@ -689,6 +701,7 @@
       "pages/CacheOperationHistoryPage.css",
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
+      "pages/ContentRewritePage.css",
       "pages/DnsReconcilePage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/LogCenterPage.css",
@@ -698,6 +711,7 @@
       "pages/NodeListPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
       "pages/RegisterPage.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/SiteBlockLogPage.css",
       "pages/StreamDetailPage.css",
@@ -705,6 +719,7 @@
       "pages/SystemGlobalSettingsPage.css",
       "pages/WafLogsV2.css",
       "pages/dns-hub/DnsHubPage.css",
+      "pages/lists/lists.css",
       "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
       "pages/site-edit/SiteEditSyncStatus.css",
@@ -968,7 +983,10 @@
   },
   "chartColor1": {
     "kind": "color",
-    "group": "chart"
+    "group": "chart",
+    "used_in": [
+      "pages/RumReportPage.css"
+    ]
   },
   "chartColor2": {
     "kind": "color",
@@ -1176,6 +1194,8 @@
     "used_in": [
       "@cdnca/ui/styles.css",
       "components/CacheOperationOutcome.css",
+      "pages/ContentRewritePage.css",
+      "pages/RumReportPage.css",
       "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/plugin-webhooks/PluginWebhooksPage.css",
@@ -1214,6 +1234,7 @@
     "used_in": [
       "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
+      "pages/lists/lists.css",
       "pages/site-edit/HttpsSiteTab.css",
       "pages/site-edit/SiteProtectionTabs.css"
     ]

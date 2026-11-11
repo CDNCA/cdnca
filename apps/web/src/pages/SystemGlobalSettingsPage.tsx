@@ -478,7 +478,7 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
       {mode === 'payment' || mode === 'all' ? <Form.Item label=" "><Space><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" onClick={save}>{t('actions.saveRecharge')}</Button></Space></Form.Item> : null}
       {mode === 'all' ? <Form.Item label=" "><Space><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" onClick={save}>{t('actions.save')}</Button></Space></Form.Item> : null}
     </Form>
-    {mode === 'account' || mode === 'all' ? <><Divider /><Space><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button>{mode === 'all' ? null : <Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" icon={<Save size={14} />} onClick={save}>{t('actions.save')}</Button>}<Typography.Text type="secondary">{t('metadata.revision')} {document.revision}</Typography.Text></Space></> : null}
+    {mode === 'account' || mode === 'all' ? <><Divider /><Space><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button>{mode === 'all' ? null : <Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" icon={<Save size={14} />} onClick={save}>{t('actions.save')}</Button>}</Space></> : null}
     {write.saved ? <Alert type="success" showIcon message={state.saved} style={{ marginTop: 12 }} /> : null}
   </div>
 }
@@ -556,7 +556,7 @@ function CleanupPanel() {
       <h2 id="system-settings-backup-title">{t('sections.backup')}</h2>
       <Typography.Paragraph type="secondary" data-testid="system-settings-backup-moved">{t('sections.backupMoved')} <Link to="/sys/op?tab=maintenance">{t('sections.backupMovedLink')}</Link>{t('sections.backupMovedSuffix')}</Typography.Paragraph>
     </section>
-    <Divider /><Space><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" icon={<Save size={14} />} onClick={save}>{t('actions.save')}</Button><Typography.Text type="secondary">{t('metadata.revision')} {document.revision}</Typography.Text></Space>
+    <Divider /><Space><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" icon={<Save size={14} />} onClick={save}>{t('actions.save')}</Button></Space>
     {write.saved ? <Alert type="success" showIcon message={t('states.saved')} style={{ marginTop: 12 }} /> : null}
   </div>
 }
@@ -691,7 +691,7 @@ function MailPanel() {
         <div><Button aria-label={t('mailActions.sms')} aria-busy={write.saving && write.savingScope === 'sms'} disabled={!canManage || write.uncertain || write.saving || unsupportedProvider} type="primary" loading={write.saving && write.savingScope === 'sms'} onClick={() => save('sms')}>{t('mailActions.sms')}</Button></div>
       </section>
     </Form>
-    <Space wrap><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button><Typography.Text type="secondary">{t('metadata.revision')} {document.revision}</Typography.Text></Space>
+    <Space wrap><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button></Space>
     {write.saved ? <Alert type="success" showIcon message={t('states.savedMail')} style={{ marginTop: 12 }} /> : null}
   </div>
 }
@@ -882,7 +882,6 @@ function OtherPanel() {
     {/* fix-sysother：底部固定保存条，滚动中始终可见；只管上方分组卡；审批中心在其后单独保存。 */}
     <div className={`sys-setting-v2-savebar sys-other-savebar${dirty ? ' is-dirty' : ''}`}>
       <span>{noticeDaysInvalid ? t('v2.other.invalidDays') : dirty ? t('v2.other.unsaved') : t('v2.other.allSaved')}</span>
-      <Typography.Text type="secondary">{t('metadata.revision')} {document.revision}</Typography.Text>
       <Space className="sys-other-savebar-actions">
         <Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button>
         <Button disabled={!canManage || write.uncertain || noticeDaysInvalid} loading={write.saving} type="primary" icon={<Save size={14} />} onClick={save}>{t('actions.save')}</Button>
@@ -1181,7 +1180,6 @@ function SystemPanel() {
     {/* redesign-a：底部固定自动保存状态条（原"刷新 · 修订版本"并入）；保存中仍由 SaveState 播报。 */}
     <div className={`sys-setting-v2-savebar${dirty ? ' is-dirty' : ''}`}>
       <span>{dirty ? t('v2.pending') : t('v2.allSaved')}</span>
-      <Typography.Text type="secondary">{t('metadata.revision')} {document.revision}</Typography.Text>
       <Button icon={<RefreshCw size={14} />} loading={refreshing}
         disabled={writeInFlight || write.uncertain || brandBindingWrite.uncertain || brandUploadUncertain} onClick={refresh}>{t('actions.refresh')}</Button>
     </div>

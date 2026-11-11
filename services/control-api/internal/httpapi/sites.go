@@ -50,6 +50,12 @@ type siteBasicPayload struct {
 	// CacheStatusHeader (响应头显示缓存状态): omitted keeps the stored value;
 	// on create, on.
 	CacheStatusHeader *bool `json:"cache_status_header,omitempty"`
+	// ServerTiming (Server-Timing response header): omitted keeps the stored
+	// value; on create, off.
+	ServerTiming *bool `json:"server_timing,omitempty"`
+	// RUM (真实用户体验上报): omitted keeps the stored value, null
+	// turns it off; on create, off. Responses always carry it (null = off).
+	RUM *siteRUMPayload `json:"rum"`
 	// TLS profile: omitted keeps the stored value; on create,
 	// the system default. tls_client_ca_pem goes with tls_client_auth.
 	TLSCipherPreset *string `json:"tls_cipher_preset,omitempty"`
@@ -78,6 +84,12 @@ type siteBasicPayload struct {
 	decoded       bool
 	ipv6Present   bool
 	preferPresent bool
+	rumPresent    bool
+}
+
+// siteRUMPayload is basic.rum: {"sample_percent": 1-100}.
+type siteRUMPayload struct {
+	SamplePercent int `json:"sample_percent"`
 }
 
 func (payload *siteBasicPayload) UnmarshalJSON(data []byte) error {
@@ -97,6 +109,7 @@ func (payload *siteBasicPayload) UnmarshalJSON(data []byte) error {
 	payload.decoded = true
 	_, payload.ipv6Present = fields["ipv6_enabled"]
 	_, payload.preferPresent = fields["tls_prefer_server_ciphers"]
+	_, payload.rumPresent = fields["rum"]
 	return nil
 }
 
@@ -799,6 +812,7 @@ func fieldsFromBasic(basic siteBasicPayload) (site.SiteFields, error) {
 		HTTPSRedirectPort:        basic.HTTPSRedirectPort,
 		CacheSharedAcrossDomains: basic.CacheSharedAcrossDomains,
 		CacheStatusHeader:        basic.CacheStatusHeader,
+		ServerTiming:             basic.ServerTiming,
 		TLSCipherPreset:          basic.TLSCipherPreset,
 		TLSCipherSuites:          basic.TLSCipherSuites,
 		TLSOCSPStapling:          basic.TLSOCSPStapling,
@@ -821,6 +835,16 @@ func fieldsFromBasic(basic siteBasicPayload) (site.SiteFields, error) {
 	fields.TLSPreferServerCiphers = basic.TLSPreferServerCiphers
 	// an explicit null: by the cipher preset again
 	fields.TLSPreferServerCiphersReset = basic.preferPresent && basic.TLSPreferServerCiphers == nil
+	if basic.rumPresent {
+		fields.RUMSet = true
+		if basic.RUM != nil {
+			percent := basic.RUM.SamplePercent
+			fields.RUMSamplePercent = &percent
+		}
+		if !site.ValidRUMSamplePercent(fields.RUMSamplePercent) {
+			return site.SiteFields{}, site.ErrInvalidInput
+		}
+	}
 	return fields, nil
 }
 
@@ -838,7 +862,7 @@ func siteDetailAt(item site.Site, now time.Time) siteDetailResponse {
 		expiresAt, expiredDays, remainingDays = &text, &days, &remaining
 	}
 	forceHTTPS, redirectPort, cacheShared := item.ForceHTTPS, item.HTTPSRedirectPort, item.CacheSharedAcrossDomains
-	cacheStatusHeader := item.CacheStatusHeader
+	cacheStatusHeader, serverTiming := item.CacheStatusHeader, item.ServerTiming
 	syncStatus := item.SyncStatus
 	var packageName, groupName *string
 	if item.Package != nil {
@@ -906,6 +930,8 @@ func siteDetailAt(item site.Site, now time.Time) siteDetailResponse {
 			HTTPSRedirectPort:        &redirectPort,
 			CacheSharedAcrossDomains: &cacheShared,
 			CacheStatusHeader:        &cacheStatusHeader,
+			ServerTiming:             &serverTiming,
+			RUM:                      siteRUMResponse(item.RUMSamplePercent),
 			TLSCipherPreset:          &tlsCipherPreset,
 			TLSCipherSuites:          append([]string(nil), item.TLSCipherSuites...),
 			TLSOCSPStapling:          &tlsOCSPStapling,
@@ -1245,4 +1271,12 @@ func (s *Server) writeDomainTrustError(w http.ResponseWriter, r *http.Request, e
 		"code": code, "message": message, "request_id": requestID(r.Context()),
 		"domain": detail.Domain, "apex": detail.Apex,
 	}})
+}
+
+// siteRUMResponse is basic.rum of a site detail (nil: off).
+func siteRUMResponse(percent *int) *siteRUMPayload {
+	if percent == nil {
+		return nil
+	}
+	return &siteRUMPayload{SamplePercent: *percent}
 }

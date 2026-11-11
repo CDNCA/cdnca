@@ -27,7 +27,7 @@ const zhCN = {
   errors: {
     load: '加载插件列表失败', detail: '加载插件详情失败', request: '操作失败',
     permissionDenied: '当前账号没有管理插件的权限', notFound: '找不到这个插件，或它不属于当前账号',
-    revisionConflict: '插件状态刚刚变了，请刷新后再试', idempotencyConflict: '这次提交和之前的请求冲突，请刷新后重新操作',
+    revisionConflict: '内容已被其他人修改，请刷新后再保存', idempotencyConflict: '这次提交和之前的请求冲突，请刷新后重新操作',
     scopeApproval: '平台还没有批准这个插件需要的权限', manifestInvalid: '插件的签名校验没有通过',
     versionIncompatible: '这个插件版本不支持当前主控版本', licenseUnavailable: '暂时连不上授权服务，请稍后再试',
     resultUnknown: '不确定操作是否成功', invalidResponse: '服务器返回的数据格式不对',
@@ -52,6 +52,7 @@ const zhCN = {
     generation: '访问凭据版本', lkg: '可回退版本', compatibility: '版本兼容', reason: '状态说明', updated: '更新时间',
     diagnostics: '诊断信息（联系平台时提供）',
   },
+  settingsTab: { overview: '概览', settings: '设置' },
   compatibility: {
     verified: '平台已校验签名，和当前主控版本兼容', pending: '安装后确认',
     incompatible: '当前主控版本不在插件支持的范围内',
@@ -106,7 +107,7 @@ const zhCN = {
     title: '插件将添加的页面', loading: '正在从插件市场核对页面声明',
     notice: '启用后，下列页面会以隔离框架从 {{origin}} 加载，插件读不到你的登录凭据。',
     origin: '页面来源', api: '插件后端', none: '这个版本不添加页面',
-    menuItem: '{{title}}（{{mount}}）', mount: { menu: '菜单', site_tab: '网站详情页签' },
+    menuItem: '{{title}}（{{mount}}）', mount: { menu: '菜单', site_tab: '网站详情页签', plugin_settings: '插件详情的设置页' },
     roles: { admin: '平台管理员', user: '租户用户' },
     mismatch: '插件市场里的 {{version}} 版本和待安装的签名清单对不上，无法展示页面声明，请先联系平台核实。',
     unavailable: '暂时无法从插件市场读取页面声明，确认前请向平台核实这个插件会添加哪些页面。',
@@ -157,7 +158,7 @@ const enUS = {
   errors: {
     load: 'Failed to load plugin installations', detail: 'Failed to load plugin details', request: 'Action failed',
     permissionDenied: 'Plugin installation management permission is required', notFound: 'The authorization does not exist in this customer scope',
-    revisionConflict: 'The record changed; refresh before retrying', idempotencyConflict: 'The idempotency key belongs to another request',
+    revisionConflict: 'Someone else changed this content. Refresh before saving.', idempotencyConflict: 'The idempotency key belongs to another request',
     scopeApproval: 'Capability approval is missing or expired', manifestInvalid: 'Plugin manifest verification failed',
     versionIncompatible: 'The plugin version is incompatible with this control plane', licenseUnavailable: 'The license service is unavailable',
     resultUnknown: 'The write result is unknown', invalidResponse: 'The server response violates the versioned contract',
@@ -182,6 +183,7 @@ const enUS = {
     generation: 'Identity generation', lkg: 'Last known good', compatibility: 'Version compatibility', reason: 'Stable reason', updated: 'Updated',
     diagnostics: 'Diagnostics (give these to the platform)',
   },
+  settingsTab: { overview: 'Overview', settings: 'Settings' },
   compatibility: {
     verified: 'Verified by the signed catalog and control service', pending: 'Pending installation authorization',
     incompatible: 'This control plane is outside the plugin signed compatibility range',
@@ -236,7 +238,7 @@ const enUS = {
     title: 'Pages this plugin adds', loading: 'Checking the page declaration with the plugin market',
     notice: 'Once enabled, these pages load from {{origin}} in an isolated frame; the plugin cannot read your sign-in credentials.',
     origin: 'Page origin', api: 'Plugin backend', none: 'This version adds no pages',
-    menuItem: '{{title}} ({{mount}})', mount: { menu: 'menu', site_tab: 'site detail tab' },
+    menuItem: '{{title}} ({{mount}})', mount: { menu: 'menu', site_tab: 'site detail tab', plugin_settings: 'settings in the plugin detail' },
     roles: { admin: 'platform administrators', user: 'tenant users' },
     mismatch: 'Version {{version}} in the plugin market does not match the signed manifest being installed; ask the platform before confirming.',
     unavailable: 'The plugin market page declaration is unavailable; ask the platform which pages this plugin adds before confirming.',

@@ -10,6 +10,7 @@
 --                      2 http_policy   custom response headers + CORS
 --                                      (skipped on a replaced page)
 --                      3 cache_status  cache hit header
+--                      3b server_timing Server-Timing (this module)
 --                      4 hsts          Strict-Transport-Security (this module)
 --                      5 alt_svc       Alt-Svc (cdnca_tls, D4)
 --                    Each slot writes only its own headers; slots 3-5 own
@@ -34,6 +35,7 @@
 -- and v7's error_page never replaced those either.
 local cdnca_site = require "cdnca_site"
 local lrucache = require "resty.lrucache"
+local ngx_resp = require "ngx.resp"
 
 local ngx = ngx
 local ngx_var = ngx.var
@@ -42,7 +44,7 @@ local type, tostring, tonumber, pairs, ipairs = type, tostring, tonumber, pairs,
 
 local _M = { _VERSION = "1" }
 
-_M.HEADER_SLOTS = { "error_page", "http_policy", "cache_status", "hsts", "alt_svc" }
+_M.HEADER_SLOTS = { "error_page", "http_policy", "cache_status", "server_timing", "hsts", "alt_svc" }
 
 local registered = {}
 local compiled = assert(lrucache.new(10000)) -- site digest -> {pages, statuses}
@@ -617,6 +619,92 @@ local function apply_header_actions(actions)
     end
 end
 
+-- ------------------------------------------------- Server-Timing
+-- Slot 3b, only for a site whose object carries server_timing (published off
+-- at attack escalation B and above). The caller tests the field, so a site
+-- without it costs one table read and nothing else. Entries are appended to
+-- the origin's own Server-Timing; one that does not apply is left out, none
+-- at all adds no header. No node name, address or tenant: status words and
+-- whole milliseconds only (ASCII tokens, no quoting).
+local HIT_LAYER_EDGE = { HIT = true, STALE = true, UPDATING = true, REVALIDATED = true }
+local HIT_LAYER_MISS = { MISS = true, EXPIRED = true }
+
+-- the last attempt of "0.003, 0.004 : 0.002" (retries ", ", internal
+-- redirects " : ") in whole milliseconds (a number); nil for "-" or anything
+-- else. One attempt, the usual case, is a plain number: tonumber only, the
+-- pattern (a stitched C call) only for retries and redirects.
+local function last_ms(value)
+    if not value then
+        return nil
+    end
+    local seconds = tonumber(value)
+    if not seconds then
+        seconds = tonumber(value:match("([%d%.]+)%s*$"))
+        if not seconds then
+            return nil
+        end
+    end
+    return math.floor(seconds * 1000 + 0.5)
+end
+
+-- the site's cache status as $cdnca_cache_status. That map is volatile and
+-- runs its regexes on every read; with no zone (a bypassed request, a site
+-- without cache) its value only depends on $cdnca_cache_enabled ("~^\|" ""
+-- else default BYPASS, edgecache.HTTP), so the map is read only when the
+-- request had a zone.
+local function cache_status()
+    local zone = ngx_var.cdnca_cache_zone
+    if zone == nil or zone == "" then
+        local enabled = ngx_var.cdnca_cache_enabled
+        if enabled == nil or enabled == "" then
+            return nil
+        end
+        return "BYPASS"
+    end
+    local status = ngx_var.cdnca_cache_status
+    if status == "" then
+        return nil
+    end
+    return status
+end
+
+-- One value appended after the origin's own Server-Timing lines
+-- (ngx.resp.add_header: no read of the current header).
+local function server_timing()
+    local status = cache_status()
+    -- an L1's trusted hop on this L2: the L1 answers the
+    -- visitor; this node only tells it its own cache status (hidden from
+    -- the visitor by the L1's proxy_hide_header, edgecache.responseHeaders)
+    if ngx_var.cdnca_l2_trusted == "1" then
+        if status then
+            ngx_header["X-Cdnca-L2-Cache"] = status
+        end
+        return
+    end
+    local value
+    if status then
+        value = "cdn-cache;desc=" .. status
+        if HIT_LAYER_EDGE[status] then
+            value = value .. ", cdn-hit-layer;desc=edge"
+        elseif HIT_LAYER_MISS[status] and ngx_var.cdnca_origin_l2_hop == "1" and
+            HIT_LAYER_EDGE[ngx_var.upstream_http_x_cdnca_l2_cache or ""] then
+            value = value .. ", cdn-hit-layer;desc=l2"
+        end
+    end
+    local connect = last_ms(ngx_var.upstream_connect_time)
+    if connect then
+        value = (value and value .. ", cdn-connect;dur=" or "cdn-connect;dur=") .. connect
+    end
+    local ttfb = last_ms(ngx_var.upstream_header_time)
+    if ttfb then
+        value = (value and value .. ", cdn-ttfb;dur=" or "cdn-ttfb;dur=") .. ttfb
+    end
+    if value then
+        ngx_resp.add_header("Server-Timing", value)
+    end
+end
+_M._server_timing, _M._last_ms = server_timing, last_ms
+
 local function hsts(site)
     local value = site.hsts
     if not value or ngx_var.https ~= "on" then
@@ -659,6 +747,9 @@ function _M.header_filter()
     local cache = registered.cache_status
     if cache then
         cache(site, state)
+    end
+    if site.server_timing then
+        server_timing()
     end
     hsts(site)
     alt_svc()

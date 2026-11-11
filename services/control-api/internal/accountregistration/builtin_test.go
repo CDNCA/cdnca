@@ -39,8 +39,8 @@ func (captcha *captchaStub) ConsumeCaptcha(_ context.Context, proof identity.Log
 func builtInInput() BuiltInInput {
 	return BuiltInInput{
 		RegisterInput: RegisterInput{
-			Username: " Fix-Register-Alice ", Password: "Correct-horse-battery-staple", DisplayName: "Alice",
-			Email: " Fix-Register-Alice@Example.com ", TermsAccepted: true, TermsVersion: "terms-2026-08",
+			Username: " Builtin-Alice ", Password: "Correct-horse-battery-staple", DisplayName: "Alice",
+			Email: " Builtin-Alice@Example.com ", TermsAccepted: true, TermsVersion: "terms-2026-08",
 			IdempotencyKey: "registration-builtin-1", RequestID: "request-builtin-1", Source: "203.0.113.9",
 		},
 		Captcha: identity.LoginCaptchaProof{ID: uuid.MustParse("22222222-2222-4222-8222-222222222222"), Answer: "AB2CD"},
@@ -71,7 +71,7 @@ func TestBuiltInRegistrationCreatesNormalizedOwnerWithCaptcha(t *testing.T) {
 		t.Fatalf("captcha=%d store=%d", len(captcha.calls), len(store.calls))
 	}
 	record := store.calls[0]
-	if record.Username != "builtin registration-alice" || record.Email != "builtin registration-alice@example.com" ||
+	if record.Username != "builtin-alice" || record.Email != "builtin-alice@example.com" ||
 		record.VerificationChannel != VerificationEmail || record.PasswordHash == "" ||
 		record.PasswordHash == "Correct-horse-battery-staple" {
 		t.Fatalf("record=%#v", record)

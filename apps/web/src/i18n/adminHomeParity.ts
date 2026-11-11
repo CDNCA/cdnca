@@ -22,7 +22,7 @@ const zhCN = {
     status: { uninstalled: '未安装', valid: '有效', grace: '宽限中', expired: '已过期', revoked: '已吊销', invalid: '无效' },
     graceWarning: '本地租约已过期，仍在宽限期，剩余 {{count}} 天。宽限期内现有套餐与功能照常使用，升级需要有效租约；宽限期结束后，新建、扩容和功能变更会被拒绝，已在运行的边缘服务不会立即中断。请点「刷新授权」并查看结果。',
   },
-  authorization: { licensedNodes: '授权节点', currentNode: '当前节点', expiresAt: '到期时间', operation: '操作' },
+  authorization: { licensedNodes: '授权节点', currentNode: '当前节点', expiresAt: '到期时间', permanent: '永久', operation: '操作' },
   usage: { domainsTotal: '域名数', forwardsTotal: '转发数', certificatesShort: '证书' },
   profile: {
     platformAdmin: '平台管理员', accountId: '账号ID', lastLogin: '最近登录', loginIp: '登录IP', notProvided: '当前会话未提供', edit: '编辑个人资料',
@@ -51,7 +51,7 @@ const enUS = {
     status: { uninstalled: 'Not installed', valid: 'Valid', grace: 'In grace', expired: 'Expired', revoked: 'Revoked', invalid: 'Invalid' },
     graceWarning: 'The local lease has expired and is in its grace period: {{count}} days left. Existing plans and features keep working, upgrades need a valid lease; after the grace period, creating, scaling and feature changes are refused, while running edge traffic is not cut off at once. Use "Refresh authorization" to check again and see the result.',
   },
-  authorization: { licensedNodes: 'Authorized nodes', currentNode: 'Current node', expiresAt: 'Expiration', operation: 'Operation' },
+  authorization: { licensedNodes: 'Authorized nodes', currentNode: 'Current node', expiresAt: 'Expiration', permanent: 'Permanent', operation: 'Operation' },
   usage: { domainsTotal: 'Domains', forwardsTotal: 'Forwards', certificatesShort: 'Certificates' },
   profile: {
     platformAdmin: 'Platform administrator', accountId: 'Account ID', lastLogin: 'Last login', loginIp: 'Login IP', notProvided: 'Not provided by this session', edit: 'Edit profile',

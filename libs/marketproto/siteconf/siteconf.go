@@ -75,10 +75,14 @@ type Config struct {
 	// Site settings (site_settings.go): the HTTPS profile, IPv6, all domains
 	// sharing one cache, the cache status header off, and the site access
 	// settings (siteaccess.Settings without basic auth) as an object.
+	// ServerTiming is the site's Server-Timing response header (off by
+	// default); the leaf publishes it under its own
+	// escalation and capability gate.
 	TLS                      *TLSOptions     `json:"tls,omitempty"`
 	IPv6                     bool            `json:"ipv6,omitempty"`
 	CacheSharedAcrossDomains bool            `json:"cache_shared_across_domains,omitempty"`
 	CacheStatusHeaderOff     bool            `json:"cache_status_header_off,omitempty"`
+	ServerTiming             bool            `json:"server_timing,omitempty"`
 	SiteAccess               json.RawMessage `json:"site_access,omitempty"`
 	// WAF is the site's WAF policy (fix-mktsiteconf2 ②) in the cdnca 1.0.35
 	// security policy model: default action, rules without IDs (the managed

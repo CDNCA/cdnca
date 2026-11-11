@@ -69,7 +69,7 @@ func TestChallengeAndVerifyRoutesNeverEchoSecrets(t *testing.T) {
 		t.Fatalf("verify response = %d %s", verifyResponse.Code, verifyResponse.Body.String())
 	}
 	cookies := verifyResponse.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != accountregistrationproof.CookieName || !cookies[0].Secure ||
+	if len(cookies) != 1 || cookies[0].Name != accountregistrationproof.ChannelCookieName("email") || !cookies[0].Secure ||
 		!cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode || cookies[0].Path != "/" {
 		t.Fatalf("proof cookies = %#v", cookies)
 	}

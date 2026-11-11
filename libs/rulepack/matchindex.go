@@ -200,10 +200,15 @@ func CompileMatchIndex(plan edgeconfig.RulePlan, budget MatchBudget) (*MatchInde
 		}
 		pureRun := true
 		for position, condition := range rule.Conditions {
-			if condition.Op == edgeconfig.RuleOpIPIntel || condition.Op == edgeconfig.RuleOpIPList {
-				// cdnca_iplib.match / cdnca_waf.ip_list are lookups without side effects on
-				// the request: an inspect key may follow it, a pure key
-				// may not (the index reads no IP library).
+			if condition.Op == edgeconfig.RuleOpIPIntel || condition.Op == edgeconfig.RuleOpIPList || condition.Op == edgeconfig.RuleOpStringSet {
+				// cdnca_iplib.match / cdnca_waf.ip_list / a string set are
+				// lookups without side effects on the request: an inspect
+				// key may follow it, a pure key may not (the index reads no
+				// IP library or string set). The WAF v6 client
+				// conditions (browser_in, browser_version, device_in,
+				// time_window) are like expires_before: pureBuckets has no
+				// bucket for them and they do not end the pure run (
+				//).
 				pureRun = false
 				continue
 			}

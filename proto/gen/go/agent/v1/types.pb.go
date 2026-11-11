@@ -359,6 +359,46 @@ const (
 	// scripts and root packaging helper. Report only: control stores and shows
 	// it and sends nothing back. A node without it is shown as not reporting.
 	CapabilityName_CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT CapabilityName = 83
+	// SITE_SERVER_TIMING v1:
+	// the site object field server_timing (cdnca.edge.site/v2). The node
+	// appends Server-Timing entries cdn-cache, cdn-hit-layer, cdn-connect and
+	// cdn-ttfb to the site's responses. Older agents decode site objects
+	// strictly and refuse the field, so a publication with a site that has it
+	// requires this capability (site object capability "site_server_timing")
+	// and is refused for nodes that do not declare it.
+	CapabilityName_CAPABILITY_NAME_SITE_SERVER_TIMING CapabilityName = 84
+	// CHALLENGE_EXTERNAL v1 (86):
+	// the node's JS challenge engine accepts the external providers turnstile
+	// and recaptcha-v3 and the external_provider fields score_threshold and
+	// unavailable, and the Agent verifier answers 204 / 403 / 503 (passed /
+	// refused / provider unavailable). Control sends a policy using either
+	// provider or either field only to nodes declaring it; the others keep
+	// their previous policy. tencent and geetest-v4 policies without the new
+	// fields are byte for byte what older agents accept.
+	CapabilityName_CAPABILITY_NAME_CHALLENGE_EXTERNAL CapabilityName = 86
+	// URL_AUTH v1 (87): the site
+	// object field security.url_auth (cdnca.edge.site/v2) names the site's
+	// enabled URL auth policy version, and the node verifies signed URLs in
+	// dynamic routing before the cache, from the policy the URL auth secret
+	// rollout installed (no policy installed: 503). Older agents decode site
+	// objects strictly and refuse the field, so a publication with a site that
+	// has it requires this capability (site object capability "url_auth").
+	CapabilityName_CAPABILITY_NAME_URL_AUTH CapabilityName = 87
+	// SITE_RUM v1: the site
+	// object field rum (cdnca.edge.site/v2): the node injects the same-origin
+	// RUM script into the site's HTML documents and serves /.cdnca/rum/v1.js
+	// and /.cdnca/rum/collect. Older agents decode site objects strictly and
+	// refuse the field, so a publication with a site that has it requires this
+	// capability (site object capability "site_rum").
+	CapabilityName_CAPABILITY_NAME_SITE_RUM CapabilityName = 89
+	// SITE_CONTENT_REWRITE v1:
+	// the site object field content_rewrite (cdnca.edge.site/v2): the node
+	// fetches matching paths without Accept-Encoding and rewrites links,
+	// replaces text and upgrades http:// links in the site's HTML/CSS/JS
+	// (cdnca_rewrite.lua). Older agents refuse the field, so a publication
+	// with a site that has it requires this capability (site object
+	// capability "site_content_rewrite").
+	CapabilityName_CAPABILITY_NAME_SITE_CONTENT_REWRITE CapabilityName = 90
 )
 
 // Enum value maps for CapabilityName.
@@ -441,6 +481,11 @@ var (
 		81: "CAPABILITY_NAME_CHALLENGE_POW",
 		82: "CAPABILITY_NAME_SITE_SELECTION",
 		83: "CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT",
+		84: "CAPABILITY_NAME_SITE_SERVER_TIMING",
+		86: "CAPABILITY_NAME_CHALLENGE_EXTERNAL",
+		87: "CAPABILITY_NAME_URL_AUTH",
+		89: "CAPABILITY_NAME_SITE_RUM",
+		90: "CAPABILITY_NAME_SITE_CONTENT_REWRITE",
 	}
 	CapabilityName_value = map[string]int32{
 		"CAPABILITY_NAME_UNSPECIFIED":                     0,
@@ -520,6 +565,11 @@ var (
 		"CAPABILITY_NAME_CHALLENGE_POW":                   81,
 		"CAPABILITY_NAME_SITE_SELECTION":                  82,
 		"CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT":        83,
+		"CAPABILITY_NAME_SITE_SERVER_TIMING":              84,
+		"CAPABILITY_NAME_CHALLENGE_EXTERNAL":              86,
+		"CAPABILITY_NAME_URL_AUTH":                        87,
+		"CAPABILITY_NAME_SITE_RUM":                        89,
+		"CAPABILITY_NAME_SITE_CONTENT_REWRITE":            90,
 	}
 )
 
@@ -2401,6 +2451,9 @@ const (
 	// ADR 0012 ML-07: per subscription minute statistics of cdnca_limits
 	// (JSON subscription_minute.v1).
 	TelemetryKind_TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1 TelemetryKind = 8
+	// One site's real user monitoring minute on one node
+	// (JSON rum_minute.v1): histograms and error counts, no visitor data.
+	TelemetryKind_TELEMETRY_KIND_RUM_MINUTE_V1 TelemetryKind = 9
 )
 
 // Enum value maps for TelemetryKind.
@@ -2415,6 +2468,7 @@ var (
 		6: "TELEMETRY_KIND_L4_SESSION_V1",
 		7: "TELEMETRY_KIND_ACCESS_WINDOW_V1",
 		8: "TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1",
+		9: "TELEMETRY_KIND_RUM_MINUTE_V1",
 	}
 	TelemetryKind_value = map[string]int32{
 		"TELEMETRY_KIND_UNSPECIFIED":            0,
@@ -2426,6 +2480,7 @@ var (
 		"TELEMETRY_KIND_L4_SESSION_V1":          6,
 		"TELEMETRY_KIND_ACCESS_WINDOW_V1":       7,
 		"TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1": 8,
+		"TELEMETRY_KIND_RUM_MINUTE_V1":          9,
 	}
 )
 
@@ -15900,7 +15955,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x10total_size_bytes\x18\x05 \x01(\x04R\x0etotalSizeBytes\x12\"\n" +
 	"\rend_of_object\x18\x06 \x01(\bR\vendOfObject\"K\n" +
 	"\x18FetchSiteObjectsResponse\x12/\n" +
-	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\xae\x16\n" +
+	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\xe4\x17\n" +
 	"\x0eCapabilityName\x12\x1f\n" +
 	"\x1bCAPABILITY_NAME_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CAPABILITY_NAME_HTTP_1_1\x10\x01\x12\x1a\n" +
@@ -15979,7 +16034,12 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x1bCAPABILITY_NAME_MARKET_ROLE\x10O\x12!\n" +
 	"\x1dCAPABILITY_NAME_CHALLENGE_POW\x10Q\x12\"\n" +
 	"\x1eCAPABILITY_NAME_SITE_SELECTION\x10R\x12,\n" +
-	"(CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT\x10S\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
+	"(CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT\x10S\x12&\n" +
+	"\"CAPABILITY_NAME_SITE_SERVER_TIMING\x10T\x12&\n" +
+	"\"CAPABILITY_NAME_CHALLENGE_EXTERNAL\x10V\x12\x1c\n" +
+	"\x18CAPABILITY_NAME_URL_AUTH\x10W\x12\x1c\n" +
+	"\x18CAPABILITY_NAME_SITE_RUM\x10Y\x12(\n" +
+	"$CAPABILITY_NAME_SITE_CONTENT_REWRITE\x10Z\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
 	"\x1aActiveConfigIdentitySchema\x12-\n" +
 	")ACTIVE_CONFIG_IDENTITY_SCHEMA_UNSPECIFIED\x10\x00\x12$\n" +
 	" ACTIVE_CONFIG_IDENTITY_SCHEMA_V1\x10\x01*\x9a\x04\n" +
@@ -16168,7 +16228,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	" MARKET_PROBE_OUTCOME_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17MARKET_PROBE_OUTCOME_OK\x10\x01\x12\x1f\n" +
 	"\x1bMARKET_PROBE_OUTCOME_FAILED\x10\x02\x12 \n" +
-	"\x1cMARKET_PROBE_OUTCOME_SKIPPED\x10\x03*\xc0\x02\n" +
+	"\x1cMARKET_PROBE_OUTCOME_SKIPPED\x10\x03*\xe2\x02\n" +
 	"\rTelemetryKind\x12\x1e\n" +
 	"\x1aTELEMETRY_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18TELEMETRY_KIND_ACCESS_V1\x10\x01\x12\x1e\n" +
@@ -16178,7 +16238,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x1aTELEMETRY_KIND_SECURITY_V2\x10\x05\x12 \n" +
 	"\x1cTELEMETRY_KIND_L4_SESSION_V1\x10\x06\x12#\n" +
 	"\x1fTELEMETRY_KIND_ACCESS_WINDOW_V1\x10\a\x12)\n" +
-	"%TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1\x10\b*b\n" +
+	"%TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1\x10\b\x12 \n" +
+	"\x1cTELEMETRY_KIND_RUM_MINUTE_V1\x10\t*b\n" +
 	"\x15EdgeSignerTrustSchema\x12(\n" +
 	"$EDGE_SIGNER_TRUST_SCHEMA_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bEDGE_SIGNER_TRUST_SCHEMA_V1\x10\x01*I\n" +

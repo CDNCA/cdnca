@@ -436,7 +436,7 @@ export interface MarketPlugin {
 export interface MarketUIPage {
   origin: string
   api_base_url?: string
-  pages: Array<{ id: string; path: string; mount: 'menu' | 'site_tab'; menu_parent?: string; role: 'admin' | 'user';
+  pages: Array<{ id: string; path: string; mount: 'menu' | 'site_tab' | 'plugin_settings'; menu_parent?: string; role: 'admin' | 'user';
     title: { 'zh-CN': string; 'en-US'?: string }; required_permission?: string; required_module?: string }>
 }
 // This controller's local state of a market plugin (GET /v1/admin/market/plugin-library). locally_disabled: the platform

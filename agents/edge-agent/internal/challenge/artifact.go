@@ -201,8 +201,7 @@ func (installer *ArtifactInstaller) validateDocument(document ArtifactDocument, 
 	credentials := make(map[string]ArtifactExternalCredential, len(document.ExternalCredentials))
 	for _, credential := range document.ExternalCredentials {
 		if credential.TenantID != binding.TenantID || !canonicalArtifactUUID(credential.SiteID) ||
-			(credential.Provider != ProviderTencent && credential.Provider != ProviderGeetestV4) ||
-			validateIdentifier(credential.AppID, MaxIdentifierBytes) != nil || len(credential.Secret) < 16 ||
+			!validProvider(credential.Provider) || validateAppID(credential.AppID) != nil || len(credential.Secret) < 16 ||
 			len(credential.Secret) > 256 ||
 			(credential.Environment != ExternalSandbox && credential.Environment != ExternalProduction) {
 			return invalid("challenge external credential binding mismatch")
@@ -298,9 +297,8 @@ func (installer *ArtifactInstaller) installExternalCredentials(credentials []Art
 func LoadExternalCredentials(stateRoot string, binding ExternalCredentialBinding) (ExternalCredential, error) {
 	if !cleanAbsoluteNonRoot(stateRoot) || !canonicalArtifactUUID(binding.PolicyID) || binding.PolicyVersion == 0 ||
 		!canonicalArtifactUUID(binding.TenantID) || !canonicalArtifactUUID(binding.SiteID) ||
-		(binding.Provider != ProviderTencent && binding.Provider != ProviderGeetestV4) ||
-		validateIdentifier(binding.AppID, MaxIdentifierBytes) != nil {
-		return ExternalCredential{}, ErrExternalVerification
+		!validProvider(binding.Provider) || validateAppID(binding.AppID) != nil {
+		return ExternalCredential{}, ErrExternalUnavailable
 	}
 	versions, err := openDirectoryPath(filepath.Join(stateRoot, "challenge", "credentials", binding.PolicyID, "versions"), false)
 	if err != nil {

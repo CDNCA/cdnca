@@ -34,6 +34,10 @@ const (
 
 	MountMenu    = "menu"     // a menu item under MenuParent
 	MountSiteTab = "site_tab" // a tab on the site detail page
+	// MountPluginSettings is the plugin's own settings page, shown in the
+	// control plane's plugin market (installed plugin detail, 设置) instead of
+	// a menu item: at most one per plugin, role admin only.
+	MountPluginSettings = "plugin_settings"
 
 	RoleAdmin = "admin"
 	RoleUser  = "user"
@@ -71,7 +75,9 @@ type Title struct {
 // Page is one mounted page.
 //   - Path is appended to the origin as the iframe src (no query/fragment).
 //   - Mount menu: a menu item under MenuParent for Role; site_tab: an
-//     "扩展" tab on the site detail page (Role admin or user).
+//     "扩展" tab on the site detail page (Role admin or user);
+//     plugin_settings: the plugin's settings in the plugin market detail
+//     (one per plugin, Role admin, no MenuParent).
 //   - RequiredPermission / RequiredModule gate the menu item and the route
 //     the same way as built-in pages (RBAC code / lease module code).
 type Page struct {
@@ -137,6 +143,7 @@ func Validate(entrypoint Entrypoint) []Finding {
 		add("spec.entrypoint.pages", "pages_count")
 	}
 	seen := map[string]bool{}
+	settings := false
 	for index, page := range entrypoint.Pages {
 		field := "spec.entrypoint.pages[" + itoa(index) + "]"
 		if !pageIDPattern.MatchString(page.ID) || seen[page.ID] {
@@ -158,6 +165,17 @@ func Validate(entrypoint Entrypoint) []Finding {
 			if page.MenuParent != "" {
 				add(field+".menu_parent", "menu_parent_invalid")
 			}
+		case MountPluginSettings:
+			if page.MenuParent != "" {
+				add(field+".menu_parent", "menu_parent_invalid")
+			}
+			if page.Role != RoleAdmin {
+				add(field+".role", "role_invalid")
+			}
+			if settings {
+				add(field+".mount", "settings_duplicate")
+			}
+			settings = true
 		default:
 			add(field+".mount", "mount_invalid")
 		}

@@ -370,7 +370,7 @@ describe('SitePublicationsPage', () => {
     const columnWidths = Array.from(tableRegion.querySelectorAll('colgroup:first-of-type col'), (column) => (
       Number.parseFloat((column as HTMLElement).style.width)
     ))
-    const expectedWidths = [245, 105, 150, 90, 180, 260]
+    const expectedWidths = [245, 180, 105, 150, 90, 260]
 
     expect(columnWidths).toEqual(expectedWidths)
     expect(Number.parseFloat(tableRegion.querySelector('table')?.style.width ?? '')).toBeGreaterThanOrEqual(
@@ -1356,7 +1356,7 @@ describe('SitePublicationsPage', () => {
 
     await submitRollback(user)
     // sec-ui-polish 改了冲突文案（已刷新为最新值），且写失败改为反馈弹窗：读到后关闭再重发。
-    expect(await screen.findByText('源修订已变化，已刷新为最新值，请重新发布。')).toBeInTheDocument()
+    expect(await screen.findByText('内容已被其他人修改，请刷新后再保存')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '知道了' }))
     await waitFor(() => expect(fetchSpy.mock.calls.filter(([, init]) => init?.method !== 'POST').length).toBeGreaterThan(1))
 

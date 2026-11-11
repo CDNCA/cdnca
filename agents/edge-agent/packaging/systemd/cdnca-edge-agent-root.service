@@ -9,6 +9,19 @@ Type=simple
 User=root
 Group=root
 UMask=0077
+# Soft Go heap limit: past it the runtime collects harder
+# instead of letting the heap double (GOGC=100), so a memory growth bug in the
+# Agent meets GC pressure before it can take the node's RAM. 4GiB is far above
+# normal use (130-200 MiB idle; 0.77-1.12 GiB RSS at 100k dynamic-routing
+# sites; a full event spool costs ~500 B RSS per pending record, ~700 MiB at
+# the 2 GiB disk limit with 1.6 KB access events), so normal operation never
+# reaches it; on the 8 GB
+# recommended node it keeps the Agent under half the RAM. It is a soft limit:
+# it never kills the Agent. agent.env (EnvironmentFile, read later) overrides it.
+# No MemoryHigh here: the OpenResty master the Agent starts lives in this
+# unit's cgroup and its page cache (cached responses) is charged to it, so a
+# cgroup memory limit would throttle and reclaim OpenResty in normal operation.
+Environment=GOMEMLIMIT=4GiB
 EnvironmentFile=/etc/cdnca-edge-agent/agent.env
 ExecStartPre=/usr/libexec/cdnca-edge-agent/preflight.sh
 ExecStart=/usr/lib/cdnca-edge-agent/current/edge-agent -config ${CDNCA_EDGE_CONFIG}

@@ -72,6 +72,15 @@ func (writer GeoEnrichingWriter) WriteSubscriptionMinutes(ctx context.Context, b
 	return inner.WriteSubscriptionMinutes(ctx, batchID, minutes)
 }
 
+// WriteRUMMinutes passes through (countries are the node's, no addresses).
+func (writer GeoEnrichingWriter) WriteRUMMinutes(ctx context.Context, batchID string, minutes []RUMMinute) error {
+	inner, ok := writer.Writer.(RUMMinuteWriter)
+	if !ok {
+		return ErrInvalidInput
+	}
+	return inner.WriteRUMMinutes(ctx, batchID, minutes)
+}
+
 func (writer GeoEnrichingWriter) WriteAccessEvents(ctx context.Context, batchID string, events []AccessEvent) error {
 	var fields *edgeconfig.AccessLogFields
 	if writer.Fields != nil && len(events) > 0 {

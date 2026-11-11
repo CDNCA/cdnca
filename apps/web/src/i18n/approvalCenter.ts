@@ -41,7 +41,7 @@ const zhCN = {
   errors: {
     approval_same_operator: '发起人不能审批自己的申请。',
     approval_expired: '申请已过期。',
-    revision_conflict: '申请已被他人处理，请刷新。',
+    revision_conflict: '内容已被其他人修改，请刷新后再保存',
     mfa_step_up_required: '二次验证码无效或已过期。',
     permission_denied: '没有权限。',
     unknown: '操作失败，请稍后重试。',
@@ -90,7 +90,7 @@ const enUS: typeof zhCN = {
   errors: {
     approval_same_operator: 'The requester cannot approve its own request.',
     approval_expired: 'The request has expired.',
-    revision_conflict: 'The request was handled by someone else. Refresh.',
+    revision_conflict: 'Someone else changed this content. Refresh before saving.',
     mfa_step_up_required: 'The verification code is invalid or expired.',
     permission_denied: 'Permission is required.',
     unknown: 'The operation failed. Try again later.',

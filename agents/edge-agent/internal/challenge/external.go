@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 )
@@ -17,12 +18,43 @@ const (
 
 var ErrExternalVerification = errors.New("external challenge verification failed")
 
+// ErrExternalUnavailable is "the provider could not be asked" (
+// §2.2): network, TLS, timeout, non-200, non-JSON, provider internal error,
+// wrong secret, local rate limit or missing credential. The handler answers
+// 503 and the node does not count it as a failed attempt.
+var ErrExternalUnavailable = errors.New("external challenge provider unavailable")
+
 type ExternalProvider string
 
 const (
-	ProviderTencent   ExternalProvider = "tencent"
-	ProviderGeetestV4 ExternalProvider = "geetest-v4"
+	ProviderTencent     ExternalProvider = "tencent"
+	ProviderGeetestV4   ExternalProvider = "geetest-v4"
+	ProviderTurnstile   ExternalProvider = "turnstile"
+	ProviderRecaptchaV3 ExternalProvider = "recaptcha-v3"
 )
+
+// validProvider is the provider list shared with migration 655 and the engine.
+func validProvider(provider ExternalProvider) bool {
+	return provider == ProviderTencent || provider == ProviderGeetestV4 || provider == ProviderTurnstile ||
+		provider == ProviderRecaptchaV3
+}
+
+// validateAppID is a provider app id / site key: an identifier that may also
+// carry '_' (reCAPTCHA site keys do).
+func validateAppID(value string) error {
+	if len(value) == 0 || len(value) > MaxIdentifierBytes {
+		return ErrExternalVerification
+	}
+	for index := range value {
+		character := value[index]
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' || index > 0 && strings.ContainsRune("._:-_", rune(character)) {
+			continue
+		}
+		return ErrExternalVerification
+	}
+	return nil
+}
 
 type ExternalRequest struct {
 	Provider ExternalProvider
@@ -30,6 +62,10 @@ type ExternalRequest struct {
 	Proof    string
 	ClientIP string
 	SiteID   string
+	// Host is the policy host (turnstile / recaptcha-v3 compare the token's
+	// hostname with it); ScoreThreshold is recaptcha-v3's (0 = 0.5).
+	Host           string
+	ScoreThreshold float64
 }
 
 type ExternalResult struct {
@@ -77,7 +113,7 @@ func (service *ExternalVerificationService) Verify(ctx context.Context, request 
 func (service *ExternalVerificationService) verifyWith(ctx context.Context, request ExternalRequest,
 	verifier ExternalVerifier) (ExternalResult, error) {
 	if service == nil || !service.allow(request.SiteID) {
-		return ExternalResult{}, ErrExternalVerification
+		return ExternalResult{}, ErrExternalUnavailable
 	}
 	result, err := VerifyExternal(ctx, request, verifier)
 	if err != nil {
@@ -152,8 +188,7 @@ func (store *MemoryExternalReplayStore) Consume(scope, key string, now, expiresA
 }
 
 func VerifyExternal(ctx context.Context, request ExternalRequest, verifier ExternalVerifier) (ExternalResult, error) {
-	if ctx == nil || verifier == nil || (request.Provider != ProviderTencent && request.Provider != ProviderGeetestV4) ||
-		validateIdentifier(request.AppID, MaxIdentifierBytes) != nil ||
+	if ctx == nil || verifier == nil || !validProvider(request.Provider) || validateAppID(request.AppID) != nil ||
 		validateIdentifier(request.SiteID, MaxIdentifierBytes) != nil ||
 		!boundedExternalValue(request.Proof, MaxExternalProofBytes) {
 		return ExternalResult{}, ErrExternalVerification
@@ -166,7 +201,10 @@ func VerifyExternal(ctx context.Context, request ExternalRequest, verifier Exter
 		return ExternalResult{}, ErrExternalVerification
 	}
 	result, err := verifier.Verify(ctx, request)
-	if err != nil || ctx.Err() != nil || !result.Valid || !boundedExternalValue(result.ReplayKey, MaxReplayKeyBytes) ||
+	if errors.Is(err, ErrExternalUnavailable) || err == nil && ctx.Err() != nil {
+		return ExternalResult{}, ErrExternalUnavailable
+	}
+	if err != nil || !result.Valid || !boundedExternalValue(result.ReplayKey, MaxReplayKeyBytes) ||
 		len(result.AppID) != len(request.AppID) || subtle.ConstantTimeCompare([]byte(result.AppID), []byte(request.AppID)) != 1 {
 		return ExternalResult{}, ErrExternalVerification
 	}

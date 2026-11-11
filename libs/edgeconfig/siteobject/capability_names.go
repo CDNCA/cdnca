@@ -49,4 +49,12 @@ var RuntimeCapabilityNames = map[string]string{
 	"CAPABILITY_NAME_SITE_TLS_OPTIONS":        edgeconfig.SiteTLSOptionsCapability,
 	"CAPABILITY_NAME_SITE_TLS_CUSTOM_CIPHERS": edgeconfig.SiteTLSCustomCiphersCapability,
 	"CAPABILITY_NAME_L4_PACKAGE_ATTRIBUTION":  edgeconfig.L4PackageAttributionCapability,
+	// A site with server_timing requires it.
+	"CAPABILITY_NAME_SITE_SERVER_TIMING": ServerTimingCapability,
+	// a site with security.url_auth requires it.
+	"CAPABILITY_NAME_URL_AUTH": URLAuthCapability,
+	// A site with rum requires it.
+	"CAPABILITY_NAME_SITE_RUM": RUMCapability,
+	// A site with content_rewrite requires it.
+	"CAPABILITY_NAME_SITE_CONTENT_REWRITE": ContentRewriteCapability,
 }

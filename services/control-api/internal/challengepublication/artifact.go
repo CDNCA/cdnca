@@ -87,6 +87,53 @@ type Rule struct {
 type ExternalProvider struct {
 	Provider string `json:"provider"`
 	AppID    string `json:"app_id"`
+	// CHALLENGE_EXTERNAL: omitted when unset so tencent /
+	// geetest-v4 rules stay byte for byte what older agents accept.
+	ScoreThreshold *float64 `json:"score_threshold,omitempty"` // recaptcha-v3 only, 0.1..0.9
+	Unavailable    string   `json:"unavailable,omitempty"`     // builtin | closed
+}
+
+const (
+	ProviderTencent     = "tencent"
+	ProviderGeetestV4   = "geetest-v4"
+	ProviderTurnstile   = "turnstile"
+	ProviderRecaptchaV3 = "recaptcha-v3"
+)
+
+// ValidExternalProvider is the provider list shared with migration 655, the
+// node engine and the Agent verifier.
+func ValidExternalProvider(value string) bool {
+	return value == ProviderTencent || value == ProviderGeetestV4 || value == ProviderTurnstile ||
+		value == ProviderRecaptchaV3
+}
+
+// ValidExternalAppID is the provider app / site key: an identifier that may
+// also carry '_' (reCAPTCHA site keys do), 1..128 bytes.
+func ValidExternalAppID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for index, character := range []byte(value) {
+		if character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z' || character >= '0' && character <= '9' ||
+			index > 0 && strings.ContainsRune("._:-_", rune(character)) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// ValidScoreThreshold is a reCAPTCHA v3 score threshold: 0.1..0.9 in steps
+// of 0.1.
+func ValidScoreThreshold(value float64) bool {
+	tenths := math.Round(value * 10)
+	return tenths >= 1 && tenths <= 9 && math.Abs(value*10-tenths) < 1e-9
+}
+
+func validExternalRule(provider *ExternalProvider) bool {
+	return provider != nil && ValidExternalProvider(provider.Provider) && ValidExternalAppID(provider.AppID) &&
+		(provider.ScoreThreshold == nil || provider.Provider == ProviderRecaptchaV3 && ValidScoreThreshold(*provider.ScoreThreshold)) &&
+		(provider.Unavailable == "" || provider.Unavailable == "builtin" || provider.Unavailable == "closed")
 }
 
 type Policy struct {
@@ -257,8 +304,7 @@ func normalizeArtifactDocument(request ArtifactBuildRequest, material ArtifactMa
 	for index, credential := range material.ExternalCredentials {
 		if !canonicalUUID(credential.TenantID) || !canonicalUUID(credential.SiteID) ||
 			credential.TenantID != material.TenantID.String() ||
-			(credential.Provider != "tencent" && credential.Provider != "geetest-v4") ||
-			!validIdentifier(credential.AppID) || len(credential.Secret) < 16 || len(credential.Secret) > 256 ||
+			!ValidExternalProvider(credential.Provider) || !ValidExternalAppID(credential.AppID) || len(credential.Secret) < 16 || len(credential.Secret) > 256 ||
 			(credential.Environment != "sandbox" && credential.Environment != "production") {
 			clearArtifactSecrets(keys)
 			clearExternalCredentials(credentials)
@@ -285,7 +331,7 @@ func normalizeArtifactDocument(request ArtifactBuildRequest, material ArtifactMa
 		scope := rule.TenantID + "\x00" + rule.SiteID
 		credential, exists := externalByScope[scope]
 		if rule.Mode == "external" {
-			if rule.ExternalProvider == nil || !exists || credential.Provider != rule.ExternalProvider.Provider ||
+			if !validExternalRule(rule.ExternalProvider) || !exists || credential.Provider != rule.ExternalProvider.Provider ||
 				credential.AppID != rule.ExternalProvider.AppID {
 				clearArtifactSecrets(keys)
 				clearExternalCredentials(credentials)

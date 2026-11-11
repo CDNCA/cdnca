@@ -19,8 +19,15 @@ const (
 	ModeCaptcha  = "captcha"
 	ModeExternal = "external"
 
-	ProviderTencent  = "tencent"
-	ProviderGeetest4 = "geetest-v4"
+	ProviderTencent     = "tencent"
+	ProviderGeetest4    = "geetest-v4"
+	ProviderTurnstile   = "turnstile"
+	ProviderRecaptchaV3 = "recaptcha-v3"
+
+	// ExternalUnavailable* is what a visitor gets when the provider widget
+	// does not load or the node cannot reach the provider.
+	ExternalUnavailableBuiltin = "builtin"
+	ExternalUnavailableClosed  = "closed"
 
 	IPBindingNone  = "none"
 	IPBindingExact = "exact"
@@ -47,6 +54,11 @@ var (
 	ErrUnavailable            = errors.New("challenge policy storage unavailable")
 	ErrInvalidCursorConfig    = errors.New("invalid challenge policy cursor configuration")
 	ErrInvalidStoreConfig     = errors.New("invalid challenge policy store configuration")
+	// ErrProviderMismatch: the credential is for another provider than the
+	// policy's (or the policy is not in external mode), 422 provider_mismatch.
+	ErrProviderMismatch = errors.New("challenge policy external provider mismatch")
+	// ErrCredentialUnavailable: no credential cipher is configured.
+	ErrCredentialUnavailable = errors.New("challenge policy credential cipher unavailable")
 )
 
 type CredentialReference struct {
@@ -70,8 +82,47 @@ type BypassRoute struct {
 }
 
 type ExternalProviderReference struct {
-	Provider     string `json:"provider"`
+	Provider string `json:"provider"`
+	// AppReference may be omitted on write: the server sets
+	// appref:policy:<policy_id> (§3; the credential itself is
+	// entered through the external-credential endpoint).
 	AppReference string `json:"app_reference"`
+	// ScoreThreshold (recaptcha-v3 only, 0.1..0.9) and Unavailable (builtin |
+	// closed; unset = builtin) require CHALLENGE_EXTERNAL; unset they stay out
+	// of the revision document (migration 655).
+	ScoreThreshold *float64 `json:"score_threshold,omitempty"`
+	Unavailable    string   `json:"unavailable,omitempty"`
+}
+
+// ExternalProviderSummary is the read-only external provider of a policy
+//: what the console form shows back; never the secret.
+type ExternalProviderSummary struct {
+	Provider       string   `json:"provider"`
+	ScoreThreshold *float64 `json:"score_threshold,omitempty"`
+	Unavailable    string   `json:"unavailable"`
+}
+
+// ExternalCredentialStatus is GET /external-credential: whether a secret is
+// configured, never the secret.
+type ExternalCredentialStatus struct {
+	Provider         string     `json:"provider"`
+	AppID            string     `json:"app_id,omitempty"`
+	Environment      string     `json:"environment,omitempty"`
+	SecretConfigured bool       `json:"secret_configured"`
+	Revision         int64      `json:"revision"`
+	UpdatedAt        *time.Time `json:"updated_at,omitempty"`
+}
+
+// ExternalCredentialRequest is PUT /external-credential.
+type ExternalCredentialRequest struct {
+	TargetScopeID    uuid.UUID
+	ID               uuid.UUID
+	ExpectedRevision int64
+	Provider         string
+	AppID            string
+	Secret           []byte
+	Environment      string
+	WriteMetadata
 }
 
 type Config struct {
@@ -118,6 +169,8 @@ type Policy struct {
 	Revision                   int64         `json:"revision"`
 	CreatedAt                  time.Time     `json:"created_at"`
 	UpdatedAt                  time.Time     `json:"updated_at"`
+	// ExternalProvider is the read-only provider summary.
+	ExternalProvider *ExternalProviderSummary `json:"external_provider_summary,omitempty"`
 }
 
 type storedPolicy struct {

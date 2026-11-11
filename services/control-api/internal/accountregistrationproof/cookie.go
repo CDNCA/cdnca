@@ -46,3 +46,53 @@ func ClearReferenceCookie() *http.Cookie {
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
 	}
 }
+
+// several verifications can be required at once, so each
+// verified channel gets its own cookie (CookieName + "_" + channel); the
+// single legacy cookie is still read as a one-channel proof.
+
+// ChannelCookieName is the proof cookie of one channel (email / sms).
+func ChannelCookieName(channel string) string { return CookieName + "_" + channel }
+
+// NewChannelReferenceCookie is NewReferenceCookie for one channel.
+func NewChannelReferenceCookie(channel, reference string, expiresAt time.Time) (*http.Cookie, error) {
+	if channel != "email" && channel != "sms" {
+		return nil, ErrInvalidReference
+	}
+	cookie, err := NewReferenceCookie(reference, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	cookie.Name = ChannelCookieName(channel)
+	return cookie, nil
+}
+
+// ResolveProofReferences returns the legacy reference ("" when absent) and
+// the per-channel references. A duplicated or malformed cookie fails; no
+// cookie at all fails too.
+func (CookieReferenceResolver) ResolveProofReferences(request *http.Request) (string, map[string]string, error) {
+	if request == nil {
+		return "", nil, ErrInvalidReference
+	}
+	names := map[string]string{CookieName: "", ChannelCookieName("email"): "email", ChannelCookieName("sms"): "sms"}
+	seen := map[string]int{}
+	legacy, channels := "", map[string]string{}
+	for _, cookie := range request.Cookies() {
+		channel, known := names[cookie.Name]
+		if !known {
+			continue
+		}
+		if seen[cookie.Name]++; seen[cookie.Name] > 1 || !validReference(cookie.Value) {
+			return "", nil, ErrInvalidReference
+		}
+		if channel == "" {
+			legacy = cookie.Value
+		} else {
+			channels[channel] = cookie.Value
+		}
+	}
+	if legacy == "" && len(channels) == 0 {
+		return "", nil, ErrInvalidReference
+	}
+	return legacy, channels, nil
+}

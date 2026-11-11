@@ -18,8 +18,17 @@ func TestNewRejectsOpenSegmentBeforeLaterSealedSegment(t *testing.T) {
 	writeRecoverySegment(t, spool, 1, "open", openEvent)
 	writeRecoverySegment(t, spool, 2, "seg", sealedEvent)
 
-	if _, err := New(config); !errors.Is(err, ErrCorruptState) {
+	// New does not read segments (the node must serve while a
+	// backlog or a corrupt spool is read); the first operation reports it.
+	restarted, err := New(config)
+	if err != nil {
+		t.Fatalf("New = %v, want success", err)
+	}
+	if _, err := restarted.Stats(); !errors.Is(err, ErrCorruptState) {
 		t.Fatalf("open segment before sealed segment error = %v, want ErrCorruptState", err)
+	}
+	if code := restarted.FailureCode(); code != "TELEMETRY_SPOOL_CORRUPT" {
+		t.Fatalf("failure code = %q", code)
 	}
 }
 

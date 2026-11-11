@@ -230,6 +230,9 @@ type EntitlementStats struct {
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	GraceUntil     *time.Time `json:"grace_until,omitempty"`
 	LastVerifiedAt *time.Time `json:"last_verified_at,omitempty"`
+	// LicenseExpiresAt is always null in the community edition: the license
+	// never expires, and the page shows "permanent".
+	LicenseExpiresAt *time.Time `json:"license_expires_at"`
 }
 
 type NodeHealthStats struct {

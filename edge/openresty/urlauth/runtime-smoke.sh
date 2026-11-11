@@ -5,7 +5,7 @@ repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)"
 # shellcheck source=edge/openresty/runtime.env
 . "${repo_root}/edge/openresty/runtime.env"
 
-expected_sha256="93405cdcf5e2a7edef1198cc3e09c6f1584cca6bd351e8561cb1c96c0aaa0bcc"
+expected_sha256="ce3120c32b8074fbb7ba6999b6b0bfa302bd3b2b69362aff647e6a143e3d6c62"
 runtime_path="/usr/local/share/cdnca/security/url_auth.lua"
 tmp_base="${TMPDIR:-/tmp}"
 workdir="$(mktemp -d "${tmp_base%/}/cdnca-urlauth-runtime.XXXXXX")"
@@ -275,7 +275,8 @@ assert_runtime_contract() {
   }
   docker exec "${candidate_name}" /usr/local/openresty/bin/resty -e \
     'package.path = "/usr/local/share/cdnca/security/?.lua;" .. package.path; local url_auth = require("url_auth"); assert(type(url_auth.init) == "function"); assert(type(url_auth.init_worker) == "function"); assert(type(url_auth.access) == "function")'
-  if docker exec "${candidate_name}" grep -n 'ngx\.log' "${runtime_path}"; then
+  # preload() logs once at init when a policy version is missing (its sites answer 503); no other ngx.log may be on the request path.
+  if docker exec "${candidate_name}" grep -n 'ngx\.log' "${runtime_path}" | grep -v 'cdnca url auth: policy'; then
     echo "URL-auth runtime uses request-context ngx.log" >&2
     return 1
   fi

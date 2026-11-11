@@ -294,7 +294,7 @@ func (set fuzzRuleset) compile() ([]SecurityPolicy, RulePlan, error) {
 	if err != nil {
 		return nil, RulePlan{}, err
 	}
-	plan, err := CompileSiteSecurityRulePlan(fuzzSiteID, set.Policies, set.OverflowBlocks, set.Telemetry)
+	plan, err := CompileSiteSecurityRulePlan(fuzzSiteID, set.Policies, nil, set.OverflowBlocks, set.Telemetry)
 	return policies, plan, err
 }
 

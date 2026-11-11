@@ -64,3 +64,25 @@ func TestIssuedEnrollmentTokenResponseCarriesTheGateway(t *testing.T) {
 		t.Fatalf("without a Gateway entry body = %s", got)
 	}
 }
+
+// A re_enrollment token takes the reinstall entry (a ws
+// console's first grpc entry), an initial token the install command's.
+func TestIssuedEnrollmentTokenResponsePicksTheReinstallGateway(t *testing.T) {
+	install := NodeInstallGateway{EnrollmentAddress: "203.0.113.20:29402", Address: "203.0.113.20:20407", ServerName: "install.example"}
+	reinstall := NodeInstallGateway{EnrollmentAddress: "203.0.113.20:29402", Address: "203.0.113.20:20407", ServerName: "reinstall.example"}
+	s := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		nodeInstallGateway:   func(context.Context) (NodeInstallGateway, bool, error) { return install, false, nil },
+		nodeReinstallGateway: func(context.Context) (NodeInstallGateway, bool, error) { return reinstall, true, nil }}
+	for purpose, want := range map[string]*NodeInstallGateway{node.PurposeReEnrollment: &reinstall, node.PurposeInitial: nil} {
+		issued := node.IssuedToken{TokenMetadata: node.TokenMetadata{Purpose: purpose}, Token: "raw-token"}
+		got := s.issuedEnrollmentTokenResponse(t.Context(), issued).Gateway
+		if (got == nil) != (want == nil) || (got != nil && *got != *want) {
+			t.Errorf("%s: gateway = %+v, want %+v", purpose, got, want)
+		}
+	}
+	s.nodeReinstallGateway = nil
+	reEnrollment := node.IssuedToken{TokenMetadata: node.TokenMetadata{Purpose: node.PurposeReEnrollment}}
+	if got := s.issuedEnrollmentTokenResponse(t.Context(), reEnrollment).Gateway; got != nil {
+		t.Fatalf("without a reinstall source gateway = %+v", got)
+	}
+}

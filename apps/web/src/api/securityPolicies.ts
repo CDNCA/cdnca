@@ -15,6 +15,9 @@ export interface SecurityPolicyCondition {
     | 'request_length' | 'body_length' | 'uri_length' | 'header_max_length' | 'header_count' | 'arg_count'
     // Node WAF v5: multipart part names, part count, longest field.
     | 'multipart_field_names' | 'multipart_part_count' | 'multipart_field_max_length'
+    // Node WAF v6: what the User-Agent claims, and the request time (key = IANA zone).
+    | 'browser' | 'browser_version' | 'device' | 'request_time'
+  /** String sets add in_string_set / not_in_string_set (one string set ID) on host, path, request_uri, user_agent, referer, header, ja4. */
   operator: string
   key?: string
   values: string[]

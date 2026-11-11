@@ -253,7 +253,7 @@ func CanonicalIngestDigestV1(decoded DecodedIngest) ([sha256.Size]byte, error) {
 	var digest [sha256.Size]byte
 	validVersionKind := decoded.SchemaVersion == IngestSchemaVersion &&
 		(decoded.Kind == AccessEnvelopeType || decoded.Kind == SecurityEnvelopeType || decoded.Kind == AccessWindowEnvelopeType ||
-			decoded.Kind == SubscriptionMinuteEnvelopeType) ||
+			decoded.Kind == SubscriptionMinuteEnvelopeType || decoded.Kind == RUMMinuteEnvelopeType) ||
 		decoded.SchemaVersion == IngestSchemaVersionV2 && (decoded.Kind == AccessEnvelopeTypeV2 || decoded.Kind == SecurityEnvelopeTypeV2)
 	if !validVersionKind || decoded.MessageID == "" ||
 		decoded.ProducedAt.IsZero() || decoded.ProducedAt.Location() != time.UTC || !validUUID(decoded.TenantID) ||
@@ -291,6 +291,9 @@ func CanonicalIngestDigestV1(decoded DecodedIngest) ([sha256.Size]byte, error) {
 	}
 	if decoded.Kind == SubscriptionMinuteEnvelopeType {
 		value["subscription_minutes"] = canonicalSubscriptionMinutesV1(decoded.SubscriptionMinutes)
+	}
+	if decoded.Kind == RUMMinuteEnvelopeType {
+		value["rum_minutes"] = canonicalRUMMinutesV1(decoded.RUMMinutes)
 	}
 	encoded, err := canonicalJSONV1(value)
 	if err != nil {

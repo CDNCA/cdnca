@@ -161,8 +161,16 @@ func TestSpoolRecoversIncompleteOpenAndRejectsCorruptSealed(t *testing.T) {
 			t.Fatal(err)
 		}
 		_ = file.Close()
-		if _, err := New(config); !errors.Is(err, ErrCorruptState) {
+		// Reported by the first operation, not by New.
+		restarted, err := New(config)
+		if err != nil {
+			t.Fatalf("New = %v, want success", err)
+		}
+		if _, err := restarted.Stats(); !errors.Is(err, ErrCorruptState) {
 			t.Fatalf("corrupt segment error = %v", err)
+		}
+		if code := restarted.FailureCode(); code != "TELEMETRY_SPOOL_CORRUPT" {
+			t.Fatalf("failure code = %q", code)
 		}
 	})
 }
@@ -290,8 +298,16 @@ func TestSpoolRejectsSymlinkAndHardlink(t *testing.T) {
 	if err := os.Link(segment[0], filepath.Join(config.Root, "segment-hardlink")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(config); !errors.Is(err, ErrUnsafePath) {
+	// Segments are checked by the first operation, not by New.
+	restarted, err := New(config)
+	if err != nil {
+		t.Fatalf("New = %v, want success", err)
+	}
+	if _, err := restarted.Stats(); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("hardlink segment error = %v", err)
+	}
+	if code := restarted.FailureCode(); code != "TELEMETRY_SPOOL_CORRUPT" {
+		t.Fatalf("failure code = %q", code)
 	}
 }
 

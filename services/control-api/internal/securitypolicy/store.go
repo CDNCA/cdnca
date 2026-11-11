@@ -81,7 +81,7 @@ func (s *Store) Create(ctx context.Context, actor Actor, request CreateRequest, 
 			result.Replayed = true
 			return nil
 		}
-		if err := requireUsableIPLists(ctx, tx, request.TargetScopeID, request.Fields.Rules); err != nil {
+		if err := requireUsableReferences(ctx, tx, request.TargetScopeID, request.Fields.Rules); err != nil {
 			return err
 		}
 		policyID, err := uuid.NewV7()
@@ -189,7 +189,7 @@ func (s *Store) Update(ctx context.Context, actor Actor, request UpdateRequest, 
 		if featureErr != nil && !disableOnly(current.policy, request.Fields) {
 			return featureErr
 		}
-		if err := requireUsableIPLists(ctx, tx, current.policy.ScopeID, request.Fields.Rules); err != nil {
+		if err := requireUsableReferences(ctx, tx, current.policy.ScopeID, request.Fields.Rules); err != nil {
 			return err
 		}
 		existing := current.policy.Rules

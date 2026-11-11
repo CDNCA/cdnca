@@ -56,7 +56,9 @@ func TestURLAuthPolicyHTTPFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAESGCMCredentialCipher: %v", err)
 	}
-	server := httptest.NewServer(New(pool, identityService, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), DNSCredentialCipher: cipher}).Handler())
+	api := New(pool, identityService, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), DNSCredentialCipher: cipher,
+		URLAuthPublisher: &recordingURLAuthPublisher{}}) // the full write flow with edge publication ready
+	server := httptest.NewServer(api.Handler())
 	t.Cleanup(server.Close)
 	client := server.Client()
 	platformAuth, _ := loginOK(t, client, server.URL, "urlauthadmin")

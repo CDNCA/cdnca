@@ -27,16 +27,21 @@ const (
 )
 
 var (
-	idPattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
-	uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 )
 
 func ParseSourceLine(line []byte, policy CapturePolicy) (Envelope, error) {
-	return parseSourceLine(line, policy, nil)
+	return parseSourceLine(line, policy, nil, false)
 }
 
 func ParseSourceLineBound(line []byte, policy CapturePolicy, identity TrustedIdentity) (Envelope, error) {
-	return parseSourceLine(line, policy, &identity)
+	return parseSourceLine(line, policy, &identity, false)
+}
+
+// ParseSourceLineChecked is ParseSourceLineBound for a line whose JSON
+// validity and key uniqueness the caller already checked (checked).
+func ParseSourceLineChecked(line []byte, policy CapturePolicy, identity TrustedIdentity, checked bool) (Envelope, error) {
+	return parseSourceLine(line, policy, &identity, checked)
 }
 
 func ParseL4SourceLineBound(line []byte, identity TrustedIdentity) (Envelope, error) {
@@ -240,13 +245,13 @@ func validL4SessionLog(log *L4SessionLog) bool {
 	return log.UpstreamConnectMS == nil || *log.UpstreamConnectMS <= 3_600_000
 }
 
-func parseSourceLine(line []byte, policy CapturePolicy, identity *TrustedIdentity) (Envelope, error) {
+func parseSourceLine(line []byte, policy CapturePolicy, identity *TrustedIdentity, checked bool) (Envelope, error) {
 	policy, err := normalizeCapturePolicy(policy)
 	if err != nil {
 		return Envelope{}, err
 	}
 	if len(line) == 0 || len(line) > policy.MaxEventBytes || bytes.IndexByte(line, '\n') >= 0 || bytes.IndexByte(line, '\r') >= 0 ||
-		!json.Valid(line) || validateUniqueJSONKeys(line) != nil {
+		!checked && (!json.Valid(line) || validateUniqueJSONKeys(line) != nil) {
 		return Envelope{}, ErrInvalidEvent
 	}
 	decoder := json.NewDecoder(bytes.NewReader(line))
@@ -328,10 +333,11 @@ const (
 )
 
 func validateEnvelope(envelope Envelope, identity identityState) error {
-	if envelope.SchemaVersion != SchemaVersion || (envelope.Type != EventAccess && envelope.Type != EventSecurity && envelope.Type != EventL4Session && envelope.Type != EventAccessWindow && envelope.Type != EventSubscriptionMinute && envelope.Type != EventL4Checkpoint) ||
+	if envelope.SchemaVersion != SchemaVersion || (envelope.Type != EventAccess && envelope.Type != EventSecurity && envelope.Type != EventL4Session && envelope.Type != EventAccessWindow && envelope.Type != EventSubscriptionMinute && envelope.Type != EventRUMMinute && envelope.Type != EventL4Checkpoint) ||
 		(envelope.CheckpointSequence != 0 && envelope.Type != EventL4Checkpoint) ||
 		((envelope.CheckpointedRequestBytes != 0 || envelope.CheckpointedResponseBytes != 0) && envelope.Type != EventL4Session) ||
 		(envelope.SubscriptionMinute != nil && envelope.Type != EventSubscriptionMinute) ||
+		(envelope.RUMMinute != nil && envelope.Type != EventRUMMinute) ||
 		(envelope.Blocked && envelope.Type != EventAccess) ||
 		((envelope.ClientBrowser != "" || envelope.ClientOS != "") && envelope.Type != EventAccess) ||
 		(envelope.UpstreamAddr != "" && envelope.Type != EventAccess) || !validBounded(envelope.UpstreamAddr, 64) ||
@@ -373,6 +379,10 @@ func validateEnvelope(envelope Envelope, identity identityState) error {
 		}
 	case EventSubscriptionMinute:
 		if !validSubscriptionMinuteRecord(envelope) {
+			return ErrInvalidEvent
+		}
+	case EventRUMMinute:
+		if !validRUMMinuteRecord(envelope) {
 			return ErrInvalidEvent
 		}
 	case EventAccess:
@@ -804,8 +814,31 @@ func sensitiveName(value string) bool {
 	return lower == "set-cookie" || strings.Contains(lower, "authorization")
 }
 
+// validUUID: 8-4-4-4-12 hex digits (either case), not the nil UUID. It runs
+// several times per telemetry event, so it is not a regexp.
 func validUUID(value string) bool {
-	return uuidPattern.MatchString(value) && !strings.EqualFold(value, "00000000-0000-0000-0000-000000000000")
+	if len(value) != 36 {
+		return false
+	}
+	zero := true
+	for index := 0; index < 36; index++ {
+		character := value[index]
+		switch index {
+		case 8, 13, 18, 23:
+			if character != '-' {
+				return false
+			}
+			continue
+		}
+		switch {
+		case character == '0':
+		case character >= '1' && character <= '9', character >= 'a' && character <= 'f', character >= 'A' && character <= 'F':
+			zero = false
+		default:
+			return false
+		}
+	}
+	return !zero
 }
 
 func validRequired(value string, maximum int) bool {

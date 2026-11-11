@@ -37,6 +37,11 @@ type ProductionRuntimeDependencies struct {
 	SecretPublisher challengepublication.SecretPublisher
 	RolloutReader   challengepublication.RolloutReader
 	ConfigPublisher challengepublication.ConfigPublisher
+	// CredentialCipher seals console external credentials;
+	// nil leaves PUT /external-credential at 503.
+	CredentialCipher CredentialCipher
+	// KeyFacts writes the policy HMAC key facts; nil writes none.
+	KeyFacts KeyFactIssuer
 }
 
 // NewRuntimeHandler assembles this package's production session, transactional
@@ -68,6 +73,8 @@ func NewProductionRuntimeHandler(config RuntimeConfig, dependencies ProductionRu
 	if err != nil {
 		return nil, err
 	}
+	service.store.UseCredentialCipher(dependencies.CredentialCipher)
+	service.store.UseKeyFactIssuer(dependencies.KeyFacts)
 	crud, err := NewHandler(service, authenticator)
 	if err != nil {
 		return nil, ErrInvalidHandlerConfig

@@ -1,0 +1,122 @@
+/* 内容改写: --cdnca-* variables only */
+.content-rewrite .cr-overhead {
+  margin-bottom: 16px;
+}
+
+.content-rewrite .cr-overhead p {
+  margin: 0 0 4px;
+  color: var(--cdnca-color-text);
+}
+
+.content-rewrite .cr-mono,
+.cr-mono {
+  font-family: var(--cdnca-font-family-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.content-rewrite .cr-ellipsis {
+  display: inline-block;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.content-rewrite .cr-off {
+  margin-left: 8px;
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+}
+
+.content-rewrite .cr-hint,
+.cr-hint {
+  color: var(--cdnca-color-text);
+  font-size: 13px;
+}
+
+.content-rewrite .cr-tester-bar {
+  margin-bottom: 12px;
+}
+
+.content-rewrite .cr-tester {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 991px) {
+  .content-rewrite .cr-tester { grid-template-columns: minmax(0, 1fr); }
+}
+
+.content-rewrite .cr-output {
+  min-height: 316px;
+  max-height: 480px;
+  margin: 0;
+  padding: 8px 11px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-muted);
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 6px;
+}
+
+.content-rewrite .cr-result {
+  min-height: 22px;
+  margin-top: 12px;
+  color: var(--cdnca-color-title);
+}
+
+.cr-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+}
+
+.cr-field {
+  margin-bottom: 16px;
+}
+
+.cr-hint + .cr-error,
+.cr-field .cr-hint {
+  margin-top: 4px;
+}
+
+.cr-error {
+  margin-top: 4px;
+  color: var(--cdnca-color-error);
+  font-size: 13px;
+}
+
+.cr-inline {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cr-summary {
+  margin-bottom: 16px;
+  outline: none;
+}
+
+.cr-summary:focus-visible {
+  outline: 2px solid var(--cdnca-color-border);
+  outline-offset: 2px;
+}
+
+.cr-drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-rewrite *,
+  .cr-field * {
+    transition-duration: 0s !important;
+  }
+}

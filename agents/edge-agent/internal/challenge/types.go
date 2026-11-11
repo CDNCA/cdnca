@@ -115,7 +115,12 @@ type Rule struct {
 
 type ExternalProviderConfig struct {
 	Provider ExternalProvider `json:"provider"`
-	AppID    string           `json:"app_id"`
+	// CHALLENGE_EXTERNAL v1: recaptcha-v3 score threshold
+	// (0.1..0.9, unset = 0.5) and what a visitor gets when the provider is
+	// unavailable (builtin | closed, unset = builtin).
+	ScoreThreshold *float64 `json:"score_threshold,omitempty"`
+	Unavailable    string   `json:"unavailable,omitempty"`
+	AppID          string   `json:"app_id"`
 }
 
 type CompiledPolicy struct {

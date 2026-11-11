@@ -44,6 +44,9 @@ type RegisterInput struct {
 	RequestID           string
 	Source              string
 	ProofReference      string `json:"-"`
+	// ProofReferences holds one proof reference per verified channel
+	// (email / sms) when several verifications are required.
+	ProofReferences map[string]string `json:"-"`
 }
 
 type RegisterResult struct {

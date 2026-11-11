@@ -33,6 +33,7 @@ func compileSiteSettings(s site.Site, cfg *siteconf.Config) []Unsupported {
 	}
 	cfg.IPv6 = s.ListenerState.IPv6DesiredEnabled
 	cfg.CacheSharedAcrossDomains, cfg.CacheStatusHeaderOff = s.CacheSharedAcrossDomains, !s.CacheStatusHeader
+	cfg.ServerTiming = s.ServerTiming
 	switch s.OriginPool.L2Mode {
 	case "", site.SiteL2Package:
 	case site.SiteL2Off:

@@ -192,7 +192,8 @@ func batchRefusal(result BatchItemResult, err error) (BatchItemResult, error) {
 		result.Status = "in_use"
 	case errors.Is(err, ErrIdempotencyConflict):
 		result.Status = "idempotency_conflict"
-	case errors.Is(err, ErrInvalidInput), errors.Is(err, ErrConflict), errors.Is(err, ErrIPListUnavailable),
+	case errors.Is(err, ErrInvalidInput), errors.Is(err, ErrConflict), errors.Is(err, ErrIPListUnavailable), errors.Is(err, ErrStringSetUnavailable),
+		errors.Is(err, ErrStringSetTargetMismatch),
 		errors.Is(err, ErrQuickBlockUnsupported), errors.Is(err, packageaddon.ErrFeatureDenied):
 		result.Status = "rejected"
 	default:

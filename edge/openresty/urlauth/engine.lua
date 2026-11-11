@@ -52,6 +52,7 @@ local SCHEMA_VERSION = "cdnca.edge.urlauth/v1"
 local ALGORITHM = "hmac-sha256"
 local MAX_POLICY_BYTES = 1024 * 1024
 local MAX_POLICY_VERSION = 9007199254740991
+local FALLBACK_STEPS = 64 -- keep equal to edgeskeleton.URLAuthFallbackSteps
 local MAX_IDENTIFIER_BYTES = 128
 local MAX_PARAMETER_BYTES = 64
 local MAX_EXCLUDED_PARAMETERS = 32
@@ -390,6 +391,11 @@ local function mark_rejected(state, code, digest)
 end
 
 local function reload(state, force)
+    if state.static then
+        -- preloaded in the master (preload): an immutable version file the
+        -- workers cannot read
+        return true
+    end
     local now = ngx.now()
     if not force and now < state.next_reload_at then
         return true
@@ -938,6 +944,8 @@ function _M.metrics()
     return result
 end
 
+local check
+
 function _M.access(context)
 	local state = legacy_state
 	if not state and type(context) == "table" and type(context.tenant_id) == "string"
@@ -947,6 +955,75 @@ function _M.access(context)
     if not state then
         return reject(nil, ngx.HTTP_SERVICE_UNAVAILABLE, "context_unavailable", 0)
     end
+    return check(state, context)
+end
+
+-- Dynamic routing: the master preloads the installed policy
+-- versions the sites reference (preload, init_by_lua); a site names its
+-- version in security.url_auth (access_site). Versions are immutable files
+-- (<root>/policies/<id>/versions/<v>.json, root-only): a preloaded state is
+-- never re-read; a new version reaches the node by a skeleton reload.
+local preloaded = {}
+
+local function preload_key(id, revision)
+    return id .. "@" .. string.format("%d", revision)
+end
+
+function _M.preload(options)
+    if type(options) ~= "table" or type(options.state_dict) ~= "string" or not ngx.shared[options.state_dict]
+        or not valid_policy_path(options.root) or type(options.policies) ~= "table" then
+        error("invalid URL auth preload options")
+    end
+    state_dict_name = options.state_dict
+    preloaded = {}
+    for _, ref in ipairs(options.policies) do
+        if type(ref) ~= "table" or not identifier(ref.id, MAX_IDENTIFIER_BYTES) or ref.id:find("[^0-9a-f-]")
+            or not integer(ref.revision, 1, MAX_POLICY_VERSION) then
+            error("invalid URL auth policy reference")
+        end
+        local state = new_state({ policy_path = string.format("%s/policies/%s/versions/%020d.json",
+            options.root, ref.id, ref.revision) })
+        local ok, load_error = reload(state, true)
+        if ok and state.current_policy and state.current_policy.policy_version == ref.revision then
+            state.static = true
+            preloaded[preload_key(ref.id, ref.revision)] = state
+        else
+            -- left out: the sites of this version answer 503
+            ngx.log(ngx.ERR, "cdnca url auth: policy ", ref.id, "@", tostring(ref.revision), " not loaded: ",
+                tostring(load_error or "policy_version_mismatch"))
+        end
+    end
+end
+
+-- access_site(site): site.security.url_auth is set (the caller checked).
+-- The site carries tenant_id and site_id, which the policy must name.
+function _M.access_site(site)
+    local ref = site.security.url_auth
+    local state = nil
+    if type(ref.id) == "string" and type(ref.revision) == "number" then
+        -- the site's own version, else (key rotation, the artifact is still
+        -- on its way) the newest preloaded one down to the control plane's
+        -- floor (security.url_auth_fallback_floor); same walk as
+        -- edgeskeleton.URLAuthFromSites
+        local floor = site.security.url_auth_fallback_floor
+        local low = ref.revision
+        if type(floor) == "number" and floor >= 1 and floor < ref.revision then
+            low = math.max(floor, ref.revision - FALLBACK_STEPS)
+        end
+        for candidate = ref.revision, low, -1 do
+            state = preloaded[preload_key(ref.id, candidate)]
+            if state then
+                break
+            end
+        end
+    end
+    if not state then
+        return reject(nil, ngx.HTTP_SERVICE_UNAVAILABLE, "context_unavailable", 0)
+    end
+    return check(state, site)
+end
+
+check = function(state, context)
     reload(state, false)
     local policy = state.current_policy
 	if not policy or type(context) ~= "table" or context.tenant_id ~= policy.tenant_id or context.site_id ~= policy.site_id then

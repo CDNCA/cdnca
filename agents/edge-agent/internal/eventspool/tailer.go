@@ -381,7 +381,7 @@ func (t *Tailer) parseSourceLine(line []byte) (Envelope, error) {
 			return Envelope{}, ErrInvalidEvent
 		}
 		identity.TenantID, identity.SiteID = strings.ToLower(identity.TenantID), strings.ToLower(identity.SiteID)
-		return ParseSourceLineBound(resolved.Line, resolved.CapturePolicy, identity)
+		return ParseSourceLineChecked(resolved.Line, resolved.CapturePolicy, identity, resolved.Checked)
 	}
 	if t.config.EventType == EventL4Session {
 		return ParseL4SourceLineBound(line, t.config.Identity)
@@ -395,7 +395,20 @@ func sortBySiteDimension(envelopes []Envelope) {
 			envelope.CapturePolicyDigest, strconv.FormatUint(envelope.CapturePolicyRevision, 10), envelope.Host,
 			strconv.Itoa(int(envelope.ListenPort))}, "\x00")
 	}
-	sort.SliceStable(envelopes, func(i, j int) bool { return key(envelopes[i]) < key(envelopes[j]) })
+	// each key once (a batch holds up to 10 000 events), same stable order
+	keyed := make([]keyedEnvelope, len(envelopes))
+	for index := range envelopes {
+		keyed[index] = keyedEnvelope{key: key(envelopes[index]), envelope: envelopes[index]}
+	}
+	sort.SliceStable(keyed, func(i, j int) bool { return keyed[i].key < keyed[j].key })
+	for index := range keyed {
+		envelopes[index] = keyed[index].envelope
+	}
+}
+
+type keyedEnvelope struct {
+	key      string
+	envelope Envelope
 }
 
 func readCompletedLine(reader *bufio.Reader, maximum int) ([]byte, int64, bool, bool, error) {

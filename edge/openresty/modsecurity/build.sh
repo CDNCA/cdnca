@@ -15,8 +15,9 @@
 #   lib/libmodsecurity.so.3, lib/libyajl.so.2, lib/libxml2.so.16,
 #   lib/libstdc++.so.6, lib/libgcc_s.so.1, modules/ngx_http_modsecurity_module.so,
 #   unicode.mapping, LICENSE.*
-# ModSecurity-nginx carries the CDNCA patches of sources.lock.json "patches"
-# ($modsecurity_rule_ids, waf-gap6). The extension carries no rule text: OWASP CRS arrives with the signed system
+# libmodsecurity and ModSecurity-nginx carry the CDNCA patches of
+# sources.lock.json "patches" (hashed SecRuleRemoveById ids;
+# $modsecurity_rule_ids, waf-gap6). The extension carries no rule text: OWASP CRS arrives with the signed system
 # rule catalog. Paths and timestamps are fixed (SOURCE_DATE_EPOCH,
 # -ffile-prefix-map, deterministic ar) for byte-identical rebuilds.
 set -eu
@@ -39,6 +40,19 @@ verified() { # source -> path
   printf '%s  %s\n' "${sum}" "${src}/${file}" | sha256sum -c - >/dev/null || {
     echo "sha256 mismatch: ${src}/${file}" >&2; exit 1; }
   printf '%s\n' "${src}/${file}"
+}
+
+# The CDNCA patches of sources.lock.json "patches" whose "applies_to" is
+# <source>, in lock order: pinned sha256, applied exactly (no fuzz).
+apply_patches() { # source dir
+  for patch_file in $(sed -n 's/.*"file": "\(patches\/[^"]*\)".*/\1/p' "${lock}"); do
+    block="$(sed -n "/\"file\": \"$(printf '%s' "${patch_file}" | sed 's/[\/.]/\\&/g')\"/,/}/p" "${lock}")"
+    [ "$(printf '%s\n' "${block}" | sed -n 's/.*"applies_to": "\([^"]*\)".*/\1/p' | head -1)" = "$1" ] || continue
+    patch_sum="$(printf '%s\n' "${block}" | sed -n 's/.*"sha256": "\([^"]*\)".*/\1/p' | head -1)"
+    printf '%s  %s\n' "${patch_sum}" "${here}/${patch_file}" | sha256sum -c - >/dev/null || {
+      echo "sha256 mismatch: ${patch_file}" >&2; exit 1; }
+    patch -p1 -F0 -N -d "$2" <"${here}/${patch_file}" >>"${work}/patch.log"
+  done
 }
 
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1760486400}"
@@ -87,6 +101,7 @@ ln -sfn libxml2/libxml "${prefix}/include/libxml"
 # network / database / scripting dependency off (SecRemoteRules, Lua, GeoIP,
 # LMDB stay unavailable on the node by construction).
 tar -xzf "$(verified libmodsecurity)" -C "${work}"
+apply_patches libmodsecurity "${work}/modsecurity-v3.0.17"
 cd "${work}/modsecurity-v3.0.17"
 ./configure --prefix="${prefix}" --disable-static --enable-shared --disable-examples \
   --disable-doxygen-doc --disable-dependency-tracking --disable-debug-logs \
@@ -114,15 +129,9 @@ for runtime in libstdc++.so.6 libgcc_s.so.1; do
 done
 
 # ModSecurity-nginx as a --with-compat dynamic module for the bundled nginx,
-# with the CDNCA patches of sources.lock.json "patches" (pinned sha256,
-# applied exactly: no fuzz).
+# with its CDNCA patches.
 tar -xzf "$(verified modsecurity_nginx)" -C "${work}"
-for patch_file in $(sed -n 's/.*"file": "\(patches\/[^"]*\)".*/\1/p' "${lock}"); do
-  patch_sum="$(sed -n "/\"file\": \"$(printf '%s' "${patch_file}" | sed 's/[\/.]/\\&/g')\"/,/}/p" "${lock}" | sed -n 's/.*"sha256": "\([^"]*\)".*/\1/p' | head -1)"
-  printf '%s  %s\n' "${patch_sum}" "${here}/${patch_file}" | sha256sum -c - >/dev/null || {
-    echo "sha256 mismatch: ${patch_file}" >&2; exit 1; }
-  patch -p1 -F0 -N -d "${work}/ModSecurity-nginx-v1.0.4" <"${here}/${patch_file}" >"${work}/patch.log"
-done
+apply_patches modsecurity_nginx "${work}/ModSecurity-nginx-v1.0.4"
 if [ -d "${nginx_input}" ]; then
   nginx_src="$(ls -d "${nginx_input}"/bundle/nginx-* 2>/dev/null | head -1)"
   [ -n "${nginx_src}" ] || nginx_src="${nginx_input}"

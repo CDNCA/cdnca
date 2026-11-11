@@ -78,13 +78,17 @@ export default function FirewallActionPoliciesPage() {
   const querySite = (searchParams.get('site_id') ?? '').trim().toLowerCase()
   const scopeId = isPlatform ? (uuidPattern.test(queryScope) ? queryScope : '') : principal?.scope_id ?? ''
   const siteId = uuidPattern.test(querySite) ? querySite : ''
+  const queryOwner = (searchParams.get('owner_id') ?? '').trim().toLowerCase()
+  // 平台视角的「所属用户」筛选：用户 id 随 URL 保存，刷新和从详情返回后列表与默认设置摘要保持一致。
+  const ownerId = isPlatform && scopeId && uuidPattern.test(queryOwner) ? queryOwner : ''
   const canRead = Boolean(principal?.permissions.includes('firewall.read') || principal?.permissions.includes('platform.admin'))
 
   if (!canRead) return <Result status="403" title={t('errors.forbidden')} />
-  if (!scopeId || !siteId) return <SitePicker isPlatform={isPlatform} scopeId={scopeId} onPick={(site, scope) =>
-    setSearchParams(isPlatform ? { target_scope_id: scope, site_id: site } : { site_id: site })}
-    onPickScope={(scope) => setSearchParams(scope ? { target_scope_id: scope } : {})} />
-  return <PolicyEditor key={`${scopeId}:${siteId}`} scopeId={scopeId} siteId={siteId} onBack={() => setSearchParams({})} />
+  if (!scopeId || !siteId) return <SitePicker isPlatform={isPlatform} scopeId={scopeId} ownerId={ownerId}
+    onPick={(site, scope) => setSearchParams(isPlatform ? { target_scope_id: scope, site_id: site, ...(ownerId ? { owner_id: ownerId } : {}) } : { site_id: site })}
+    onPickScope={(scope, owner) => setSearchParams(scope ? { target_scope_id: scope, ...(owner ? { owner_id: owner } : {}) } : {})} />
+  return <PolicyEditor key={`${scopeId}:${siteId}`} scopeId={scopeId} siteId={siteId}
+    onBack={() => setSearchParams(ownerId ? { target_scope_id: scopeId, owner_id: ownerId } : {})} />
 }
 
 /**
@@ -93,8 +97,8 @@ export default function FirewallActionPoliciesPage() {
  * 列表上方是本租户的默认设置，没有自定义的网站都用它。
  * 平台管理员先在上方选择用户（target_scope_id），再显示该用户的默认设置。
  */
-function SitePicker({ isPlatform, scopeId, onPick, onPickScope }: { isPlatform: boolean; scopeId: string;
-  onPick: (siteId: string, scopeId: string) => void; onPickScope: (scopeId: string) => void }) {
+function SitePicker({ isPlatform, scopeId, ownerId, onPick, onPickScope }: { isPlatform: boolean; scopeId: string; ownerId: string;
+  onPick: (siteId: string, scopeId: string) => void; onPickScope: (scopeId: string, ownerId: string) => void }) {
   const { t } = useTranslation('firewallAction')
   const feedback = useFeedback()
   const token = useSessionStore((state) => state.accessToken)
@@ -104,9 +108,11 @@ function SitePicker({ isPlatform, scopeId, onPick, onPickScope }: { isPlatform: 
   const [domain, setDomain] = useState('')
   const [page, setPage] = useState(1)
   const [opening, setOpening] = useState<string | null>(null)
+  // TenantScopeSelect 先回调 onChange(scope)，再回调 onPickUser(user)：这里只记 scope，在 onPickUser 里一次写入 URL。
+  const pendingScope = useRef('')
   const sites = useQuery({
-    queryKey: ['firewall-action-sites', domain, page], enabled: Boolean(token), placeholderData: keepPreviousData,
-    queryFn: () => sitesApi.list(token!, { page, limit: pageSize, ...(domain ? { domain } : {}) }),
+    queryKey: ['firewall-action-sites', domain, ownerId, page], enabled: Boolean(token), placeholderData: keepPreviousData,
+    queryFn: () => sitesApi.list(token!, { page, limit: pageSize, ...(domain ? { domain } : {}), ...(ownerId ? { owner: ownerId } : {}) }),
   })
   const open = async (site: SiteListItem) => {
     if (!isPlatform) return onPick(site.id, '')
@@ -122,35 +128,42 @@ function SitePicker({ isPlatform, scopeId, onPick, onPickScope }: { isPlatform: 
     }
   }
   const columns: TableColumnsType<SiteListItem> = [
-    { title: t('picker.columns.domain'), dataIndex: 'domain', render: (value: string, site) => <Space direction="vertical" size={0}>
-      <Typography.Text strong>{value}</Typography.Text>
-      <Typography.Text type="secondary">{site.display_id}</Typography.Text>
-    </Space> },
+    { title: t('picker.columns.domain'), dataIndex: 'domain', render: (value: string, site) => {
+      const aliases = (site.domains ?? []).filter((item) => item !== value).length
+      return <Space direction="vertical" size={0}>
+        <Typography.Text strong>{value}</Typography.Text>
+        {aliases > 0 ? <Typography.Text type="secondary">{t('picker.aliases', { count: aliases })}</Typography.Text> : null}
+      </Space>
+    } },
     ...(isPlatform ? [{ title: t('picker.columns.owner'), key: 'owner', render: (_: unknown, site: SiteListItem) => site.owner?.display_name ?? '—' }] : []),
     { title: t('picker.columns.action'), key: 'action', width: 160, render: (_: unknown, site: SiteListItem) =>
       <Button type="link" icon={<Settings2 size={16} />} loading={opening === site.id} disabled={opening !== null && opening !== site.id}
         aria-label={t('picker.configureSite', { domain: site.domain })} onClick={() => void open(site)}>{t('picker.configure')}</Button> },
   ]
-  return <PageSection>
+  return <PageSection className="firewall-action-picker">
     <Space direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
-      <div>
+      <div className="firewall-action-intro">
         <Typography.Title level={3} style={{ margin: 0 }}>{t('title')}</Typography.Title>
         <Typography.Paragraph type="secondary" style={{ margin: '4px 0 0' }}>{t('description')}</Typography.Paragraph>
       </div>
-      {isPlatform ? <Space wrap size={8} className="firewall-action-default-tenant">
-        <Typography.Text>{t('defaults.tenant')}</Typography.Text>
-        <TenantScopeSelect accessToken={token} ownerKey={principal?.user_id ?? ''} canList={canListTenants}
-          queryKeyPrefix="firewall-action-default-tenants" ariaLabel={t('defaults.tenant')} placeholder={t('defaults.tenantPlaceholder')}
-          emptyText={t('defaults.tenantEmpty')} value={scopeId} onChange={onPickScope} />
-      </Space> : null}
-      {scopeId ? <DefaultEditor key={scopeId} scopeId={scopeId} /> : null}
-      <TableToolbar filters={<Input.Search allowClear aria-label={t('picker.search')} placeholder={t('picker.search')} value={search} style={{ width: 280 }}
-        onChange={(event) => { setSearch(event.target.value); if (!event.target.value) { setDomain(''); setPage(1) } }}
-        onSearch={(value) => { setDomain(value.trim()); setPage(1) }} />} />
-      {sites.isError ? <Alert type="error" showIcon message={t('picker.loadFailed')} action={<Button size="small" onClick={() => void sites.refetch()}>{t('picker.retry')}</Button>} /> : null}
-      <DataTable<SiteListItem> rowKey="id" loading={sites.isLoading} columns={columns} dataSource={sites.data?.items ?? []}
-        locale={{ emptyText: t('picker.empty') }}
-        pagination={{ current: page, pageSize, total: sites.data?.total ?? 0, showSizeChanger: false, onChange: setPage }} />
+      {scopeId ? <DefaultEditor key={scopeId} scopeId={scopeId} />
+        : isPlatform ? <div className="firewall-action-default-empty" role="note">{t('defaults.pickUser')}</div> : null}
+      <div>
+        <TableToolbar
+          actions={isPlatform ? <TenantScopeSelect className="firewall-action-owner" allowClear
+            accessToken={token} ownerKey={principal?.user_id ?? ''} canList={canListTenants}
+            queryKeyPrefix="firewall-action-default-tenants" ariaLabel={t('defaults.tenant')} placeholder={t('defaults.tenantPlaceholder')}
+            emptyText={t('defaults.tenantEmpty')} value={scopeId}
+            onChange={(scope) => { pendingScope.current = scope; setPage(1) }}
+            onPickUser={(user) => { onPickScope(pendingScope.current, user?.id ?? ''); pendingScope.current = '' }} /> : undefined}
+          filters={<Input.Search allowClear aria-label={t('picker.search')} placeholder={t('picker.search')} value={search}
+            onChange={(event) => { setSearch(event.target.value); if (!event.target.value) { setDomain(''); setPage(1) } }}
+            onSearch={(value) => { setDomain(value.trim()); setPage(1) }} />} />
+        {sites.isError ? <Alert type="error" showIcon message={t('picker.loadFailed')} action={<Button size="small" onClick={() => void sites.refetch()}>{t('picker.retry')}</Button>} /> : null}
+        <DataTable<SiteListItem> rowKey="id" loading={sites.isLoading} columns={columns} dataSource={sites.data?.items ?? []}
+          locale={{ emptyText: domain ? t('picker.emptySearch', { domain }) : t('picker.empty') }}
+          pagination={{ current: page, pageSize, total: sites.data?.total ?? 0, showSizeChanger: false, onChange: setPage }} />
+      </div>
     </Space>
   </PageSection>
 }
@@ -302,6 +315,10 @@ function DefaultEditor({ scopeId }: { scopeId: string }) {
   })
   const current = query.data
   const headingId = 'firewall-action-default-title'
+  const stat = (label: string, value: ReactNode) => <div className="firewall-action-stat">
+    <span className="firewall-action-stat-label">{label}</span>
+    <span className="firewall-action-stat-value">{value}</span>
+  </div>
   return <Card size="small" className="firewall-action-default" role="region" aria-labelledby={headingId}
     title={<Space wrap size={8}><span id={headingId}>{t('defaults.title')}</span>
       {current ? <Tag color={current.source === 'tenant_default' ? 'blue' : 'default'}>{t(`source.${current.source}`)}</Tag> : null}</Space>}
@@ -310,15 +327,14 @@ function DefaultEditor({ scopeId }: { scopeId: string }) {
     {query.isLoading ? <Spin size="small" /> : query.isError || !current
       ? <Alert type="error" showIcon message={t('defaults.loadFailed')} action={<Button size="small" onClick={() => void query.refetch()}>{t('picker.retry')}</Button>} />
       : <Space direction="vertical" size={12} style={{ width: '100%', minWidth: 0 }}>
-        <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-          {t(current.source === 'tenant_default' ? 'defaults.hintSaved' : 'defaults.hintSystem', { count: current.inheriting_site_count })}
-        </Typography.Paragraph>
-        <Space wrap size={16}>
-          <span>{t('engageThreshold')}：{current.engage_threshold}</span>
-          <span>{t('recoverThreshold')}：{current.recover_threshold}</span>
-          <span>{t('recoveryWindows')}：{current.recovery_windows}</span>
-          <span>{t('normalAction')}：{t(`actions.${current.normal_action}`)}</span>
-        </Space>
+        <div className="firewall-action-stats">
+          {stat(t('defaults.inheriting'), t('defaults.inheritingCount', { count: current.inheriting_site_count }))}
+          {stat(t('engageThreshold'), current.engage_threshold)}
+          {stat(t('recoverThreshold'), current.recover_threshold)}
+          {stat(t('recoveryWindows'), current.recovery_windows)}
+          {stat(t('normalAction'), t(`actions.${current.normal_action}`))}
+        </div>
+        {current.source === 'system_default' ? <Typography.Text type="secondary">{t('defaults.systemNote')}</Typography.Text> : null}
         {open && draft ? <div id="firewall-action-default-body" className="firewall-action-default-body">
           <PolicyFields draft={draft} setDraft={setDraft} canManage={canManage} showEscalation={false} />
           <Space wrap>

@@ -36,6 +36,8 @@ func TestChallengePolicyOpenAPIOperationContract(t *testing.T) {
 		{Method: "delete", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}", OperationID: "deleteChallengePolicy", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "503"}},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/enable", OperationID: "enableChallengePolicy", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "503"}},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/disable", OperationID: "disableChallengePolicy", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "503"}},
+		{Method: "get", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/external-credential", OperationID: "getChallengeExternalCredential", Statuses: []string{"200", "400", "401", "403", "404", "405", "503"}},
+		{Method: "put", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/external-credential", OperationID: "putChallengeExternalCredential", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "422", "503"}},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications", OperationID: "publishChallengePolicy", Statuses: []string{"202", "400", "401", "403", "404", "405", "409", "412", "422", "503"}},
 		{Method: "get", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}", OperationID: "getChallengePolicyPublication", Statuses: []string{"200", "400", "401", "403", "404", "405", "503"}},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote", OperationID: "promoteChallengePolicyPublication", Statuses: []string{"200", "400", "401", "403", "404", "405", "409", "412", "422", "503"}},
@@ -115,8 +117,8 @@ func assertChallengePolicyBundledBearerSecurity(t *testing.T, repositoryRoot, so
 	if err := json.Unmarshal(encoded, &document); err != nil {
 		t.Fatal(err)
 	}
-	if len(document.Paths) != 7 {
-		t.Fatalf("bundled challenge-policy paths = %d, want 7", len(document.Paths))
+	if len(document.Paths) != 8 {
+		t.Fatalf("bundled challenge-policy paths = %d, want 8", len(document.Paths))
 	}
 
 	wantSecurity := []map[string][]string{{"bearerAuth": {}}}
@@ -129,6 +131,8 @@ func assertChallengePolicyBundledBearerSecurity(t *testing.T, repositoryRoot, so
 		{Method: "delete", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}", OperationID: "deleteChallengePolicy"},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/enable", OperationID: "enableChallengePolicy"},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/disable", OperationID: "disableChallengePolicy"},
+		{Method: "get", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/external-credential", OperationID: "getChallengeExternalCredential"},
+		{Method: "put", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/external-credential", OperationID: "putChallengeExternalCredential"},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications", OperationID: "publishChallengePolicy"},
 		{Method: "get", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}", OperationID: "getChallengePolicyPublication"},
 		{Method: "post", Path: "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote", OperationID: "promoteChallengePolicyPublication"},
@@ -155,8 +159,8 @@ func assertChallengePolicyBundledBearerSecurity(t *testing.T, repositoryRoot, so
 		}
 		operations++
 	}
-	if operations != 10 {
-		t.Fatalf("bundled challenge-policy operations = %d, want 10", operations)
+	if operations != 12 {
+		t.Fatalf("bundled challenge-policy operations = %d, want 12", operations)
 	}
 }
 
@@ -166,6 +170,7 @@ func challengePolicyOpenAPIPaths() []string {
 		"/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}",
 		"/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/enable",
 		"/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/disable",
+		"/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/external-credential",
 		"/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications",
 		"/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}",
 		"/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote",

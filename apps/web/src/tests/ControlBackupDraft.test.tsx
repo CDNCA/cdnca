@@ -105,7 +105,7 @@ describe('主控备份设置草稿不被后台刷新覆盖（A04）', () => {
     fireEvent.change(within(panel).getByDisplayValue('cdnca-backups'), { target: { value: 'draft-bucket' } })
     revision = 'rev-2'
     await user.click(within(panel).getByRole('button', { name: '保存设置' }))
-    expect(await screen.findByText(/设置已被修改/)).toBeInTheDocument()
+    expect(await screen.findByText(/内容已被其他人修改，请刷新后再保存/)).toBeInTheDocument()
     expect(within(panel).getByDisplayValue('draft-bucket')).toBeInTheDocument()
     const save = calls.find((call) => call.url.endsWith('/settings'))
     expect(JSON.parse(String(save?.init?.body))).toMatchObject({ expected_revision: 'rev-1',

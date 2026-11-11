@@ -78,9 +78,22 @@ const WAFConditionsAPIVersion uint32 = 4
 // release using them requires it.
 const WAFMultipartAPIVersion uint32 = 5
 
+// WAFStringSetAPIVersion is CAPABILITY_NAME_WAF v6: string
+// set conditions (WAFMatch.StringSets) and the site object's
+// security.string_sets. WAFClientConditionsAPIVersion is the same v6:
+// browser,
+// browser_version, device and request time conditions. A release using any
+// of them requires v6.
+const (
+	WAFStringSetAPIVersion        uint32 = 6
+	WAFClientConditionsAPIVersion        = WAFStringSetAPIVersion
+)
+
 // WAFNodeAPIVersion is the highest WAF API version this node code implements
-// (what the agent advertises).
-const WAFNodeAPIVersion = WAFMultipartAPIVersion
+// (what the agent advertises): v6, the string set and client conditions the
+// rule plan interpreter runs (cdnca_rule_interp.lua, cdnca_ua.lua;
+// WAF v6).
+const WAFNodeAPIVersion = WAFStringSetAPIVersion
 
 // ListenerSecurityWAFAPIVersion is the WAF API version a listener's
 // security needs: 0 without policies or a managed WAF.
@@ -103,6 +116,9 @@ func ListenerSecurityWAFAPIVersion(security *ListenerSecurity) uint32 {
 	}
 	if SecurityPoliciesUseWAFMultipart(security.Policies) {
 		version = WAFMultipartAPIVersion
+	}
+	if SecurityPoliciesUseWAFV6Conditions(security.Policies) {
+		version = WAFStringSetAPIVersion
 	}
 	return version
 }
@@ -298,4 +314,23 @@ func wafBanScope(siteID string) string {
 		return "site"
 	}
 	return "site:" + siteID
+}
+
+// SecurityPoliciesUseWAFV6Conditions reports whether a rule of the policies
+// uses a WAF v6 condition (WAFStringSetAPIVersion).
+func SecurityPoliciesUseWAFV6Conditions(policies []SecurityPolicy) bool {
+	for _, policy := range policies {
+		for _, rule := range policy.Rules {
+			if WAFMatchUsesV6Conditions(rule.Match) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// WAFMatchUsesV6Conditions: the match has a string set, browser, browser
+// version, device or request time condition.
+func WAFMatchUsesV6Conditions(match WAFMatch) bool {
+	return match.StringSets != nil || match.Browser != nil || match.BrowserVersion != nil || match.Device != nil || match.Time != nil
 }

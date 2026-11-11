@@ -231,12 +231,13 @@ describe('challengePoliciesApi', () => {
     const externalConfig: ChallengePolicyConfig = {
       ...config,
       mode: 'external',
-      external_provider: { provider: 'tencent', app_reference: 'appref:tencent-primary' },
+      external_provider: { provider: 'tencent' },
     }
     fetcher.mockResolvedValueOnce(json({
       ...created,
       mode: 'external',
       external_provider_configured: true,
+      external_provider_summary: { provider: 'tencent', unavailable: 'builtin' },
     }, 201))
     await expect(challengePoliciesApi.create('token', scopeID, {
       site_id: siteID, host: policy.host, enabled: true, config: externalConfig,
@@ -246,6 +247,7 @@ describe('challengePoliciesApi', () => {
       ...policy,
       mode: 'external',
       external_provider_configured: true,
+      external_provider_summary: { provider: 'tencent', unavailable: 'builtin' },
       revision: 4,
     }))
     await expect(challengePoliciesApi.update('token', scopeID, policyID, 3, externalConfig, true, 'external-update-key'))
@@ -341,6 +343,9 @@ describe('challengePoliciesApi', () => {
         ...safeConfig,
         key_reference_configured: true,
         external_provider_configured: Boolean(body.config.external_provider),
+        ...(body.config.external_provider
+          ? { external_provider_summary: { provider: body.config.external_provider.provider, unavailable: 'builtin' } }
+          : {}),
         revision: 1,
       }, 201))
     })
@@ -350,7 +355,7 @@ describe('challengePoliciesApi', () => {
         mode,
         min_delay_seconds: mode === 'delay' ? 5 : 0,
         ...(mode === 'external'
-          ? { external_provider: { provider: 'geetest-v4', app_reference: 'appref:challenge-primary' } }
+          ? { external_provider: { provider: 'geetest-v4' } }
           : {}),
       }
       await challengePoliciesApi.create('token', scopeID, {

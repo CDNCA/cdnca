@@ -27,6 +27,7 @@ import '../../i18n/pluginInstallations'
 
 import { AdvisoryList } from './AdvisoryList'
 import { PluginIdentityKeyPanel } from './PluginIdentityKeyPanel'
+import { PluginSettingsTabs } from './PluginSettingsTabs'
 import { SigningKeyPanel, UIPageDisclosure } from './PluginUIDisclosure'
 import { allTenantsDraft, draftComplete, draftTargets, type TargetsDraft } from './targetsDraft'
 import { TenantTargetsPicker } from './TenantTargetsPicker'
@@ -582,7 +583,7 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
     <Drawer className="plugin-market-drawer" width="min(760px, 100vw)" title={detail ? nameOf(detail.plugin_id) : t('detail.title')} open={Boolean(selected)} closable onClose={() => setSelected(null)}>
       {detailQuery.isLoading ? <div className="plugin-market-loading"><Spin aria-label={t('accessibility.loading')} /></div> : null}
       {detailQuery.isError ? <Alert type="error" showIcon message={t('errors.detail')} description={errorText(detailQuery.error, t)} /> : null}
-      {detail ? <>
+      {detail ? <PluginSettingsTabs installation={detail}>
         {/* 平台插件：先给下一步（确认安装 / 去对应页面启用），技术字段放在后面。 */}
         {platform && detail.status === 'pending_confirmation' && canManage ? <Alert className="plugin-market-consent-note" type="info" showIcon
           message={t(tenantPlugin(detail) ? 'platform.pendingTenantHint' : 'platform.pendingHint')} action={<Button type="primary" disabled={writeLocked} onClick={() => openAction('confirm', detail)}>{t('actions.confirm')}</Button>} /> : null}
@@ -628,7 +629,6 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
         <Collapse size="small" ghost className="plugin-market-diagnostics" items={[{
           key: 'diagnostics', label: t('detail.diagnostics'),
           children: <Descriptions bordered size="small" column={1}>
-            <Descriptions.Item label={t('detail.revision')}>{detail.revision}</Descriptions.Item>
             <Descriptions.Item label={t('detail.generation')}>{detail.identity_generation}</Descriptions.Item>
             <Descriptions.Item label={t('detail.installation')}>{detail.installation_id}</Descriptions.Item>
             <Descriptions.Item label={t('detail.verification')}>{detail.verification_id}</Descriptions.Item>
@@ -650,7 +650,7 @@ function PluginMarketContent({ accessToken, principal, owner, platform = false }
         {manageDetail(detail) && detail.status !== 'uninstalled' && detail.status !== 'pending_confirmation' ? <div className="plugin-market-danger">
           <Button danger disabled={writeLocked} onClick={() => openAction('uninstall', detail)}>{t('actions.uninstall')}</Button>
         </div> : null}
-      </> : null}
+      </PluginSettingsTabs> : null}
     </Drawer>
 
     <Modal open={Boolean(action)} title={action?.kind === 'confirm' ? t('consent.installTitle') : action?.kind === 'upgrade' ? t('consent.upgradeTitle') : action?.kind === 'disable' ? t('protective.disableTitle') : t('protective.uninstallTitle')}

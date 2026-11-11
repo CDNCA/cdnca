@@ -112,11 +112,13 @@ const L4RealtimeMonitorPage = lazy(() => import('./pages/L4RealtimeMonitorPage')
 const L4AccessLogPage = lazy(() => import('./pages/L4SessionPanels').then((module) => ({ default: module.L4AccessLogPage })))
 const L4LiveConnectionsPage = lazy(() => import('./pages/L4SessionPanels').then((module) => ({ default: module.L4LiveConnectionsPage })))
 const SiteAnalysisPage = lazy(() => import('./pages/SiteAnalysisPage'))
+const RumReportPage = lazy(() => import('./pages/RumReportPage'))
+const ContentRewritePage = lazy(() => import('./pages/ContentRewritePage'))
 const JA4BlockWorkflowsPage = lazy(() => import('./pages/JA4BlockWorkflowsPage'))
 const SiteAccessLogPage = lazy(() => import('./pages/SiteAccessLogPage'))
 const SiteBlockLogPage = lazy(() => import('./pages/SiteBlockLogPage'))
 const SecurityBansPage = lazy(() => import('./pages/SecurityBansPage'))
-const SecurityIPListsPage = lazy(() => import('./pages/SecurityIPListsPage'))
+const ListsPage = lazy(() => import('./pages/lists/ListsPage'))
 const SiteBlockEventLogPage = lazy(() => import('./pages/SiteBlockEventLogPage'))
 const CCCoordinationPage = lazy(() => import('./pages/CCCoordinationPage'))
 const WafLogsPage = lazy(() => import('./pages/WafLogsPage'))
@@ -146,6 +148,7 @@ const NodeMonitorSettingsPage = lazy(() => import('./pages/NodeMonitorSettingsPa
 const DDoSProtectionSettingsPage = lazy(() => import('./pages/DDoSProtectionSettingsPage'))
 const AccessLogFieldsSettingsPage = lazy(() => import('./pages/AccessLogFieldsSettingsPage'))
 const GatewayManagementPage = lazy(() => import('./pages/GatewayManagementPage'))
+const StatusPageEditorPage = lazy(() => import('./pages/StatusPageEditorPage'))
 const NodeMarketPage = lazy(() => import('./pages/node-market/NodeMarketPage'))
 const PluginStorePage = lazy(() => import('./pages/market/MarketStorePage'))
 const PluginUIPage = lazy(() => import('./pluginui/PluginPage'))
@@ -661,6 +664,18 @@ const appRouteTree = (
             }
           />
           <Route
+            path="/sys/status-page"
+            element={
+              <RoleRoute role="admin" mismatch="not-found">
+                <PermissionRoute permission="system_configuration.read">
+                  <Suspense fallback={<RouteFallback />}>
+                    <StatusPageEditorPage />
+                  </Suspense>
+                </PermissionRoute>
+              </RoleRoute>
+            }
+          />
+          <Route
             path="/sys/gateways"
             element={
               <RoleRoute role="admin" mismatch="not-found">
@@ -1034,6 +1049,26 @@ const appRouteTree = (
             }
           />
           <Route
+            path="/site/content-rewrite"
+            element={
+              <PermissionRoute permission="sites.read">
+                <Suspense fallback={<RouteFallback />}>
+                  <ContentRewritePage />
+                </Suspense>
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/monitor/site/rum"
+            element={
+              <PermissionRoute permission="sites.read">
+                <Suspense fallback={<RouteFallback />}>
+                  <RumReportPage />
+                </Suspense>
+              </PermissionRoute>
+            }
+          />
+          <Route
             path="/monitor/site/analysis/ja4-blocks"
             element={
               <RoleRoute role="user" mismatch="not-found">
@@ -1280,12 +1315,13 @@ const appRouteTree = (
               </PermissionRoute>
             }
           />
+          <Route path="/site/ip-lists" element={<Navigate to="/site/lists?tab=ip" replace />} />
           <Route
-            path="/site/ip-lists"
+            path="/site/lists"
             element={
               <PermissionRoute permission="security_policies.read">
                 <Suspense fallback={<RouteFallback />}>
-                  <SecurityIPListsPage />
+                  <ListsPage />
                 </Suspense>
               </PermissionRoute>
             }

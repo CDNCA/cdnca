@@ -31,12 +31,14 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	_ "time/tzdata" // request_time zones do not depend on the host zoneinfo
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/cdnca/cdnca/libs/entitlement"
 	"github.com/cdnca/cdnca/libs/rulepack"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoverycontext"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoveryhttp"
+	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
 	"github.com/cdnca/cdnca/services/control-api/internal/acmehttp01"
 	"github.com/cdnca/cdnca/services/control-api/internal/analytics"
 	"github.com/cdnca/cdnca/services/control-api/internal/analyticsdiagnostichttp"
@@ -112,6 +114,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeca"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodecertlifecycle"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodegatewayaddr"
+	"github.com/cdnca/cdnca/services/control-api/internal/nodedownloads"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeidentity"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeisolationhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodemonitoringoutbox"
@@ -155,6 +158,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/systemmailsettings"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/cdnca/cdnca/services/control-api/internal/theme"
+	"github.com/cdnca/cdnca/services/control-api/internal/urlauthpolicy"
 	"github.com/cdnca/cdnca/services/control-api/internal/wafreport"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -1406,13 +1410,35 @@ func runServer() error {
 	// builtin registration: without the Turnstile registration runtime (the fresh
 	// install default) 开放注册 uses the built-in CAPTCHA instead.
 	var builtInRegistration httpapi.BuiltInRegistration
+	var builtInRegistrationService *accountregistration.BuiltInService
+	var builtInVerification *builtInRegistrationVerification
 	if accountRegistrationRuntime == nil {
 		service, err := openBuiltInRegistration(pool, publicSystemSettings, identityService, cfg.AccessSecret)
 		if err != nil {
 			return runtimeStageError{stage: "initialize built-in account registration", err: err}
 		}
-		builtInRegistration = service
+		builtInRegistration, builtInRegistrationService = service, service
+		// email / SMS codes for built-in registration.
+		builtInVerification, err = openBuiltInRegistrationVerification(ctx, pool, notificationConfig, publicSystemSettings,
+			identityService, service, cfg.AccessSecret, slog.Default())
+		if err != nil {
+			return runtimeStageError{stage: "initialize built-in registration verification", err: err}
+		}
+		if builtInVerification != nil {
+			defer builtInVerification.Close()
+		}
 	}
+	registrationDispatcher := accountRegistrationRuntime.Dispatcher()
+	if builtInVerification != nil {
+		registrationDispatcher = builtInVerification.Dispatcher()
+		if !accountRecoveryConfig.Enabled && notificationRuntime != nil {
+			if err := builtInVerification.RegisterAlone(ctx, notificationRuntime); err != nil {
+				return runtimeStageError{stage: "register built-in registration dispatcher", err: err}
+			}
+		}
+	}
+	registrationConfig := newRegistrationConfigSource(pool, publicSystemSettings, accountRegistrationConfig,
+		builtInRegistrationService, builtInVerification, accountRecoveryConfig)
 	accountLoginRuntime, err := openAccountLoginRuntime(
 		ctx, accountRecoveryConfig, notificationConfig, pool, identityService, cfg.CookieSecure, cfg.CookieDomain,
 		accountRegistrationRuntime != nil,
@@ -1439,7 +1465,7 @@ func runServer() error {
 	accountRecoveryRuntime, err := openAccountRecoveryRuntime(
 		ctx, accountRecoveryConfig, pool, slog.Default(), accountRecoveryRuntimeDependencies{
 			TrustedContext: trustedRecoveryContext, Notifications: notificationRuntime,
-			RegistrationDispatcher: accountRegistrationRuntime.Dispatcher(),
+			RegistrationDispatcher: registrationDispatcher,
 			LoginDispatcher:        accountLoginRuntime.Dispatcher(),
 		},
 	)
@@ -2136,6 +2162,10 @@ func runServer() error {
 	if err != nil {
 		return runtimeStageError{stage: "initialize system other settings runtime", err: err}
 	}
+	statusPageHandlerFactory, err := buildStatusPageHandlerFactory(ctx, pool, identityService, cfg.APIKeyTrustedProxyCIDRs, cfg.APIKeyMaxProxyHops)
+	if err != nil {
+		return runtimeStageError{stage: "initialize status page runtime", err: err}
+	}
 	ja4BlockRuntime, err := openJA4BlockProductionRuntime(ja4BlockConfig, ja4BlockProductionDependencies{
 		Pool: pool, Analytics: analyticsService, Identity: identityService,
 		StepUp: mfaRuntime.StepUpConsumer(), Signer: edgePublishSigner, Now: time.Now,
@@ -2210,7 +2240,29 @@ func runServer() error {
 			return runtimeStageError{stage: "initialize L4 line switch runtime", err: err}
 		}
 	}
+	// enabled URL auth policies reach their nodes as a
+	// system secret rollout (agent URL auth consumer); without the edge
+	// publication runtime enabling one is refused (url_auth_unavailable).
+	var urlAuthPublisher urlauthpolicy.Publisher
+	if sitePublicationRuntime.Publisher != nil && edgePublishSigner != nil {
+		urlAuthCipher, cipherErr := urlauthpolicy.PublicationCipher(credentialCipher)
+		if cipherErr != nil {
+			return runtimeStageError{stage: "initialize URL auth publication cipher", err: cipherErr}
+		}
+		urlAuthProducer, producerErr := urlauthpolicy.NewArtifactProducer(edgePublishSigner)
+		if producerErr != nil {
+			return runtimeStageError{stage: "initialize URL auth artifact producer", err: producerErr}
+		}
+		publisher, publisherErr := urlauthpolicy.NewArtifactPublisher(
+			sitePublicationRuntime.Publisher.RolloutCommands(), urlAuthCipher, urlAuthProducer)
+		if publisherErr != nil {
+			return runtimeStageError{stage: "initialize URL auth publisher", err: publisherErr}
+		}
+		urlAuthPublisher = publisher
+	}
 	var challengeRedeliverer edgepublish.ChallengeSecretRedeliverer
+	// runs once after startup to give pre-existing challenge policies their key facts.
+	var challengeKeyFactBackfill func(context.Context)
 	if challengePolicyRuntimeConfig.Enabled {
 		if sitePublicationRuntime.Publisher == nil || edgePublishSigner == nil {
 			return runtimeStageError{stage: "initialize challenge publication runtime",
@@ -2231,6 +2283,29 @@ func runServer() error {
 			}))
 		if factErr != nil {
 			return runtimeStageError{stage: "initialize challenge key fact resolver", err: factErr}
+		}
+		// console external credentials, same KEK as the facts.
+		externalCredentials, factErr := challengepublication.NewPostgresExternalCredentialSource(pool, factCipher)
+		if factErr != nil {
+			return runtimeStageError{stage: "initialize challenge external credential source", err: factErr}
+		}
+		factResolver.WithExternalCredentials(externalCredentials)
+		credentialCipher, factErr := challengepublication.NewAESGCMFactWriterCipher(factCipher)
+		if factErr != nil {
+			return runtimeStageError{stage: "initialize challenge external credential cipher", err: factErr}
+		}
+		factSigner, factErr := challengepublication.NewArtifactFactSigner(edgePublishSigner)
+		if factErr != nil {
+			return runtimeStageError{stage: "initialize challenge key fact signer", err: factErr}
+		}
+		keyFactIssuer, factErr := challengepublication.NewKeyFactIssuer(credentialCipher, factSigner)
+		if factErr != nil {
+			return runtimeStageError{stage: "initialize challenge key fact issuer", err: factErr}
+		}
+		challengeKeyFactBackfill = func(ctx context.Context) {
+			if _, _, err := challengepolicy.BackfillKeyFacts(ctx, pool, keyFactIssuer, slog.Default()); err != nil {
+				slog.Error("challenge policy key fact backfill aborted", "error", err)
+			}
 		}
 		artifactProducer, factErr := challengepublication.NewArtifactProducer(edgePublishSigner)
 		if factErr != nil {
@@ -2276,6 +2351,7 @@ func runServer() error {
 					},
 					KeyResolver: factResolver, SecretPublisher: secretPublisher,
 					RolloutReader: rolloutReader, ConfigPublisher: bindingPublisher,
+					CredentialCipher: credentialCipher, KeyFacts: keyFactIssuer,
 				},
 			)
 		}
@@ -2581,6 +2657,18 @@ func runServer() error {
 		OfflineAfter: cfg.NodePresenceOfflineAfter,
 	}
 	configureMaintenanceUpgradeRuntime(&maintenanceUpgradeRuntime, controlPlaneUpgradeHandler)
+	nodeDownloadsVersion := cfg.ControlVersion
+	if nodeDownloadsVersion == "" {
+		nodeDownloadsVersion = controlVersion
+	}
+	nodeDownloads, nodeDownloadsOff, err := nodeDownloadsRuntime(cfg.LicenseServiceURL, nodeDownloadsVersion)
+	if err != nil {
+		return runtimeStageError{stage: "initialize node downloads sync", err: err}
+	}
+	maintenanceUpgradeRuntime.NodeDownloads = func() nodedownloads.Status { return nodeDownloadsOff }
+	if nodeDownloads != nil {
+		maintenanceUpgradeRuntime.NodeDownloads = nodeDownloads.Status
+	}
 	if maintenanceUpgradeClient != nil {
 		maintenanceUpgradeRuntime.Candidates = maintenanceUpgradeClient
 	}
@@ -2780,6 +2868,7 @@ func runServer() error {
 		ControlUpgradeService:               controlUpgradeService,
 		MaintenanceUpgradeRuntime:           maintenanceUpgradeRuntime,
 		DNSCredentialCipher:                 credentialCipher,
+		URLAuthPublisher:                    urlAuthPublisher,
 		DNSProviderVerifier:                 dnsacme.NewProviderVerifierDispatcher(),
 		DNSZoneApexResolver:                 dnsproviderremote.NewZoneApexResolver(),
 		CertificateHTTP01Readiness:          acmehttp01.OrderReadiness,
@@ -2806,6 +2895,7 @@ func runServer() error {
 		SystemUserSettingsHandlerFactory:    systemUserSettingsHandlerFactory,
 		SystemMailSettingsHandlerFactory:    systemMailSettingsHandlerFactory,
 		SystemOtherSettingsHandlerFactory:   systemOtherSettingsHandlerFactory,
+		StatusPageHandlerFactory:            statusPageHandlerFactory,
 		L4LineSwitchHandlerFactory:          l4SwitchRuntime.HandlerFactory,
 		SiteGroupService:                    siteGroupService,
 		ControlUpgradePlanHandlerFactory:    controlUpgradePlanHandlerFactory,
@@ -2831,9 +2921,12 @@ func runServer() error {
 		TicketHandlerFactory:                       ticketHandlerFactory,
 		NodeSSHInstallHandlerFactory:               nodeSSHInstallHandlerFactory,
 		NodeInstallGateway:                         nodeInstallGatewayForAPI(gatewayRegistry),
+		NodeReinstallGateway:                       nodeReinstallGatewayForAPI(gatewayRegistry),
 		AccountRegistrationHandlerFactory:          accountRegistrationRuntime.HandlerFactory(),
 		AccountLoginHandlerFactory:                 accountLoginRuntime.HandlerFactory(),
 		BuiltInRegistration:                        builtInRegistration,
+		BuiltInRegistrationChallengeHandler:        builtInVerification.Handler(),
+		RegistrationConfig:                         registrationConfig,
 		CertificateAssetHandlerFactory:             certificateAssetHandlerFactory,
 		CertificatePublicationStatusHandlerFactory: certificatePublicationStatusHandlerFactory,
 		CacheControlHandlerFactory:                 cacheRuntime.HandlerFactory(),
@@ -2875,6 +2968,7 @@ func runServer() error {
 		SecurityCoordinationMetricsHandlerFactory:  securityCoordinationMetricsHandlerFactory,
 		JA4BlockHandlerFactory:                     ja4BlockRuntime.HandlerFactory(),
 		CCStatsHandlerFactory:                      ccStats.handler,
+		RUMReportHandlerFactory:                    ccStats.rum,
 		MarketSecurityHandlerFactory:               ccStats.market,
 		AnalyticsConnectionsRetentionHandler:       analyticsConnectionsRetentionHandler,
 		AnalyticsConnectionsDLQHandler:             analyticsConnectionsDLQHandler,
@@ -3012,6 +3106,13 @@ func runServer() error {
 		default:
 		}
 		terminalErrorMu.Unlock()
+	}
+	if challengeKeyFactBackfill != nil {
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			challengeKeyFactBackfill(ctx)
+		}()
 	}
 	background.Add(1)
 	go func() {
@@ -3245,6 +3346,14 @@ func runServer() error {
 		go func() {
 			defer background.Done()
 			packageTrafficEnforcement.Run(ctx)
+		}()
+	}
+	if nodeDownloads != nil {
+		// Keeps the served package on any failure and retries next interval.
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			_ = nodeDownloads.Run(ctx)
 		}()
 	}
 	if marketAdvisories != nil {

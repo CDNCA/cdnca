@@ -165,10 +165,10 @@ func (evaluator *Evaluator) evaluate(ctx context.Context, item dueLimit, now tim
 			exceeded_period_start=$4,exceeded_at=$5 WHERE site_id=$1`, item.siteID, now, periodValue, startValue, atValue); err != nil {
 			return err
 		}
-		// The release reads the decision from site_traffic_limits; advance
-		// the site so the scope's source revision moves (one system segment).
-		if _, err := tx.Exec(ctx, `UPDATE sites SET revision=revision+1,updated_at=$2 WHERE id=$1 AND deleted_at IS NULL`,
-			item.siteID, now); err != nil {
+		// The release reads the decision from site_traffic_limits. No admin-edited
+		// site column changed, so advance only the scope's source revision (one
+		// system segment) and leave sites.revision, the admin's If-Match, alone.
+		if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, item.scopeID); err != nil {
 			return err
 		}
 		operation := "site.batch.enable"

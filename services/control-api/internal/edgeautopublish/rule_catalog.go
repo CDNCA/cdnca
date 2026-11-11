@@ -213,6 +213,65 @@ func RepublishIPListChangeTx(ctx context.Context, tx pgx.Tx, listID uuid.UUID, r
 	return scopes, nil
 }
 
+// StringSetRepublicationDebounce merges a burst of edits of one string set
+// into one republication per scope.
+const StringSetRepublicationDebounce = 5 * time.Second
+
+// RepublishStringSetChangeTx republishes every tenant scope whose bound WAF
+// policy references the string set setID, written in this
+// transaction at revision; as RepublishIPListChangeTx (system trigger
+// string_set for a manual scope, the policy actor's site.update for an
+// automatic one). It returns the scopes, in scope order.
+func RepublishStringSetChangeTx(ctx context.Context, tx pgx.Tx, setID uuid.UUID, revision int64) ([]uuid.UUID, error) {
+	if ctx == nil || tx == nil || setID == uuid.Nil || revision < 1 {
+		return nil, ErrInvalidInput
+	}
+	sites, err := edgepublish.StringSetSitesTx(ctx, tx, setID)
+	if err != nil {
+		return nil, err
+	}
+	requestID := "string-set." + setID.String() + "." + strconv.FormatInt(revision, 10)
+	var scopes []uuid.UUID
+	for index, site := range sites {
+		if index > 0 && sites[index-1].ScopeID == site.ScopeID {
+			continue
+		}
+		var from int64
+		err := tx.QueryRow(ctx, `SELECT source_revision FROM edge_configuration_scopes WHERE scope_id=$1 FOR UPDATE`,
+			site.ScopeID).Scan(&from)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue // never published: its first publication reads the set
+		}
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, site.ScopeID); err != nil {
+			return nil, err
+		}
+		_, automatic, err := automaticPolicyActor(ctx, tx, site.ScopeID)
+		if err != nil {
+			return nil, err
+		}
+		if automatic {
+			for _, other := range sites[index:] {
+				if other.ScopeID != site.ScopeID {
+					break
+				}
+				if _, err := EnqueueSiteSettingTx(ctx, tx, site.ScopeID, other.SiteID, requestID); err != nil {
+					return nil, err
+				}
+			}
+		} else if _, err := RequestRepublicationTx(ctx, tx, RepublishRequest{
+			ScopeID: site.ScopeID, Trigger: edgepublish.SystemTriggerStringSet, SourceResourceID: setID,
+			SourceRequestID: requestID, FromRevision: from, Debounce: StringSetRepublicationDebounce,
+		}); err != nil {
+			return nil, err
+		}
+		scopes = append(scopes, site.ScopeID)
+	}
+	return scopes, nil
+}
+
 // DefaultOnPackRepublicationDebounce merges the mount recomputes of one
 // catalog sync into one republication per scope.
 const DefaultOnPackRepublicationDebounce = 30 * time.Second

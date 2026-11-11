@@ -272,8 +272,8 @@ func writeState(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, state failover
 	return err
 }
 
-// switchTx moves the active level: site revision (the scope's source
-// revision follows), republication, audit, notification.
+// switchTx moves the active level: the scope's source revision, republication,
+// audit, notification (sites.revision is not touched).
 func (s *Store) switchTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value evaluation, target int, reason string,
 	actor *uuid.UUID, requestKey string, now time.Time,
 ) error {
@@ -294,10 +294,10 @@ func (s *Store) switchTx(ctx context.Context, tx pgx.Tx, siteID uuid.UUID, value
 			return err
 		}
 	}
-	// The release reads active_level; advance the site so the scope's
-	// source revision moves.
-	if _, err := tx.Exec(ctx, `UPDATE sites SET revision=revision+1, updated_at=$2 WHERE id=$1 AND deleted_at IS NULL`,
-		siteID, now); err != nil {
+	// The release reads active_level. No admin-edited site column changed, so
+	// advance only the scope's source revision and leave sites.revision (the
+	// admin's If-Match) alone.
+	if _, err := tx.Exec(ctx, `SELECT advance_edge_configuration_scope_revision($1)`, value.scopeID); err != nil {
 		return err
 	}
 	requestID := "origin-failover:" + siteID.String() + ":" + strconv.FormatInt(value.state.sequence, 10)

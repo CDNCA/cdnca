@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 // @ts-expect-error plain ESM helper shared with node --test
-import { declarations, defaultVariables, expandFallbacks, leftoverColors, normalizeValue, removedOnPurpose, scriptVariable, wrappedVariable } from '../../scripts/defaultLook.mjs'
+import { declarations, defaultVariables, expandFallbacks, leftoverColors, normalizeValue, removedOnPurpose, scriptVariable, standaloneStylesheets, wrappedVariable } from '../../scripts/defaultLook.mjs'
 
 const repo = resolve(__dirname, '../../../..') + '/'
 const base = process.env.DEFAULT_LOOK_BASE ?? 'b3150d535'
@@ -68,6 +68,7 @@ describe('default look lock', () => {
   it.skipIf(baseText('apps/web/src/styles.css') === null)('keeps every stylesheet equal to the base commit once variables are expanded', () => {
     let compared = 0
     for (const file of files) {
+      if (standaloneStylesheets.includes(file)) continue
       const before = baseText(file)
       const after = readFileSync(repo + file, 'utf8')
       if (before === null) {

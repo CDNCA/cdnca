@@ -136,7 +136,7 @@ const zhCN = {
   },
   errors: {
     network_error: '无法连接服务，请稍后重试。', invalid_response: '服务响应无效，请刷新确认当前状态。',
-    permission_denied: '当前账号缺少缓存策略权限。', revision_conflict: '策略修订已变化，请重新加载后重试。',
+    permission_denied: '当前账号缺少缓存策略权限。', revision_conflict: '内容已被其他人修改，请刷新后再保存',
     idempotency_conflict: '该幂等键已用于不同请求，请刷新后重新提交。', validation_error: '缓存策略无效，请检查输入。',
     invalid_request: '缓存策略请求无效，请检查输入。', not_found: '未找到该站点或缓存策略。',
     service_unavailable: '缓存策略服务暂不可用，请稍后重试。', request_failed: '缓存策略请求失败，请稍后重试。',
@@ -278,7 +278,7 @@ const enUS = {
   },
   errors: {
     network_error: 'Unable to connect to the service. Try again later.', invalid_response: 'The service response was invalid. Refresh to confirm the current state.',
-    permission_denied: 'The current account lacks cache policy permission.', revision_conflict: 'The policy revision changed. Reload before retrying.',
+    permission_denied: 'The current account lacks cache policy permission.', revision_conflict: 'Someone else changed this content. Refresh before saving.',
     idempotency_conflict: 'The idempotency key was used for a different request. Refresh and submit again.', validation_error: 'The cache policy is invalid. Check the input.',
     invalid_request: 'The cache policy request is invalid. Check the input.', not_found: 'The site or cache policy was not found.',
     service_unavailable: 'The cache policy service is unavailable. Try again later.', request_failed: 'The cache policy request failed. Try again later.',

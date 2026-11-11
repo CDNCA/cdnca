@@ -128,6 +128,9 @@ type siteRuntimeV2Site struct {
 	// Schedule302 is the site's HTTP 302 scheduling (sched302 v1,
 	// site_schedule302.go).
 	Schedule302 *sched302.Site `json:"schedule302,omitempty"`
+	// URLAuth is the site's enabled URL auth policy version
+	// (see site_url_auth.go).
+	URLAuth *siteRuntimeV2URLAuthBinding `json:"url_auth,omitempty"`
 }
 
 type siteRuntimeV2ForceHTTPS struct {
@@ -448,6 +451,15 @@ func (s *Service) compileSiteRuntimeV2FactsWith(
 	} else if slots {
 		requireSiteRuntimeV2Capability(&document, siteobject.ErrorPageSlotsCapability, siteobject.ErrorPageSlotsAPIVersion)
 	}
+	if err := requireServerTimingCapability(ctx, tx, scopeID, &document); err != nil {
+		return nil, [sha256.Size]byte{}, edgeconfig.Bundle{}, [sha256.Size]byte{}, nil, nil, err
+	}
+	if err := requireRUMCapability(ctx, tx, scopeID, &document); err != nil {
+		return nil, [sha256.Size]byte{}, edgeconfig.Bundle{}, [sha256.Size]byte{}, nil, nil, err
+	}
+	if err := requireContentRewriteCapability(ctx, tx, scopeID, &document); err != nil {
+		return nil, [sha256.Size]byte{}, edgeconfig.Bundle{}, [sha256.Size]byte{}, nil, nil, err
+	}
 	httpPolicyRevision, httpPolicyFacts, err := loadHTTPPolicyFactsAt(ctx, tx, scopeID, lockedRevision, sourceRevision, document.Sites)
 	if err != nil {
 		return nil, [sha256.Size]byte{}, edgeconfig.Bundle{}, [sha256.Size]byte{}, nil, nil, err
@@ -536,6 +548,9 @@ func (s *Service) compileSiteRuntimeV2FactsWith(
 		return nil, [sha256.Size]byte{}, edgeconfig.Bundle{}, [sha256.Size]byte{}, nil, nil, err
 	}
 	if err := bindSiteRuntimeV2Schedule302(ctx, tx, scopeID, &document); err != nil {
+		return nil, [sha256.Size]byte{}, edgeconfig.Bundle{}, [sha256.Size]byte{}, nil, nil, err
+	}
+	if err := bindSiteRuntimeV2URLAuth(ctx, tx, scopeID, &document); err != nil {
 		return nil, [sha256.Size]byte{}, edgeconfig.Bundle{}, [sha256.Size]byte{}, nil, nil, err
 	}
 	var originRouteBundle []byte
@@ -1551,6 +1566,9 @@ func validateSiteRuntimeV2Site(site siteRuntimeV2Site, inferred map[string]uint3
 		return false, err
 	}
 	if err := validateSiteRuntimeV2Schedule302(site, inferred); err != nil {
+		return false, err
+	}
+	if err := validateSiteRuntimeV2URLAuth(site, inferred); err != nil {
 		return false, err
 	}
 	requiresTLS := false

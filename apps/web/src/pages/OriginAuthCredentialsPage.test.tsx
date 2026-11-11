@@ -230,7 +230,7 @@ describe('OriginAuthCredentialsPage', () => {
     renderPage()
     expect(await screen.findByText(credential.name)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '查看详情' }))
-    expect(await screen.findByText(credential.revision_ref)).toBeInTheDocument()
+    expect(await screen.findByText('验证时间')).toBeInTheDocument()
 
     await submitCreate(user, 'abandoned-secret')
     expect(await screen.findByText('写入结果未知', { selector: '.cdnca-outcome-bar .ant-alert-message' })).toBeInTheDocument()

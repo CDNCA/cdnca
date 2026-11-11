@@ -51,7 +51,7 @@ const zhCN = {
     snapshotStale: '排行快照已失效，请刷新后重新选择。',
     dependencyInvalid: '封禁服务返回了无效回执，请稍后重试。',
     idempotencyConflict: '幂等请求与原请求不一致，请核对后重新创建。',
-    revisionConflict: '创建前置修订不匹配，请重新确认。', stepUpRequired: '需要重新完成二次认证。',
+    revisionConflict: '内容已被其他人修改，请刷新后再保存', stepUpRequired: '需要重新完成二次认证。',
     unavailable: 'JA4 封禁服务暂不可用，请稍后重试。', requestFailed: 'JA4 封禁请求失败，请重试。',
   },
 }
@@ -107,7 +107,7 @@ const enUS: typeof zhCN = {
     snapshotStale: 'The ranking snapshot has expired. Refresh it and select the fingerprint again.',
     dependencyInvalid: 'The block service returned an invalid receipt. Try again later.',
     idempotencyConflict: 'The idempotency request differs from the original request. Verify it before creating again.',
-    revisionConflict: 'The create precondition revision does not match. Confirm again.', stepUpRequired: 'Complete step-up authentication again.',
+    revisionConflict: 'Someone else changed this content. Refresh before saving.', stepUpRequired: 'Complete step-up authentication again.',
     unavailable: 'The JA4 block service is temporarily unavailable. Try again later.', requestFailed: 'The JA4 block request failed. Try again.',
   },
 }

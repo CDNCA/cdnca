@@ -158,6 +158,7 @@ type DecodedIngest struct {
 	SecurityEvents            []SecurityEvent
 	AccessWindowContributions []AccessWindowContributionV1
 	SubscriptionMinutes       []SubscriptionMinute
+	RUMMinutes                []RUMMinute
 	PayloadDigest             [sha256.Size]byte
 }
 
@@ -461,6 +462,8 @@ func (decoder *IngestDecoder) Decode(subject, brokerMessageID string, payload []
 		return decoded, nil
 	case probe.SchemaVersion == IngestSchemaVersion && probe.Type == SubscriptionMinuteEnvelopeType:
 		return decoder.decodeSubscriptionMinute(payload, nodeID, brokerMessageID)
+	case probe.SchemaVersion == IngestSchemaVersion && probe.Type == RUMMinuteEnvelopeType:
+		return decoder.decodeRUMMinute(payload, nodeID, brokerMessageID)
 	default:
 		return DecodedIngest{}, rejection(RejectUnsupportedVersion)
 	}
@@ -534,7 +537,8 @@ func extractV2EventInstallation(encoded json.RawMessage) (string, []byte, error)
 
 func (decoder *IngestDecoder) validate(decoded DecodedIngest, subjectNodeID, brokerMessageID string) error {
 	v2 := decoded.SchemaVersion == IngestSchemaVersionV2
-	authorityBound := v2 || decoded.Kind == AccessWindowEnvelopeType || decoded.Kind == SubscriptionMinuteEnvelopeType
+	authorityBound := v2 || decoded.Kind == AccessWindowEnvelopeType || decoded.Kind == SubscriptionMinuteEnvelopeType ||
+		decoded.Kind == RUMMinuteEnvelopeType
 	if decoded.SchemaVersion != IngestSchemaVersion && !v2 || !validBatchID(decoded.MessageID) ||
 		brokerMessageID == "" || brokerMessageID != decoded.MessageID ||
 		!validUUID(decoded.TenantID) || nilUUID(decoded.TenantID) ||
@@ -613,6 +617,12 @@ func (decoder *IngestDecoder) validate(decoded DecodedIngest, subjectNodeID, bro
 	case SubscriptionMinuteEnvelopeType:
 		if v2 || len(decoded.SubscriptionMinutes) != 1 || len(decoded.AccessEvents) != 0 || len(decoded.SecurityEvents) != 0 ||
 			len(decoded.AccessWindowContributions) != 0 || decoded.PackageSubscriptionID == "" {
+			return rejection(RejectBatchLimit)
+		}
+	case RUMMinuteEnvelopeType:
+		// the package subscription is optional: a site without one has ""
+		if v2 || len(decoded.RUMMinutes) != 1 || len(decoded.AccessEvents) != 0 || len(decoded.SecurityEvents) != 0 ||
+			len(decoded.AccessWindowContributions) != 0 || len(decoded.SubscriptionMinutes) != 0 {
 			return rejection(RejectBatchLimit)
 		}
 	default:

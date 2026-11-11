@@ -173,7 +173,7 @@ func CopyForSiteTx(ctx context.Context, tx pgx.Tx, actor Actor, request SiteCopy
 	if err := normalizeCCSettings(fields.Kind, fields.CCSettings, true); err != nil {
 		return Policy{}, unlocated(err)
 	}
-	if err := requireUsableIPLists(ctx, tx, request.ScopeID, fields.Rules); err != nil {
+	if err := requireUsableReferences(ctx, tx, request.ScopeID, fields.Rules); err != nil {
 		return Policy{}, err
 	}
 	tenantID, err := authorizeTargetScope(ctx, tx, actor, request.ScopeID, request.OwnerID)

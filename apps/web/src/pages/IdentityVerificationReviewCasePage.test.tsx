@@ -277,7 +277,7 @@ describe('IdentityVerificationReviewCasePage', () => {
     expect(await screen.findByText('待审核')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '认领案件' }))
     await user.click(await screen.findByRole('button', { name: '确认认领' }))
-    expect(await screen.findByText('案件版本已变化，请刷新后重试。')).toBeInTheDocument()
+    expect(await screen.findByText('内容已被其他人修改，请刷新后再保存')).toBeInTheDocument()
     expect(screen.queryByText('操作结果待确认')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '使用同一请求重试' })).not.toBeInTheDocument()
   })

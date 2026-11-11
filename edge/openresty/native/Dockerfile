@@ -27,6 +27,7 @@ COPY --from=builder /source-contract/vendor/ipmatcher.lua /usr/local/openresty/l
 COPY edge/openresty/range/guard.lua /usr/local/share/cdnca/range/guard.lua
 COPY edge/openresty/lua/cdnca_waf.lua /usr/local/share/cdnca/security/cdnca_waf.lua
 COPY edge/openresty/lua/cdnca_rule_interp.lua /usr/local/share/cdnca/security/cdnca_rule_interp.lua
+COPY edge/openresty/lua/cdnca_ua.lua /usr/local/share/cdnca/security/cdnca_ua.lua
 COPY edge/openresty/lua/cdnca_banlist.lua /usr/local/share/cdnca/security/cdnca_banlist.lua
 COPY edge/openresty/dynroute/cdnca_site.lua /usr/local/share/cdnca/dynroute/cdnca_site.lua
 COPY edge/openresty/dynroute/cdnca_site_admin.lua /usr/local/share/cdnca/dynroute/cdnca_site_admin.lua
@@ -60,6 +61,8 @@ COPY edge/openresty/dynroute/cdnca_rule_plan.lua /usr/local/share/cdnca/dynroute
 COPY edge/openresty/dynroute/cdnca_bot.lua /usr/local/share/cdnca/dynroute/cdnca_bot.lua
 COPY edge/openresty/dynroute/cdnca_telemetry.lua /usr/local/share/cdnca/dynroute/cdnca_telemetry.lua
 COPY edge/openresty/dynroute/cdnca_webp.lua /usr/local/share/cdnca/dynroute/cdnca_webp.lua
+COPY edge/openresty/dynroute/cdnca_rum.lua /usr/local/share/cdnca/dynroute/cdnca_rum.lua
+COPY edge/openresty/dynroute/cdnca_rewrite.lua /usr/local/share/cdnca/dynroute/cdnca_rewrite.lua
 COPY edge/openresty/dynroute/cdnca_webp_codec.lua /usr/local/share/cdnca/dynroute/cdnca_webp_codec.lua
 COPY edge/openresty/sched302/cdnca_sched302.lua /usr/local/share/cdnca/sched302/cdnca_sched302.lua
 COPY --from=h3probe /out/h3probe /usr/local/bin/h3probe

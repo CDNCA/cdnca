@@ -589,7 +589,9 @@ func requireTenantScope(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) error
 }
 
 func requireAnonymousDispatchScope(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, eventType string) error {
-	if eventType != EventTypeAccountRecovery {
+	// sign-up on the platform's own website has no tenant
+	// yet, so its verification code is sent from the platform scope too.
+	if eventType != EventTypeAccountRecovery && eventType != EventTypeAccountRegistrationVerification {
 		return requireTenantScope(ctx, tx, scopeID)
 	}
 	var allowed bool

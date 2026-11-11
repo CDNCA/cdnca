@@ -65,6 +65,10 @@ type List struct {
 	Revision    int64     `json:"revision"`
 	Platform    bool      `json:"platform"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	// ReferenceCount (list only decision 8): the live policies,
+	// of the actor's scope for a tenant (every scope for the platform),
+	// whose versions reference the list.
+	ReferenceCount int `json:"reference_count"`
 }
 
 // Input is a create / update body. Entries are addresses or CIDRs
@@ -138,20 +142,30 @@ func scanList(row pgx.Row) (List, error) {
 
 // ListAll is the actor's own lists and (for a tenant) the platform's, by name.
 func (s *Store) ListAll(ctx context.Context, actor Actor) ([]List, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+listColumns+` FROM security_ip_lists list
+	var referenceScope *uuid.UUID
+	if actor.ScopeKind != "platform" {
+		referenceScope = &actor.ScopeID
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+listColumns+`,(SELECT count(DISTINCT policy.id) FROM security_policies policy
+			JOIN security_policy_versions version ON version.policy_id=policy.id
+			WHERE policy.deleted_at IS NULL AND ($2::uuid IS NULL OR policy.scope_id=$2) AND jsonb_path_exists(version.document,
+			  '$.rules[*].conditions[*] ? (@.field == "ip_list" && @.values[0] == $id)', jsonb_build_object('id', list.id::text)))
+		FROM security_ip_lists list
 		JOIN access_scopes owner ON owner.id=list.owner_scope_id
 		WHERE list.deleted_at IS NULL AND (list.owner_scope_id=$1 OR owner.kind='platform')
-		ORDER BY owner.kind='platform', lower(list.name), list.id`, actor.ScopeID)
+		ORDER BY owner.kind='platform', lower(list.name), list.id`, actor.ScopeID, referenceScope)
 	if err != nil {
 		return nil, fmt.Errorf("list IP lists: %w", err)
 	}
 	defer rows.Close()
 	result := []List{}
 	for rows.Next() {
-		list, err := scanList(rows)
-		if err != nil {
+		var list List
+		if err := rows.Scan(&list.ID, &list.Name, &list.Description, &list.Entries, &list.Revision, &list.Platform,
+			&list.UpdatedAt, &list.ReferenceCount); err != nil {
 			return nil, fmt.Errorf("scan IP list: %w", err)
 		}
+		list.UpdatedAt = list.UpdatedAt.UTC()
 		result = append(result, list)
 	}
 	return result, rows.Err()

@@ -8,13 +8,14 @@ import { RouteStatusPage } from '../components/RouteErrorBoundary'
 import { PluginFrame } from './PluginFrame'
 import { pluginPageTitle, usePluginUIPages } from './usePluginUIPages'
 
-// /plugin-ui/:pluginId/:pageId — a menu-mounted ui_page plugin page.
+// /plugin-ui/:pluginId/:pageId — a menu-mounted ui_page plugin page, or a plugin_settings page (我的插件 去配置;
+// no menu item of its own).
 export default function PluginPage() {
   const { pluginId, pageId } = useParams()
   const accessToken = useSessionStore((state) => state.accessToken)
   const pages = usePluginUIPages(accessToken, { cachedOnly: true })
   const { t, i18n } = useTranslation('pluginUI')
-  const page = pages.find((candidate) => candidate.mount === 'menu' && candidate.plugin_id === pluginId &&
+  const page = pages.find((candidate) => (candidate.mount === 'menu' || candidate.mount === 'plugin_settings') && candidate.plugin_id === pluginId &&
     candidate.page_id === pageId)
   if (!page) return pages.length === 0 ? null : <RouteStatusPage status="404" />
   const title = pluginPageTitle(page, i18n.resolvedLanguage ?? 'zh-CN')

@@ -76,53 +76,96 @@ func Split(line []byte) ([]byte, Attribution, error) {
 
 // Normalize turns one dynamic routing line into the v7 line of its site.
 func Normalize(line []byte, registry *Registry, sites SiteResolver, nodeID string) (Result, error) {
-	v7, attribution, err := Split(line)
+	result, v7, err := attribute(line, registry, sites, nodeID)
 	if err != nil {
 		return Result{}, err
+	}
+	filled, err := fillConfigVersion(v7, result.Identity.ConfigVersionID)
+	if err != nil {
+		return Result{}, err
+	}
+	result.Line = filled
+	return result, nil
+}
+
+// maxEscapeGrowth bounds how much re-encoding a valid JSON text can grow it:
+// a byte becomes at most a six byte escape (invalid UTF-8 as \ufffd).
+const maxEscapeGrowth = 6
+
+// normalizeTail is Normalize for the event spool tail. The tail sets the
+// envelope's config_version_id from the identity, so the filled line only
+// matters for its length (ParseSourceLine refuses a line above the policy's
+// event size): when even the most a re-encoding could grow the line stays
+// within that size, the v7 bytes are returned as they are, Checked (Split
+// verified exactly these bytes). Otherwise the line is filled as Normalize.
+func normalizeTail(line []byte, registry *Registry, sites SiteResolver, nodeID string) (Result, bool, error) {
+	result, v7, err := attribute(line, registry, sites, nodeID)
+	if err != nil {
+		return Result{}, false, err
+	}
+	version := result.Identity.ConfigVersionID
+	maximum := result.CapturePolicy.MaxEventBytes
+	if maximum == 0 {
+		maximum = edgeconfig.DefaultCaptureEventBytes
+	}
+	if !strings.ContainsAny(version, "\"\\") && maxEscapeGrowth*len(v7)+len(version) <= maximum {
+		result.Line = v7
+		return result, true, nil
+	}
+	filled, err := fillConfigVersion(v7, version)
+	if err != nil {
+		return Result{}, false, err
+	}
+	result.Line = filled
+	return result, false, nil
+}
+
+// attribute binds a line to its site object and generation: the Result
+// without its Line, and the v7 part of the line (config_version_id empty).
+func attribute(line []byte, registry *Registry, sites SiteResolver, nodeID string) (Result, []byte, error) {
+	v7, attribution, err := Split(line)
+	if err != nil {
+		return Result{}, nil, err
 	}
 	if attribution.L2 {
 		// the L1 logged (and meters) the visitor's request; the L2's line
 		// would count its traffic twice
-		return Result{}, ErrL2Hop
+		return Result{}, nil, ErrL2Hop
 	}
 	version, ok := registry.ConfigVersion(attribution.Generation, attribution.Scope)
 	if !ok {
-		return Result{}, fmt.Errorf("%w: generation %d scope %s", ErrUnattributed, attribution.Generation, attribution.Scope)
+		return Result{}, nil, fmt.Errorf("%w: generation %d scope %s", ErrUnattributed, attribution.Generation, attribution.Scope)
 	}
 	site, err := sites.Site(attribution.Digest)
 	if err != nil {
-		return Result{}, fmt.Errorf("%w: site object %s: %v", ErrUnattributed, attribution.Digest, err)
+		return Result{}, nil, fmt.Errorf("%w: site object %s: %v", ErrUnattributed, attribution.Digest, err)
 	}
 	var fields lineIdentity
 	if err := json.Unmarshal(v7, &fields); err != nil || fields.TenantID == nil || fields.SiteID == nil ||
 		fields.ConfigVersionID == nil || fields.Host == nil {
-		return Result{}, fmt.Errorf("%w: identity fields", ErrInvalid)
+		return Result{}, nil, fmt.Errorf("%w: identity fields", ErrInvalid)
 	}
 	switch {
 	case site.Telemetry == nil:
-		return Result{}, fmt.Errorf("%w: site %s has no telemetry", ErrInvalid, site.SiteID)
+		return Result{}, nil, fmt.Errorf("%w: site %s has no telemetry", ErrInvalid, site.SiteID)
 	case site.ConfigurationScopeID != attribution.Scope || *fields.TenantID != site.TenantID || *fields.SiteID != site.SiteID:
-		return Result{}, fmt.Errorf("%w: line identity is not its site object's", ErrInvalid)
+		return Result{}, nil, fmt.Errorf("%w: line identity is not its site object's", ErrInvalid)
 	case *fields.ConfigVersionID != "":
-		return Result{}, fmt.Errorf("%w: config_version_id is the Agent's to fill", ErrInvalid)
+		return Result{}, nil, fmt.Errorf("%w: config_version_id is the Agent's to fill", ErrInvalid)
 	case !servesPort(site, attribution.Port) || !servesHost(site, *fields.Host):
-		return Result{}, fmt.Errorf("%w: site %s does not serve %s:%d", ErrInvalid, site.SiteID, *fields.Host, attribution.Port)
+		return Result{}, nil, fmt.Errorf("%w: site %s does not serve %s:%d", ErrInvalid, site.SiteID, *fields.Host, attribution.Port)
 	case fields.Type == string(eventspool.EventSecurity) && (fields.ListenPort == nil || *fields.ListenPort != attribution.Port):
-		return Result{}, fmt.Errorf("%w: security listen_port", ErrInvalid)
-	}
-	filled, err := fillConfigVersion(v7, version)
-	if err != nil {
-		return Result{}, err
+		return Result{}, nil, fmt.Errorf("%w: security listen_port", ErrInvalid)
 	}
 	capture := site.Telemetry.Capture
 	policy, err := capturePolicy(capture)
 	if err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	}
-	return Result{Line: filled, Attribution: attribution, CapturePolicy: policy, Identity: eventspool.TrustedIdentity{
+	return Result{Attribution: attribution, CapturePolicy: policy, Identity: eventspool.TrustedIdentity{
 		ListenPort: attribution.Port, EnrollmentNodeID: nodeID, TenantID: site.TenantID, SiteID: site.SiteID,
 		ConfigVersionID: version, CapturePolicyRevision: capture.Revision, CapturePolicyDigest: capture.EvidenceDigest,
-	}}, nil
+	}}, v7, nil
 }
 
 // fillConfigVersion sets the top-level config_version_id (written empty by

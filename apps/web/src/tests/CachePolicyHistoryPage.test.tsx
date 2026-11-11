@@ -87,7 +87,7 @@ async function applySite(user: ReturnType<typeof userEvent.setup>, value = siteI
   const input = screen.getByRole('textbox', { name: '站点 ID' })
   await user.clear(input)
   await user.type(input, value)
-  await user.click(screen.getByRole('button', { name: '查询修订' }))
+  await user.click(screen.getByRole('button', { name: '查询版本' }))
 }
 
 describe('CachePolicyHistoryPage', () => {
@@ -126,7 +126,7 @@ describe('CachePolicyHistoryPage', () => {
     const history = vi.spyOn(cachePoliciesApi, 'history').mockResolvedValue({ items: [] })
     const user = userEvent.setup()
     renderPage()
-    expect(await screen.findByText('输入站点 ID 后查询修订历史。')).toBeInTheDocument()
+    expect(await screen.findByText('输入站点 ID 后查询版本历史。')).toBeInTheDocument()
     expect(history).not.toHaveBeenCalled()
 
     await applySite(user, 'not-a-uuid')
@@ -135,7 +135,7 @@ describe('CachePolicyHistoryPage', () => {
 
     await applySite(user)
     await waitFor(() => expect(history).toHaveBeenCalledWith('cache-history-token', siteID, { limit: 20 }))
-    expect(await screen.findByText('当前站点暂无缓存策略修订。')).toBeInTheDocument()
+    expect(await screen.findByText('当前站点暂无缓存策略版本。')).toBeInTheDocument()
   })
 
   it('renders loading, localized error, and explicit retry recovery without raw messages', async () => {
@@ -148,7 +148,7 @@ describe('CachePolicyHistoryPage', () => {
     const user = userEvent.setup()
     renderPage()
     await applySite(user)
-    expect(await screen.findByLabelText('缓存策略修订加载中')).toHaveAttribute('aria-busy', 'true')
+    expect(await screen.findByLabelText('缓存策略版本加载中')).toHaveAttribute('aria-busy', 'true')
 
     await act(async () => rejectFirst(new ApiError('private upstream detail', 503, 'service_unavailable')))
     expect(await screen.findByText('缓存策略服务暂不可用，请稍后重试。')).toBeInTheDocument()
@@ -189,7 +189,7 @@ describe('CachePolicyHistoryPage', () => {
     ))
     expect(await screen.findByText('第 2 页')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '查看详情' }))
-    expect(await screen.findByRole('region', { name: '修订 2 详情' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '版本 2 详情' })).toBeInTheDocument()
     expect(detail).toHaveBeenCalledWith('cache-history-token', siteID, 2)
     expect(screen.getAllByText('64 MB').length).toBeGreaterThan(0)
   })
@@ -240,8 +240,8 @@ describe('CachePolicyHistoryPage', () => {
     renderPage()
     await applySite(user)
     await user.click(await screen.findByRole('button', { name: '查看详情' }))
-    const region = await screen.findByRole('region', { name: '修订 3 详情' })
-    expect(within(region).getByText('该缓存策略修订不存在或不可见。')).toBeInTheDocument()
+    const region = await screen.findByRole('region', { name: '版本 3 详情' })
+    expect(within(region).getByText('该缓存策略版本不存在或不可见。')).toBeInTheDocument()
     expect(region.textContent).not.toContain('private detail')
     await user.click(within(region).getByRole('button', { name: '重试' }))
     expect(await within(region).findByText('request-3')).toBeInTheDocument()
@@ -258,13 +258,13 @@ describe('CachePolicyHistoryPage', () => {
     renderPage()
     await applySite(user)
     await user.click(await screen.findByRole('button', { name: '查看详情' }))
-    expect(await screen.findByRole('region', { name: '修订 3 详情' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '版本 3 详情' })).toBeInTheDocument()
     expect(screen.getAllByText('request-3').length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: '刷新' }))
     expect(await screen.findByText('无权查看缓存策略历史')).toBeInTheDocument()
     expect(screen.queryByText('request-3')).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '修订 3 详情' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '版本 3 详情' })).not.toBeInTheDocument()
     expect(history).toHaveBeenCalledTimes(2)
   })
 
@@ -312,7 +312,7 @@ describe('CachePolicyHistoryPage', () => {
       tenant_id: otherTenantID,
     })
     act(() => authenticate(next, 'new-session-token'))
-    expect(await screen.findByText('输入站点 ID 后查询修订历史。')).toBeInTheDocument()
+    expect(await screen.findByText('输入站点 ID 后查询版本历史。')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '站点 ID' })).toHaveValue('')
     await act(async () => resolveOld({ items: [policy(3, 'late-private-result')] }))
     expect(screen.queryByText('late-private-result')).not.toBeInTheDocument()

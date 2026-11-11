@@ -293,6 +293,38 @@ func DirectNodeInstallGateway(published []Entrypoint, local Entrypoint) (NodeGat
 	return NodeGatewayDefaults{EnrollmentAddress: d.EnrollmentAddress, Address: d.Address, ServerName: d.ServerName, Transport: TransportGRPC}, true
 }
 
+// ReinstallNodeInstallGateway is the Gateway entry of the 重装此节点 command
+//: DirectNodeInstallGateway, and on a ws console the
+// first published grpc entry (same enrollment-address rule as
+// NodeGatewayDefaultsFor). A reinstalled node usually ran on grpc before;
+// when that port is closed (CDN) the installer's 443 WebSocket fallback
+// (install-node.sh gateway_fallback_defaults) still enrolls it.
+func ReinstallNodeInstallGateway(published []Entrypoint, local Entrypoint) (NodeGatewayDefaults, bool) {
+	if d, ok := DirectNodeInstallGateway(published, local); ok {
+		return d, true
+	}
+	var direct []Entrypoint
+	for _, endpoint := range published {
+		if endpoint.Transport == TransportGRPC || endpoint.Transport == "" {
+			direct = append(direct, endpoint)
+		}
+	}
+	return DirectNodeInstallGateway(direct, local)
+}
+
+// NodeReinstallGateway reads the published list and applies ReinstallNodeInstallGateway.
+func (s *Service) NodeReinstallGateway(ctx context.Context) (NodeGatewayDefaults, bool, error) {
+	if s == nil {
+		return NodeGatewayDefaults{}, false, nil
+	}
+	endpoints, err := s.nodeEndpoints(ctx)
+	if err != nil {
+		return NodeGatewayDefaults{}, false, err
+	}
+	d, ok := ReinstallNodeInstallGateway(endpoints, s.config.LocalGateway)
+	return d, ok, nil
+}
+
 // NodeInstallGateway reads the published list and applies DirectNodeInstallGateway.
 // A nil service (no Gateway registry on this console) yields ok=false.
 func (s *Service) NodeInstallGateway(ctx context.Context) (NodeGatewayDefaults, bool, error) {

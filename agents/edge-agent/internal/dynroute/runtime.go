@@ -91,6 +91,10 @@ type Config struct {
 	// the tokens, so it is made worker traversable: never the deployment
 	// root, which telemetry requires to be private.
 	ACMEOverlayRoot string
+	// URLAuthRoot is the URL auth secret rollout's root (the agent's
+	// <deployment root>/urlauth, root-only: the master preloads it); "" =
+	// URL auth is not served (a site with security.url_auth answers 503).
+	URLAuthRoot string
 	// MarketProbe / MarketBenchmark: the node market probe path and the
 	// benchmark object (market_probe.enabled / join_market).
 	MarketProbe     bool

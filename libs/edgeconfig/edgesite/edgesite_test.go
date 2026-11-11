@@ -208,7 +208,12 @@ func TestDecodeRejectsOtherEncodings(t *testing.T) {
 
 func TestValidateRejects(t *testing.T) {
 	cases := map[string]func(*Site){
-		"schema":            func(s *Site) { s.Schema = "cdnca.edge.site/v1" },
+		"schema":                        func(s *Site) { s.Schema = "cdnca.edge.site/v1" },
+		"url auth floor without policy": func(s *Site) { s.Security.URLAuthFallbackFloor = 1 },
+		"url auth floor not below version": func(s *Site) {
+			s.Security.URLAuth = &Ref{Kind: RefURLAuth, ID: "p", Revision: 2}
+			s.Security.URLAuthFallbackFloor = 2
+		},
 		"site id":           func(s *Site) { s.SiteID = "not-a-uuid" },
 		"upper case uuid":   func(s *Site) { s.TenantID = strings.ToUpper(testTenant) },
 		"revision 0":        func(s *Site) { s.Revision = 0 },

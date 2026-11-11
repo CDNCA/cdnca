@@ -271,7 +271,7 @@ describe('NodeInventoryDetailPage', () => {
     expect(await screen.findByRole('heading', { name: inventory.name })).toBeInTheDocument()
     for (const value of [
       nodeID, '主服务节点', 'CN-East', '192.0.2.10', '2001:db8::10', '在线', '2.4.1',
-      '会话 7 / 心跳 11', '投影新鲜', '租约有效', '版本 4',
+      '会话 7 / 心跳 11', '投影新鲜', '租约有效',
     ]) expect(screen.getByText(value)).toBeInTheDocument()
   })
 

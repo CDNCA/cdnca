@@ -342,6 +342,7 @@ describe('AdminHomePage', () => {
     expect(screen.getByText('转发数').parentElement).toHaveTextContent('24')
     expect(screen.getByText('授权节点').parentElement).toHaveTextContent('30')
     expect(screen.getByText('当前节点').parentElement).toHaveTextContent('6')
+    expect(screen.getByText('到期时间').parentElement).toHaveTextContent('永久')
     expect(document.querySelectorAll('.dashboard-operation-panel')).toHaveLength(1)
     expect(document.querySelectorAll('.dashboard-monitoring-grid > .dashboard-block')).toHaveLength(2)
     expect(document.querySelectorAll('.dashboard-card-title')).toHaveLength(7)

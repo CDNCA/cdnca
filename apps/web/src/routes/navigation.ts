@@ -108,6 +108,8 @@ const adminNavigation: NavigationDefinition[] = [
     children: [
       { key: '/monitor/site/realtime', labelKey: 'navigation:realtime', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/analysis', labelKey: 'navigation:dataAnalysis', implemented: true, requiredPermission: 'sites.read' },
+      // Real user monitoring report
+      { key: '/monitor/site/rum', labelKey: 'navigation:rum', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/block-log', labelKey: 'navigation:blockLog', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/block-event-log', labelKey: 'navigation:blockEventLog', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/cc-coordination', labelKey: 'navigation:ccCoordination', implemented: true, requiredPermission: 'sites.read' },
@@ -185,11 +187,13 @@ const adminNavigation: NavigationDefinition[] = [
         platformAdminFallback: false,
       },
       { key: '/site/cache-clean', labelKey: 'navigation:cacheRefresh', implemented: true, requiredPermission: 'sites.read', requiredRuntime: 'cache_control' },
+      // 内容改写
+      { key: '/site/content-rewrite', labelKey: 'navigation:contentRewrite', implemented: true, requiredPermission: 'sites.read' },
       { key: '/site/cc-rule', labelKey: 'navigation:ccRules', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/waf-rule', labelKey: 'navigation:wafRules', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/rule-packs', labelKey: 'navigation:rulePacks', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/security-bans', labelKey: 'navigation:securityBans', implemented: true, requiredPermission: 'security_policies.read' },
-      { key: '/site/ip-lists', labelKey: 'navigation:securityIPLists', implemented: true, requiredPermission: 'security_policies.read' },
+      { key: '/site/lists', labelKey: 'navigation:securityLists', implemented: true, requiredPermission: 'security_policies.read' },
     ],
   },
   {
@@ -244,6 +248,7 @@ const adminNavigation: NavigationDefinition[] = [
       { key: '/sys/tickets', labelKey: 'tickets:adminTitle', implemented: true, requiredPermission: 'tickets.read' },
       { key: '/sys/identity-review', labelKey: 'adminIdentityReview:title', implemented: true, requiredPermission: 'platform.admin', platformAdminFallback: false },
       { key: '/sys/gateways', labelKey: 'navigation:gateways', implemented: true, requiredPermission: 'system.gateway.manage' },
+      { key: '/sys/status-page', labelKey: 'navigation:statusPage', implemented: true, requiredPermission: 'system_configuration.read' },
       // fz-x10: shown only while the approval center is on (runtime approval_center).
       { key: '/sys/approvals', labelKey: 'approvalCenter:title', implemented: true, requiredPermission: 'approvals.read', requiredRuntime: 'approval_center', platformAdminFallback: false },
     ],
@@ -261,6 +266,8 @@ const userNavigation: NavigationDefinition[] = [
     children: [
       { key: '/monitor/site/realtime', labelKey: 'navigation:realtime', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/analysis', labelKey: 'navigation:dataAnalysis', implemented: true, requiredPermission: 'sites.read' },
+      // Real user monitoring report
+      { key: '/monitor/site/rum', labelKey: 'navigation:rum', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/block-log', labelKey: 'navigation:blockLog', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/access-log', labelKey: 'navigation:accessLog', implemented: true, requiredPermission: 'sites.read' },
       { key: '/monitor/site/attack-log', labelKey: 'navigation:wafLog', implemented: true, requiredPermission: 'sites.read' },
@@ -279,11 +286,13 @@ const userNavigation: NavigationDefinition[] = [
       { key: '/site/list', labelKey: 'navigation:siteList', implemented: true, requiredPermission: 'sites.read' },
       { key: '/site/cert', labelKey: 'navigation:certificates', implemented: true, requiredPermission: 'certificates.read', platformAdminFallback: false },
       { key: '/site/cache-clean', labelKey: 'navigation:cacheRefresh', implemented: true, requiredPermission: 'sites.read', requiredRuntime: 'cache_control' },
+      // 内容改写
+      { key: '/site/content-rewrite', labelKey: 'navigation:contentRewrite', implemented: true, requiredPermission: 'sites.read' },
       { key: '/site/cc-rule', labelKey: 'navigation:ccRules', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/waf-rule', labelKey: 'navigation:wafRules', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/rule-packs', labelKey: 'navigation:rulePacks', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/security-bans', labelKey: 'navigation:securityBans', implemented: true, requiredPermission: 'security_policies.read' },
-      { key: '/site/ip-lists', labelKey: 'navigation:securityIPLists', implemented: true, requiredPermission: 'security_policies.read' },
+      { key: '/site/lists', labelKey: 'navigation:securityLists', implemented: true, requiredPermission: 'security_policies.read' },
       // ADR 0020 §3.4：用户自有多家 DNS 账号的域名解析统一管理（只用户端；平台副本账号不出现）。
       { key: '/site/dns-hub', labelKey: 'navigation:dnsHub', implemented: true, requiredPermission: 'dns.read', platformAdminFallback: false },
     ],

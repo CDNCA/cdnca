@@ -39,6 +39,13 @@
       "sha256": "92be97624cbfb842d1f5c78684e680253a9db9dfecc0cccf5811fc3753aeaf3d",
       "origin": "CDNCA original; no upstream equivalent",
       "adaptation": "New nginx variable $modsecurity_rule_ids: the IDs of the rule messages the request's own transaction keeps (msc_get_rules_messages_rule_ids, the rules with log), ',<id>,...,' (',' for none), not found without a transaction; not cacheable. Lets Lua read a transaction outcome in the log phase without libmodsecurity's process-wide setenv."
+    },
+    {
+      "file": "patches/02-cdnca-rule-exceptions-hashed-ids.patch",
+      "applies_to": "libmodsecurity",
+      "sha256": "26183ed7573f6eb890b47fccd3a73293c5c13943b983e1e9f25179c14124a540",
+      "origin": "CDNCA original; upstream still scans a std::list",
+      "adaptation": "RulesExceptions::m_numbers (the single ids of SecRuleRemoveById) becomes std::unordered_set<int>: RulesSet::evaluate calls contains() for every rule of every transaction, so the list scan cost rules x removed ids per request. Ranges, tag/msg removal and ctl:ruleRemoveById are unchanged; which rules are removed does not change."
     }
   ],
   "note": "OWASP CRS rule text is not part of the engine extension: it is pinned by libs/edgeconfig/crs/manifest.json and delivered as signed system rule catalog data (libs/entitlement/rulecatalog/crs/rules.json, source coreruleset v4.30.0 sha256 a4bb3688ef6205b64471a9ccbf0d7b024eb8edf39b97c6f6c0006e7a948f8550)."

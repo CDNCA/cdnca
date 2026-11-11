@@ -253,9 +253,12 @@ func InitLua(pool Pool, siteLRU int) string {
 
 // responseHeaders strips internal and cache headers from the origin and
 // adds the cache status (every location that proxies a site request; empty
-// unless $cdnca_cache_show, see HTTP).
+// unless $cdnca_cache_show, see HTTP). X-Cdnca-L2-Cache is an L2's own
+// cache status for its L1 (Server-Timing cdn-hit-layer): the L1
+// still reads $upstream_http_x_cdnca_l2_cache, the visitor never sees it,
+// and on an L2 an origin's copy is dropped before the node writes its own.
 func responseHeaders(output *strings.Builder, indent string) {
-	for _, header := range []string{"X-CDN-Cache", "X-CDN-Cache-Reason", "X-Cdnca-Cache-Key", "X-Cdnca-Site"} {
+	for _, header := range []string{"X-CDN-Cache", "X-CDN-Cache-Reason", "X-Cdnca-Cache-Key", "X-Cdnca-Site", "X-Cdnca-L2-Cache"} {
 		fmt.Fprintf(output, "%sproxy_hide_header %s;\n", indent, header)
 	}
 	fmt.Fprintf(output, "%sproxy_set_header X-Cdnca-Cache-Task \"\";\n", indent)

@@ -341,7 +341,6 @@ export function OriginAuthRulesContent({ owner, ownerKey, manageable }: {
     { title: t('fields.bucket'), dataIndex: 'bucket', width: 130 },
     { title: t('fields.sourcePosition'), dataIndex: 'source_position', width: 100 },
     { title: t('fields.enabled'), dataIndex: 'enabled', width: 90, render: (value: boolean) => <Tag color={value ? 'success' : 'default'}>{t(value ? 'states.enabled' : 'states.disabled')}</Tag> },
-    { title: t('fields.revision'), dataIndex: 'revision', width: 90 },
     { title: t('fields.updatedAt'), dataIndex: 'updated_at', width: 180, render: (value: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) },
     {
       title: t('fields.actions'), key: 'actions', width: manageable ? 245 : 60, fixed: 'right',
@@ -405,7 +404,6 @@ export function OriginAuthRulesContent({ owner, ownerKey, manageable }: {
           <Descriptions.Item label={t('fields.endpoint')}>{detailQuery.data.endpoint}</Descriptions.Item>
           <Descriptions.Item label={t('fields.bucket')}>{detailQuery.data.bucket}</Descriptions.Item>
           <Descriptions.Item label={t('fields.credentialID')}>{detailQuery.data.current_credential.credential_id}</Descriptions.Item>
-          <Descriptions.Item label={t('fields.revision')}>{detailQuery.data.revision}</Descriptions.Item>
         </Descriptions>
       ) : null}
     </Drawer>

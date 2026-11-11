@@ -57,7 +57,7 @@ const zhCN = {
     publisher: '发布者', namespace: '命名空间', kind: '类型', version: '版本', permissions: '权限', noPermissions: '没有声明权限',
     highRisk: '高风险权限', versions: '版本历史', plans: '价格', menus: '页面与菜单', origin: '页面来源',
     originNotice: '启用后，下列菜单会以隔离框架加载 {{origin}} 的页面，插件无法读取你的登录凭据。',
-    menuItem: '{{title}}（{{mount}}）', mount: { menu: '菜单', site_tab: '网站详情页签' }, noMenus: '这个插件不添加页面',
+    menuItem: '{{title}}（{{mount}}）', mount: { menu: '菜单', site_tab: '网站详情页签', plugin_settings: '插件详情的设置页' }, noMenus: '这个插件不添加页面',
     featureCode: '解锁功能', beta: '测试版',
   },
   pay: {
@@ -142,7 +142,7 @@ const enUS: Messages = {
     publisher: 'Publisher', namespace: 'Namespace', kind: 'Type', version: 'Version', permissions: 'Permissions', noPermissions: 'No permissions declared',
     highRisk: 'High-risk permission', versions: 'Version history', plans: 'Pricing', menus: 'Pages and menus', origin: 'Page origin',
     originNotice: 'Once enabled, these menus load pages from {{origin}} in an isolated frame; the plugin cannot read your sign-in credentials.',
-    menuItem: '{{title}} ({{mount}})', mount: { menu: 'menu', site_tab: 'site detail tab' }, noMenus: 'This plugin adds no pages',
+    menuItem: '{{title}} ({{mount}})', mount: { menu: 'menu', site_tab: 'site detail tab', plugin_settings: 'settings in the plugin detail' }, noMenus: 'This plugin adds no pages',
     featureCode: 'Unlocks', beta: 'Beta',
   },
   pay: {

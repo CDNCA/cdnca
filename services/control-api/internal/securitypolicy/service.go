@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/netip"
 	"regexp"
 	"slices"
@@ -745,10 +746,19 @@ func normalizePublishableSorted(fields *PolicyFields, create bool, order []int) 
 			return refuse(path+".conditions", fielderr.OutOfRange)
 		}
 		seen := make(map[string]struct{}, len(rule.Conditions))
+		stringSets := 0
 		for conditionIndex, condition := range rule.Conditions {
 			conditionPath := path + "." + indexed("conditions", conditionIndex)
 			if !runtimeConditionSupported(fields.Kind, condition) {
 				return refuse(conditionPath+".operator", fielderr.Invalid)
+			}
+			// String set conditions may repeat ("not in A and not in B"),
+			// at most edgeconfig.MaxWAFStringSetsPerRule per rule.
+			if IsStringSetCondition(condition) {
+				if stringSets++; stringSets > edgeconfig.MaxWAFStringSetsPerRule {
+					return refuse(conditionPath, fielderr.OutOfRange)
+				}
+				continue
 			}
 			// CC rules may repeat client IP and header conditions (all must
 			// hold, NF27); everything else is one condition per field.
@@ -779,16 +789,19 @@ func runtimeConditionSupported(kind string, condition Condition) bool {
 			// expanded at publication; W1 content_type / http_version. Both
 			// need CAPABILITY_NAME_WAF v4.
 			"ip_list": ipListOperators,
-			// Content fields: cdnca_waf inspect clauses (edgeconfig.WAFInspect).
-			"path":              wafContentOperators,
-			"header":            wafContentOperators,
+			// Content fields: cdnca_waf inspect clauses (edgeconfig.WAFInspect);
+			// String sets on host / path / request_uri /
+			// user_agent / referer / header / ja4 need CAPABILITY_NAME_WAF v6.
+			"host":              stringSetOperators,
+			"path":              slices.Concat(wafContentOperators, stringSetOperators),
+			"header":            slices.Concat(wafContentOperators, stringSetOperators),
 			"args":              wafContentOperators,
 			"query":             wafContentOperators,
 			"body":              wafContentOperators,
-			"request_uri":       wafContentOperators,
+			"request_uri":       slices.Concat(wafContentOperators, stringSetOperators),
 			"cookie":            wafContentOperators,
-			"user_agent":        wafContentOperators,
-			"referer":           wafContentOperators,
+			"user_agent":        slices.Concat(wafContentOperators, stringSetOperators),
+			"referer":           slices.Concat(wafContentOperators, stringSetOperators),
 			"upload_filename":   wafContentOperators,
 			"upload_extension":  wafContentOperators,
 			"header_names":      wafContentOperators,
@@ -809,7 +822,12 @@ func runtimeConditionSupported(kind string, condition Condition) bool {
 
 			// $cdnca_ja4 set by the native JA4 module; needs CAPABILITY_NAME_JA4,
 			// not_in also CAPABILITY_NAME_WAF_JA4_NEGATION.
-			"ja4": {"equals", "in", "not_in"},
+			"ja4": {"equals", "in", "not_in", "in_string_set", "not_in_string_set"},
+			// CAPABILITY_NAME_WAF v6.
+			"browser":         {"in", "not_in"},
+			"browser_version": wafBrowserVersionOperators,
+			"device":          {"in", "not_in"},
+			"request_time":    {"in_time_range", "not_in_time_range"},
 			// Looked up in the node's signed IP intelligence library
 			// (cdnca_iplib); needs CAPABILITY_NAME_IP_INTEL v2.
 			"carrier":  {"equals", "not_equals", "in", "not_in"},
@@ -1333,8 +1351,26 @@ func normalizeCondition(condition *Condition) error {
 		if condition.Key != "" && !wafNameKeyPattern.MatchString(condition.Key) {
 			return refuse("key", fielderr.InvalidFormat)
 		}
+	case condition.Field == "browser_version":
+		// The browser the version belongs to (one with a version).
+		if !edgeconfig.WAFBrowserHasVersion(condition.Key) {
+			return refuse("key", fielderr.Invalid)
+		}
+	case condition.Field == "request_time":
+		// An IANA zone name, case sensitive ("" = Asia/Shanghai).
+		condition.Key = strings.TrimSpace(rawKey)
+		if condition.Key == "" {
+			condition.Key = edgeconfig.DefaultWAFTimeZone
+		}
+		if _, err := edgeconfig.LoadWAFTimeZone(condition.Key); err != nil {
+			return refuse("key", edgeconfig.TimeReasonUnknownZone)
+		}
 	case condition.Key != "":
 		return refuse("key", fielderr.Invalid)
+	}
+	if IsStringSetCondition(*condition) && (len(condition.Filters) != 0 || condition.BodyOverflow != "") {
+		// Case folding is the set's; no filters.
+		return refuse("filters", fielderr.Invalid)
 	}
 	if err := normalizeConditionFilters(condition); err != nil {
 		return err
@@ -1354,8 +1390,19 @@ func normalizeCondition(condition *Condition) error {
 		seen[value] = struct{}{}
 		condition.Values[index] = value
 	}
-	if (strings.HasPrefix(condition.Operator, "number_") || condition.Field == "ip_list") && len(condition.Values) != 1 {
+	if (strings.HasPrefix(condition.Operator, "number_") || condition.Field == "ip_list" || condition.Field == "browser_version" ||
+		IsStringSetCondition(*condition)) && len(condition.Values) != 1 {
 		return refuse("values", fielderr.Invalid)
+	}
+	if condition.Field == "request_time" {
+		// Weekly slots or date ranges in the key's zone.
+		if _, err := edgeconfig.CompileWAFTimeMatch(condition.Key, condition.Values, false, time.Now()); err != nil {
+			var refused *edgeconfig.TimeConditionError
+			if errors.As(err, &refused) {
+				return refuse("values", refused.Reason)
+			}
+			return refuse("values", fielderr.Invalid)
+		}
 	}
 	sort.Strings(condition.Values)
 	return nil
@@ -1404,6 +1451,35 @@ func normalizeConditionValue(field, operator, raw string) (string, error) {
 		return "", refuse("values", fielderr.InvalidFormat)
 	case utf8.RuneCountInString(value) > 256:
 		return "", refuse("values", fielderr.TooLong)
+	}
+	if slices.Contains(stringSetOperators, operator) {
+		// The set ID (security_string_sets), whatever the field.
+		id, err := uuid.Parse(value)
+		if err != nil || id == uuid.Nil {
+			return "", refuse("values", fielderr.InvalidFormat)
+		}
+		return id.String(), nil
+	}
+	switch field {
+	case "browser":
+		value = strings.ToLower(value)
+		if !slices.Contains(edgeconfig.WAFBrowserNames, value) {
+			return "", refuse("values", fielderr.Invalid)
+		}
+		return value, nil
+	case "device":
+		value = strings.ToLower(value)
+		if !slices.Contains(edgeconfig.WAFDeviceKinds, value) {
+			return "", refuse("values", fielderr.Invalid)
+		}
+		return value, nil
+	case "browser_version":
+		if _, err := edgeconfig.ParseBrowserVersion(value); err != nil {
+			return "", refuse("values", fielderr.InvalidFormat)
+		}
+		return value, nil
+	case "request_time":
+		return value, nil // checked as a whole (CompileWAFTimeMatch)
 	}
 	switch field {
 	case "client_ip":
@@ -1508,37 +1584,43 @@ func validFieldOperator(field, operator string) bool {
 
 // conditionFieldOperators are the operators each condition field takes.
 var conditionFieldOperators = map[string][]string{
-	"client_ip":            {"equals", "not_equals", "ip_in_cidr", "ip_not_in_cidr"},
-	"ip_list":              ipListOperators,
-	"host":                 {"equals", "not_equals", "prefix", "suffix", "contains", "in", "not_in"},
-	"path":                 append([]string{"in", "not_in"}, wafContentOperators...),
-	"method":               {"equals", "not_equals", "in", "not_in"},
-	"header":               append([]string{"in", "not_in"}, wafContentOperators...),
-	"args":                 wafContentOperators,
-	"query":                wafContentOperators,
-	"body":                 wafContentOperators,
-	"request_uri":          wafContentOperators,
-	"cookie":               wafContentOperators,
-	"user_agent":           wafContentOperators,
-	"referer":              wafContentOperators,
-	"upload_filename":      wafContentOperators,
-	"upload_extension":     wafContentOperators,
-	"header_names":         wafContentOperators,
-	"content_type":         wafContentOperators,
-	"http_version":         wafHTTPVersionOperators,
-	"request_length":       wafLengthOperators,
-	"body_length":          wafLengthOperators,
-	"uri_length":           wafLengthOperators,
-	"header_max_length":    wafLengthOperators,
-	"header_count":         wafLengthOperators,
-	"arg_count":            wafLengthOperators,
-	"country":              {"equals", "not_equals", "in", "not_in"},
-	"asn":                  {"number_eq", "number_gte", "number_lte", "equals", "not_equals", "in", "not_in"},
-	"carrier":              {"equals", "not_equals", "in", "not_in"},
-	"ip_tag":               {"equals", "not_equals", "in", "not_in"},
-	"province":             {"equals", "not_equals", "in", "not_in"},
-	"city":                 {"equals", "not_equals", "in", "not_in"},
-	"ja4":                  {"equals", "not_equals", "prefix", "in", "not_in"},
+	"client_ip":         {"equals", "not_equals", "ip_in_cidr", "ip_not_in_cidr"},
+	"ip_list":           ipListOperators,
+	"host":              {"equals", "not_equals", "prefix", "suffix", "contains", "in", "not_in", "in_string_set", "not_in_string_set"},
+	"path":              slices.Concat([]string{"in", "not_in"}, wafContentOperators, stringSetOperators),
+	"method":            {"equals", "not_equals", "in", "not_in"},
+	"header":            slices.Concat([]string{"in", "not_in"}, wafContentOperators, stringSetOperators),
+	"args":              wafContentOperators,
+	"query":             wafContentOperators,
+	"body":              wafContentOperators,
+	"request_uri":       slices.Concat(wafContentOperators, stringSetOperators),
+	"cookie":            wafContentOperators,
+	"user_agent":        slices.Concat(wafContentOperators, stringSetOperators),
+	"referer":           slices.Concat(wafContentOperators, stringSetOperators),
+	"upload_filename":   wafContentOperators,
+	"upload_extension":  wafContentOperators,
+	"header_names":      wafContentOperators,
+	"content_type":      wafContentOperators,
+	"http_version":      wafHTTPVersionOperators,
+	"request_length":    wafLengthOperators,
+	"body_length":       wafLengthOperators,
+	"uri_length":        wafLengthOperators,
+	"header_max_length": wafLengthOperators,
+	"header_count":      wafLengthOperators,
+	"arg_count":         wafLengthOperators,
+	"country":           {"equals", "not_equals", "in", "not_in"},
+	"asn":               {"number_eq", "number_gte", "number_lte", "equals", "not_equals", "in", "not_in"},
+	"carrier":           {"equals", "not_equals", "in", "not_in"},
+	"ip_tag":            {"equals", "not_equals", "in", "not_in"},
+	"province":          {"equals", "not_equals", "in", "not_in"},
+	"city":              {"equals", "not_equals", "in", "not_in"},
+	"ja4":               {"equals", "not_equals", "prefix", "in", "not_in", "in_string_set", "not_in_string_set"},
+	// what the User-Agent claims (edgeconfig.ParseUserAgent)
+	// and the request time; WAF only, CAPABILITY_NAME_WAF v6.
+	"browser":              {"in", "not_in"},
+	"browser_version":      wafBrowserVersionOperators,
+	"device":               {"in", "not_in"},
+	"request_time":         {"in_time_range", "not_in_time_range"},
 	"port":                 {"number_eq", "number_gte", "number_lte", "in", "not_in"},
 	"distinct_user_agents": {"number_gte"},
 	"status_404_count":     {"number_gte"},
@@ -1557,6 +1639,9 @@ var (
 	// ip_list: the client address is (in_ip_list) or is not (not_in_ip_list)
 	// in the named IP list; one list ID per condition.
 	ipListOperators = []string{"in_ip_list", "not_in_ip_list"}
+	// browser_version: key = browser name; one version, compared as
+	// major.minor.patch (edgeconfig.WAFVersionEQ / GTE / LT).
+	wafBrowserVersionOperators = []string{"version_eq", "version_gte", "version_lt"}
 	// http_version: the request's HTTP version is one of (equals) or none of
 	// (not_equals) the values 1.0, 1.1, 2, 3.
 	wafHTTPVersionOperators = []string{"equals", "not_equals"}

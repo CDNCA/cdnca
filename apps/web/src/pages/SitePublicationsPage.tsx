@@ -534,16 +534,16 @@ export default function SitePublicationsPage() {
 
   const publicationColumns: TableColumnsType<Publication> = [
     { title: t('columns.publicationId'), dataIndex: 'id', width: 245, render: (value: string) => <code>{value}</code> },
+    {
+      title: t('columns.createdAt'), dataIndex: 'created_at', width: 180,
+      render: (value: string) => formatDateTime(value, i18n.resolvedLanguage) || value,
+    },
     { title: t('columns.sourceRevision'), dataIndex: 'source_revision', width: 105 },
     { title: t('columns.target'), width: 150, render: (_, item) => <Tag>{t(`targets.${item.target.kind}`)}</Tag> },
     {
       title: t('columns.nodes'), dataIndex: 'node_count', width: 90,
       // Nodes this publication left on the old configuration.
       render: (value: number, item) => <Space size={4} wrap>{value}<PublicationLeftOutNodesTag publication={item} /></Space>,
-    },
-    {
-      title: t('columns.createdAt'), dataIndex: 'created_at', width: 180,
-      render: (value: string) => formatDateTime(value, i18n.resolvedLanguage) || value,
     },
     {
       title: t('columns.actions'), width: 260, fixed: 'right', render: (_, item) => (
@@ -592,11 +592,11 @@ export default function SitePublicationsPage() {
         ? `${item.rollout.released_cohort + 1}/${item.rollout.cohort_count}`
         : t('values.placeholder'),
     },
-    { title: t('columns.revision'), dataIndex: 'revision', width: 90 },
     {
       title: t('columns.updatedAt'), dataIndex: 'updated_at', width: 180,
       render: (value: string) => formatDateTime(value, i18n.resolvedLanguage) || value,
     },
+    { title: t('columns.revision'), dataIndex: 'revision', width: 90 },
     {
       title: t('columns.actions'), width: 310, fixed: 'right', render: (_, item) => (
         <Space size={4} wrap>

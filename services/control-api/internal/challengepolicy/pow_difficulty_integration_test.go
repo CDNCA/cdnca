@@ -77,9 +77,23 @@ func TestChallengePolicyPoWDifficultyRoundTripAndGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.pool.Exec(ctx, string(script)); err == nil ||
-		!strings.Contains(err.Error(), "explicit pow_difficulty facts") {
-		t.Fatalf("646 down with explicit facts error = %v", err)
+	// 646 down 要求迁移头恰为 646；头之后还有迁移时，在事务里临时隐藏 646 之后的记录再执行，随后回滚。
+	hideTx, err := fixture.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hideTx.Exec(ctx, `SET LOCAL session_replication_role = replica`); err != nil {
+		_ = hideTx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	if _, err := hideTx.Exec(ctx, `DELETE FROM schema_migrations WHERE version > 646`); err != nil {
+		_ = hideTx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	_, downErr := hideTx.Exec(ctx, string(script))
+	_ = hideTx.Rollback(ctx)
+	if downErr == nil || !strings.Contains(downErr.Error(), "explicit pow_difficulty facts") {
+		t.Fatalf("646 down with explicit facts error = %v", downErr)
 	}
 	if err := fixture.pool.QueryRow(ctx, `SELECT pow_difficulty FROM challenge_policy_revisions
 		WHERE policy_id=$1 AND revision=1`, created.Policy.ID).Scan(&column); err != nil || column == nil || *column != 20 {

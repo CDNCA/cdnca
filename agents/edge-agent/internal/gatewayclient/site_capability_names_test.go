@@ -81,3 +81,16 @@ func TestSameSiteObjectCapabilitiesAcceptsL4PackageAttribution(t *testing.T) {
 		t.Fatal("L4_PACKAGE_ATTRIBUTION version mismatch accepted")
 	}
 }
+
+// SITE_SERVER_TIMING (84) is a site object document
+// capability, so a publication with server_timing is refused for an agent
+// that does not declare it.
+func TestSiteRuntimeCapabilityNameServerTiming(t *testing.T) {
+	if agentv1.CapabilityName_CAPABILITY_NAME_SITE_SERVER_TIMING != 84 {
+		t.Fatalf("SITE_SERVER_TIMING = %d", agentv1.CapabilityName_CAPABILITY_NAME_SITE_SERVER_TIMING)
+	}
+	got, known := siteRuntimeCapabilityName(agentv1.CapabilityName_CAPABILITY_NAME_SITE_SERVER_TIMING)
+	if !known || got != siteobject.ServerTimingCapability || siteobject.ServerTimingCapability != "site_server_timing" || siteobject.ServerTimingAPIVersion != 1 {
+		t.Fatalf("siteRuntimeCapabilityName(SITE_SERVER_TIMING) = %q (known %v)", got, known)
+	}
+}

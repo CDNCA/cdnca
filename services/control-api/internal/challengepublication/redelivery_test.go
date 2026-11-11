@@ -213,12 +213,12 @@ func TestChallengeSecretRedeliveryGatesExplicitDifficultyOnChallengePoW(t *testi
 }
 
 func TestRequiredCapabilitiesAddChallengePoWOnlyForAnExplicitDifficulty(t *testing.T) {
-	if got := RequiredCapabilities(false); len(got) != 2 ||
+	if got := RequiredCapabilities(false, false); len(got) != 2 ||
 		got[0].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_ATOMIC_RELEASE ||
 		got[1].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_CONFIG_PRECHECK {
 		t.Fatalf("default difficulty: %v", got)
 	}
-	got := RequiredCapabilities(true)
+	got := RequiredCapabilities(true, false)
 	if len(got) != 3 || got[2].GetName() != agentv1.CapabilityName_CAPABILITY_NAME_CHALLENGE_POW || got[2].GetApiVersion() != 1 {
 		t.Fatalf("explicit difficulty: %v", got)
 	}

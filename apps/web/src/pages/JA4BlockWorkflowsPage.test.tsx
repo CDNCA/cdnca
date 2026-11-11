@@ -188,7 +188,7 @@ describe('JA4BlockWorkflowsPage', () => {
   it.each([
     [403, 'ja4_block_permission_denied', '无权创建 JA4 封禁'],
     [409, 'ja4_block_idempotency_conflict', '幂等请求与原请求不一致，请核对后重新创建。'],
-    [412, 'ja4_block_revision_conflict', '创建前置修订不匹配，请重新确认。'],
+    [412, 'ja4_block_revision_conflict', '内容已被其他人修改，请刷新后再保存'],
     [428, 'ja4_block_step_up_required', '需要重新完成二次认证。'],
   ])('maps terminal %i/%s without raw text or unknown retry', async (status, code, localized) => {
     const create = vi.spyOn(ja4BlocksApi, 'createTenant').mockRejectedValue(new ApiError('private policy detail', status, code))

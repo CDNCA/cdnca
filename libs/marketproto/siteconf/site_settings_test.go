@@ -13,7 +13,7 @@ func TestSiteSettingsRoundTrip(t *testing.T) {
 	c := sample()
 	c.TLS = &TLSOptions{Protocols: []string{"TLSv1.1", "TLSv1.2", "TLSv1.3"}, CipherPreset: "custom",
 		CipherSuites: []string{"ECDHE-RSA-AES128-GCM-SHA256"}, OCSPStapling: true, PreferServerCiphers: &on, HTTP2Off: true}
-	c.IPv6, c.CacheSharedAcrossDomains, c.CacheStatusHeaderOff = true, true, true
+	c.IPv6, c.CacheSharedAcrossDomains, c.CacheStatusHeaderOff, c.ServerTiming = true, true, true, true
 	c.Forwarding = &Forwarding{L2Off: true}
 	c.SiteAccess = json.RawMessage(`{"hsts":{"max_age_seconds":600},  "compression":{"enabled":true,"types":["text/html"]}}`)
 	c.CC = json.RawMessage(`{"rules":[], "default_action":"allow"}`)

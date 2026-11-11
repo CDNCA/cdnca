@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
+	"github.com/cdnca/cdnca/services/control-api/internal/nodedownloads"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/mod/semver"
 )
@@ -21,6 +22,8 @@ type MaintenanceRuntime struct {
 	ControlRuntime    func(context.Context) MaintenanceRuntimeState
 	NodeReady         func() error
 	OfflineAfter      time.Duration
+	// NodeDownloads is the /downloads node package sync; nil: not reported.
+	NodeDownloads func() nodedownloads.Status
 }
 
 type MaintenanceBuild struct {
@@ -77,6 +80,9 @@ type MaintenanceStatus struct {
 	ObservedAt time.Time                `json:"observed_at"`
 	Control    MaintenanceControlStatus `json:"control"`
 	Nodes      []MaintenanceNodeStatus  `json:"nodes"`
+	// NodeDownloads: whether the console serves the release server's node
+	// package of this version (重装/安装命令下载的包).
+	NodeDownloads *nodedownloads.Status `json:"node_downloads,omitempty"`
 }
 
 type maintenanceNodeFact struct {
@@ -100,6 +106,10 @@ func (s *Service) ReadMaintenanceStatus(ctx context.Context, actor Actor, runtim
 	now := s.store.now().UTC()
 	result := MaintenanceStatus{Schema: "cdnca.maintenance-upgrade-status/v1", ObservedAt: now, Nodes: []MaintenanceNodeStatus{}}
 	result.Control = maintenanceControlFacts(runtime)
+	if runtime.NodeDownloads != nil {
+		downloads := runtime.NodeDownloads()
+		result.NodeDownloads = &downloads
+	}
 	var grant entitlementguard.VersionGrant
 	var facts []maintenanceNodeFact
 	err := pgx.BeginTxFunc(ctx, s.store.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {

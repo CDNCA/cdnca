@@ -30,7 +30,7 @@ const zhCN = {
   notices: { saved: '角色已保存', published: '角色权限已发布', deactivated: '角色已停用', assigned: '角色已分配', revoked: '授权已撤销' },
   errors: {
     forbidden: '无权管理自定义角色', load: '自定义角色加载失败，请重试',
-    revisionConflict: '角色版本已变化，请刷新后重试', stepUpRequired: '此操作需要有效且未使用的二次认证证明',
+    revisionConflict: '内容已被其他人修改，请刷新后再保存', stepUpRequired: '此操作需要有效且未使用的二次认证证明',
     permissionNotDelegable: '所选权限不能委派给租户自定义角色', serviceUnavailable: '自定义角色服务暂不可用，请稍后重试',
     nameConflict: '角色名称已存在', roleInactive: '该角色已停用', selfAssignment: '不能向当前操作者分配此角色',
     validation: '请填写完整且有效的角色信息',
@@ -68,7 +68,7 @@ const enUS: typeof zhCN = {
   notices: { saved: 'Role saved', published: 'Role permissions published', deactivated: 'Role deactivated', assigned: 'Role assigned', revoked: 'Grant revoked' },
   errors: {
     forbidden: 'You cannot manage custom roles', load: 'Failed to load custom roles. Try again.',
-    revisionConflict: 'The role revision changed. Refresh and try again.', stepUpRequired: 'This operation requires a valid unused step-up proof.',
+    revisionConflict: 'Someone else changed this content. Refresh before saving.', stepUpRequired: 'This operation requires a valid unused step-up proof.',
     permissionNotDelegable: 'A selected permission cannot be delegated to a tenant custom role.', serviceUnavailable: 'The custom role service is temporarily unavailable.',
     nameConflict: 'That role name already exists.', roleInactive: 'This role is deactivated.', selfAssignment: 'You cannot assign this role to the current operator.',
     validation: 'Complete the role form with valid values.',

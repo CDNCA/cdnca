@@ -257,7 +257,28 @@ local rule_fields = {
 	external_provider = true, pow_difficulty = true,
 }
 
-local external_provider_fields = { provider = true, app_id = true }
+local external_provider_fields = { provider = true, app_id = true, score_threshold = true, unavailable = true }
+
+-- CHALLENGE_EXTERNAL v1: reCAPTCHA site keys may carry '_'.
+local EXTERNAL_PROVIDERS = { tencent = true, ["geetest-v4"] = true, turnstile = true, ["recaptcha-v3"] = true }
+
+local function external_app_id(value)
+	return type(value) == "string" and #value >= 1 and #value <= MAX_IDENTIFIER_BYTES
+		and value:match("^[A-Za-z0-9][A-Za-z0-9._:_-]*$") ~= nil
+end
+
+local function valid_external_provider(value)
+	if not has_only(value, external_provider_fields) or not EXTERNAL_PROVIDERS[value.provider]
+		or not external_app_id(value.app_id) then
+		return false
+	end
+	local score = value.score_threshold
+	if score ~= nil and (value.provider ~= "recaptcha-v3" or type(score) ~= "number"
+		or score < 0.1 - 1e-9 or score > 0.9 + 1e-9 or math.abs(score * 10 - math.floor(score * 10 + 0.5)) > 1e-6) then
+		return false
+	end
+	return value.unavailable == nil or value.unavailable == "builtin" or value.unavailable == "closed"
+end
 
 local bypass_fields = { kind = true, path = true }
 
@@ -319,9 +340,7 @@ local function validate_rule(value)
 		return false
 	end
 	if value.mode == "external" then
-		if not has_only(value.external_provider, external_provider_fields)
-			or (value.external_provider.provider ~= "tencent" and value.external_provider.provider ~= "geetest-v4")
-			or not identifier(value.external_provider.app_id, MAX_IDENTIFIER_BYTES) then
+		if not valid_external_provider(value.external_provider) then
 			return false
 		end
 		if value.pow_difficulty ~= nil then
@@ -542,6 +561,7 @@ end
 local function response_headers(csp_nonce, scripted, external_provider, builtin)
 	local script_source = scripted and "'nonce-" .. csp_nonce .. "'" or "'none'"
 	local connect_source = "'none'"
+	local frame_source
 	local extra = ""
 	if builtin then
 		-- The proof of work runs in blob: Workers; puzzle pictures are same-origin.
@@ -553,10 +573,20 @@ local function response_headers(csp_nonce, scripted, external_provider, builtin)
 	elseif external_provider == "geetest-v4" then
 		script_source = script_source .. " https://static.geetest.com"
 		connect_source = "https://*.geetest.com"
+	elseif external_provider == "turnstile" then
+		-- Cloudflare Turnstile CSP reference: script-src and frame-src.
+		script_source = script_source .. " https://challenges.cloudflare.com"
+		frame_source = "https://challenges.cloudflare.com"
+	elseif external_provider == "recaptcha-v3" then
+		-- From earlier reCAPTCHA docs (developers.google.com unreachable
+		-- when written); 合并后实测：check the browser CSP report.
+		script_source = script_source .. " https://www.recaptcha.net https://www.gstatic.com"
+		frame_source = "https://www.recaptcha.net"
+		connect_source = "https://www.recaptcha.net"
 	end
 	ngx.header["Content-Security-Policy"] = "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
 		.. "form-action 'self'; style-src 'nonce-" .. csp_nonce .. "'; script-src " .. script_source
-		.. "; connect-src " .. connect_source .. extra
+		.. "; connect-src " .. connect_source .. (frame_source and ("; frame-src " .. frame_source) or "") .. extra
     ngx.header["Cache-Control"] = "no-store, no-cache, must-revalidate, private, max-age=0"
     ngx.header["Pragma"] = "no-cache"
     ngx.header["Expires"] = "0"
@@ -1048,6 +1078,7 @@ local function issue_pending(policy, rule, address, user_agent, target)
         issued_at = now, expires_at = now + rule.challenge_ttl_seconds, target = target,
         not_before = now + (rule.mode == "delay" and rule.min_delay_seconds or MIN_INTERACTION_SECONDS),
         answer = answer, pow = pow_answer, seed = seed, ip_digest = ip_digest, ua_digest = ua_digest,
+        fallback = rule.fallback or nil,
     })
     if not state then
         return nil, "state_encode_failed"
@@ -1098,6 +1129,11 @@ local MESSAGES = {
     captcha = "输入图中显示的 6 个字符，不区分大小写。",
     external = "验证结果将由受控服务端适配器核验，密钥不会发送到浏览器。",
 }
+-- Turnstile / reCAPTCHA v3 run without a start button. Without a
+-- token within 8 seconds the page submits widget_unavailable and the engine
+-- falls back to the built-in check or answers 503 (unavailable policy).
+local WIDGET_LOADING = { turnstile = "正在加载验证组件", ["recaptcha-v3"] = "正在验证" }
+local WIDGET_TIMEOUT_SCRIPT = "(()=>{const form=document.getElementById('challenge-form'),proof=document.getElementById('external-proof'),status=document.getElementById('status');let done=false;const send=v=>{if(done)return;done=true;proof.value=v;form.requestSubmit()};window.cdncaExternalDone=t=>{if(typeof t!=='string'||t.length<1||t.length>4096){window.cdncaExternalFail();return}status.textContent='验证完成，正在核验';send(t)};window.cdncaExternalFail=()=>{if(done)return;status.textContent='验证组件加载失败';send('widget_unavailable')};setTimeout(()=>window.cdncaExternalFail(),8000)})();"
 local ALTERNATIVE = "<input id=\"alt-response\" type=\"hidden\" value=\"wait\"><button id=\"alt-start\" class=\"alt\" type=\"button\">改用等待验证（约 5 秒，适合读屏或无法查看图片）</button>"
 
 local function render_challenge(policy, rule, nonce, presentation, reason)
@@ -1120,12 +1156,17 @@ local function render_challenge(policy, rule, nonce, presentation, reason)
 	response_headers(csp_nonce, true, external and rule.external_provider.provider or nil, not external)
     ngx.status = ngx.HTTP_OK
     local title = TITLES[rule.mode]
-    emit("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>", title, "</title>", page_style(csp_nonce), "</head><body><main><h1>", title, "</h1><p>", MESSAGES[rule.mode], "</p><div class=\"status\" aria-live=\"polite\"><span class=\"mark\" aria-hidden=\"true\"></span><span id=\"status\">", external and "等待完成验证" or "正在完成浏览器校验", "</span></div>")
+    emit("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>", title, "</title>", page_style(csp_nonce), "</head><body><main><h1>", title, "</h1><p>", MESSAGES[rule.mode], "</p><div class=\"status\" aria-live=\"polite\"><span class=\"mark\" aria-hidden=\"true\"></span><span id=\"status\">", external and (WIDGET_LOADING[rule.external_provider.provider] or "等待完成验证") or (rule.fallback and "验证组件加载失败，已改用站内验证" or "正在完成浏览器校验"), "</span></div>")
 	if external then
 		emit("<form id=\"challenge-form\" method=\"post\" action=\"", VERIFY_ENDPOINT, "\"><input type=\"hidden\" name=\"nonce\" value=\"", nonce, "\">")
-		emit("<input id=\"external-proof\" name=\"response\" type=\"hidden\"><div id=\"external-widget\"></div><button id=\"external-start\" type=\"button\">开始验证</button><noscript><p class=\"error\">此验证方式需要 JavaScript；请联系站点管理员改用无脚本验证方式。</p></noscript></form>")
+		local widget_only = WIDGET_LOADING[rule.external_provider.provider] ~= nil
+		emit("<input id=\"external-proof\" name=\"response\" type=\"hidden\"><div id=\"external-widget\"></div>", widget_only and "" or "<button id=\"external-start\" type=\"button\">开始验证</button>", "<noscript><p class=\"error\">此验证方式需要 JavaScript；请联系站点管理员改用无脚本验证方式。</p></noscript></form>")
 		if rule.external_provider.provider == "tencent" then
 			emit("<script src=\"https://turing.captcha.qcloud.com/TCaptcha.js\"></script><script nonce=\"", csp_nonce, "\">(()=>{const button=document.getElementById('external-start');const status=document.getElementById('status');button.addEventListener('click',()=>{if(typeof TencentCaptcha!=='function'){status.textContent='验证组件不可用';return}button.disabled=true;new TencentCaptcha('", rule.external_provider.app_id, "',result=>{if(!result||result.ret!==0||typeof result.ticket!=='string'||typeof result.randstr!=='string'){status.textContent='验证未通过';button.disabled=false;return}document.getElementById('external-proof').value=JSON.stringify({ticket:result.ticket,randstr:result.randstr});status.textContent='验证完成，正在核验';document.getElementById('challenge-form').requestSubmit()}).show()})})();</script>")
+		elseif rule.external_provider.provider == "turnstile" then
+			emit("<script nonce=\"", csp_nonce, "\">", WIDGET_TIMEOUT_SCRIPT, "window.cdncaTurnstileReady=()=>{try{turnstile.render('#external-widget',{sitekey:'", rule.external_provider.app_id, "',action:'cdnca_challenge',callback:token=>window.cdncaExternalDone(token),'error-callback':()=>window.cdncaExternalFail()})}catch(_){window.cdncaExternalFail()}};</script><script src=\"https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=cdncaTurnstileReady\" async defer nonce=\"", csp_nonce, "\"></script>")
+		elseif rule.external_provider.provider == "recaptcha-v3" then
+			emit("<script nonce=\"", csp_nonce, "\">", WIDGET_TIMEOUT_SCRIPT, "window.cdncaRecaptchaReady=()=>{try{grecaptcha.ready(()=>{grecaptcha.execute('", rule.external_provider.app_id, "',{action:'cdnca_challenge'}).then(token=>window.cdncaExternalDone(token),()=>window.cdncaExternalFail())})}catch(_){window.cdncaExternalFail()}};</script><script src=\"https://www.recaptcha.net/recaptcha/api.js?render=", rule.external_provider.app_id, "&amp;onload=cdncaRecaptchaReady\" async defer nonce=\"", csp_nonce, "\"></script>")
 		else
 			emit("<script src=\"https://static.geetest.com/v4/gt4.js\"></script><script nonce=\"", csp_nonce, "\">(()=>{const button=document.getElementById('external-start');const status=document.getElementById('status');button.addEventListener('click',()=>{if(typeof initGeetest4!=='function'){status.textContent='验证组件不可用';return}button.disabled=true;initGeetest4({captchaId:'", rule.external_provider.app_id, "',product:'bind'},captcha=>{captcha.appendTo('#external-widget');captcha.onSuccess(()=>{const result=captcha.getValidate();if(!result){status.textContent='验证未通过';button.disabled=false;return}document.getElementById('external-proof').value=JSON.stringify(result);status.textContent='验证完成，正在核验';document.getElementById('challenge-form').requestSubmit()});captcha.onError(()=>{status.textContent='验证组件不可用';button.disabled=false})})})})();</script>")
 		end
@@ -1324,54 +1365,79 @@ local function form_values()
     return values
 end
 
+-- Returns "ok" (agent 204), "rejected" (403: the provider refused the
+-- token) or "unavailable" (503, any other answer or no answer; §4.3).
+-- Only "rejected" counts as a failed attempt.
 local function external_verify(policy, rule, address, proof)
 	if #proof > MAX_EXTERNAL_PROOF_BYTES then
-		return false
+		return "rejected"
 	end
+	local provider = rule.external_provider
 	local payload = cjson.encode({
 		policy_id = rule.rule_id, policy_version = policy.policy_version,
 		tenant_id = rule.tenant_id, site_id = rule.site_id,
-		provider = rule.external_provider.provider, app_id = rule.external_provider.app_id,
+		provider = provider.provider, app_id = provider.app_id,
 		proof = proof, client_ip = address.canonical,
+		host = WIDGET_LOADING[provider.provider] and rule.host or nil,
+		score_threshold = provider.score_threshold,
 	})
 	if not payload or #payload > 8192 then
-		return false
+		return "rejected"
 	end
 	local socket = ngx.socket.tcp()
 	if not socket then
-		return false
+		return "unavailable"
 	end
 	socket:settimeouts(250, 3500, 500)
 	local connected = socket:connect("127.0.0.1", 19178)
 	if not connected then
 		socket:close()
-		return false
+		return "unavailable"
 	end
 	local request = "POST /v1/challenge/external/verify HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: "
 		.. #payload .. "\r\n\r\n" .. payload
 	local sent = socket:send(request)
 	if sent ~= #request then
 		socket:close()
-		return false
+		return "unavailable"
 	end
 	local status = socket:receive("*l")
+	if status == "HTTP/1.1 403 Forbidden" then
+		socket:close()
+		return "rejected"
+	end
 	if status ~= "HTTP/1.1 204 No Content" then
 		socket:close()
-		return false
+		return "unavailable"
 	end
 	for _ = 1, 32 do
 		local line = socket:receive("*l")
 		if line == "" then
 			socket:close()
-			return true
+			return "ok"
 		end
 		if not line or #line > 4096 or line:find("[%c]") then
 			socket:close()
-			return false
+			return "unavailable"
 		end
 	end
 	socket:close()
-	return false
+	return "unavailable"
+end
+
+-- The built-in check an external rule falls back to (unavailable =
+-- builtin): click + proof of work at the engine default difficulty, same
+-- rule identity, so pending/failure keys and the pass cookie are unchanged.
+local function fallback_rule(rule)
+	local copy = {}
+	for key, value in pairs(rule) do
+		copy[key] = value
+	end
+	copy.mode = "click"
+	copy.external_provider = nil
+	copy.pow_difficulty = nil
+	copy.fallback = true
+	return copy
 end
 
 local function verify_submission(policy, rule, address, user_agent)
@@ -1381,13 +1447,20 @@ local function verify_submission(policy, rule, address, user_agent)
     end
     local nonce_digest = crypto.sha256_hex(values.nonce)
     local dict = ngx.shared[state_dict_name]
-    local pending = dict:get(pending_key(policy, rule, nonce_digest))
+    -- a pending state issued by the built-in fallback of an external rule is
+    -- keyed by the fallback's mode (click), not the rule's
+    local pending_rule = rule
+    local pending = dict:get(pending_key(policy, pending_rule, nonce_digest))
+    if not pending and rule.mode == "external" then
+        pending_rule = fallback_rule(rule)
+        pending = dict:get(pending_key(policy, pending_rule, nonce_digest))
+    end
     if not pending then
         return reject_attempt(policy, rule, address, "nonce_missing_or_replayed")
     end
     local state = cjson.decode(pending)
     if type(state) ~= "table" then
-        dict:delete(pending_key(policy, rule, nonce_digest))
+        dict:delete(pending_key(policy, pending_rule, nonce_digest))
         return reject_attempt(policy, rule, address, "nonce_state_invalid")
     end
     local now = ngx.now()
@@ -1405,12 +1478,46 @@ local function verify_submission(policy, rule, address, user_agent)
         return render_error(ngx.HTTP_SERVICE_UNAVAILABLE, "验证服务暂不可用", "验证状态容量不足，请稍后重试。", 1,
             policy, rule, "replay_state_unavailable")
     end
-    dict:delete(pending_key(policy, rule, nonce_digest))
+    dict:delete(pending_key(policy, pending_rule, nonce_digest))
     local ip_digest, ua_digest = binding(rule, address, user_agent)
     local response = values.response
+    -- A pending state issued by the built-in fallback of an external rule is
+    -- checked as that click + proof of work rule and never calls the agent.
+    local original = rule
+    if rule.mode == "external" and state.fallback == true then
+        rule = fallback_rule(rule)
+    end
+    local state_ok = state.policy_version == policy.policy_version and state.rule_id == rule.rule_id
+        and state.mode == rule.mode and type(state.issued_at) == "number" and type(state.expires_at) == "number"
+        and type(state.not_before) == "number" and now <= state.expires_at and now >= state.not_before
+        and state.ip_digest == ip_digest and state.ua_digest == ua_digest
+        and type(state.target) == "string" and #state.target <= MAX_TARGET_BYTES
+        and state.target:sub(1, 1) == "/" and state.target:sub(1, 2) ~= "//" and state.target:find("[%c\\]") == nil
     local answer_valid
     if rule.mode == "external" then
-        answer_valid = values.pow == nil and external_verify(policy, rule, address, response)
+        if not state_ok or values.pow ~= nil then
+            return reject_attempt(policy, rule, address, "proof_invalid_or_too_early")
+        end
+        local outcome = response == "widget_unavailable" and "unavailable"
+            or external_verify(policy, rule, address, response)
+        if outcome == "rejected" then
+            return reject_attempt(policy, rule, address, "external_rejected")
+        end
+        if outcome == "unavailable" then
+            -- Not a failed attempt.
+            if rule.external_provider.unavailable == "closed" then
+                return render_error(ngx.HTTP_SERVICE_UNAVAILABLE, "验证服务暂不可用", "验证服务暂不可用，请稍后重试。", 30,
+                    policy, rule, "external_unavailable")
+            end
+            local fallback = fallback_rule(rule)
+            local nonce, presentation_or_error = issue_pending(policy, fallback, address, user_agent, state.target)
+            if not nonce then
+                return render_error(ngx.HTTP_SERVICE_UNAVAILABLE, "验证服务暂不可用", "无法分配一次性验证状态，请稍后重试。", 1,
+                    policy, rule, presentation_or_error)
+            end
+            return render_challenge(policy, fallback, nonce, presentation_or_error, "external_unavailable_fallback")
+        end
+        answer_valid = outcome == "ok"
     elseif response == "wait" and (rule.mode == "slider" or rule.mode == "captcha") then
         answer_valid = type(state.issued_at) == "number" and now >= state.issued_at + ALTERNATIVE_WAIT_SECONDS
     elseif rule.mode == "slider" then
@@ -1425,13 +1532,8 @@ local function verify_submission(policy, rule, address, user_agent)
     end
     local pow_valid = rule.mode == "external" or (type(state.pow) == "string" and values.pow ~= nil
         and crypto.constant_time_equal(values.pow, state.pow))
-    local state_valid = state.policy_version == policy.policy_version and state.rule_id == rule.rule_id
-        and state.mode == rule.mode and type(state.issued_at) == "number" and type(state.expires_at) == "number"
-        and type(state.not_before) == "number" and now <= state.expires_at and now >= state.not_before
-        and state.ip_digest == ip_digest and state.ua_digest == ua_digest
-        and answer_valid and pow_valid
-        and type(state.target) == "string" and #state.target <= MAX_TARGET_BYTES
-        and state.target:sub(1, 1) == "/" and state.target:sub(1, 2) ~= "//" and state.target:find("[%c\\]") == nil
+    local state_valid = state_ok and answer_valid and pow_valid
+    rule = original
     if not state_valid then
         return reject_attempt(policy, rule, address, "proof_invalid_or_too_early")
     end

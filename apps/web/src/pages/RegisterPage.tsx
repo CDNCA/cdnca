@@ -7,6 +7,8 @@ import { Link } from 'react-router-dom'
 import {
   AccountRegistrationApiError,
   accountRegistrationApi,
+  registrationChannels,
+  type AccountRegistrationConfig,
   type AccountRegistrationChallengeRequest,
   type AccountRegistrationChallengeResult,
   type AccountRegistrationCaptcha,
@@ -154,6 +156,28 @@ export function RegisterPage({
     })
     return () => controller.abort()
   }, [registrationMode])
+
+  // only the required and sendable channels are offered.
+  const [config, setConfig] = useState<AccountRegistrationConfig | null | undefined>(undefined)
+  // Read after the mode is known; a page given its mode (embedding, tests)
+  // keeps the previous behaviour.
+  useEffect(() => {
+    if (registrationMode || mode === null || mode === 'closed') return
+    const controller = new AbortController()
+    void accountRegistrationApi.registrationConfig(controller.signal).then((value) => {
+      if (!controller.signal.aborted) setConfig(value)
+    })
+    return () => controller.abort()
+  }, [registrationMode, mode])
+  const channels = registrationChannels(config ?? null)
+  const requiredCount = config ? (config.email.required ? 1 : 0) + (config.sms.required ? 1 : 0) : 0
+  // This page proves one channel (Turnstile) or none (built-in CAPTCHA); the
+  // website pages (control-site) finish every combination.
+  const verifyOnSite = Boolean(config && config.mode !== 'closed' && (requiredCount > 1 || (mode === 'builtin' && requiredCount > 0)))
+  const verifyNotReady = Boolean(config && config.mode !== 'closed' && !config.ready)
+  useEffect(() => {
+    if (channels.length > 0 && !channels.includes(form.getFieldValue('verification_channel'))) form.setFieldValue('verification_channel', channels[0])
+  }, [channels, form])
 
   useEffect(() => () => {
     activeRef.current = false
@@ -432,7 +456,7 @@ export function RegisterPage({
   }
 
   const verifying = session !== null && ['otp', 'verification-pending'].includes(stage)
-  const showForm = mode !== 'closed' && (stage === 'details' || stage === 'challenge-pending')
+  const showForm = mode !== 'closed' && !verifyOnSite && !verifyNotReady && (stage === 'details' || stage === 'challenge-pending')
   const step = mode === 'verified' && showForm ? t('page.stepDetails') : verifying ? t('page.stepVerify') : null
   const features = [
     { key: 'access', Icon: Globe },
@@ -488,6 +512,12 @@ export function RegisterPage({
               <Alert className="register-alert" type="warning" showIcon message={t('errors.turnstileUnavailable')} />
             ) : null}
 
+            {mode !== 'closed' && (verifyNotReady || verifyOnSite) ? (
+              <div className="register-state register-enter" role="status">
+                <p className="register-state-text">{t(verifyNotReady ? 'page.verifyNotReady' : 'page.verifyOnSite')}</p>
+                {!verifyNotReady ? <div className="register-actions"><a className="register-link-button" href="/register/">{t('page.verifyOnSiteAction')}</a></div> : null}
+              </div>
+            ) : null}
             {mode === 'closed' ? (
               <div className="register-state register-enter">
                 <span className="register-state-icon" aria-hidden="true"><DoorClosed size={24} strokeWidth={1.6} /></span>
@@ -600,14 +630,12 @@ export function RegisterPage({
                     >
                       <Input inputMode="tel" autoComplete="tel" aria-label={t('fields.phone')} />
                     </Form.Item>
-                    {mode === 'verified' ? <Form.Item className="register-span" name="verification_channel" label={t('fields.channel')}>
+                    {mode === 'verified' && channels.length < 2 ? <Form.Item hidden name="verification_channel"><Input /></Form.Item> : null}
+                    {mode === 'verified' && channels.length > 1 ? <Form.Item className="register-span" name="verification_channel" label={t('fields.channel')}>
                       <Radio.Group
                         optionType="button"
                         buttonStyle="solid"
-                        options={[
-                          { value: 'email', label: t('channels.email') },
-                          { value: 'sms', label: t('channels.sms') },
-                        ]}
+                        options={channels.map((channel) => ({ value: channel, label: t(`channels.${channel}`) }))}
                       />
                     </Form.Item> : null}
                   </div>

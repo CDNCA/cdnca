@@ -308,7 +308,7 @@ describe('AdvancedSiteTab', () => {
     [new ApiError('raw forbidden', 403, 'permission_denied'), '当前账号无权修改 HTTP 策略'],
     [new ApiError('raw missing', 404, 'not_found'), 'HTTP 策略不存在或已不可访问'],
     [new ApiError('raw conflict', 409, 'idempotency_conflict'), '幂等键已被其他请求使用，请刷新后重试'],
-    [new ApiError('raw stale', 412, 'revision_conflict'), 'HTTP 策略修订已变化，请刷新后重试'],
+    [new ApiError('raw stale', 412, 'revision_conflict'), '内容已被其他人修改，请刷新后再保存'],
     [new ApiError('raw invalid', 422, 'validation_error'), /^请填写有效的 HTTP 策略字段（响应头不能包含节点管理的头/],
   ])('renders terminal write status without exact retry: %s', async (error, localized) => {
     vi.mocked(httpPoliciesApi.create).mockRejectedValue(error)

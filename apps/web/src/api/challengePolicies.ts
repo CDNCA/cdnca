@@ -8,9 +8,41 @@ export interface ChallengeBypassRoute {
   path: string
 }
 
+export type ExternalProvider = 'tencent' | 'geetest-v4' | 'turnstile' | 'recaptcha-v3'
+export type ExternalUnavailable = 'builtin' | 'closed'
+/** Turnstile / reCAPTCHA v3 are services outside mainland China. */
+export const globalProviders: readonly ExternalProvider[] = ['turnstile', 'recaptcha-v3']
+
 export interface ExternalProviderReference {
-  provider: 'tencent' | 'geetest-v4'
-  app_reference: string
+  provider: ExternalProvider
+  /** Server-owned (appref:policy:<id>); omitted on write. */
+  app_reference?: string
+  /** recaptcha-v3 only, 0.1..0.9; omitted means 0.5. */
+  score_threshold?: number
+  /** Omitted means builtin. */
+  unavailable?: ExternalUnavailable
+}
+
+export interface ExternalProviderSummary {
+  provider: ExternalProvider
+  score_threshold?: number
+  unavailable: ExternalUnavailable
+}
+
+/** GET .../external-credential: never carries the secret. */
+export interface ExternalCredentialStatus {
+  provider: string
+  app_id?: string
+  environment?: 'sandbox' | 'production'
+  secret_configured: boolean
+  revision: number
+  updated_at?: string
+}
+
+export interface ExternalCredentialInput {
+  provider: ExternalProvider
+  app_id: string
+  secret: string
 }
 
 export interface ChallengePolicyConfig {
@@ -52,6 +84,7 @@ export interface ChallengePolicy {
   pow_difficulty?: number
   key_reference_configured: boolean
   external_provider_configured: boolean
+  external_provider_summary?: ExternalProviderSummary
   enabled: boolean
   deleted: boolean
   revision: number
@@ -157,8 +190,21 @@ function validBypassRoute(value: unknown): value is ChallengeBypassRoute {
   return value.kind !== 'prefix' || value.path !== '/' && value.path.endsWith('/')
 }
 
+const externalProviders = new Set<string>(['tencent', 'geetest-v4', 'turnstile', 'recaptcha-v3'])
+export const externalAppIDPattern = /^[A-Za-z0-9][A-Za-z0-9._:_-]{0,127}$/
+export const externalSecretPattern = /^[\x21-\x7e][\x20-\x7e]{14,254}[\x21-\x7e]$/
+
+function validSummary(value: unknown): value is ExternalProviderSummary {
+  return record(value) && exactKeys(value, ['provider', 'unavailable'], ['score_threshold']) &&
+    externalProviders.has(String(value.provider)) && (value.unavailable === 'builtin' || value.unavailable === 'closed') &&
+    (!('score_threshold' in value) || value.provider === 'recaptcha-v3' && typeof value.score_threshold === 'number' &&
+      value.score_threshold >= 0.1 && value.score_threshold <= 0.9)
+}
+
 function parsePolicy(value: unknown): ChallengePolicy {
-  if (!record(value) || !exactKeys(value, [...responseKeys], ['pow_difficulty']) ||
+  if (!record(value) || !exactKeys(value, [...responseKeys], ['pow_difficulty', 'external_provider_summary']) ||
+    ('external_provider_summary' in value) !== (value.mode === 'external') ||
+    ('external_provider_summary' in value && !validSummary(value.external_provider_summary)) ||
     ('pow_difficulty' in value && (value.mode === 'external' ||
       !integer(value.pow_difficulty, powDifficultyRange.min, powDifficultyRange.max))) ||
     typeof value.id !== 'string' || !uuidPattern.test(value.id) ||
@@ -291,6 +337,9 @@ function matchesConfig(policy: ChallengePolicy, config: ChallengePolicyConfig, e
       route.path === config.bypass_routes[index]?.path) &&
     policy.key_reference_configured &&
     policy.external_provider_configured === Boolean(config.external_provider) &&
+    (!config.external_provider || policy.external_provider_summary?.provider === config.external_provider.provider &&
+      policy.external_provider_summary.score_threshold === config.external_provider.score_threshold &&
+      policy.external_provider_summary.unavailable === (config.external_provider.unavailable ?? 'builtin')) &&
     policy.pow_difficulty === config.pow_difficulty &&
     policy.enabled === enabled
 }
@@ -379,8 +428,42 @@ async function promote(
   }), scopeID, policyID)
 }
 
+function parseCredentialStatus(value: unknown): ExternalCredentialStatus {
+  if (!record(value) || !exactKeys(value, ['provider', 'secret_configured', 'revision'], ['app_id', 'environment', 'updated_at']) ||
+    typeof value.provider !== 'string' || (value.provider !== '' && !externalProviders.has(value.provider)) ||
+    typeof value.secret_configured !== 'boolean' || !integer(value.revision, 0, Number.MAX_SAFE_INTEGER) ||
+    ('app_id' in value && (typeof value.app_id !== 'string' || !externalAppIDPattern.test(value.app_id))) ||
+    ('environment' in value && value.environment !== 'sandbox' && value.environment !== 'production') ||
+    ('updated_at' in value && !timestamp(value.updated_at)) ||
+    value.secret_configured !== ('app_id' in value)) throw invalidResponse()
+  return value as unknown as ExternalCredentialStatus
+}
+
+async function externalCredential(
+  accessToken: string, scopeID: string, policyID: string, signal?: AbortSignal,
+): Promise<ExternalCredentialStatus> {
+  return parseCredentialStatus(await request(accessToken, `${resourcePath(scopeID, policyID)}/external-credential`, { signal }))
+}
+
+/** PUT .../external-credential (If-Match = policy revision); the policy moves to a new revision. */
+async function putExternalCredential(
+  accessToken: string, scopeID: string, policyID: string, revision: number,
+  input: ExternalCredentialInput, idempotencyKey: string,
+): Promise<ChallengePolicy> {
+  if (!externalProviders.has(input.provider) || !externalAppIDPattern.test(input.app_id) ||
+    !externalSecretPattern.test(input.secret)) throw invalidRequest()
+  const policy = parsePolicy(await request(accessToken, `${resourcePath(scopeID, policyID)}/external-credential`, {
+    method: 'PUT', headers: writeHeaders(idempotencyKey, revision), body: JSON.stringify(input),
+  }))
+  if (policy.deleted || policy.revision !== revision + 1 || policy.tenant_scope_id !== scopeID ||
+    policy.id !== policyID || policy.external_provider_summary?.provider !== input.provider) throw invalidResponse()
+  return policy
+}
+
 export const challengePoliciesApi = {
   create,
+  externalCredential,
+  putExternalCredential,
   disable: (accessToken: string, scopeID: string, policyID: string, revision: number, key: string) =>
     setEnabled(accessToken, scopeID, policyID, revision, false, key),
   enable: (accessToken: string, scopeID: string, policyID: string, revision: number, key: string) =>

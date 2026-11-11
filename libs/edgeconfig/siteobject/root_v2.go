@@ -97,6 +97,33 @@ const (
 
 	ErrorPageSlotsCapability        = "error_page_slots"
 	ErrorPageSlotsAPIVersion uint32 = 1
+
+	// ServerTimingCapability (C10; CAPABILITY_NAME_SITE_SERVER_TIMING
+	// = 84): a site object with server_timing needs it; the agent decodes
+	// site objects strictly, so an older node would refuse the field.
+	ServerTimingCapability        = "site_server_timing"
+	ServerTimingAPIVersion uint32 = 1
+
+	// URLAuthCapability (CAPABILITY_NAME_URL_AUTH = 87): a
+	// site object with security.url_auth needs it; the agent decodes site
+	// objects strictly, so an older node would refuse the field.
+	URLAuthCapability        = "url_auth"
+	URLAuthAPIVersion uint32 = 1
+)
+
+// RUMCapability: a site object
+// with rum needs it; the agent decodes site objects strictly, so an older
+// node would refuse the field.
+const (
+	RUMCapability        = "site_rum"
+	RUMAPIVersion uint32 = 1
+)
+
+// ContentRewriteCapability (CAPABILITY_NAME_SITE_CONTENT_REWRITE
+// = 90): a site object with content_rewrite needs it (strict decoding).
+const (
+	ContentRewriteCapability        = "site_content_rewrite"
+	ContentRewriteAPIVersion uint32 = 1
 )
 
 // SlotNodePageStatus is the status a slot node page answers with.

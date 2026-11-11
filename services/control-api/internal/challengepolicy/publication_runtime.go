@@ -254,6 +254,7 @@ func publicationRuntimeSnapshot(snapshot PublicationSnapshot) challengepublicati
 	if snapshot.ExternalProvider != nil {
 		result.ExternalProvider = &challengepublication.ExternalProviderReference{
 			Provider: snapshot.ExternalProvider.Provider, AppReference: snapshot.ExternalProvider.AppReference,
+			ScoreThreshold: snapshot.ExternalProvider.ScoreThreshold, Unavailable: snapshot.ExternalProvider.Unavailable,
 		}
 	}
 	if snapshot.PowDifficulty != nil {
@@ -347,10 +348,13 @@ func (planner *PostgresPublicationPlanner) Plan(ctx context.Context, tx pgx.Tx, 
 		return PublicationPlan{}, ErrUnavailable
 	}
 	rows.Close()
-	required := challengepublication.RequiredCapabilities(snapshot.PowDifficulty != nil)
+	external := snapshot.ExternalProvider != nil && challengepublication.ExternalNeedsCapability(
+		&challengepublication.ExternalProviderReference{Provider: snapshot.ExternalProvider.Provider,
+			ScoreThreshold: snapshot.ExternalProvider.ScoreThreshold, Unavailable: snapshot.ExternalProvider.Unavailable})
+	required := challengepublication.RequiredCapabilities(snapshot.PowDifficulty != nil, external)
 	var unsupported []uuid.UUID
-	if snapshot.PowDifficulty != nil {
-		// Older agents refuse the field; they are left
+	if snapshot.PowDifficulty != nil || external {
+		// older agents refuse the field; they are left
 		// out (keep their previous policy). No node can take it: refused,
 		// naming the nodes.
 		refusal := edgepublish.ValidateFeatureCapabilityTargets(ctx, tx, nodeIDs, required)

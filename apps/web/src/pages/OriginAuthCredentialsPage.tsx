@@ -349,7 +349,6 @@ function OriginAuthCredentialsContent({
     { title: t('columns.status'), dataIndex: 'status', width: 120, render: (value: OriginAuthCredentialStatus) => (
       <Tag color={value === 'verified' ? 'success' : value === 'pending' ? 'processing' : 'default'}>{t(`statuses.${value}`)}</Tag>
     ) },
-    { title: t('columns.revision'), dataIndex: 'revision', width: 80 },
     { title: t('columns.expiresAt'), dataIndex: 'expires_at', width: 180, render: (value: string) => formatDateTime(value, locale) },
     { title: t('columns.updatedAt'), dataIndex: 'updated_at', width: 180, render: (value: string) => formatDateTime(value, locale) },
     { title: t('columns.actions'), key: 'actions', width: mayManage ? 320 : 110, render: (_, item) => (
@@ -430,8 +429,6 @@ function OriginAuthCredentialsContent({
                 <Descriptions.Item label={t('columns.name')}>{detailQuery.data.name}</Descriptions.Item>
                 <Descriptions.Item label={t('columns.provider')}>{t(`providers.${detailQuery.data.provider}`)}</Descriptions.Item>
                 <Descriptions.Item label={t('columns.status')}>{t(`statuses.${detailQuery.data.status}`)}</Descriptions.Item>
-                <Descriptions.Item label={t('columns.revision')}>{detailQuery.data.revision}</Descriptions.Item>
-                <Descriptions.Item label={t('columns.revisionRef')}>{detailQuery.data.revision_ref}</Descriptions.Item>
                 <Descriptions.Item label={t('columns.notBefore')}>{formatDateTime(detailQuery.data.not_before, locale)}</Descriptions.Item>
                 <Descriptions.Item label={t('columns.expiresAt')}>{formatDateTime(detailQuery.data.expires_at, locale)}</Descriptions.Item>
                 <Descriptions.Item label={t('columns.verifiedAt')}>{detailQuery.data.verified_at ? formatDateTime(detailQuery.data.verified_at, locale) : t('values.none')}</Descriptions.Item>

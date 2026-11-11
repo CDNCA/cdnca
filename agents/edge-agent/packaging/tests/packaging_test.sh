@@ -557,6 +557,7 @@ done
 [ "$(mode_of "${root}/var/lib/cdnca-edge-agent-backups/active-state")" = 700 ] || fail "active state mode"
 [ "$(mode_of "${root}/usr/lib/cdnca-edge-agent/versions/v1")" = 755 ] || fail "version directory mode"
 grep -F 'EnvironmentFile=/etc/cdnca-edge-agent/agent.env' "${root}/usr/lib/systemd/system/cdnca-edge-agent.service" >/dev/null || fail "unit lacks EnvironmentFile"
+grep -Fx 'Environment=GOMEMLIMIT=4GiB' "${root}/usr/lib/systemd/system/cdnca-edge-agent.service" >/dev/null || fail "unit lacks the Go soft memory limit"
 grep -Fx 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' "${root}/usr/lib/systemd/system/cdnca-edge-agent.service" >/dev/null || fail "unit lacks low-port precheck capability bound"
 grep -Fx 'AmbientCapabilities=CAP_NET_BIND_SERVICE' "${root}/usr/lib/systemd/system/cdnca-edge-agent.service" >/dev/null || fail "unit lacks low-port precheck ambient capability"
 grep -F '/usr/sbin/nologin' "${root}/usr/lib/sysusers.d/cdnca-edge-agent.conf" >/dev/null || fail "sysuser is not non-login"
@@ -1486,9 +1487,19 @@ if "${root}/usr/libexec/cdnca-edge-agent/uninstall.sh" \
   fail "unguarded non-interactive purge was accepted"
 fi
 assert_file "${root}/etc/cdnca-edge-agent/config.json"
+# A managed WAF node's dynamic routing state: left behind,
+# the next install's Agent started OpenResty from this nginx.conf, whose
+# load_module names the WAF engine purge removes with /var/lib/cdnca-edge.
+mkdir -p "${root}/var/lib/dynroute/shared/cache/0" "${root}/var/lib/dynroute/state/site-objects" \
+  "${root}/var/lib/cdnca-edge/extensions/waf-crs/versions/fixture/modules"
+printf 'load_module "/var/lib/cdnca-edge/extensions/waf-crs/versions/fixture/modules/ngx_http_modsecurity_module.so";\n' \
+  >"${root}/var/lib/dynroute/shared/nginx.conf"
+printf 'object\n' >"${root}/var/lib/dynroute/state/site-objects/fixture"
+printf 'cached\n' >"${root}/var/lib/dynroute/shared/cache/0/entry"
 "${root}/usr/libexec/cdnca-edge-agent/uninstall.sh" \
   --destdir "${root}" --service-driver "${service_driver}" \
   --purge --non-interactive --confirm-purge DELETE-EDGE-IDENTITY-AND-STATE >/dev/null
+assert_absent "${root}/var/lib/dynroute"
 assert_absent "${root}/etc/cdnca-edge-agent"
 assert_absent "${root}/var/lib/cdnca-edge-agent"
 assert_absent "${root}/var/lib/cdnca-edge"

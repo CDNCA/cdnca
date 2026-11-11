@@ -229,6 +229,20 @@ func (overlay *publicationOverlay) compileSiteRuntimeV2(
 	if err := markSiteRuntimeV2PackageExpiry(ctx, tx, scopeID, &inputs.Document, nil, now); err != nil {
 		return fail(err)
 	}
+	// Server-Timing follows the current rows too (an attack-level
+	// republication turns it off; a node without the capability is refused).
+	if err := requireServerTimingCapability(ctx, tx, scopeID, &inputs.Document); err != nil {
+		return fail(err)
+	}
+	// RUM follows the current rows too (a node without the
+	// capability is refused).
+	if err := requireRUMCapability(ctx, tx, scopeID, &inputs.Document); err != nil {
+		return fail(err)
+	}
+	// content rewrite likewise
+	if err := requireContentRewriteCapability(ctx, tx, scopeID, &inputs.Document); err != nil {
+		return fail(err)
+	}
 	// A renewed (or since activated) certificate replaces the version the
 	// base publication referenced: certificate_renewal does not wait for the
 	// tenant's publication (fix-dnscert3 卡 2-B).

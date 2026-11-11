@@ -43,27 +43,49 @@ func (resolver *Resolver) Counts() Counts {
 	return resolver.counts
 }
 
+// ResolveTail is Resolve for the event spool tail (TailConfig.Resolve): the
+// same outcomes and counts, but the line is not re-encoded to fill
+// config_version_id when the tail's identity sets it anyway (normalizeTail).
+func (resolver *Resolver) ResolveTail(line []byte) (eventspool.ResolvedLine, error) {
+	return resolver.resolve(line, true)
+}
+
 // Resolve binds one line. A line that cannot be attributed yet makes the
 // tail stop before it (eventspool.ErrLineNotReady) until the grace period
 // ends; then it is quarantined like an invalid line.
 func (resolver *Resolver) Resolve(line []byte) (eventspool.ResolvedLine, error) {
-	result, err := Normalize(line, resolver.Registry, resolver.Sites, resolver.NodeID)
+	return resolver.resolve(line, false)
+}
+
+func (resolver *Resolver) resolve(line []byte, tail bool) (eventspool.ResolvedLine, error) {
+	var result Result
+	var checked bool
+	var err error
+	if tail {
+		result, checked, err = normalizeTail(line, resolver.Registry, resolver.Sites, resolver.NodeID)
+	} else {
+		result, err = Normalize(line, resolver.Registry, resolver.Sites, resolver.NodeID)
+	}
 	resolver.mu.Lock()
 	defer resolver.mu.Unlock()
 	if resolver.waiting == nil {
 		resolver.waiting = map[string]time.Time{}
 	}
-	key := string(line)
 	switch {
 	case err == nil:
-		delete(resolver.waiting, key)
+		if len(resolver.waiting) > 0 {
+			delete(resolver.waiting, string(line))
+		}
 		resolver.counts.Attributed++
-		return eventspool.ResolvedLine{Line: result.Line, Identity: result.Identity, CapturePolicy: result.CapturePolicy}, nil
+		return eventspool.ResolvedLine{Line: result.Line, Identity: result.Identity, CapturePolicy: result.CapturePolicy, Checked: checked}, nil
 	case errors.Is(err, ErrL2Hop):
-		delete(resolver.waiting, key)
+		if len(resolver.waiting) > 0 {
+			delete(resolver.waiting, string(line))
+		}
 		resolver.counts.L2Hops++
 		return eventspool.ResolvedLine{}, eventspool.ErrLineSkipped
 	case errors.Is(err, ErrUnattributed):
+		key := string(line)
 		now := time.Now
 		if resolver.Now != nil {
 			now = resolver.Now

@@ -413,6 +413,8 @@ type Site struct {
 	// host.
 	CacheSharedAcrossDomains bool              `json:"cache_shared_across_domains"`
 	CacheStatusHeader        bool              `json:"cache_status_header"` // 响应头显示缓存状态 (X-CDN-Cache, migration 472), on by default
+	ServerTiming             bool              `json:"server_timing"`       // Server-Timing 响应头 (migration 651), off by default
+	RUMSamplePercent         *int              `json:"rum_sample_percent"`  // 真实用户体验上报 (migration 654): nil off, else 1-100
 	Enabled                  bool              `json:"enabled"`
 	Package                  *Reference        `json:"package"`
 	PackageID                *uuid.UUID        `json:"package_id"`
@@ -597,6 +599,9 @@ type SiteFields struct {
 	// on create, off.
 	CacheSharedAcrossDomains *bool
 	CacheStatusHeader        *bool // 响应头显示缓存状态: nil keeps the current value; on create, on
+	ServerTiming             *bool // Server-Timing 响应头: nil keeps the current value; on create, off
+	RUMSet                   bool  // 真实用户体验上报: write RUMSamplePercent; unset keeps the current value; on create, off
+	RUMSamplePercent         *int  // nil turns it off, else 1-100
 	Enabled                  bool
 	Status                   string
 	IsDefault                bool

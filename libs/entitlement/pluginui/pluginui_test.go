@@ -94,3 +94,35 @@ func hasReason(findings []Finding, reason string) bool {
 	}
 	return false
 }
+
+func TestValidatePluginSettingsPage(t *testing.T) {
+	settings := Page{ID: "settings", Path: "/admin", Mount: MountPluginSettings, Role: RoleAdmin,
+		Title: Title{ZhCN: "设置"}, RequiredModule: "module.acme_tools"}
+	entrypoint := validEntrypoint()
+	entrypoint.Pages = append(entrypoint.Pages, settings)
+	if findings := Validate(entrypoint); len(findings) != 0 {
+		t.Fatalf("Validate(plugin_settings) = %v", findings)
+	}
+	cases := map[string]func(*Entrypoint){
+		"settings_duplicate": func(e *Entrypoint) {
+			second := settings
+			second.ID = "settings-2"
+			e.Pages = append(e.Pages, second)
+		},
+		"role_invalid":        func(e *Entrypoint) { e.Pages[2].Role = RoleUser },
+		"menu_parent_invalid": func(e *Entrypoint) { e.Pages[2].MenuParent = "system" },
+	}
+	for reason, mutate := range cases {
+		entrypoint := validEntrypoint()
+		entrypoint.Pages = append(entrypoint.Pages, settings)
+		mutate(&entrypoint)
+		if !hasReason(Validate(entrypoint), reason) {
+			t.Errorf("%s not reported: %v", reason, Validate(entrypoint))
+		}
+	}
+	if _, encoded, err := Build("acme.reports", "1.2.0", []string{Permission}, entrypoint); err != nil {
+		t.Fatal(err)
+	} else if parsed, err := Parse(encoded); err != nil || len(parsed.Pages) != 3 {
+		t.Fatalf("Parse() = %+v, %v", parsed, err)
+	}
+}

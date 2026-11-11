@@ -1196,7 +1196,7 @@ describe('SiteEdit review closure session identity and live permissions', () => 
     await user.type(domain, 'entitlement.example.com')
     await commitEdits()
 
-    expect(await screen.findByText('请求失败，请稍后重试')).toBeInTheDocument()
+    expect(await screen.findByText('操作被拒绝（错误码 entitlement_required）')).toBeInTheDocument()
     expect(screen.queryByText(i18n.t('sites:edit.errors.forbiddenTitle'))).not.toBeInTheDocument()
     expect(screen.queryByText('private entitlement detail')).not.toBeInTheDocument()
     act(() => {
@@ -1946,7 +1946,7 @@ describe('SiteEditPage editing', () => {
     const ipv6 = (await screen.findByRole('switch', { name: SHARED }))
     const before = ipv6.getAttribute('aria-checked')
     await user.click(ipv6)
-    expect(await screen.findByText('请求失败，请稍后重试')).toBeInTheDocument()
+    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('switch', { name: SHARED })).toHaveAttribute('aria-checked', before!))
   })
 
@@ -1969,7 +1969,7 @@ describe('SiteEditPage editing', () => {
     await user.clear(ports)
     await user.type(ports, '8081')
     await act(async () => refuse!(jsonResponse({ error: { code: 'validation_failed', message: 'refused' } }, 422)))
-    expect(await screen.findByText('请求失败，请稍后重试')).toBeInTheDocument()
+    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
     expect(ports).toHaveValue('8081')
     await waitFor(() => expect(screen.getByRole('switch', { name: SHARED })).toHaveAttribute('aria-checked', before!))
   })
@@ -1991,7 +1991,7 @@ describe('SiteEditPage editing', () => {
     const backups = screen.getByRole('textbox', { name: i18n.t('siteOriginForwarding:fields.backupOrigins') })
     await user.type(backups, '192.0.2.20:80')
     await act(async () => refuse!(jsonResponse({ error: { code: 'validation_failed', message: 'refused' } }, 422)))
-    expect(await screen.findByText('请求失败，请稍后重试')).toBeInTheDocument()
+    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
     expect(backups).toHaveValue('192.0.2.20:80')
   })
 
@@ -2212,7 +2212,7 @@ describe('SiteEditPage editing', () => {
     await user.clear(domain)
     await user.type(domain, 'retry.example.com')
     await commitEdits()
-    expect(await screen.findByText('请求失败，请稍后重试')).toBeInTheDocument()
+    expect(await screen.findByText('操作被拒绝（错误码 validation_failed）')).toBeInTheDocument()
     expect(screen.queryByText('配置无效')).not.toBeInTheDocument()
     // the refused value went back; editing again sends a new attempt
     await waitFor(() => expect(domain).toHaveValue('www.example.com'))

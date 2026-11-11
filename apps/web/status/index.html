@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/v1/brand-assets/favicon" />
+    <title>Status</title>
+  </head>
+  <body>
+    <div class="st-page">
+      <header class="st-header">
+        <img id="status-logo" class="st-logo" alt="" width="32" height="32" hidden />
+        <h1 id="status-title" class="st-title"></h1>
+        <a id="status-lang" class="st-lang" href="?lang=en"></a>
+      </header>
+      <main id="status-main" aria-busy="false">
+        <section class="st-banner st-skeleton" aria-hidden="true"></section>
+        <section class="st-card st-skeleton st-skeleton-tall" aria-hidden="true"></section>
+      </main>
+      <footer id="status-footer" class="st-footer st-muted"></footer>
+    </div>
+    <script type="module" src="/src/status/main.ts"></script>
+  </body>
+</html>

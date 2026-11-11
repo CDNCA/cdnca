@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,12 +29,69 @@ type ExternalVerifyEnvelope struct {
 	AppID         string           `json:"app_id"`
 	Proof         string           `json:"proof"`
 	ClientIP      string           `json:"client_ip"`
+	// CHALLENGE_EXTERNAL v1: the policy host and the
+	// recaptcha-v3 score threshold, from the node's own policy file.
+	Host           string  `json:"host,omitempty"`
+	ScoreThreshold float64 `json:"score_threshold,omitempty"`
+}
+
+// externalBreaker skips the provider round trip after 5 consecutive
+// "unavailable" answers for 30 seconds, then lets one request probe it, so
+// visitors reach the fallback in milliseconds instead of after a 3 s timeout
+//.
+type externalBreaker struct {
+	mu    sync.Mutex
+	state map[ExternalProvider]breakerState
+	now   func() time.Time
+}
+
+type breakerState struct {
+	failures  int
+	openUntil time.Time
+}
+
+const (
+	breakerThreshold = 5
+	breakerOpenFor   = 30 * time.Second
+)
+
+func (breaker *externalBreaker) allow(provider ExternalProvider) bool {
+	breaker.mu.Lock()
+	defer breaker.mu.Unlock()
+	state := breaker.state[provider]
+	if state.failures < breakerThreshold {
+		return true
+	}
+	now := breaker.now()
+	if now.Before(state.openUntil) {
+		return false
+	}
+	// Half open: one probe; it re-opens the breaker unless it succeeds.
+	state.openUntil = now.Add(breakerOpenFor)
+	breaker.state[provider] = state
+	return true
+}
+
+func (breaker *externalBreaker) record(provider ExternalProvider, unavailable bool) {
+	breaker.mu.Lock()
+	defer breaker.mu.Unlock()
+	if !unavailable {
+		delete(breaker.state, provider)
+		return
+	}
+	state := breaker.state[provider]
+	state.failures++
+	if state.failures >= breakerThreshold {
+		state.openUntil = breaker.now().Add(breakerOpenFor)
+	}
+	breaker.state[provider] = state
 }
 
 type ExternalVerifierHandler struct {
 	stateRoot string
 	client    *http.Client
 	service   *ExternalVerificationService
+	breaker   *externalBreaker
 }
 
 func NewExternalVerifierHandler(stateRoot string, client *http.Client, replays ExternalReplayStore,
@@ -44,7 +102,8 @@ func NewExternalVerifierHandler(stateRoot string, client *http.Client, replays E
 	}
 	service := &ExternalVerificationService{replays: replays, limit: limit, window: window, now: now,
 		usage: make(map[string]externalUsage)}
-	return &ExternalVerifierHandler{stateRoot: stateRoot, client: client, service: service}, nil
+	return &ExternalVerifierHandler{stateRoot: stateRoot, client: client, service: service,
+		breaker: &externalBreaker{state: make(map[ExternalProvider]breakerState), now: now}}, nil
 }
 
 func (handler *ExternalVerifierHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -71,21 +130,34 @@ func (handler *ExternalVerifierHandler) ServeHTTP(writer http.ResponseWriter, re
 		PolicyID: envelope.PolicyID, PolicyVersion: envelope.PolicyVersion, TenantID: envelope.TenantID,
 		SiteID: envelope.SiteID, Provider: envelope.Provider, AppID: envelope.AppID,
 	})
+	// 204 passed, 403 refused by the provider, 503 provider unavailable
+	// (not counted as a failed attempt by the engine).
 	if err != nil {
-		writer.WriteHeader(http.StatusForbidden)
+		writer.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	defer clear(credential.Secret)
 	verifier, err := NewHTTPExternalVerifier(handler.client, credential)
 	if err != nil {
-		writer.WriteHeader(http.StatusForbidden)
+		writer.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	defer clear(verifier.credential.Secret)
+	if !handler.breaker.allow(envelope.Provider) {
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	ctx, cancel := context.WithTimeout(request.Context(), 4*time.Second)
 	defer cancel()
 	_, err = handler.service.verifyWith(ctx, ExternalRequest{Provider: envelope.Provider, AppID: envelope.AppID,
-		Proof: envelope.Proof, ClientIP: envelope.ClientIP, SiteID: envelope.SiteID}, verifier)
+		Proof: envelope.Proof, ClientIP: envelope.ClientIP, SiteID: envelope.SiteID, Host: envelope.Host,
+		ScoreThreshold: envelope.ScoreThreshold}, verifier)
+	unavailable := errors.Is(err, ErrExternalUnavailable)
+	handler.breaker.record(envelope.Provider, unavailable)
+	if unavailable {
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		writer.WriteHeader(http.StatusForbidden)
 		return

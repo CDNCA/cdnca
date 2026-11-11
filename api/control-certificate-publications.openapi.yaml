@@ -178,6 +178,13 @@ components:
             Present on a succeeded unpublication that created no rollout: the
             site's certificate never reached a node, so there was nothing to
             remove. The publication and rollout fields are then absent.
+        recovered_by_rollout_id:
+          allOf: [{$ref: '#/components/schemas/CanonicalUUID'}]
+          description: >-
+            Present on a succeeded publication that had failed permanently and
+            was settled once the certificate redelivery rollout named here
+            carried the certificate to every node serving the site. The
+            publication and rollout fields are then absent.
     PublicationStatusEvent:
       type: object
       additionalProperties: false

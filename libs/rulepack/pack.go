@@ -433,6 +433,11 @@ func normalizeRule(pack Pack, rule Rule) (Rule, error) {
 			return Rule{}, errors.New("rule_id, comment, expires_at, host and port are assigned per site")
 		}
 		match := waf.Match
+		if edgeconfig.WAFMatchUsesV6Conditions(match) {
+			// string sets are tenant objects, and a pack states no WAF
+			// version: WAF v6 conditions are for bound security policies only
+			return Rule{}, errors.New("string set, browser, device and request time conditions are not available in rule packs")
+		}
 		if engine == EngineACL && (match.Method != "" || match.Path != nil || match.Header != nil || match.Inspect != nil) {
 			return Rule{}, errors.New("acl rules match only source_cidr, ja4 and ip_intel")
 		}

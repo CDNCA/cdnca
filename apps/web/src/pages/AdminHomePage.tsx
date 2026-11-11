@@ -900,7 +900,7 @@ function AdminHomePageContent({ owner, ownerKey, principal }: { owner: AdminDash
                   <DashboardInfoRows rows={[
                     { label: t('authorization.licensedNodes'), value: entitlement.node_limit === undefined ? t('values.placeholder') : formatQuota(entitlement.node_limit, locale) },
                     { label: t('authorization.currentNode'), value: data.resources.available ? formatNumber(data.resources.value.nodes_total, locale) : t('values.placeholder') },
-                    { label: t('authorization.expiresAt'), value: entitlement.expires_at ? formatAdminHomeDateTime(entitlement.expires_at, locale) : t('values.placeholder') },
+                    { label: t('authorization.expiresAt'), value: t('authorization.permanent') },
                     { label: t('authorization.operation'), value: <Button type="primary" size="small" className="dashboard-action-button"
                       loading={refreshEntitlementMutation.isPending || lockCheck.isPending}
                       onClick={() => checkEntitlement(entitlement)}>{t('entitlement.refresh')}</Button> },

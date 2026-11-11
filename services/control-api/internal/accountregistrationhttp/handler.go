@@ -61,6 +61,12 @@ type ProofReferenceResolver interface {
 	ResolveProofReference(*http.Request) (string, error)
 }
 
+// MultiProofReferenceResolver also returns the per-channel proof references
+// (several verifications required at once).
+type MultiProofReferenceResolver interface {
+	ResolveProofReferences(*http.Request) (string, map[string]string, error)
+}
+
 type ProofReferenceResolverFunc func(*http.Request) (string, error)
 
 func (function ProofReferenceResolverFunc) ResolveProofReference(request *http.Request) (string, error) {
@@ -206,10 +212,16 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 			return
 		}
 	}
-	proofReference, err := handler.proofs.ResolveProofReference(request)
-	if err != nil || len(proofReference) < 22 || len(proofReference) > 4096 ||
-		!registrationProofPattern.MatchString(proofReference) ||
-		strings.TrimSpace(proofReference) != proofReference {
+	var proofReference string
+	var proofReferences map[string]string
+	if multi, ok := handler.proofs.(MultiProofReferenceResolver); ok {
+		proofReference, proofReferences, err = multi.ResolveProofReferences(request)
+	} else {
+		proofReference, err = handler.proofs.ResolveProofReference(request)
+	}
+	if err != nil || proofReference == "" && len(proofReferences) == 0 || proofReference != "" && (len(proofReference) < 22 ||
+		len(proofReference) > 4096 || !registrationProofPattern.MatchString(proofReference) ||
+		strings.TrimSpace(proofReference) != proofReference) {
 		handler.writeError(response, request, http.StatusServiceUnavailable,
 			"account_registration_unavailable", requestID)
 		return
@@ -221,7 +233,7 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		Email: body.Email, Phone: body.Phone, TermsAccepted: body.TermsAccepted,
 		TermsVersion: body.TermsVersion, VerificationChannel: body.VerificationChannel,
 		IdempotencyKey: idempotencyKey, RequestID: requestID, Source: source.Unmap().String(),
-		ProofReference: proofReference,
+		ProofReference: proofReference, ProofReferences: proofReferences,
 	})
 	if err != nil {
 		handler.writeServiceError(response, request, requestID, err)

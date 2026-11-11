@@ -262,7 +262,6 @@ function JA4BlockWorkflowsContent({ owner, ownerKey }: { owner: Owner; ownerKey:
           <Descriptions size="small" bordered column={{ xs: 1, md: 2 }}>
             <Descriptions.Item label={t('fields.workflowId')}><Typography.Text copyable>{workflow.id}</Typography.Text></Descriptions.Item>
             <Descriptions.Item label={t('fields.ja4Sha256')}><Typography.Text copyable>{workflow.ja4_sha256}</Typography.Text></Descriptions.Item>
-            <Descriptions.Item label={t('fields.revision')}>{workflow.revision}</Descriptions.Item>
             {workflow.policy_id ? <Descriptions.Item label={t('fields.policyId')}><Typography.Text copyable>{workflow.policy_id}</Typography.Text></Descriptions.Item> : null}
             {workflow.policy_revision ? <Descriptions.Item label={t('fields.policyRevision')}>{workflow.policy_revision}</Descriptions.Item> : null}
             {workflow.binding_id ? <Descriptions.Item label={t('fields.bindingId')}><Typography.Text copyable>{workflow.binding_id}</Typography.Text></Descriptions.Item> : null}

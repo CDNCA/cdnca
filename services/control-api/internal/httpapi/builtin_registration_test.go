@@ -85,8 +85,10 @@ func TestBuiltInRegisterRoute(t *testing.T) {
 		stub.inputs[0].IdempotencyKey != "registration-key-1" {
 		t.Fatalf("inputs=%#v", stub.inputs)
 	}
-	if response := post(strings.Replace(valid, `,"captcha":{"id":"22222222-2222-4222-8222-222222222222","answer":"AB2CD"}`, "", 1), "registration-key-2"); response.Code != http.StatusUnprocessableEntity ||
-		!strings.Contains(response.Body.String(), "account_registration_captcha_invalid") {
+	// no CAPTCHA reaches the service, which requires it
+	// only when no verification is required (ErrCaptchaInvalid below).
+	if response := post(strings.Replace(valid, `,"captcha":{"id":"22222222-2222-4222-8222-222222222222","answer":"AB2CD"}`, "", 1), "registration-key-2"); response.Code != http.StatusAccepted ||
+		len(stub.inputs) != 2 || stub.inputs[1].Captcha.Answer != "" {
 		t.Fatalf("missing captcha: status=%d body=%s", response.Code, response.Body)
 	}
 	for _, item := range []struct {
@@ -95,6 +97,7 @@ func TestBuiltInRegisterRoute(t *testing.T) {
 		code   string
 	}{
 		{accountregistration.ErrCaptchaInvalid, http.StatusUnprocessableEntity, "account_registration_captcha_invalid"},
+		{accountregistration.ErrProofInvalid, http.StatusUnprocessableEntity, "account_registration_verification_required"},
 		{accountregistration.ErrRegistrationDisabled, http.StatusForbidden, "account_registration_disabled"},
 		{accountregistration.ErrContactVerificationUnavailable, http.StatusServiceUnavailable, "account_registration_verification_unavailable"},
 		{accountregistration.ErrIdempotencyConflict, http.StatusConflict, "account_registration_idempotency_conflict"},
@@ -121,5 +124,45 @@ func TestBuiltInRegistrationYieldsToMountedRuntime(t *testing.T) {
 	api.ServeHTTP(response, request)
 	if !called || len(stub.inputs) != 0 {
 		t.Fatalf("called=%v builtin=%d", called, len(stub.inputs))
+	}
+}
+
+type registrationConfigStub struct{ config RegistrationConfig }
+
+func (stub registrationConfigStub) RegistrationConfig(context.Context) (RegistrationConfig, error) {
+	return stub.config, nil
+}
+
+// the public registration config is always mounted; with
+// no source it reports registration closed.
+func TestRegistrationConfigEndpoint(t *testing.T) {
+	read := func(api http.Handler) map[string]any {
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/auth/registration-config", nil))
+		if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("status=%d body=%s", response.Code, response.Body)
+		}
+		var body struct {
+			Data map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return body.Data
+	}
+	closed := read(New(nil, nil, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32)}).Handler())
+	if closed["registration_enabled"] != false || closed["mode"] != "closed" {
+		t.Fatalf("closed=%v", closed)
+	}
+	open := read(New(nil, nil, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), RegistrationConfig: registrationConfigStub{RegistrationConfig{
+		RegistrationEnabled: true, Mode: "builtin", HumanCheck: "builtin_captcha", Ready: true,
+		Email: RegistrationChannel{Required: true, Available: true}, SMS: RegistrationChannel{Required: true, Available: false},
+	}}}).Handler())
+	email, sms := open["email"].(map[string]any), open["sms"].(map[string]any)
+	if open["mode"] != "builtin" || email["required"] != true || sms["available"] != false {
+		t.Fatalf("open=%v", open)
+	}
+	if recovery := open["recovery"].(map[string]any); recovery["channels"] == nil {
+		t.Fatalf("recovery channels must be a list: %v", recovery)
 	}
 }

@@ -434,6 +434,96 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/BadRequest'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/content-rewrite:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      operationId: getSiteContentRewrite
+      x-summary-zh: "读取网站的内容改写规则"
+      summary: Get the site's content rewrite rules
+      description: >-
+        Requires sites.read. 内容改写: link rewrite, text replace and
+        force HTTPS rules the node runs on the site's HTML, CSS and JavaScript
+        responses. A site without rules returns an empty list and the default
+        max_bytes. domains are the site's active names (https rules with
+        include_site_domains add them).
+      responses:
+        '200':
+          description: Current rules and the shared site version.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteContentRewriteState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    put:
+      operationId: replaceSiteContentRewrite
+      x-summary-zh: "替换网站的内容改写规则"
+      summary: Replace the site's content rewrite rules
+      description: >-
+        Requires sites.manage and a strong If-Match value for the shared site
+        version. The whole settings object is replaced; the update, automatic
+        edge publication request and the site.content_rewrite.update audit
+        event commit in one transaction. A refused rule answers 400
+        validation_error with details.field (e.g. rules[2].find) and reason.
+        A replayed request carries a stale version and gets 409. Publishing a
+        site with an enabled rule requires nodes with SITE_CONTENT_REWRITE.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteContentRewriteSettings'}
+      responses:
+        '200':
+          description: Updated state.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteContentRewriteState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/content-rewrite/test:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: testSiteContentRewrite
+      x-summary-zh: "用草稿规则试运行内容改写"
+      summary: Run draft content rewrite rules on a pasted body
+      description: >-
+        Requires sites.read. Runs the draft settings on one response (path,
+        content type, body up to 256 KiB) with the node's algorithm and the
+        site's real domains; nothing is stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteContentRewriteTestRequest'}
+      responses:
+        '200':
+          description: The body as the node would send it.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteContentRewriteTestResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /v1/sites/{id}/origin-status:
     parameters:
       - $ref: '#/components/parameters/SiteID'
@@ -1421,6 +1511,28 @@ components:
             escalation level B or above (shown again after the next publication once it is back
             at A). Omitted on create: on; omitted on update: unchanged. Audited as
             site.cache_status_header.update.
+        server_timing:
+          type: boolean
+          description: >-
+            Server-Timing 响应头: the node appends the Server-Timing entries cdn-cache, cdn-hit-layer,
+            cdn-connect and cdn-ttfb to the site's responses. Published off while the site is at
+            attack escalation level B or above. Omitted on create: off; omitted on update: unchanged.
+            Every node serving the site must declare capability SITE_SERVER_TIMING v1, otherwise the
+            publication is refused and the nodes are listed. Audited as site.server_timing.update.
+        rum:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [sample_percent]
+          description: >-
+            真实用户体验上报: the node injects a same-origin script
+            (/.cdnca/rum/v1.js) into the site's HTML documents and collects Web Vitals
+            (LCP, INP, CLS, FCP, TTFB) and resource / request errors of the sampled page views
+            (no query string, IP address or cookie). null is off. Omitted on create: off;
+            omitted on update: unchanged. Publishing requires nodes with SITE_RUM. Audited as
+            site.rum.update.
+          properties:
+            sample_percent: {type: integer, minimum: 1, maximum: 100, default: 10}
         enabled: {type: boolean}
         status: {$ref: '#/components/schemas/SiteStatus'}
         sync_status:
@@ -2096,6 +2208,82 @@ components:
         settings: {$ref: '#/components/schemas/SiteSchedule302Settings'}
         plain_http: {type: boolean}
         updated_at: {type: [string, 'null'], format: date-time}
+    SiteContentRewriteRule:
+      type: object
+      additionalProperties: false
+      required: [id, name, enabled, kind, paths, content_types]
+      description: >-
+        One rule; only the fields of its kind are set. link: from_hosts (1-20
+        host names without port) to to_host (optionally :port), scheme
+        keep|https|http. replace: find (1-256 bytes), replace (up to 1024
+        bytes; with regex, $0-$9 name groups and $$ is $). A regex is
+        restricted: ASCII, at most 256 bytes, no * + {n,} ^ $ \b, repetition
+        {m,n} with n up to 64 and not nested, longest match 512 bytes. https:
+        include_site_domains and/or hosts (exact or *.suffix, up to 50).
+      properties:
+        id: {type: string, pattern: '^[a-z0-9-]{1,32}$'}
+        name: {type: string, maxLength: 64}
+        enabled: {type: boolean}
+        kind: {type: string, enum: [link, replace, https]}
+        paths:
+          type: array
+          maxItems: 10
+          description: Prefixes, or patterns with * (the whole path must match); empty = every path.
+          items: {type: string, minLength: 1, maxLength: 256}
+        content_types:
+          type: array
+          items: {type: string, enum: [text/html, text/css, application/javascript]}
+        from_hosts: {type: array, maxItems: 20, items: {type: string}}
+        to_host: {type: string}
+        scheme: {type: string, enum: [keep, https, http]}
+        find: {type: string, maxLength: 256}
+        replace: {type: string, maxLength: 1024}
+        regex: {type: boolean}
+        ignore_case: {type: boolean}
+        include_site_domains: {type: boolean}
+        hosts: {type: array, maxItems: 50, items: {type: string}}
+    SiteContentRewriteSettings:
+      type: object
+      additionalProperties: false
+      required: [max_bytes, rules]
+      properties:
+        max_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 16777216
+          description: Bytes of a response rewritten (0 = 2 MiB, else 64 KiB to 16 MiB); the rest passes unchanged.
+        rules:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/SiteContentRewriteRule'}
+    SiteContentRewriteState:
+      type: object
+      additionalProperties: false
+      required: [site_id, version, settings, domains]
+      properties:
+        site_id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+        settings: {$ref: '#/components/schemas/SiteContentRewriteSettings'}
+        domains: {type: array, items: {type: string}}
+    SiteContentRewriteTestRequest:
+      type: object
+      additionalProperties: false
+      required: [settings, path, content_type, body]
+      properties:
+        settings: {$ref: '#/components/schemas/SiteContentRewriteSettings'}
+        path: {type: string, minLength: 1, maxLength: 2048}
+        content_type: {type: string}
+        body: {type: string, maxLength: 262144}
+    SiteContentRewriteTestResult:
+      type: object
+      additionalProperties: false
+      required: [body, matched_rules, replacements, truncated]
+      properties:
+        body: {type: string}
+        matched_rules: {type: array, items: {type: string}}
+        replacements: {type: integer, minimum: 0}
+        truncated: {type: boolean}
     ConditionalOriginState:
       type: object
       additionalProperties: false

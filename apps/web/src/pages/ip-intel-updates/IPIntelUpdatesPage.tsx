@@ -91,7 +91,6 @@ export default function IPIntelUpdatesPage() {
   const licensed = Boolean(data?.licensed)
 
   const library = (value: IPIntelLibrary | null) => value ? <Space wrap>
-    <Typography.Text>{t('libraries.revision', { revision: value.revision })}</Typography.Text>
     <Typography.Text type="secondary">{value.source_release}</Typography.Text>
     <Typography.Text type="secondary">{t('libraries.dataUpdated', { time: formatTime(value.data_updated_at) })}</Typography.Text>
     {!value.usable ? <Tag color="orange">{t('libraries.unusable')}</Tag> : null}

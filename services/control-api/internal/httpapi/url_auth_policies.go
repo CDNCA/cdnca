@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -47,7 +48,7 @@ func (s *Server) handleCreateURLAuthPolicy(w http.ResponseWriter, r *http.Reques
 		TargetScopeID: targetScopeID, OwnerUserID: ownerID, Fields: body.PolicyFields, IdempotencyKey: key, RequestID: requestID(r.Context()),
 	})
 	if err != nil {
-		s.writeError(w, r, err)
+		s.writeURLAuthError(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(result.Policy.Revision))
@@ -120,7 +121,40 @@ func (s *Server) handleUpdateURLAuthPolicy(w http.ResponseWriter, r *http.Reques
 	}
 	result, err := s.urlAuthPolicies.Update(r.Context(), urlAuthPolicyActor(principal), urlauthpolicy.UpdateRequest{ID: id, ExpectedRevision: revision, Fields: fields, IdempotencyKey: key, RequestID: requestID(r.Context())})
 	if err != nil {
-		s.writeError(w, r, err)
+		s.writeURLAuthError(w, r, err)
+		return
+	}
+	w.Header().Set("ETag", quoteVersion(result.Policy.Revision))
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleEnableURLAuthPolicy(w http.ResponseWriter, r *http.Request) {
+	s.setURLAuthPolicyEnabled(w, r, true)
+}
+
+func (s *Server) handleDisableURLAuthPolicy(w http.ResponseWriter, r *http.Request) {
+	s.setURLAuthPolicyEnabled(w, r, false)
+}
+
+// setURLAuthPolicyEnabled is the console's enable/disable action (no body;
+// If-Match and Idempotency-Key as PATCH): only the enabled state changes.
+func (s *Server) setURLAuthPolicyEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
+	principal, id, ok := s.urlAuthPolicyResource(w, r, "url_auth_policies.manage")
+	if !ok {
+		return
+	}
+	key, ok := s.idempotencyKey(w, r)
+	if !ok {
+		return
+	}
+	revision, err := parseIfMatch(r.Header.Get("If-Match"))
+	if err != nil {
+		s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "If-Match must contain a quoted positive version")
+		return
+	}
+	result, err := s.urlAuthPolicies.SetEnabled(r.Context(), urlAuthPolicyActor(principal), urlauthpolicy.StateRequest{ID: id, ExpectedRevision: revision, Enabled: enabled, IdempotencyKey: key, RequestID: requestID(r.Context())})
+	if err != nil {
+		s.writeURLAuthError(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(result.Policy.Revision))
@@ -143,7 +177,7 @@ func (s *Server) handleRotateURLAuthPolicy(w http.ResponseWriter, r *http.Reques
 	}
 	result, err := s.urlAuthPolicies.Rotate(r.Context(), urlAuthPolicyActor(principal), urlauthpolicy.RotateRequest{ID: id, ExpectedRevision: revision, IdempotencyKey: key, RequestID: requestID(r.Context())})
 	if err != nil {
-		s.writeError(w, r, err)
+		s.writeURLAuthError(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(result.Policy.Revision))
@@ -171,7 +205,7 @@ func (s *Server) handleRevokeURLAuthPolicyKey(w http.ResponseWriter, r *http.Req
 	}
 	result, err := s.urlAuthPolicies.Revoke(r.Context(), urlAuthPolicyActor(principal), urlauthpolicy.RevokeRequest{ID: id, KeyID: body.KeyID, ExpectedRevision: revision, IdempotencyKey: key, RequestID: requestID(r.Context())})
 	if err != nil {
-		s.writeError(w, r, err)
+		s.writeURLAuthError(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(result.Policy.Revision))
@@ -214,6 +248,18 @@ func (s *Server) requireURLAuthPolicyPermission(w http.ResponseWriter, r *http.R
 		return identity.Principal{}, false
 	}
 	return principal, true
+}
+
+// writeURLAuthError: a write of an enabled policy without the edge
+// publication runtime (urlauthpolicy.ErrPublicationUnavailable) is refused
+// as url_auth_unavailable: a policy shown as enabled would otherwise leave
+// the site unprotected. Anything else as writeError.
+func (s *Server) writeURLAuthError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, urlauthpolicy.ErrPublicationUnavailable) {
+		s.writeAPIError(w, r, http.StatusUnprocessableEntity, "url_auth_unavailable", "URL 鉴权尚未在节点生效，暂不可用")
+		return
+	}
+	s.writeError(w, r, err)
 }
 
 func urlAuthPolicyActor(principal identity.Principal) urlauthpolicy.Actor {

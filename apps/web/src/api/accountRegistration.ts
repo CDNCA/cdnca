@@ -284,7 +284,36 @@ async function registerBuiltIn(
   return parseRegistrationResult(await response.json().catch(() => null))
 }
 
+/** GET /v1/auth/registration-config (null: unreadable). */
+export interface AccountRegistrationConfig {
+  mode: AccountRegistrationMode
+  ready: boolean
+  email: { required: boolean, available: boolean }
+  sms: { required: boolean, available: boolean }
+}
+
+async function registrationConfig(signal?: AbortSignal): Promise<AccountRegistrationConfig | null> {
+  try {
+    const response = await fetch(`${apiRoot}/v1/auth/registration-config`, { method: 'GET', credentials: 'omit', cache: 'no-store', signal })
+    if (!response.ok) return null
+    const body = await response.json().catch(() => null) as { data?: AccountRegistrationConfig } | null
+    return body?.data && typeof body.data === 'object' ? body.data : null
+  } catch {
+    return null
+  }
+}
+
+/** The channels the console page may offer: the required and sendable ones,
+ * else (nothing required) every sendable one. */
+export function registrationChannels(config: AccountRegistrationConfig | null): AccountRegistrationVerificationChannel[] {
+  if (!config) return ['email', 'sms']
+  const all: AccountRegistrationVerificationChannel[] = ['email', 'sms']
+  const required = all.filter((channel) => config[channel].required)
+  return (required.length ? required : all).filter((channel) => config[channel].available)
+}
+
 export const accountRegistrationApi = {
+  registrationConfig,
   registrationMode,
   registerBuiltIn,
   createChallenge,

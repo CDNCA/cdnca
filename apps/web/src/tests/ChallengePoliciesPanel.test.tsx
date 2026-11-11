@@ -236,14 +236,19 @@ describe('ChallengePoliciesPanel', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('requires write-only external references again when editing an external policy', async () => {
+  it('keeps the stored external secret when editing an external policy', async () => {
     authenticate(['challenge_policies.read', 'challenge_policies.manage'])
     const externalPolicy: ChallengePolicy = {
       ...policy,
       mode: 'external',
       external_provider_configured: true,
+      external_provider_summary: { provider: 'tencent', unavailable: 'builtin' },
     }
     vi.spyOn(challengePoliciesApi, 'list').mockResolvedValue({ items: [externalPolicy] })
+    vi.spyOn(challengePoliciesApi, 'externalCredential').mockResolvedValue({
+      provider: 'tencent', app_id: '2060000000', environment: 'production', secret_configured: true, revision: 1,
+    })
+    const putCredential = vi.spyOn(challengePoliciesApi, 'putExternalCredential')
     const update = vi.spyOn(challengePoliciesApi, 'update').mockResolvedValue({ ...externalPolicy, revision: 4 })
     const user = userEvent.setup()
     renderWithProviders(<SecurityPoliciesPage kind="cc" />, ['/site/cc-rule'])
@@ -251,25 +256,22 @@ describe('ChallengePoliciesPanel', () => {
     await user.click(await screen.findByRole('button', { name: '编辑 app.example.com' }))
     const dialog = screen.getByRole('dialog', { name: '编辑挑战策略' })
 
-    expect(within(dialog).queryByText('极验 v4')).not.toBeInTheDocument()
+    await waitFor(() => expect(within(dialog).getByLabelText('App ID')).toHaveValue('2060000000'))
+    expect(within(dialog).getByLabelText('Secret')).toHaveAttribute('placeholder', '已配置，留空不修改')
     await user.type(within(dialog).getByLabelText('密钥引用'), 'keyref:challenge-primary')
     const ttl = within(dialog).getByLabelText('挑战有效期（秒）')
     await user.clear(ttl)
     await user.type(ttl, '61')
-    await user.click(within(dialog).getByRole('button', { name: '保存' }))
-    expect(update).not.toHaveBeenCalled()
-
-    await user.click(within(dialog).getByLabelText('外部提供商'))
-    await user.click(await screen.findByText('腾讯云验证码'))
-    await user.type(within(dialog).getByLabelText('应用引用'), 'appref:tencent-primary')
     await user.click(within(dialog).getByRole('button', { name: '保存' }))
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
     expect(update.mock.calls[0][4]).toMatchObject({
       mode: 'external',
       challenge_ttl_seconds: 61,
-      external_provider: { provider: 'tencent', app_reference: 'appref:tencent-primary' },
+      external_provider: { provider: 'tencent' },
     })
+    expect(update.mock.calls[0][4].external_provider).not.toHaveProperty('app_reference')
+    expect(putCredential).not.toHaveBeenCalled()
   })
 
   it('accepts a 253-byte ASCII hostname and blocks 254 bytes before create', async () => {
@@ -492,17 +494,17 @@ describe('ChallengePoliciesPanel', () => {
     await user.type(within(dialog).getByLabelText('密钥引用'), 'keyref:mutation-cache-secret')
     await user.click(within(dialog).getByLabelText('挑战模式'))
     await user.click(await screen.findByText('外部验证'))
-    await user.click(within(dialog).getByLabelText('外部提供商'))
-    await user.click(await screen.findByText('腾讯云验证码'))
-    await user.type(within(dialog).getByLabelText('应用引用'), 'appref:mutation-cache-secret')
+    await user.click(within(dialog).getByLabelText('腾讯云验证码'))
+    await user.type(within(dialog).getByLabelText('App ID'), '2060000000')
+    await user.type(within(dialog).getByLabelText('Secret'), 'provider-secret-mutation-cache')
     await user.click(within(dialog).getByRole('button', { name: '保存' }))
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
 
     expect(serializedMutationCache(queryClient)).not.toContain('keyref:mutation-cache-secret')
-    expect(serializedMutationCache(queryClient)).not.toContain('appref:mutation-cache-secret')
+    expect(serializedMutationCache(queryClient)).not.toContain('provider-secret-mutation-cache')
     rendered.unmount()
     await act(async () => {
-      resolveCreate({ ...policy, mode: 'external', external_provider_configured: true, revision: 1 })
+      resolveCreate({ ...policy, mode: 'external', external_provider_configured: true, external_provider_summary: { provider: 'tencent', unavailable: 'builtin' }, revision: 1 })
       await pendingCreate
     })
     await waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(0))

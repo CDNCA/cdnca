@@ -10,9 +10,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -40,8 +40,10 @@ type eventIdentity struct {
 }
 
 type preparedRecord struct {
-	frame  []byte
-	record Record
+	frame   []byte
+	record  pendingRecord
+	stored  Record // decoded from the stored payload, for the recent cache
+	decoded bool
 }
 
 const maxConnectionsQueueEntries = 256
@@ -85,9 +87,20 @@ type Spool struct {
 	connectionsPath string
 	device          uint64
 	ack             ackState
-	pending         []Record
-	eventIDs        map[string]eventIdentity
+	pending         []pendingRecord
+	eventIDs        map[string]uint64
 	tenantBytes     map[string]int64
+	tenantNames     map[string]string
+	oldest          []uint64
+	indexPeak       int
+	indexed         bool
+	fullRebuilds    int // index rebuilt from every segment (tests)
+	recent          []Record
+	recentBytes     int64
+	failure         atomic.Value // string: why the index cannot be built ("" = none)
+	failedScan      string       // segments as they were when that failed
+	failedErr       error
+	ackCorrupt      bool // ack.json unreadable: nothing is published until it is repaired
 	metas           []segmentMeta
 	segmentCache    map[string]cachedSegment
 	nextSequence    uint64
@@ -133,17 +146,63 @@ func New(config Config) (*Spool, error) {
 		return nil, err
 	}
 	defer unlock()
-	if err := spool.loadAckLocked(); err != nil {
-		return nil, err
-	}
-	if _, err := spool.loadConnectionsStateLocked(); err != nil {
+	spool.failure.Store("")
+	// An unsafe ack.json (link, mode, size) stays fatal like an unsafe root;
+	// unreadable contents are reported by the first operation.
+	if err := spool.loadAckLocked(); err != nil && !errors.Is(err, ErrCorruptState) {
 		return nil, err
 	}
 	spool.loadAlertLocked()
-	if err := spool.rebuildLocked(true); err != nil {
-		return nil, err
-	}
+	// The segments are not read here: the Agent builds the
+	// spool before it hands OpenResty its configuration, and reading a large
+	// backlog kept the node from serving. The first locked operation (in the
+	// telemetry goroutine) builds the index; a corrupt segment is reported
+	// there (FailureCode) and the node keeps serving. The connections state
+	// is checked by the calls that use it.
 	return spool, nil
+}
+
+// FailureCode is the node health code while the spool cannot be read
+// (TELEMETRY_SPOOL_CORRUPT, TELEMETRY_SPOOL_UNAVAILABLE), "" otherwise. It does
+// not wait for the spool lock.
+func (s *Spool) FailureCode() string {
+	code, _ := s.failure.Load().(string)
+	return code
+}
+
+func spoolFailureCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrCorruptState), errors.Is(err, ErrUnsafePath):
+		return "TELEMETRY_SPOOL_CORRUPT"
+	default:
+		return "TELEMETRY_SPOOL_UNAVAILABLE"
+	}
+}
+
+// scanSignatureLocked names the segments and the ack as they are now, so an
+// unchanged corrupt spool is not read again on every retry.
+func (s *Spool) scanSignatureLocked() string {
+	entries, err := os.ReadDir(s.segmentsDir)
+	if err != nil {
+		return ""
+	}
+	var signature strings.Builder
+	fmt.Fprintf(&signature, "ack=%d;", s.ack.Sequence)
+	for _, entry := range entries {
+		info, err := os.Lstat(filepath.Join(s.segmentsDir, entry.Name()))
+		if err != nil {
+			return ""
+		}
+		stat, _ := infoSys(info)
+		changedSec, changedNSec := int64(0), int64(0)
+		if stat != nil {
+			changedSec, changedNSec = statChangeTime(stat)
+		}
+		fmt.Fprintf(&signature, "%s:%d:%d:%d.%d;", entry.Name(), info.Size(), info.ModTime().UnixNano(), changedSec, changedNSec)
+	}
+	return signature.String()
 }
 
 func (s *Spool) loadConnectionsStateLocked() (connectionsState, error) {
@@ -388,10 +447,10 @@ func (s *Spool) AppendBatch(ctx context.Context, envelopes []Envelope) ([]Append
 		}
 		digest := contentDigest(envelope)
 		if existing, found := s.eventIDs[envelope.EventID]; found {
-			if existing.digest != digest {
+			if at, _ := s.pendingIndexLocked(existing); s.pending[at].digest != digest {
 				return nil, ErrConflict
 			}
-			results[index] = AppendResult{EventID: envelope.EventID, Sequence: existing.sequence, Duplicate: true}
+			results[index] = AppendResult{EventID: envelope.EventID, Sequence: existing, Duplicate: true}
 			continue
 		}
 		if existing, found := batchIDs[envelope.EventID]; found {
@@ -419,6 +478,9 @@ func (s *Spool) AppendBatch(ctx context.Context, envelopes []Envelope) ([]Append
 		}
 		frame := encodeFrame(payload)
 		frameBytes := int64(len(frame))
+		// Published records come from the stored bytes (as when they were
+		// read back from the segment), never from the offered envelope.
+		stored, decodeErr := decodeEncodedEnvelope(frame[recordHeaderSize:])
 		headerBytes := int64(0)
 		if virtualOpenSize == 0 || (virtualOpenRecords > 0 && virtualOpenSize+frameBytes > s.config.MaxSegmentBytes) {
 			headerBytes = segmentHeaderSize
@@ -445,10 +507,13 @@ func (s *Spool) AppendBatch(ctx context.Context, envelopes []Envelope) ([]Append
 		batchIDs[envelope.EventID] = identity
 		batchTenantBytes[envelope.TenantID] += frameBytes
 		results[index] = AppendResult{EventID: envelope.EventID, Sequence: next}
-		prepared = append(prepared, preparedRecord{frame: frame, record: Record{
-			Sequence: next, EventID: envelope.EventID, TenantID: envelope.TenantID,
-			NodeID: envelope.NodeID, Type: envelope.Type, OccurredAt: envelope.OccurredAt,
-			Payload: payload, Size: frameBytes, digest: digest, envelope: envelope,
+		prepared = append(prepared, preparedRecord{frame: frame, record: pendingRecord{
+			sequence: next, eventID: envelope.EventID, tenantID: envelope.TenantID,
+			occurredAt: envelope.OccurredAt, size: frameBytes, digest: digest,
+		}, decoded: decodeErr == nil, stored: Record{
+			Sequence: stored.Sequence, EventID: stored.EventID, TenantID: stored.TenantID,
+			NodeID: stored.NodeID, Type: stored.Type, OccurredAt: stored.OccurredAt,
+			Payload: frame[recordHeaderSize:], Size: frameBytes, digest: digest, envelope: stored,
 		}})
 		total += frameBytes
 		if headerBytes > 0 {
@@ -623,8 +688,9 @@ func (s *Spool) FlushConnections(ctx context.Context, publisher Publisher, maxim
 }
 
 func shouldSampleOut(envelope Envelope, config Config) bool {
-	if envelope.Type == EventAccessWindow || envelope.Type == EventSubscriptionMinute || envelope.Type == EventL4Checkpoint {
-		return false // billed usage, never sampled
+	if envelope.Type == EventAccessWindow || envelope.Type == EventSubscriptionMinute || envelope.Type == EventL4Checkpoint ||
+		envelope.Type == EventRUMMinute {
+		return false // billed usage (and RUM, sampled by the browser), never sampled
 	}
 	every := config.AccessSampleEvery
 	if envelope.Type == EventSecurity {
@@ -670,7 +736,7 @@ func (s *Spool) appendPreparedLocked(values []preparedRecord) error {
 			currentMeta = nil
 		}
 		if currentMeta == nil {
-			created, err := s.createOpenSegmentLocked(value.record.Sequence)
+			created, err := s.createOpenSegmentLocked(value.record.sequence)
 			if err != nil {
 				return err
 			}
@@ -691,9 +757,26 @@ func (s *Spool) appendPreparedLocked(values []preparedRecord) error {
 		if _, err := current.Write(value.frame); err != nil {
 			return err
 		}
+		record := value.record
+		record.offset = currentMeta.size
 		currentMeta.size += int64(len(value.frame))
-		currentMeta.max = value.record.Sequence
+		currentMeta.max = record.sequence
 		currentMeta.records++
+		// The written frame is already verified: index it and advance the
+		// cached open segment so the next scan does not read it back.
+		if cached, ok := s.segmentCache[currentMeta.name]; ok && cached.meta.open {
+			cached.meta = *currentMeta
+			cached.key.size = currentMeta.size
+			s.segmentCache[currentMeta.name] = cached
+		}
+		if err := s.pushPendingLocked(record); err != nil {
+			return err
+		}
+		if value.decoded {
+			s.pushRecentLocked(value.stored)
+		} else {
+			s.recent, s.recentBytes = nil, 0
+		}
 	}
 	return closeCurrent()
 }
@@ -735,6 +818,15 @@ func (s *Spool) createOpenSegmentLocked(start uint64) (segmentMeta, error) {
 	ok = true
 	meta := segmentMeta{path: path, name: filepath.Base(path), start: start, size: segmentHeaderSize, open: true}
 	s.metas = append(s.metas, meta)
+	if info, err := os.Lstat(path); err == nil {
+		if stat, statOK := infoSys(info); statOK {
+			if s.segmentCache == nil {
+				s.segmentCache = make(map[string]cachedSegment)
+			}
+			s.segmentCache[meta.name] = cachedSegment{meta: meta, key: sealedSegmentKey{
+				device: uint64(stat.Dev), inode: uint64(stat.Ino), size: meta.size}}
+		}
+	}
 	return meta, nil
 }
 
@@ -763,75 +855,128 @@ func (s *Spool) sealOpenSegmentLocked(meta segmentMeta) error {
 	return syncDirectory(s.segmentsDir)
 }
 
+// rebuildLocked refreshes the segment list and the pending index from disk.
+// Unchanged segments are not read again; when the index cannot be reconciled
+// with what is on disk, every segment is read and the index rebuilt.
 func (s *Spool) rebuildLocked(cleanup bool) error {
-	records, metas, total, err := s.scanSegmentsLocked(true)
-	if err != nil {
-		return err
-	}
-	if cleanup {
-		removed := false
-		kept := metas[:0]
-		for _, meta := range metas {
-			if meta.records > 0 && meta.max <= s.ack.Sequence {
-				if err := os.Remove(meta.path); err != nil {
-					return fmt.Errorf("remove acknowledged event segment: %w", err)
+	for {
+		full := !s.indexed
+		signature := ""
+		if full {
+			if s.failedScan != "" {
+				// Retries of a failed read (worker backoff, every tail
+				// round) must not read the whole spool each time.
+				if signature = s.scanSignatureLocked(); signature == s.failedScan {
+					s.failure.Store(spoolFailureCode(s.failedErr))
+					return s.failedErr
 				}
-				total -= meta.size
-				removed = true
-				continue
 			}
-			kept = append(kept, meta)
+			clear(s.segmentCache)
+			s.fullRebuilds++
 		}
-		metas = kept
-		if removed {
-			if err := syncDirectory(s.segmentsDir); err != nil {
+		records, metas, total, err := s.scanSegmentsLocked(true)
+		if err != nil {
+			if full {
+				s.failIndexLocked(err, signature)
+			}
+			return err
+		}
+		if cleanup {
+			removed := false
+			kept := metas[:0]
+			for _, meta := range metas {
+				if meta.records > 0 && meta.max <= s.ack.Sequence {
+					if err := os.Remove(meta.path); err != nil {
+						return fmt.Errorf("remove acknowledged event segment: %w", err)
+					}
+					total -= meta.size
+					removed = true
+					continue
+				}
+				kept = append(kept, meta)
+			}
+			metas = kept
+			if removed {
+				if err := syncDirectory(s.segmentsDir); err != nil {
+					return err
+				}
+			}
+		}
+		if full {
+			if err := s.resetIndexLocked(records); err != nil {
+				s.indexed = false
+				s.failIndexLocked(err, signature)
 				return err
 			}
-		}
-	}
-	s.pending = s.pending[:0]
-	s.eventIDs = make(map[string]eventIdentity)
-	s.tenantBytes = make(map[string]int64)
-	maxSequence := s.ack.Sequence
-	for _, record := range records {
-		if record.Sequence > maxSequence {
-			maxSequence = record.Sequence
-		}
-		if record.Sequence <= s.ack.Sequence {
+			s.failedScan = ""
+			s.failure.Store("")
+		} else if !s.mergeIndexLocked(records, metas) {
+			s.indexed = false
 			continue
 		}
-		identity := eventIdentity{digest: record.digest, sequence: record.Sequence}
-		if existing, duplicate := s.eventIDs[record.EventID]; duplicate && existing != identity {
-			return ErrCorruptState
+		maxSequence := s.ack.Sequence
+		for _, meta := range metas {
+			if meta.records > 0 && meta.max > maxSequence {
+				maxSequence = meta.max
+			}
 		}
-		s.eventIDs[record.EventID] = identity
-		s.tenantBytes[record.TenantID] += record.Size
-		s.pending = append(s.pending, record)
+		s.metas = metas
+		s.segmentBytes = total
+		if total > s.peakBytes {
+			s.peakBytes = total
+		}
+		s.nextSequence = maxSequence + 1
+		return nil
 	}
-	s.metas = metas
-	s.segmentBytes = total
-	if total > s.peakBytes {
-		s.peakBytes = total
-	}
-	s.nextSequence = maxSequence + 1
-	return nil
 }
 
+func (s *Spool) failIndexLocked(err error, signature string) {
+	s.failure.Store(spoolFailureCode(err))
+	s.failedScan, s.failedErr = "", err
+	if errors.Is(err, ErrCorruptState) || errors.Is(err, ErrUnsafePath) {
+		if signature == "" {
+			signature = s.scanSignatureLocked()
+		}
+		s.failedScan = signature
+	}
+}
+
+// loadAckLocked reads ack.json. While its contents cannot be read the spool
+// does not know which events the control plane already has: every operation
+// that would append, index or publish returns ErrCorruptState (no duplicate
+// upload) and FailureCode reports TELEMETRY_SPOOL_ACK_CORRUPT; once the file
+// is readable again the index is rebuilt against it.
 func (s *Spool) loadAckLocked() error {
-	var ack ackState
-	exists, err := readStateJSON(s.ackPath, &ack, s.device)
+	ack, err := s.readAckLocked()
+	if errors.Is(err, ErrCorruptState) {
+		s.ackCorrupt = true
+		s.failure.Store("TELEMETRY_SPOOL_ACK_CORRUPT")
+		return err
+	}
 	if err != nil {
 		return err
 	}
-	if !exists {
-		s.ack = ackState{SchemaVersion: SchemaVersion}
-		return nil
-	}
-	if ack.SchemaVersion != SchemaVersion || (ack.Sequence == 0) != (ack.EventID == "") || (ack.Sequence > 0 && !idPattern.MatchString(ack.EventID)) {
-		return ErrCorruptState
+	if s.ackCorrupt {
+		s.ackCorrupt, s.indexed = false, false
+		s.failure.Store("")
 	}
 	s.ack = ack
 	return nil
+}
+
+func (s *Spool) readAckLocked() (ackState, error) {
+	var ack ackState
+	exists, err := readStateJSON(s.ackPath, &ack, s.device)
+	if err != nil {
+		return ackState{}, err
+	}
+	if !exists {
+		return ackState{SchemaVersion: SchemaVersion}, nil
+	}
+	if ack.SchemaVersion != SchemaVersion || (ack.Sequence == 0) != (ack.EventID == "") || (ack.Sequence > 0 && !idPattern.MatchString(ack.EventID)) {
+		return ackState{}, ErrCorruptState
+	}
+	return ack, nil
 }
 
 func (s *Spool) loadAlertLocked() {
@@ -883,8 +1028,8 @@ func (s *Spool) ackThroughLocked(sequence uint64, eventID string) error {
 		}
 		return nil
 	}
-	index := sort.Search(len(s.pending), func(index int) bool { return s.pending[index].Sequence >= sequence })
-	if index == len(s.pending) || s.pending[index].Sequence != sequence || s.pending[index].EventID != eventID || len(s.pending) == 0 || s.pending[0].Sequence != s.ack.Sequence+1 {
+	index, found := s.pendingIndexLocked(sequence)
+	if !found || s.pending[index].eventID != eventID || s.pending[0].sequence != s.ack.Sequence+1 {
 		return ErrAckOrder
 	}
 	ack := ackState{SchemaVersion: SchemaVersion, Sequence: sequence, EventID: eventID}
@@ -911,18 +1056,7 @@ func (s *Spool) ackThroughLocked(sequence uint64, eventID string) error {
 			return err
 		}
 	}
-	pending := s.pending[:0]
-	s.eventIDs = make(map[string]eventIdentity)
-	s.tenantBytes = make(map[string]int64)
-	for _, record := range s.pending {
-		if record.Sequence <= sequence {
-			continue
-		}
-		s.eventIDs[record.EventID] = eventIdentity{digest: record.digest, sequence: record.Sequence}
-		s.tenantBytes[record.TenantID] += record.Size
-		pending = append(pending, record)
-	}
-	s.pending = pending
+	s.trimPendingLocked(sequence)
 	return nil
 }
 
@@ -946,12 +1080,7 @@ func (s *Spool) nextBatch(ctx context.Context, maximum int) ([]Record, error) {
 	if len(s.pending) < maximum {
 		maximum = len(s.pending)
 	}
-	result := make([]Record, maximum)
-	for index := range result {
-		result[index] = s.pending[index]
-		result[index].Payload = append([]byte(nil), s.pending[index].Payload...)
-	}
-	return result, nil
+	return s.readPendingLocked(maximum)
 }
 
 func (s *Spool) Flush(ctx context.Context, publisher Publisher, maximum int) (PublishResult, error) {
@@ -1092,20 +1221,15 @@ func (s *Spool) Stats() (Stats, error) {
 	}, nil
 }
 
-func (s *Spool) oldestOccurredAtLocked() time.Time {
-	var oldest time.Time
-	for _, record := range s.pending {
-		if oldest.IsZero() || record.OccurredAt.Before(oldest) {
-			oldest = record.OccurredAt
-		}
-	}
-	return oldest
-}
-
 func readStateJSON(path string, target any, device uint64) (bool, error) {
 	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
+	}
+	if errors.Is(err, syscall.ELOOP) {
+		// A symbolic link (O_NOFOLLOW) is unsafe, not corrupt: an unsafe
+		// ack.json stays fatal.
+		return false, ErrUnsafePath
 	}
 	if err != nil {
 		return false, ErrCorruptState

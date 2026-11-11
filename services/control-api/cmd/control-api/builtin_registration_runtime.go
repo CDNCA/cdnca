@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
@@ -23,6 +21,7 @@ func openBuiltInRegistration(
 	if err != nil {
 		return nil, err
 	}
-	key := sha256.Sum256(append([]byte("cdnca.account-registration.builtin.v1\x00"), accessSecret...))
-	return accountregistration.NewBuiltInService(store, settings, identityService, key[:])
+	// The challenge service of built-in verification uses the same key, so
+	// their subject digests agree (builtInRegistrationKey).
+	return accountregistration.NewBuiltInService(store, settings, identityService, builtInRegistrationKey(accessSecret, ""))
 }

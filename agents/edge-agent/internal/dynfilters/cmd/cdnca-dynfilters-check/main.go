@@ -1178,6 +1178,9 @@ func main() {
 		if want("errorpage") {
 			checkErrorPages(n)
 		}
+		if want("servertiming") {
+			checkServerTiming(n)
+		}
 		checkLog()
 	}
 	n.stop()
