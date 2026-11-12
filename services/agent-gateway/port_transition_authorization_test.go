@@ -114,15 +114,22 @@ func TestGatewayPortTransitionAuthorizationRequiresNegotiatedCapability(t *testi
 func TestGatewayPortTransitionAuthorizationEnablesInitiallyDeniedSession(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "subscribe", true: "subscribe failure"}[fail], func(t *testing.T) {
+			fastDeliveryRetry(t, 6)
 			s := newPortAuthorizationSession(t, "timer", false, true)
 			reply := portTestReceive(t, s.control.refreshes)
 			s.bus.failSubscribe.Store(fail)
 			reply <- s.authorization(controlv1.NodeAdministrativeState_NODE_ADMINISTRATIVE_STATE_ACTIVE)
 			if fail {
-				portTestReceive(t, s.done)
-				if status.Code(s.err) != codes.Unavailable {
-					t.Fatalf("failed subscription = %v", s.err)
+				// 订阅失败不再断开会话：退避后重新刷新授权，第二次成功即启用。
+				select {
+				case <-s.done:
+					t.Fatalf("session ended by a failed subscription: %v", s.err)
+				case <-time.After(100 * time.Millisecond):
 				}
+				s.bus.failSubscribe.Store(false)
+				reply = portTestReceive(t, s.control.refreshes)
+				reply <- s.authorization(controlv1.NodeAdministrativeState_NODE_ADMINISTRATIVE_STATE_ACTIVE)
+				portTestReceive(t, s.bus.subscribed)
 				return
 			}
 			portTestReceive(t, s.bus.subscribed)

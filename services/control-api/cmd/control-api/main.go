@@ -2998,6 +2998,10 @@ func runServer() error {
 		return fmt.Errorf("initialize HTTP API: %w", err)
 	}
 	readinessProbes := []readinessProbe{edgeRuntime, controlRuntime, identitySessionRuntime}
+	if presence != nil {
+		// A heartbeat fetch failing for 30 s or more is shown by the health check; the loop keeps retrying.
+		readinessProbes = append(readinessProbes, presence)
+	}
 	if siteStatusRecoveryRuntime != nil {
 		readinessProbes = append(readinessProbes, siteStatusRecoveryRuntime)
 	}

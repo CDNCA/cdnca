@@ -1401,7 +1401,6 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		sessionStarted := time.Now()
 		// Bound each blocking dial so a long gateway outage cannot leave the
 		// agent inside gRPC's growing internal backoff; MaximumBackoff then
 		// bounds reconnect latency once the gateway is reachable again.
@@ -1450,7 +1449,9 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		stableSession := established && time.Since(sessionStarted) >= c.config.MaximumBackoff
+		// 会话曾经建立过（网关可达）就把退避复位，只有握手前的连续失败才翻倍，
+		// 避免一次短暂断线后要等到 30 秒才重连、主控误判节点离线。
+		stableSession := established
 		if stableSession {
 			backoff = c.config.InitialBackoff
 		}
@@ -1946,8 +1947,12 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			cacheInFlight[item] = true
 		}
 	}
-	heartbeatTicker := time.NewTicker(gatewayHello.HeartbeatIntervalDuration.AsDuration())
+	// 会话建立后立即发首个心跳（ticker 先以 1ms 触发一次，随后复位为握手给定的间隔），
+	// 让主控在重连后马上刷新 last_seen_at。只在建立连接时多发一次，不在请求路径上。
+	heartbeatInterval := gatewayHello.HeartbeatIntervalDuration.AsDuration()
+	heartbeatTicker := time.NewTicker(time.Millisecond)
 	defer heartbeatTicker.Stop()
+	firstHeartbeatPending := true
 	livePoll, stopLivePoll := c.liveCapabilityPoll()
 	defer stopLivePoll()
 	var heartbeatSequence uint64
@@ -2613,6 +2618,10 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				return true, fmt.Errorf("%w: unexpected gateway payload", ErrInvalidMessage)
 			}
 		case <-heartbeatTicker.C:
+			if firstHeartbeatPending {
+				firstHeartbeatPending = false
+				heartbeatTicker.Reset(heartbeatInterval)
+			}
 			now := time.Now()
 			for _, event := range heartbeatEvents {
 				if now.Sub(event.sentAt) >= gatewayHello.OfflineAfterDuration.AsDuration() {
@@ -2869,6 +2878,12 @@ func (c *Client) sendACMEHTTP01OverlayRecordStatuses(stream grpc.BidiStreamingCl
 }
 
 func (c *Client) agentHello() (*agentv1.AgentHello, error) {
+	return c.buildAgentHello(true)
+}
+
+// buildAgentHello 的 recordDeclared=false 用于心跳：心跳只读取 hello 里的运行状态，
+// 不能把“当前就绪状态”覆盖成“本会话握手时声明的状态”，否则实时能力变化检测会被心跳掩盖。
+func (c *Client) buildAgentHello(recordDeclared bool) (*agentv1.AgentHello, error) {
 	snapshot, err := c.stableScopedSnapshot()
 	if err != nil {
 		return nil, err
@@ -2999,8 +3014,12 @@ func (c *Client) agentHello() (*agentv1.AgentHello, error) {
 		}
 		ipIntelDeclared = ipIntelDeclared || capability.Name == agentv1.CapabilityName_CAPABILITY_NAME_IP_INTEL
 	}
-	c.declaredIPIntel.Store(ipIntelDeclared)
-	c.declareLiveCapability(capabilities)
+	if recordDeclared {
+		c.declaredIPIntel.Store(ipIntelDeclared)
+		c.declareLiveCapability(capabilities)
+	} else {
+		c.declareLiveCapabilityReadOnly(capabilities)
+	}
 	hello := &agentv1.AgentHello{
 		NodeId: c.config.NodeID, BootId: c.config.BootID,
 		SupportedProtocolVersions: c.config.SupportedVersions,
@@ -3060,7 +3079,7 @@ func (c *Client) heartbeat(epoch, sequence uint64, activeIdentityCapability ...b
 func (c *Client) heartbeatWithContext(ctx context.Context, epoch, sequence uint64, activeIdentityCapability ...bool) (*agentv1.Heartbeat, error) {
 	activeIdentityEnabled := len(activeIdentityCapability) >= 1 && activeIdentityCapability[0]
 	multiTenantEnabled := activeIdentityEnabled && len(activeIdentityCapability) >= 2 && activeIdentityCapability[1]
-	hello, err := c.agentHello()
+	hello, err := c.buildAgentHello(false)
 	if err != nil {
 		return nil, err
 	}

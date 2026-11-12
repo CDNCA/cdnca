@@ -942,6 +942,12 @@ func (s *Store) deleteTx(ctx context.Context, tx pgx.Tx, actor Actor, request De
 				return err
 			}
 		}
+		// sitedel-500: the sites trigger advances the scope revision, so take the
+		// scope row before the site row like an edge publication does; the
+		// reverse order deadlocked (40P01) against a concurrent publication.
+		if err := lockEdgeConfigurationScope(ctx, tx, targetScopeID); err != nil {
+			return err
+		}
 		scopeID, deleted, _, locked, _, err := s.lockSite(ctx, tx, actor, request.ID)
 		if err != nil {
 			return err

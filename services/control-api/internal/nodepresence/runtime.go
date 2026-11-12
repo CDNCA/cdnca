@@ -36,15 +36,41 @@ type RuntimeConfig struct {
 	OfflineBatchSize     int
 }
 
+// heartbeatConsumer is the part of NATSConsumer the runtime loop uses.
+type heartbeatConsumer interface {
+	Next(context.Context) (Delivery, error)
+	Close() error
+}
+
+const (
+	// consumeMinBackoff and consumeMaxBackoff bound the wait after a failed
+	// durable fetch (a deleted consumer, no responders, a closed connection
+	// while NATS reconnects): the wait doubles up to the cap.
+	consumeMinBackoff = time.Second
+	consumeMaxBackoff = 30 * time.Second
+	// consumeUnhealthyAfter: a fetch that keeps failing this long makes Ready()
+	// fail, so the health check shows it while the process keeps retrying.
+	consumeUnhealthyAfter = 30 * time.Second
+)
+
 type Runtime struct {
 	connection *nats.Conn
 	redis      *redis.Client
 	leases     *RedisLeaseStore
-	consumer   *NATSConsumer
+	consumer   heartbeatConsumer
 	processor  *Processor
 	offline    *OfflineWorker
 	logger     *slog.Logger
 	closeOnce  sync.Once
+
+	// sleep and now are replaced in tests.
+	sleep func(context.Context, time.Duration) error
+	now   func() time.Time
+	// failingSince is the start of the current run of failed fetches (zero =
+	// healthy); lastFetchError is its latest error.
+	healthMu       sync.Mutex
+	failingSince   time.Time
+	lastFetchError error
 }
 
 func OpenRuntime(ctx context.Context, pool *pgxpool.Pool, config RuntimeConfig, logger *slog.Logger) (*Runtime, error) {
@@ -183,21 +209,93 @@ func (r *Runtime) Close() error {
 	return closeErr
 }
 
+// consume pulls heartbeats until ctx ends. A failed fetch never ends the
+// process: it is logged, waited out with a doubling backoff (1 s up to 30 s)
+// and retried. Only ctx cancellation returns. A fetch that keeps failing past
+// consumeUnhealthyAfter is logged as an error each round and fails Ready().
 func (r *Runtime) consume(ctx context.Context) error {
+	backoff := consumeMinBackoff
 	for {
 		delivery, err := r.consumer.Next(ctx)
 		if errors.Is(err, ErrNoMessage) {
+			r.fetchSucceeded()
+			backoff = consumeMinBackoff
 			continue
 		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return err
+			since := r.fetchFailed(err)
+			if r.clock().Sub(since) >= consumeUnhealthyAfter {
+				r.logger.Error("node presence heartbeat fetch keeps failing", "error", err,
+					"failing_for", r.clock().Sub(since).Round(time.Second), "retry_in", backoff)
+			} else {
+				r.logger.Warn("node presence heartbeat fetch failed; retrying", "error", err, "retry_in", backoff)
+			}
+			if err := r.pause(ctx, backoff); err != nil {
+				return err
+			}
+			backoff = min(backoff*2, consumeMaxBackoff)
+			continue
 		}
+		r.fetchSucceeded()
+		backoff = consumeMinBackoff
 		disposition, err := r.processor.Process(ctx, delivery)
 		if err != nil && ctx.Err() == nil {
 			r.logger.Error("node presence heartbeat disposition failed", "disposition", disposition, "error", err)
 		}
 	}
+}
+
+func (r *Runtime) clock() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
+}
+
+func (r *Runtime) pause(ctx context.Context, delay time.Duration) error {
+	if r.sleep != nil {
+		return r.sleep(ctx, delay)
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (r *Runtime) fetchFailed(err error) time.Time {
+	r.healthMu.Lock()
+	defer r.healthMu.Unlock()
+	if r.failingSince.IsZero() {
+		r.failingSince = r.clock()
+	}
+	r.lastFetchError = err
+	return r.failingSince
+}
+
+func (r *Runtime) fetchSucceeded() {
+	r.healthMu.Lock()
+	r.failingSince, r.lastFetchError = time.Time{}, nil
+	r.healthMu.Unlock()
+}
+
+// Ready reports an unhealthy heartbeat fetch (failing for consumeUnhealthyAfter
+// or longer). The runtime keeps retrying; this only makes the health check say so.
+func (r *Runtime) Ready() error {
+	if r == nil {
+		return nil
+	}
+	r.healthMu.Lock()
+	defer r.healthMu.Unlock()
+	if !r.failingSince.IsZero() && r.clock().Sub(r.failingSince) >= consumeUnhealthyAfter {
+		return fmt.Errorf("node presence heartbeat fetch has been failing since %s: %w",
+			r.failingSince.UTC().Format(time.RFC3339), r.lastFetchError)
+	}
+	return nil
 }

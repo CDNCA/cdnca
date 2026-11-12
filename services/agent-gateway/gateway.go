@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"slices"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig/artifactset"
@@ -33,6 +35,9 @@ import (
 )
 
 const maxCSRBytes = 64 << 10
+
+// 控制面给出已过期的授权快照：不是暂时性故障，刷新时仍然结束会话，不做会话内重试。
+const authorizationSnapshotExpiredMessage = "node authorization snapshot is expired"
 
 const terminalCommandReceiptVersion = 1
 
@@ -159,6 +164,7 @@ type Gateway struct {
 	endpoints        *NodeEndpoints
 	disableState     *GatewayDrain
 	now              func() time.Time
+	deliveryRetries  atomic.Int64
 }
 
 func New(config Config, control ControlPlane, sessions SessionCoordinator) (*Gateway, error) {
@@ -1102,7 +1108,7 @@ func (g *Gateway) authorizeConnection(ctx context.Context, identity nodeIdentity
 		return nil, status.Error(codes.PermissionDenied, "node administrative state does not allow connections")
 	}
 	if response.SnapshotExpirationTime == nil || response.SnapshotExpirationTime.CheckValid() != nil || !response.SnapshotExpirationTime.AsTime().After(g.now()) {
-		return nil, status.Error(codes.Unavailable, "node authorization snapshot is expired")
+		return nil, status.Error(codes.Unavailable, authorizationSnapshotExpiredMessage)
 	}
 	if validateVersionRange(response.AcceptedProtocolVersions) != nil {
 		return nil, status.Error(codes.Internal, "control plane returned invalid protocol authorization")
@@ -1443,6 +1449,85 @@ func (g *Gateway) serveSessionWithInstallation(
 		}
 	}
 	defer func() { l4Live.stop() }()
+	retry := newDeliveryRetry()
+	// refreshAuthorization 刷新授权并按结果开关各下发源。各步骤在成功后立即更新自己的 allowed
+	// 标志，因此中途失败后整体重试是幂等的（已完成的步骤 wasAllowed==isAllowed，不会重复订阅）。
+	// 控制面暂时不可用（Unavailable）或开启订阅失败时，在会话内退避重试，不断开会话；
+	// 其余错误（授权被撤销、协议/密钥变更、心跳超时）仍然结束会话。
+	refreshAuthorization := func() error {
+		refreshed, err := g.refreshSessionAuthorization(stream.Context(), identity, agentVersions, selectedVersion, artifactEncryptionKeyID, offlineDeadline, installationID)
+		retryable := err != nil && status.Code(err) == codes.Unavailable && status.Convert(err).Message() != authorizationSnapshotExpiredMessage
+		if err == nil {
+			retryable = refreshed.deploymentsAllowed
+			err = func() error {
+				var err error
+				if commandSource, err = g.applyDeploymentAuthorization(stream.Context(), identity.NodeID, commandSource, pendingCommands, deploymentsAllowed, refreshed.deploymentsAllowed); err != nil {
+					return err
+				}
+				deploymentsAllowed = refreshed.deploymentsAllowed
+				refreshedCacheAllowed := refreshed.deploymentsAllowed && cacheControlCapable
+				if cacheCommandSource, err = g.applyCacheAuthorization(stream.Context(), identity.NodeID, cacheCommandSource, pendingCacheCommands, cacheCommandsAllowed, refreshedCacheAllowed); err != nil {
+					return err
+				}
+				cacheCommandsAllowed = refreshedCacheAllowed
+				refreshedUpgradeAllowed := refreshed.deploymentsAllowed && upgradeCapable
+				if upgradeCommandSource, err = g.applyUpgradeAuthorization(stream.Context(), identity.NodeID, upgradeCommandSource, pendingUpgradeCommands, upgradeCommandsAllowed, refreshedUpgradeAllowed); err != nil {
+					return err
+				}
+				upgradeCommandsAllowed = refreshedUpgradeAllowed
+				refreshedFirewallAllowed := refreshed.deploymentsAllowed && firewallCapable && g.firewall != nil
+				if firewallCommandSource, err = g.applyFirewallAuthorization(stream.Context(), identity.NodeID, firewallCommandSource,
+					pendingFirewallCommands, firewallCommandsAllowed, refreshedFirewallAllowed); err != nil {
+					return err
+				}
+				firewallCommandsAllowed = refreshedFirewallAllowed
+				refreshedDrainAllowed := refreshed.deploymentsAllowed && drainCapable && g.drain != nil
+				if drainCommandSource, err = g.applyDrainAuthorization(stream.Context(), identity.NodeID, drainCommandSource,
+					pendingDrainCommands, drainCommandsAllowed, refreshedDrainAllowed); err != nil {
+					return err
+				}
+				drainCommandsAllowed = refreshedDrainAllowed
+				refreshedPortTransitionsAllowed := refreshed.deploymentsAllowed && portTransitionCapable && g.portTransitions != nil && g.portManager != nil
+				if portTransitionSource, err = g.applyPortTransitionAuthorization(stream.Context(), identity.NodeID, portTransitionSource,
+					pendingPortTransitions, portTransitionsAllowed, refreshedPortTransitionsAllowed); err != nil {
+					return err
+				}
+				portTransitionsAllowed = refreshedPortTransitionsAllowed
+				refreshedNodeMonitoringAllowed := refreshed.deploymentsAllowed && nodeMonitoringCapable && g.nodeMonitoring != nil
+				nodeMonitoringSource, pendingNodeMonitoring, err = g.applyNodeMonitoringAuthorization(stream.Context(), identity.NodeID,
+					nodeMonitoringSource, pendingNodeMonitoring, nodeMonitoringCommandsAllowed, refreshedNodeMonitoringAllowed)
+				if err != nil {
+					return err
+				}
+				if pendingNodeMonitoring == nil {
+					pendingNodeMonitoringArtifact = nil
+				}
+				nodeMonitoringCommandsAllowed = refreshedNodeMonitoringAllowed
+				if l4Live, err = g.applyL4LiveAuthorization(stream.Context(), identity.NodeID, l4Live,
+					l4LiveEnabled && refreshed.deploymentsAllowed); err != nil {
+					return err
+				}
+				if marketProbes, err = g.applyMarketProbeAuthorization(stream.Context(), identity.NodeID, marketProbes,
+					marketProbeEnabled && refreshed.deploymentsAllowed, marketRolesCapable); err != nil {
+					return err
+				}
+				return nil
+			}()
+		}
+		if err == nil {
+			retry.reset("authorization")
+			authorizationRefreshAt = refreshed.refreshAt
+			return nil
+		}
+		if !retryable {
+			return err
+		}
+		if failErr := retry.fail(g, "authorization", "node authorization refresh failed", err); failErr != nil {
+			return err
+		}
+		authorizationRefreshAt = retry.retryAt("authorization")
+		return nil
+	}
 	for {
 		var commandReceive <-chan commandReceive
 		var overlayReceive <-chan overlayCommandReceive
@@ -1484,7 +1569,7 @@ func (g *Gateway) serveSessionWithInstallation(
 			portTransitionSource.arm()
 			portTransitionReceive = portTransitionSource.next
 		}
-		if nodeMonitoringSource != nil && pendingNodeMonitoring == nil {
+		if nodeMonitoringSource != nil && pendingNodeMonitoring == nil && !retry.blocked("nodeMonitoring") {
 			nodeMonitoringSource.arm()
 			nodeMonitoringReceive = nodeMonitoringSource.next
 		}
@@ -1528,6 +1613,9 @@ func (g *Gateway) serveSessionWithInstallation(
 			}); err != nil {
 				return err
 			}
+		case <-retry.wake:
+			stopTimer(authorizationTimer)
+			stopTimer(offlineTimer)
 		case <-evictC:
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
@@ -1569,13 +1657,17 @@ func (g *Gateway) serveSessionWithInstallation(
 			}); err != nil {
 				return err
 			}
-		case received := <-sched302Source.receive():
+		case received := <-gated(retry, "sched302", sched302Source.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			sched302Source.next = nil
 			if received.err != nil || received.delivery == nil {
-				return status.Error(codes.Unavailable, "schedule302 table delivery failed")
+				if err := retry.fail(g, "sched302", "schedule302 table delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("sched302")
 			table := received.delivery.Table()
 			if err := validateSched302Table(table, identity.NodeID); err != nil {
 				// A broken publication can never become valid: drop it, keep the session.
@@ -1593,15 +1685,22 @@ func (g *Gateway) serveSessionWithInstallation(
 			ackErr := received.delivery.Ack(operationCtx)
 			cancel()
 			if ackErr != nil {
-				return status.Error(codes.Unavailable, "schedule302 table disposition failed")
+				// 表已发给 agent；Ack 失败时总线会按 AckWait 重投同一份表，Sched302Applier 契约要求 Apply 忽略不更新的 revision，
+				// 不必为此断开整条会话。
+				g.deliveryRetries.Add(1)
+				log.Printf("agent-gateway: warn: schedule302 table disposition failed, the bus will redeliver: %v", ackErr)
 			}
-		case received := <-autoDefense.receive():
+		case received := <-gated(retry, "autoDefense", autoDefense.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			autoDefense.next = nil
 			if received.err != nil || received.delivery == nil {
-				return status.Error(codes.Unavailable, "auto defense snapshot delivery failed")
+				if err := retry.fail(g, "autoDefense", "auto defense snapshot delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("autoDefense")
 			command := received.delivery.Command()
 			if err := validateAutoDefenseCommand(command, identity.NodeID); err != nil {
 				// A part with a broken binding can never become valid: drop it and keep the session.
@@ -1625,13 +1724,17 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			autoDefense.pending, autoDefense.pendingCommand = received.delivery, command
-		case received := <-signerTrust.receive():
+		case received := <-gated(retry, "signerTrust", signerTrust.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			signerTrust.next = nil
 			if received.err != nil || received.delivery == nil {
-				return status.Error(codes.Unavailable, "edge signer trust bundle delivery failed")
+				if err := retry.fail(g, "signerTrust", "edge signer trust bundle delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("signerTrust")
 			bundle := received.delivery.Bundle()
 			if err := validateSignerTrustBundle(bundle, identity.NodeID); err != nil {
 				// A publication with a broken binding can never become valid: drop it and keep the session.
@@ -1655,13 +1758,17 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			signerTrust.pending, signerTrust.pendingBundle = received.delivery, bundle
-		case received := <-installationBan.receive():
+		case received := <-gated(retry, "installationBan", installationBan.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			installationBan.next = nil
 			if received.err != nil || received.delivery == nil {
-				return status.Error(codes.Unavailable, "installation ban command delivery failed")
+				if err := retry.fail(g, "installationBan", "installation ban command delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("installationBan")
 			command := received.delivery.Command()
 			if err := validateInstallationBanCommand(command, identity.NodeID); err != nil {
 				// A publication with a broken binding can never become valid: drop it and keep the session.
@@ -1685,13 +1792,17 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			installationBan.pending, installationBan.pendingCommand = received.delivery, command
-		case received := <-securityBans.receive():
+		case received := <-gated(retry, "securityBans", securityBans.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			securityBans.next = nil
 			if received.err != nil || received.delivery == nil {
-				return status.Error(codes.Unavailable, "security ban list delivery failed")
+				if err := retry.fail(g, "securityBans", "security ban list delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("securityBans")
 			command := received.delivery.Command()
 			if err := validateSecurityBanCommand(command, identity.NodeID); err != nil {
 				// A snapshot with a broken binding can never become valid: drop it and keep the session.
@@ -1715,13 +1826,17 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			securityBans.pending, securityBans.pendingCommand = received.delivery, command
-		case received := <-siteDrops.receive():
+		case received := <-gated(retry, "siteDrops", siteDrops.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			siteDrops.next = nil
 			if received.err != nil || received.command == nil {
-				return status.Error(codes.Unavailable, "site drop list delivery failed")
+				if err := retry.fail(g, "siteDrops", "site drop list delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("siteDrops")
 			command := received.command
 			if err := validateSiteDropCommand(command, identity.NodeID); err != nil {
 				continue // a snapshot with a broken binding can never become valid: skip it and keep the session
@@ -1740,13 +1855,17 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			siteDrops.pending = command
-		case received := <-gatewayAddresses.receive():
+		case received := <-gated(retry, "gatewayAddresses", gatewayAddresses.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			gatewayAddresses.next = nil
 			if received.err != nil || received.command == nil {
-				return status.Error(codes.Unavailable, "gateway address change delivery failed")
+				if err := retry.fail(g, "gatewayAddresses", "gateway address change delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("gatewayAddresses")
 			command := received.command
 			if err := validateGatewayAddressCommand(command, identity.NodeID); err != nil {
 				continue // a broken binding can never become valid: skip it and keep the session
@@ -1765,13 +1884,17 @@ func (g *Gateway) serveSessionWithInstallation(
 				return err
 			}
 			gatewayAddresses.pending = command
-		case received := <-sshAccessSource.receive():
+		case received := <-gated(retry, "sshAccess", sshAccessSource.receive):
 			stopTimer(authorizationTimer)
 			stopTimer(offlineTimer)
 			sshAccessSource.next = nil
 			if received.err != nil || received.command == nil {
-				return status.Error(codes.Unavailable, "SSH access delivery failed")
+				if err := retry.fail(g, "sshAccess", "SSH access delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("sshAccess")
 			command := received.command
 			if err := validateSSHAccessCommand(command, identity.NodeID); err != nil {
 				continue // a malformed command can never become valid: skip it and keep the session
@@ -1794,8 +1917,12 @@ func (g *Gateway) serveSessionWithInstallation(
 			stopTimer(offlineTimer)
 			nodeMonitoringSource.next = nil
 			if received.err != nil || received.delivery == nil {
-				return status.Error(codes.Unavailable, "node monitoring artifact delivery failed")
+				if err := retry.fail(g, "nodeMonitoring", "node monitoring artifact delivery failed", received.err); err != nil {
+					return err
+				}
+				continue
 			}
+			retry.reset("nodeMonitoring")
 			artifact := received.delivery.Artifact()
 			if err := validateNodeMonitoringArtifact(artifact, identity.NodeID); err != nil {
 				operationCtx, cancel := context.WithTimeout(stream.Context(), g.config.CommandOperationTimeout)
@@ -1819,65 +1946,7 @@ func (g *Gateway) serveSessionWithInstallation(
 			pendingNodeMonitoringArtifact = artifact
 		case <-authorizationTimer.C:
 			stopTimer(offlineTimer)
-			refreshed, err := g.refreshSessionAuthorization(stream.Context(), identity, agentVersions, selectedVersion, artifactEncryptionKeyID, offlineDeadline, installationID)
-			if err != nil {
-				return err
-			}
-			authorizationRefreshAt = refreshed.refreshAt
-			commandSource, err = g.applyDeploymentAuthorization(stream.Context(), identity.NodeID, commandSource, pendingCommands, deploymentsAllowed, refreshed.deploymentsAllowed)
-			if err != nil {
-				return err
-			}
-			refreshedCacheAllowed := refreshed.deploymentsAllowed && cacheControlCapable
-			cacheCommandSource, err = g.applyCacheAuthorization(stream.Context(), identity.NodeID, cacheCommandSource, pendingCacheCommands, cacheCommandsAllowed, refreshedCacheAllowed)
-			if err != nil {
-				return err
-			}
-			deploymentsAllowed = refreshed.deploymentsAllowed
-			cacheCommandsAllowed = refreshedCacheAllowed
-			refreshedUpgradeAllowed := refreshed.deploymentsAllowed && upgradeCapable
-			upgradeCommandSource, err = g.applyUpgradeAuthorization(stream.Context(), identity.NodeID, upgradeCommandSource, pendingUpgradeCommands, upgradeCommandsAllowed, refreshedUpgradeAllowed)
-			if err != nil {
-				return err
-			}
-			upgradeCommandsAllowed = refreshedUpgradeAllowed
-			refreshedFirewallAllowed := refreshed.deploymentsAllowed && firewallCapable && g.firewall != nil
-			firewallCommandSource, err = g.applyFirewallAuthorization(stream.Context(), identity.NodeID, firewallCommandSource,
-				pendingFirewallCommands, firewallCommandsAllowed, refreshedFirewallAllowed)
-			if err != nil {
-				return err
-			}
-			firewallCommandsAllowed = refreshedFirewallAllowed
-			refreshedDrainAllowed := refreshed.deploymentsAllowed && drainCapable && g.drain != nil
-			drainCommandSource, err = g.applyDrainAuthorization(stream.Context(), identity.NodeID, drainCommandSource,
-				pendingDrainCommands, drainCommandsAllowed, refreshedDrainAllowed)
-			if err != nil {
-				return err
-			}
-			drainCommandsAllowed = refreshedDrainAllowed
-			refreshedPortTransitionsAllowed := refreshed.deploymentsAllowed && portTransitionCapable && g.portTransitions != nil && g.portManager != nil
-			portTransitionSource, err = g.applyPortTransitionAuthorization(stream.Context(), identity.NodeID, portTransitionSource,
-				pendingPortTransitions, portTransitionsAllowed, refreshedPortTransitionsAllowed)
-			if err != nil {
-				return err
-			}
-			portTransitionsAllowed = refreshedPortTransitionsAllowed
-			refreshedNodeMonitoringAllowed := refreshed.deploymentsAllowed && nodeMonitoringCapable && g.nodeMonitoring != nil
-			nodeMonitoringSource, pendingNodeMonitoring, err = g.applyNodeMonitoringAuthorization(stream.Context(), identity.NodeID,
-				nodeMonitoringSource, pendingNodeMonitoring, nodeMonitoringCommandsAllowed, refreshedNodeMonitoringAllowed)
-			if err != nil {
-				return err
-			}
-			if pendingNodeMonitoring == nil {
-				pendingNodeMonitoringArtifact = nil
-			}
-			nodeMonitoringCommandsAllowed = refreshedNodeMonitoringAllowed
-			if l4Live, err = g.applyL4LiveAuthorization(stream.Context(), identity.NodeID, l4Live,
-				l4LiveEnabled && refreshed.deploymentsAllowed); err != nil {
-				return err
-			}
-			if marketProbes, err = g.applyMarketProbeAuthorization(stream.Context(), identity.NodeID, marketProbes,
-				marketProbeEnabled && refreshed.deploymentsAllowed, marketRolesCapable); err != nil {
+			if err := refreshAuthorization(); err != nil {
 				return err
 			}
 		case <-offlineTimer.C:
@@ -1893,65 +1962,7 @@ func (g *Gateway) serveSessionWithInstallation(
 				return status.Error(codes.DeadlineExceeded, "node heartbeat deadline exceeded")
 			}
 			if !g.now().Before(authorizationRefreshAt) {
-				refreshed, err := g.refreshSessionAuthorization(stream.Context(), identity, agentVersions, selectedVersion, artifactEncryptionKeyID, offlineDeadline, installationID)
-				if err != nil {
-					return err
-				}
-				authorizationRefreshAt = refreshed.refreshAt
-				commandSource, err = g.applyDeploymentAuthorization(stream.Context(), identity.NodeID, commandSource, pendingCommands, deploymentsAllowed, refreshed.deploymentsAllowed)
-				if err != nil {
-					return err
-				}
-				refreshedCacheAllowed := refreshed.deploymentsAllowed && cacheControlCapable
-				cacheCommandSource, err = g.applyCacheAuthorization(stream.Context(), identity.NodeID, cacheCommandSource, pendingCacheCommands, cacheCommandsAllowed, refreshedCacheAllowed)
-				if err != nil {
-					return err
-				}
-				deploymentsAllowed = refreshed.deploymentsAllowed
-				cacheCommandsAllowed = refreshedCacheAllowed
-				refreshedUpgradeAllowed := refreshed.deploymentsAllowed && upgradeCapable
-				upgradeCommandSource, err = g.applyUpgradeAuthorization(stream.Context(), identity.NodeID, upgradeCommandSource, pendingUpgradeCommands, upgradeCommandsAllowed, refreshedUpgradeAllowed)
-				if err != nil {
-					return err
-				}
-				upgradeCommandsAllowed = refreshedUpgradeAllowed
-				refreshedFirewallAllowed := refreshed.deploymentsAllowed && firewallCapable && g.firewall != nil
-				firewallCommandSource, err = g.applyFirewallAuthorization(stream.Context(), identity.NodeID, firewallCommandSource,
-					pendingFirewallCommands, firewallCommandsAllowed, refreshedFirewallAllowed)
-				if err != nil {
-					return err
-				}
-				firewallCommandsAllowed = refreshedFirewallAllowed
-				refreshedDrainAllowed := refreshed.deploymentsAllowed && drainCapable && g.drain != nil
-				drainCommandSource, err = g.applyDrainAuthorization(stream.Context(), identity.NodeID, drainCommandSource,
-					pendingDrainCommands, drainCommandsAllowed, refreshedDrainAllowed)
-				if err != nil {
-					return err
-				}
-				drainCommandsAllowed = refreshedDrainAllowed
-				refreshedPortTransitionsAllowed := refreshed.deploymentsAllowed && portTransitionCapable && g.portTransitions != nil && g.portManager != nil
-				portTransitionSource, err = g.applyPortTransitionAuthorization(stream.Context(), identity.NodeID, portTransitionSource,
-					pendingPortTransitions, portTransitionsAllowed, refreshedPortTransitionsAllowed)
-				if err != nil {
-					return err
-				}
-				portTransitionsAllowed = refreshedPortTransitionsAllowed
-				refreshedNodeMonitoringAllowed := refreshed.deploymentsAllowed && nodeMonitoringCapable && g.nodeMonitoring != nil
-				nodeMonitoringSource, pendingNodeMonitoring, err = g.applyNodeMonitoringAuthorization(stream.Context(), identity.NodeID,
-					nodeMonitoringSource, pendingNodeMonitoring, nodeMonitoringCommandsAllowed, refreshedNodeMonitoringAllowed)
-				if err != nil {
-					return err
-				}
-				if pendingNodeMonitoring == nil {
-					pendingNodeMonitoringArtifact = nil
-				}
-				nodeMonitoringCommandsAllowed = refreshedNodeMonitoringAllowed
-				if l4Live, err = g.applyL4LiveAuthorization(stream.Context(), identity.NodeID, l4Live,
-					l4LiveEnabled && refreshed.deploymentsAllowed); err != nil {
-					return err
-				}
-				if marketProbes, err = g.applyMarketProbeAuthorization(stream.Context(), identity.NodeID, marketProbes,
-					marketProbeEnabled && refreshed.deploymentsAllowed, marketRolesCapable); err != nil {
+				if err := refreshAuthorization(); err != nil {
 					return err
 				}
 			}

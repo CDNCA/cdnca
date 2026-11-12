@@ -16,6 +16,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/marketmanaged"
 	"github.com/cdnca/cdnca/services/control-api/internal/site"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type siteBasicPayload struct {
@@ -751,6 +752,12 @@ func (s *Server) writeSiteError(w http.ResponseWriter, r *http.Request, err erro
 	case errors.Is(err, domaintrust.ErrClaimSuspended):
 		s.writeAPIError(w, r, http.StatusConflict, "site_domain_claim_suspended",
 			"remove the domain claimed by its verified owner before enabling this site")
+	case siteRetryableConflict(err):
+		// sitedel-500: a deadlock or serialization failure rolled the whole
+		// transaction back; nothing was written, so the caller may retry.
+		w.Header().Set("Retry-After", "1")
+		s.writeAPIError(w, r, http.StatusConflict, "site_concurrent_conflict",
+			"the site was changed by another operation at the same time; retry the request")
 	default:
 		s.writeError(w, r, err)
 	}
@@ -1288,4 +1295,11 @@ func siteRUMResponse(percent *int) *siteRUMPayload {
 		return nil
 	}
 	return &siteRUMPayload{SamplePercent: *percent}
+}
+
+// siteRetryableConflict reports PostgreSQL deadlock (40P01) and serialization
+// failure (40001), which roll the transaction back without side effects.
+func siteRetryableConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == "40P01" || pgErr.Code == "40001")
 }

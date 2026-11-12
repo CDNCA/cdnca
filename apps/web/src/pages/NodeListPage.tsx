@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Button,
@@ -1587,9 +1587,14 @@ function NodeBandwidthCell({ sample, serverTime, startedAt, now, error }: {
   </Tooltip>
 }
 
+/** Where the batch read behind the bandwidth, monthly traffic and XDP columns stands. */
+type MetricsPhase = 'loading' | 'failed' | 'ready'
+
 /** The node's XDP filter mode from its latest sample, with the reason when it falls back. */
-export function NodeXDPCell({ sample }: { sample?: NodeMetricsLatest }) {
+export function NodeXDPCell({ sample, phase = 'ready' }: { sample?: NodeMetricsLatest; phase?: MetricsPhase }) {
   const { t, i18n } = useTranslation('nodes')
+  // Still reading is not "no data": the column says so until the batch answers.
+  if (!sample && phase !== 'ready') return <span className="node-xdp-state">{t(phase === 'loading' ? 'bandwidth.loading' : 'monthlyTraffic.states.unavailable')}</span>
   const status = sample?.known ? sample.telemetry?.xdp : undefined
   const protection = sample?.known ? sample.telemetry?.ddos_protection : undefined
   // A DDoS table that failed to apply or cannot run is a protection fault,
@@ -1630,9 +1635,10 @@ export function NodeXDPCell({ sample }: { sample?: NodeMetricsLatest }) {
 // 月流量 shows the period's accumulated bytes whenever two counter points
 // exist (as the competitor's column does); data gaps and counter restarts are
 // explained in the tooltip, restarts also by a small badge.
-function NodeMonthlyTrafficCell({ sample }: { sample?: NodeMetricsLatest }) {
+function NodeMonthlyTrafficCell({ sample, phase = 'ready' }: { sample?: NodeMetricsLatest; phase?: MetricsPhase }) {
   const { t, i18n } = useTranslation('nodes')
   const monthly = sample?.monthly_traffic
+  if (!sample && phase === 'loading') return <span className="node-monthly-traffic-state">{t('bandwidth.loading')}</span>
   if (!monthly) return <span className="node-monthly-traffic-state">{t('monthlyTraffic.states.unavailable')}</span>
   if (monthly.state === 'insufficient_data') {
     return <Tooltip title={t('monthlyTraffic.stateHint', { state: t('monthlyTraffic.states.insufficient_data') })}>
@@ -1990,6 +1996,7 @@ function NodeListContent({
       }
     },
     enabled: bandwidthEnabled,
+    placeholderData: keepPreviousData,
     retry: false,
     refetchInterval: bandwidthEnabled ? 10_000 : false,
     refetchIntervalInBackground: false,
@@ -2004,6 +2011,8 @@ function NodeListContent({
     return () => window.clearInterval(timer)
   }, [bandwidthIDs.length, nodeTab, terminalForbidden])
   const bandwidthMetrics = useMemo(() => new Map(bandwidthQuery.data?.result.items.map((item) => [item.node_id, item])), [bandwidthQuery.data])
+  const metricsPhase: MetricsPhase = bandwidthQuery.data ? 'ready' : bandwidthQuery.error ? 'failed'
+    : bandwidthEnabled || query.isPending ? 'loading' : 'ready'
 
   const monitoringKey = useMemo(() => [...monitoringPrefix, queryIdentity, bandwidthIDs] as const, [bandwidthIDs, monitoringPrefix, queryIdentity])
   const monitoringIdentity = JSON.stringify([monitoringKey, nodeTab])
@@ -2026,6 +2035,7 @@ function NodeListContent({
       }
     },
     enabled: bandwidthEnabled,
+    placeholderData: keepPreviousData,
     retry: false,
     refetchInterval: bandwidthEnabled ? 10_000 : false,
     refetchIntervalInBackground: false,
@@ -2048,6 +2058,7 @@ function NodeListContent({
       return result
     },
     enabled: bandwidthEnabled,
+    placeholderData: keepPreviousData,
     retry: false,
     refetchInterval: bandwidthEnabled ? 60_000 : false,
     refetchIntervalInBackground: false,
@@ -2651,7 +2662,7 @@ function NodeListContent({
           <Tooltip title={t('columns.monthlyTrafficHint')}>？</Tooltip>
         </span>
       ),
-      key: 'monthlyTraffic', width: 105, render: (_, item) => <NodeMonthlyTrafficCell sample={bandwidthMetrics.get(item.id)} />,
+      key: 'monthlyTraffic', width: 105, render: (_, item) => <NodeMonthlyTrafficCell sample={bandwidthMetrics.get(item.id)} phase={metricsPhase} />,
     },
     {
       title: (
@@ -2660,7 +2671,7 @@ function NodeListContent({
           <Tooltip title={t('xdp.columnHint')}>？</Tooltip>
         </span>
       ),
-      key: 'xdp', width: 110, render: (_, item) => <NodeXDPCell sample={bandwidthMetrics.get(item.id)} />,
+      key: 'xdp', width: 110, render: (_, item) => <NodeXDPCell sample={bandwidthMetrics.get(item.id)} phase={metricsPhase} />,
     },
     {
       title: t('columns.status'), dataIndex: 'admin_state', width: 110,

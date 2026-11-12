@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cdnca/cdnca/libs/entitlement"
@@ -33,6 +35,10 @@ const (
 
 	// entitlementRevocationQuickLimit: see Run.
 	entitlementRevocationQuickLimit = 3
+
+	// entitlementRevocationMaxBackoff caps the wait after consecutive transient
+	// failures (the poll interval doubles from one minute up to this).
+	entitlementRevocationMaxBackoff = 5 * time.Minute
 )
 
 type entitlementRevocationKeysetRefresher interface {
@@ -80,6 +86,10 @@ type entitlementRevocationRuntime struct {
 	installationStore *installationban.Store
 	terminalMu        sync.RWMutex
 	terminalError     error
+	// transientFailures counts every deferred network/response/HTTP failure since
+	// start; consecutiveFailures (Run's goroutine only) drives the backoff.
+	transientFailures   atomic.Int64
+	consecutiveFailures int
 }
 
 func fetchEntitlementLeaseBeforeRevocations(
@@ -198,7 +208,7 @@ func initializeEntitlementRevocationRuntime(ctx context.Context, runtime *entitl
 		return errors.New("entitlement revocation runtime is incomplete")
 	}
 	if err := runtime.keysets.Refresh(ctx); err != nil {
-		if !isEntitlementRevocationRemoteError(err) {
+		if !isEntitlementRevocationTransientError(err) {
 			return fmt.Errorf("refresh entitlement verification keyset: %w", err)
 		}
 		runtime.logger.Warn("entitlement keyset refresh unavailable during startup", "error", err)
@@ -208,7 +218,7 @@ func initializeEntitlementRevocationRuntime(ctx context.Context, runtime *entitl
 	if err == nil {
 		return nil
 	}
-	remote := isEntitlementRevocationRemoteError(err)
+	remote := isEntitlementRevocationTransientError(err)
 	if !remote && !isEntitlementRevocationDeferredError(err) {
 		return fmt.Errorf("synchronize entitlement revocation state: %w", err)
 	}
@@ -270,14 +280,16 @@ func (runtime *entitlementRevocationRuntime) Run(ctx context.Context) (runErr er
 			if syncErr == nil {
 				revision = snapshot.Revision
 			}
-		} else if err := runtime.wait(ctx, entitlementRevocationPollInterval); err != nil {
+		} else if err := runtime.wait(ctx, runtime.pollDelay()); err != nil {
 			return err
 		}
 		if err := runtime.keysets.Refresh(ctx); err != nil {
-			if !isEntitlementRevocationRemoteError(err) {
+			if !isEntitlementRevocationTransientError(err) {
 				return fmt.Errorf("refresh entitlement verification keyset: %w", err)
 			}
-			runtime.logger.Warn("entitlement keyset refresh deferred", "error", err)
+			runtime.noteTransientFailure()
+			runtime.logger.Warn("entitlement keyset refresh deferred", "error", err,
+				"transient_failures", runtime.transientFailures.Load())
 		}
 		// A set the long poll could not verify may be signed by a key the
 		// refresh above just learned: retry it at once.
@@ -294,13 +306,22 @@ func (runtime *entitlementRevocationRuntime) Run(ctx context.Context) (runErr er
 		}
 		if err := syncErr; err != nil {
 			switch {
-			case isEntitlementRevocationRemoteError(err):
-				runtime.logger.Warn("entitlement revocation synchronization deferred", "error", err)
+			case isEntitlementRevocationTransientError(err):
+				// Network, response and HTTP failures (a CF 403/HTML page, a body cut
+				// off mid-stream) are not a reason to stop the control API: keep the
+				// current LKG, back off and try again. Once the LKG's own validity
+				// ends, entitlementguard locks (fail closed) whether or not this
+				// process is alive.
+				runtime.noteTransientFailure()
+				runtime.logger.Warn("entitlement revocation synchronization deferred", "error", err,
+					"transient_failures", runtime.transientFailures.Load(), "consecutive", runtime.consecutiveFailures)
 			case isEntitlementRevocationDeferredError(err):
 				runtime.logger.Error("entitlement revocation state rejected; retaining current LKG", "error", err)
 			default:
 				return fmt.Errorf("synchronize entitlement revocation state: %w", err)
 			}
+		} else {
+			runtime.consecutiveFailures = 0
 		}
 		runtime.syncInstallationState(ctx)
 		if runtime.leaseRefresh != nil {
@@ -417,6 +438,39 @@ func isEntitlementRevocationRemoteError(err error) bool {
 	}
 	var networkErr net.Error
 	return errors.Is(err, context.DeadlineExceeded) || errors.As(err, &networkErr)
+}
+
+// isEntitlementRevocationTransientError is the remote errors plus what a flaky
+// path to the license service produces: an invalid or cut-off response body
+// (ErrInvalidResponse, EOF) and any HTTP status the service or the CDN in front
+// of it answers with (403/400/404, an HTML error page). None of them says the
+// local revocation state is wrong.
+func isEntitlementRevocationTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if isEntitlementRevocationRemoteError(err) {
+		return true
+	}
+	var httpErr *entitlementsync.HTTPError
+	return errors.As(err, &httpErr) || errors.Is(err, entitlementsync.ErrInvalidResponse) ||
+		errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF)
+}
+
+// noteTransientFailure counts a deferred round (total and consecutive).
+func (runtime *entitlementRevocationRuntime) noteTransientFailure() {
+	runtime.transientFailures.Add(1)
+	runtime.consecutiveFailures++
+}
+
+// pollDelay is the poll interval, doubled for every further consecutive
+// transient failure up to entitlementRevocationMaxBackoff.
+func (runtime *entitlementRevocationRuntime) pollDelay() time.Duration {
+	delay := entitlementRevocationPollInterval
+	for step := 1; step < runtime.consecutiveFailures && delay < entitlementRevocationMaxBackoff; step++ {
+		delay *= 2
+	}
+	return min(delay, entitlementRevocationMaxBackoff)
 }
 
 func isEntitlementRevocationDeferredError(err error) bool {

@@ -169,6 +169,22 @@ DASHBOARD_ENTRY = '''        # /dashboard without a trailing slash is the consol
 DASHBOARD_ENTRY_BLOCK = re.compile(r'(?m)^[ \t]*location[ \t]+=[ \t]*/dashboard[ \t]*\{[ \t]*\n'
                                    r'[ \t]*rewrite[ \t]+\^[ \t]+/index\.html[ \t]+break;[ \t]*\n[ \t]*\}[ \t]*\n')
 DASHBOARD_ANCHOR = '        location /dashboard/ {\n'
+# The public status page /status/ (apps/web second entry, status/index.html).
+# location / only matches files, so the directory URL fell to @website and the
+# website's 404 page showed instead of the page's own "not enabled" notice
+# The page itself talks to /v1/status-page/public.
+STATUS_ENTRY = '''        # The public status page: /status/ is a directory, which location / does not
+        # serve (try_files $uri only matches files), so it would fall to @website.
+        location = /status {
+            absolute_redirect off;
+            return 301 /status/$is_args$args;
+        }
+        location = /status/ {
+            rewrite ^ /status/index.html break;
+        }
+'''
+STATUS_ANCHOR = '        location ~* ^/(?:dashboard/)?(?:assets/'
+STATUS_ENTRY_BLOCK = re.compile(r'(?m)^[ \t]*location[ \t]+=[ \t]*/status/?[ \t]*\{')
 # Log/list GET reads compress their JSON; inserted at the
 # top of location ^~ /v1/ so it inherits the proxy headers set there.
 API_GZIP_ANCHOR = '        location ^~ /v1/ {\n            proxy_http_version 1.1;\n'
@@ -437,7 +453,7 @@ def converge_main(raw, brotli=False, agent=DEFAULT_AGENT):
 
 def converge_rest(text, brotli, agent=DEFAULT_AGENT):
     text, tunnel = split_agent_tunnel(text, agent)
-    text = converge_websocket(converge_api_gzip(converge_dashboard(converge_node_installer(converge_site(text)))))
+    text = converge_websocket(converge_api_gzip(converge_status(converge_dashboard(converge_node_installer(converge_site(text))))))
     text = converge_billing_bridge(converge_favicon(text))
     return converge_http_end(converge_brotli(converge_agent_tunnel(text, tunnel), brotli))
 
@@ -583,6 +599,16 @@ def converge_api_gzip(text):
     if 'application/json' in text or text.count(API_GZIP_ANCHOR) != 1:
         raise ValueError('unexpected /v1/ location or JSON gzip; converge manually')
     return text.replace(API_GZIP_ANCHOR, API_GZIP)
+
+
+def converge_status(text):
+    """Serves /status/ as the status page entry (and /status redirects to it).
+    Any other hand-written /status location is drift, not overwritten."""
+    if text.count(STATUS_ENTRY) == 1 and len(STATUS_ENTRY_BLOCK.findall(text)) == 2:
+        return text
+    if STATUS_ENTRY_BLOCK.search(text) or text.count(STATUS_ANCHOR) != 1:
+        raise ValueError('unexpected /status location; converge manually')
+    return text.replace(STATUS_ANCHOR, STATUS_ENTRY + STATUS_ANCHOR)
 
 
 def converge_dashboard(text):

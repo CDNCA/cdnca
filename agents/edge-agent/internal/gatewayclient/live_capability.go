@@ -76,6 +76,16 @@ func (c *Client) declareLiveCapability(capabilities *agentv1.AgentCapabilities) 
 	}
 }
 
+// declareLiveCapabilityReadOnly 与 declareLiveCapability 生成相同的能力集合，但不记录 declared。
+func (c *Client) declareLiveCapabilityReadOnly(capabilities *agentv1.AgentCapabilities) {
+	for _, live := range c.liveCapabilities {
+		capabilities.Features = removeCapability(capabilities.Features, live.Name)
+		if live.Ready() {
+			capabilities.Features = append(capabilities.Features, &agentv1.Capability{Name: live.Name, ApiVersion: live.APIVersion})
+		}
+	}
+}
+
 // liveCapabilityChanged returns the session's change signal (nil without
 // one: a nil channel never fires in select).
 func (c *Client) liveCapabilityChanged() <-chan struct{} {

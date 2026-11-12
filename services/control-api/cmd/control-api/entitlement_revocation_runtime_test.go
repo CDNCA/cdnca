@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -558,4 +559,159 @@ type sameRevisionLongPoller struct {
 func (syncer *sameRevisionLongPoller) LongPollOnce(ctx context.Context) (entitlementguard.RevocationSnapshot, error) {
 	_, err := syncer.longPollingRevocationSyncer.LongPollOnce(ctx)
 	return entitlementguard.RevocationSnapshot{Revision: 1}, err
+}
+
+// A flaky path to the license service must not
+// stop the control API. Response and HTTP failures are deferred like network ones.
+func transientRevocationErrors() map[string]error {
+	return map[string]error{
+		"invalid response":    fmt.Errorf("fetch: %w", entitlementsync.ErrInvalidResponse),
+		"cut-off body":        fmt.Errorf("read body: %w", io.ErrUnexpectedEOF),
+		"cdn 403":             &entitlementsync.HTTPError{StatusCode: http.StatusForbidden},
+		"cdn 404 html":        &entitlementsync.HTTPError{StatusCode: http.StatusNotFound},
+		"invalid proof 401":   &entitlementsync.HTTPError{StatusCode: http.StatusUnauthorized, Code: "invalid_proof"},
+		"bad request 400":     &entitlementsync.HTTPError{StatusCode: http.StatusBadRequest},
+		"wrapped bad gateway": fmt.Errorf("sync: %w", &entitlementsync.HTTPError{StatusCode: http.StatusBadGateway}),
+	}
+}
+
+func TestEntitlementRevocationRunSurvivesTransientErrorsWithBackoff(t *testing.T) {
+	for name, syncErr := range transientRevocationErrors() {
+		t.Run(name, func(t *testing.T) {
+			syncer := &fakeEntitlementRevocationSyncer{err: syncErr}
+			runtime := newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{}, syncer,
+				&fakeEntitlementRevocationStore{snapshot: entitlementguard.RevocationSnapshot{Revision: 5}})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var delays []time.Duration
+			runtime.wait = func(ctx context.Context, delay time.Duration) error {
+				delays = append(delays, delay)
+				if len(delays) == 5 {
+					cancel()
+					return ctx.Err()
+				}
+				return nil
+			}
+			if err := runtime.Run(ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("Run() = %v, want the process to keep running until canceled", err)
+			}
+			want := []time.Duration{time.Minute, time.Minute, 2 * time.Minute, 4 * time.Minute, 5 * time.Minute}
+			if fmt.Sprint(delays) != fmt.Sprint(want) {
+				t.Fatalf("poll delays = %v, want %v", delays, want)
+			}
+			if syncer.calls != 4 || runtime.transientFailures.Load() != 4 {
+				t.Fatalf("sync calls=%d counted failures=%d, want 4 and 4", syncer.calls, runtime.transientFailures.Load())
+			}
+		})
+	}
+}
+
+func TestEntitlementRevocationBackoffResetsAfterASuccessfulRound(t *testing.T) {
+	syncer := &fakeEntitlementRevocationSyncer{err: &entitlementsync.HTTPError{StatusCode: http.StatusForbidden}}
+	runtime := newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{}, syncer,
+		&fakeEntitlementRevocationStore{snapshot: entitlementguard.RevocationSnapshot{Revision: 5}})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var delays []time.Duration
+	runtime.wait = func(ctx context.Context, delay time.Duration) error {
+		delays = append(delays, delay)
+		switch len(delays) {
+		case 3:
+			syncer.err = nil
+		case 5:
+			cancel()
+			return ctx.Err()
+		}
+		return nil
+	}
+	if err := runtime.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() = %v", err)
+	}
+	want := []time.Duration{time.Minute, time.Minute, 2 * time.Minute, time.Minute, time.Minute}
+	if fmt.Sprint(delays) != fmt.Sprint(want) {
+		t.Fatalf("poll delays = %v, want %v", delays, want)
+	}
+}
+
+// The process stays up, but the revocation state is still required to be current:
+// once the LKG itself is past its validity, readiness fails (fail closed).
+func TestEntitlementRevocationExpiredStateStaysLockedWhileRunKeepsRetrying(t *testing.T) {
+	store := &fakeEntitlementRevocationStore{err: entitlementguard.ErrRevocationExpired}
+	syncer := &fakeEntitlementRevocationSyncer{err: &entitlementsync.HTTPError{StatusCode: http.StatusForbidden}}
+	runtime := newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{}, syncer, store)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	waits := 0
+	runtime.wait = func(ctx context.Context, _ time.Duration) error {
+		if waits++; waits == 3 {
+			cancel()
+			return ctx.Err()
+		}
+		return nil
+	}
+	if err := runtime.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() = %v, want it to keep retrying", err)
+	}
+	if err := runtime.Ready(); !errors.Is(err, entitlementguard.ErrRevocationExpired) {
+		t.Fatalf("Ready() with an expired state = %v, want ErrRevocationExpired", err)
+	}
+	store.err = nil
+	store.snapshot = entitlementguard.RevocationSnapshot{Revision: 6}
+	if err := runtime.Ready(); err != nil {
+		t.Fatalf("Ready() with a current state = %v", err)
+	}
+}
+
+func TestEntitlementRevocationRunStillStopsOnAnUnclassifiedError(t *testing.T) {
+	runtime := newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{},
+		&fakeEntitlementRevocationSyncer{err: errors.New("local database corrupted")},
+		&fakeEntitlementRevocationStore{snapshot: entitlementguard.RevocationSnapshot{Revision: 5}})
+	runtime.wait = func(context.Context, time.Duration) error { return nil }
+	if err := runtime.Run(context.Background()); err == nil || errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() = %v, want the unclassified error", err)
+	}
+}
+
+func TestEntitlementRevocationKeysetRefreshFailuresAreDeferredToo(t *testing.T) {
+	for name, refreshErr := range transientRevocationErrors() {
+		t.Run(name, func(t *testing.T) {
+			runtime := newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{err: refreshErr},
+				&fakeEntitlementRevocationSyncer{}, &fakeEntitlementRevocationStore{snapshot: entitlementguard.RevocationSnapshot{Revision: 5}})
+			if err := initializeEntitlementRevocationRuntime(t.Context(), runtime); err != nil {
+				t.Fatalf("startup keyset refresh %v stopped the control API: %v", refreshErr, err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			waits := 0
+			runtime.wait = func(ctx context.Context, _ time.Duration) error {
+				if waits++; waits == 2 {
+					cancel()
+					return ctx.Err()
+				}
+				return nil
+			}
+			if err := runtime.Run(ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("Run() = %v, want it to keep running", err)
+			}
+		})
+	}
+}
+
+func TestEntitlementRevocationStartupWithCurrentLKGSurvivesTransientErrors(t *testing.T) {
+	for name, syncErr := range transientRevocationErrors() {
+		t.Run(name, func(t *testing.T) {
+			runtime := newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{},
+				&fakeEntitlementRevocationSyncer{err: syncErr},
+				&fakeEntitlementRevocationStore{snapshot: entitlementguard.RevocationSnapshot{Revision: 7}})
+			if err := initializeEntitlementRevocationRuntime(t.Context(), runtime); err != nil {
+				t.Fatalf("startup with a current LKG and %v = %v, want it to continue", syncErr, err)
+			}
+			// First start: no LKG at all keeps today's behavior and fails.
+			runtime = newTestEntitlementRevocationRuntime(&fakeEntitlementRevocationRefresher{},
+				&fakeEntitlementRevocationSyncer{err: syncErr}, &fakeEntitlementRevocationStore{})
+			if err := initializeEntitlementRevocationRuntime(t.Context(), runtime); err == nil {
+				t.Fatalf("startup without an LKG and %v continued", syncErr)
+			}
+		})
+	}
 }

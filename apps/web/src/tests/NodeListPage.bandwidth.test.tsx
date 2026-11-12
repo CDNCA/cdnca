@@ -216,7 +216,8 @@ describe('node list page bandwidth', function nodeBandwidthBatchRegression() {
     metricsReply = new Promise(() => undefined)
     renderPage()
     await waitFor(() => expect(batchCalls()).toHaveLength(1))
-    expect(screen.getByText('读取中')).toBeInTheDocument()
+    // 带宽、月流量、XDP 三列在批量返回前都显示读取中。
+    expect(screen.getAllByText('读取中')).toHaveLength(3)
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
     expect(batchCalls()).toHaveLength(1)
     fireEvent.click(screen.getByRole('tab', { name: '待初始化' }))
@@ -361,6 +362,49 @@ describe('node list page bandwidth', function nodeBandwidthBatchRegression() {
     expect(value.textContent).toMatch(/\d/)
     fireEvent.focus(value)
     expect(await screen.findByRole('tooltip')).toHaveTextContent('本月网卡计数器重置 1 次')
+  })
+
+  // Until the batch answers, the monthly traffic and XDP columns said
+  // "未提供 / 暂无数据" as if the node had nothing; they now say 读取中, and the batch
+  // goes out right after the inventory (no other request in between).
+  it('says 读取中 in the bandwidth, monthly traffic and XDP columns until the batch answers', async () => {
+    let answer!: (response: Response) => void
+    metricsReply = new Promise<Response>((resolve) => { answer = resolve })
+    renderPage()
+    await screen.findByText('Edge one')
+    await waitFor(() => expect(batchCalls()).toHaveLength(1))
+    expect(calls.findIndex((url) => url.startsWith('/v1/nodes?'))).toBeLessThan(calls.findIndex((url) => url.startsWith('/v1/nodes/metrics/latest?')))
+    const row = screen.getByText('Edge one').closest('tr')!
+    expect(row.querySelector('.node-monthly-traffic-state')).toHaveTextContent('读取中')
+    expect(row.querySelector('.node-xdp-state')).toHaveTextContent('读取中')
+    expect(row.querySelector('.node-bandwidth-state')).toHaveTextContent('读取中')
+    expect(row).not.toHaveTextContent('暂无数据')
+    expect(row).not.toHaveTextContent('未提供')
+    answer(new Response(JSON.stringify(metricsBody), { status: 200 }))
+    expect(await screen.findByLabelText('出站带宽：5.99 Kbps')).toBeInTheDocument()
+    expect(row.querySelector('.node-xdp-state')).not.toHaveTextContent('读取中')
+  })
+
+  it('says 未提供 in the monthly traffic and XDP columns once the batch read fails', async () => {
+    metricsStatus = 503
+    renderPage()
+    await screen.findByText('Edge one')
+    const row = screen.getByText('Edge one').closest('tr')!
+    await waitFor(() => expect(row.querySelector('.node-monthly-traffic-state')).toHaveTextContent('未提供'))
+    expect(row.querySelector('.node-xdp-state')).toHaveTextContent('未提供')
+    expect(row).not.toHaveTextContent('读取中')
+  })
+
+  it('keeps the previous values while the next page of nodes loads its batch', async () => {
+    renderPage()
+    expect(await screen.findByLabelText('出站带宽：5.99 Kbps')).toBeInTheDocument()
+    const first = batchCalls().length
+    inventoryBody = { items: [node, { ...node, id: otherID, display_id: '2', name: 'Edge two' }] }
+    metricsReply = new Promise<Response>(() => undefined)
+    await act(async () => { await client.invalidateQueries({ queryKey: ['nodes'] }) })
+    await waitFor(() => expect(batchCalls().length).toBeGreaterThan(first))
+    // The old sample stays on screen instead of blanking while the new batch is in flight.
+    expect(screen.getByLabelText('出站带宽：5.99 Kbps')).toBeInTheDocument()
   })
 
   it('drops a sample whose XDP status is inconsistent', async () => {

@@ -266,6 +266,27 @@ class ConvergeTests(unittest.TestCase):
         self.assertNotIn(b'location = /dashboard {', earlier)
         self.assertEqual(C.converge(earlier), (converged, 443))
 
+    def test_status_page_entry_is_added_once_and_matches_the_installer(self):
+        # /status/ is a directory; location / (try_files $uri) never
+        # served it, so visitors got the website's 404 shell instead of the status page.
+        entry, anchor = C.STATUS_ENTRY.encode(), C.STATUS_ANCHOR.encode()
+        self.assertNotIn(b'location = /status/ {', LEGACY)
+        converged, _ = C.converge(LEGACY)
+        self.assertEqual(converged.count(entry + anchor), 1)
+        self.assertEqual(render_current().count(entry + anchor), 1)
+        # A host converged before this step gets exactly the entry, and again is a no-op.
+        earlier = converged.replace(entry, b'')
+        self.assertNotIn(b'location = /status/ {', earlier)
+        self.assertEqual(C.converge(earlier), (converged, 443))
+        self.assertEqual(C.converge(converged), (converged, 443))
+
+    def test_status_page_entry_other_than_ours_is_drift_not_overwritten(self):
+        converged, _ = C.converge(LEGACY)
+        entry = C.STATUS_ENTRY.encode()
+        handmade = b'        location = /status/ {\n            return 302 /dashboard/;\n        }\n'
+        with self.assertRaises(ValueError):
+            C.converge(converged.replace(entry, handmade))
+
     def test_log_read_json_gzip_is_added_once_and_matches_the_installer(self):
         block = C.API_GZIP.encode()
         self.assertNotIn(b'application/json', LEGACY)

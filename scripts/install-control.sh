@@ -4011,13 +4011,15 @@ setup_nats() {
 Description=CDNCA local NATS JetStream
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
 
 [Service]
 Type=simple
 User=root
 UMask=0077
 ExecStart=${NATS_SERVER_BIN} -c ${CONFIG_DIR}/nats.json
-Restart=on-failure
+Restart=always
 RestartSec=3
 NoNewPrivileges=yes
 ProtectHome=read-only
@@ -4640,6 +4642,8 @@ gateway_write_service() {
 Description=CDNCA standalone Agent Gateway
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
 
 [Service]
 Type=simple
@@ -4647,7 +4651,7 @@ User=root
 UMask=0077
 EnvironmentFile=${env}
 ExecStart=${GATEWAY_ROOT}/bin/agent-gateway
-Restart=on-failure
+Restart=always
 RestartSec=5
 NoNewPrivileges=yes
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -4750,6 +4754,8 @@ setup_gateway() {
 Description=CDNCA Agent Gateway
 After=${SERVICE_NAME}.service ${NATS_SERVICE_NAME}.service redis-server.service
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
 
 [Service]
 Type=simple
@@ -4757,7 +4763,7 @@ User=root
 UMask=0077
 EnvironmentFile=${GATEWAY_ENV_FILE}
 ExecStart=${NATIVE_ROOT}/current/bin/agent-gateway
-Restart=on-failure
+Restart=always
 RestartSec=5
 NoNewPrivileges=yes
 CapabilityBoundingSet=
@@ -5162,6 +5168,15 @@ http {
             proxy_set_header X-Forwarded-Proto https;
             proxy_pass http://127.0.0.1:8080;
         }
+        # The public status page: /status/ is a directory, which location / does not
+        # serve (try_files \$uri only matches files), so it would fall to @website.
+        location = /status {
+            absolute_redirect off;
+            return 301 /status/\$is_args\$args;
+        }
+        location = /status/ {
+            rewrite ^ /status/index.html break;
+        }
         location ~* ^/(?:dashboard/)?(?:assets/.*|.*\.(?:css|js|mjs|map|json|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf))\$ {
             rewrite ^/dashboard/(.*)\$ /\$1 break;
             try_files \$uri =404;${brotli_static}
@@ -5343,6 +5358,8 @@ setup_web() {
 Description=CDNCA control web
 After=${SERVICE_NAME}.service ${GATEWAY_SERVICE_NAME}.service
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
 
 [Service]
 Type=simple
@@ -5350,7 +5367,7 @@ User=root
 ExecStart=${nginx_bin} -c ${NGINX_CONF} -p ${NGINX_RUNTIME_DIR} -g 'daemon off;'
 ExecReload=${nginx_bin} -s reload -c ${NGINX_CONF} -p ${NGINX_RUNTIME_DIR}
 ExecStop=/bin/kill -s QUIT \$MAINPID
-Restart=on-failure
+Restart=always
 RestartSec=5
 NoNewPrivileges=yes
 ProtectHome=read-only
@@ -5525,6 +5542,8 @@ Description=CDNCA control API
 After=network-online.target postgresql.service redis-server.service systemd-tmpfiles-setup.service$(control_dependency_units)
 Requires=systemd-tmpfiles-setup.service
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=30
 
 [Service]
 Type=simple
@@ -5536,7 +5555,7 @@ EnvironmentFile=${CONFIG_DIR}/runtime-extra.env
 EnvironmentFile=${CONFIG_DIR}/certificate-runtime/environment.env
 EnvironmentFile=/etc/cdnca-upgrade/api.env
 ExecStart=${NATIVE_ROOT}/current/bin/control-api serve
-Restart=on-failure
+Restart=always
 RestartSec=5
 NoNewPrivileges=yes
 CapabilityBoundingSet=
