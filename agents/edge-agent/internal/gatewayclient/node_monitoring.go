@@ -211,6 +211,11 @@ func (bridge *NodeMonitoringBridge) ReportNodeMonitoring(_ context.Context, repo
 					SpacePercent: disk.SpacePercent, InodePercent: disk.InodePercent,
 				})
 			}
+			for _, set := range telemetry.StringSetOverBudget {
+				load.Telemetry.StringSetOverBudget = append(load.Telemetry.StringSetOverBudget, &agentv1.NodeStringSetOverBudgetV1{
+					SetId: set.SetID, Revision: set.Revision, Mode: set.Mode, Members: set.Members,
+					EstimateBytes: set.EstimateBytes, LiveBytes: set.LiveBytes, BudgetBytes: set.BudgetBytes})
+			}
 			for _, drop := range telemetry.DDoSDrops {
 				load.Telemetry.DdosDrops = append(load.Telemetry.DdosDrops, &agentv1.NodeDDoSDropV1{
 					Kind: drop.Kind, Packets: drop.Packets, Bytes: drop.Bytes})

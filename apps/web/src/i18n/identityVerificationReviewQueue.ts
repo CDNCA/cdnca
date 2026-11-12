@@ -22,7 +22,6 @@ const zhCN = {
     kind: '认证类型',
     status: '案件状态',
     reviewer: '审核人 ID',
-    revision: '版本',
     changedAt: '状态更新时间',
   },
   kinds: {
@@ -79,7 +78,6 @@ const enUS: typeof zhCN = {
     kind: 'Verification type',
     status: 'Case status',
     reviewer: 'Reviewer ID',
-    revision: 'Revision',
     changedAt: 'State updated at',
   },
   kinds: {

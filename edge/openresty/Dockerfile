@@ -115,11 +115,11 @@ RUN set -eu; \
 	chmod 0555 /usr/local/openresty/site/lualib/resty; \
 	printf '%s  %s\n' d528c1309c2bfa0c9c48348185c1966d8a764a67164099cf6a522955667f7fdc /usr/local/share/cdnca/range/guard.lua | sha256sum -c -; \
 	 echo 'd07c193c7eabc22c1b7783c42697ced0117be4fcb43c81edf7e0e4451ca0fc62  /usr/local/share/cdnca/security/cdnca_waf.lua' | sha256sum -c -; \
-		echo '6a979e2cccbc180bbb782698434a619fd8d2b67941b8635d21d587e5c206a5ec  /usr/local/share/cdnca/security/cdnca_rule_interp.lua' | sha256sum -c -; \
+		echo 'a3b460a97eb27937730b8a28721bc2aba4a8309c80201a3a1204de3c1d068b46  /usr/local/share/cdnca/security/cdnca_rule_interp.lua' | sha256sum -c -; \
 		echo 'c1719686a77f8d1cdaffc35852c76c5c4200f5a44926b3cd49ac0b099c25586a  /usr/local/share/cdnca/security/cdnca_ua.lua' | sha256sum -c -; \
 		echo 'ac3bb86b0f0bde5fac47308a91213cedaab39e26dc827284a3aba31bbde58778  /usr/local/share/cdnca/security/cdnca_banlist.lua' | sha256sum -c -; \
 		echo '5011685413909ce4b8b2ff010e3d505378d3c9ac6797218afc16118c80b990c0  /usr/local/share/cdnca/dynroute/cdnca_site.lua' | sha256sum -c -; \
-		echo 'beba3171b3e53abacc031fe7c73dd7da081dc3e3e4276f1a3034972cd723cebe  /usr/local/share/cdnca/dynroute/cdnca_site_admin.lua' | sha256sum -c -; \
+		echo '92e59b1f7abe2fa3dba6f180e890ec12164f60c36ac9e20783817dd23343e0bb  /usr/local/share/cdnca/dynroute/cdnca_site_admin.lua' | sha256sum -c -; \
 		echo '66bc1559487b74f24cc5219df766ed46987e19785feb9b6cb4eeb8a8250c686f  /usr/local/share/cdnca/dynroute/cdnca_tls.lua' | sha256sum -c -; \
 		echo '95b2185b927cdf68e8d83287080d678fafb93f90509899d1276827078684fe58  /usr/local/share/cdnca/dynroute/cdnca_origin.lua' | sha256sum -c -; \
 		echo 'd242995eb076f4ac206271f6f3d0ee47b2c4d0089be9db41596ee904e2d6859a  /usr/local/share/cdnca/security/cc.lua' | sha256sum -c -; \

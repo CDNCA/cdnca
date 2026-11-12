@@ -459,6 +459,21 @@ function _M.check_epoch()
     end
 end
 
+-- string_set_over lists the sets a worker refused for the string set memory
+-- budget (cdnca_rule_interp writes strset_over:<id>; entries expire).
+local function string_set_over()
+    -- 空列表也要编码成 JSON 数组 []，agent 侧按数组解码（siteindex.StringSetOver）
+    local over = setmetatable({}, cjson.empty_array_mt)
+    for _, key in ipairs(state_dict:get_keys(0)) do
+        if key:sub(1, 12) == "strset_over:" then
+            local entry = cjson.decode(state_dict:get(key) or "null")
+            if type(entry) == "table" then over[#over + 1] = entry end
+        end
+    end
+    table.sort(over, function(left, right) return tostring(left.id) < tostring(right.id) end)
+    return over
+end
+
 local function status()
     local workers = {}
     for _, key in ipairs(state_dict:get_keys(0)) do
@@ -481,6 +496,7 @@ local function status()
         epoch_ok = gen == 0 or epochs_agree(),
         rebuild = cjson.decode(state_dict:get("rebuild") or "null"),
         workers = workers,
+        string_set_over = string_set_over(),
     }
 end
 

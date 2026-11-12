@@ -38,7 +38,7 @@ function apply(view: View, stale: boolean) {
   logo.hidden = !view.show_logo
   if (view.show_logo && !logo.getAttribute('src')) logo.src = '/v1/brand-assets/logo'
   footer.textContent = fill(m.poweredBy, { title })
-  if (view.description) titleNode.title = view.description
+  titleNode.title = view.description || m.defaultDescription
   renderView(root, view, lang, stale)
 }
 

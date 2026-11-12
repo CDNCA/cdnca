@@ -152,6 +152,7 @@ components:
         source: {type: string, enum: [manual, line_group]}
         line_group_id: {type: string, format: uuid, description: Required when source is line_group, refused when source is manual.}
         manual_status: {$ref: '#/components/schemas/Status', description: Defaults to operational.}
+        hidden: {type: boolean, description: A hidden component is left off the public page and its overall status. Defaults to false.}
     SaveRequest:
       type: object
       additionalProperties: false
@@ -162,7 +163,7 @@ components:
         components: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/ComponentInput'}}
     AdminComponent:
       type: object
-      required: [id, name, description, source, line_group_missing, manual_status, status]
+      required: [id, name, description, source, line_group_missing, manual_status, hidden, status]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
@@ -172,6 +173,7 @@ components:
         line_group_name: {type: string}
         line_group_missing: {type: boolean}
         manual_status: {$ref: '#/components/schemas/Status'}
+        hidden: {type: boolean}
         auto_status: {$ref: '#/components/schemas/Status'}
         status: {$ref: '#/components/schemas/Status'}
     IncidentUpdate:

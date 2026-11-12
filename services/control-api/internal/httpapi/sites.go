@@ -25,6 +25,7 @@ type siteBasicPayload struct {
 	CNAMEDomain           string              `json:"cname_domain"`
 	CNAMEHostname         string              `json:"cname_hostname"`
 	CNAMERegenerate       bool                `json:"cname_regenerate,omitempty"`
+	CNAMECustomLabel      *string             `json:"cname_custom_label,omitempty"` // 仅平台会话返回
 	PackageName           *string             `json:"package_name"`
 	GroupID               *string             `json:"group_id"`
 	GroupName             *string             `json:"group_name"`
@@ -421,7 +422,15 @@ func (s *Server) handleGetSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("ETag", quoteVersion(item.Revision))
-	writeJSON(w, http.StatusOK, siteDetail(item))
+	detail := siteDetail(item)
+	if principal.ScopeKind == "platform" {
+		if actor, err := s.siteWriteActor(r, principal); err == nil {
+			if label, err := s.sites.GetCNAMELabel(r.Context(), actor, site.CNAMELabelSite, id); err == nil {
+				detail.Basic.CNAMECustomLabel = &label
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, detail)
 }
 
 func (s *Server) handleUpdateSite(w http.ResponseWriter, r *http.Request) {

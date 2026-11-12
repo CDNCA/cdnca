@@ -5,7 +5,7 @@ const zhCN = {
   title: 'IP 名单',
   description: '在 WAF 规则里用“IP 名单”条件引用这里的名单。修改名单后，引用它的网站会自动重新发布。',
   platformHint: '平台名单由平台管理员维护，所有用户的规则都可以引用，这里只读。',
-  columns: { name: '名称', description: '说明', entries: '条目数', revision: '版本', owner: '归属', updatedAt: '更新时间', actions: '操作' },
+  columns: { name: '名称', description: '说明', entries: '条目数', owner: '归属', updatedAt: '更新时间', actions: '操作' },
   owner: { platform: '平台', own: '本账号' },
   actions: { create: '新建名单', edit: '编辑', delete: '删除', refresh: '刷新', save: '保存', cancel: '取消' },
   form: {
@@ -30,7 +30,7 @@ const enUS: typeof zhCN = {
   title: 'IP lists',
   description: 'WAF rules reference these lists with the "IP list" condition. Changing a list republishes the sites that use it.',
   platformHint: 'Platform lists are maintained by platform administrators; every user\'s rules may reference them. Read only here.',
-  columns: { name: 'Name', description: 'Description', entries: 'Entries', revision: 'Revision', owner: 'Owner', updatedAt: 'Updated', actions: 'Actions' },
+  columns: { name: 'Name', description: 'Description', entries: 'Entries', owner: 'Owner', updatedAt: 'Updated', actions: 'Actions' },
   owner: { platform: 'Platform', own: 'This account' },
   actions: { create: 'New list', edit: 'Edit', delete: 'Delete', refresh: 'Refresh', save: 'Save', cancel: 'Cancel' },
   form: {

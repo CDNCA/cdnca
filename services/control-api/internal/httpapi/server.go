@@ -920,6 +920,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/sites", s.handleListSites)
 	mux.HandleFunc("GET /v1/sites/export", s.handleExportSiteDomains)
 	mux.HandleFunc("POST /v1/sites/batch-action", s.handleBatchSiteAction)
+	mux.HandleFunc("GET /v1/admin/cname-labels/{kind}/{id}", s.handleGetCNAMELabel)
+	mux.HandleFunc("PUT /v1/admin/cname-labels/{kind}/{id}", s.handlePutCNAMELabel)
+	mux.HandleFunc("GET /v1/admin/cname-labels/{kind}/{id}/affected", s.handleCNAMELabelAffected)
+	mux.HandleFunc("POST /v1/admin/cname-labels/{kind}/{id}/regenerate", s.handleCNAMELabelRegenerate)
 	mux.HandleFunc("GET /v1/sites/{id}/origin-routing", s.handleGetSiteConditionalOrigin)
 	mux.HandleFunc("PUT /v1/sites/{id}/origin-routing", s.handlePutSiteConditionalOrigin)
 	mux.HandleFunc("GET /v1/sites/{id}/schedule302", s.handleGetSiteSchedule302)
@@ -1780,13 +1784,16 @@ func (s *Server) Handler() http.Handler {
 		}
 	}
 	mux.HandleFunc("GET /v1/auth/registration-config", s.handleRegistrationConfig)
-	var gated http.Handler = mux
+	// The mux sets r.Pattern on the request it receives, so the refusal log
+	// wraps the mux itself to read the route template.
+	logged := s.withRefusalLog(mux)
+	var gated http.Handler = logged
 	var full http.Handler
 	if s.approvalCenter != nil {
 		// Approved requests replay through the full chain (request ID,
 		// installation lock, upgrade gate) like any other request.
 		s.approvalCenterRoutes(mux, func() http.Handler { return full })
-		gated = s.withApprovalCenter(mux)
+		gated = s.withApprovalCenter(logged)
 	}
 	handler := s.withRequestID(s.withAPIKeyClientIP(s.withPluginIdentity(s.withInstallationLock(gated))))
 	if s.controlPlaneUpgradeGate != nil {
@@ -3026,6 +3033,7 @@ func (s *Server) logClientError(r *http.Request, status int, code string) {
 	if status < 400 || status >= 500 || s.logger == nil {
 		return
 	}
+	markRefusalLogged(r.Context())
 	route := r.Pattern
 	if route == "" {
 		route = "(unrouted)"

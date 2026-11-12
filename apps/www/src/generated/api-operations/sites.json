@@ -1089,6 +1089,265 @@
    ]
   },
   {
+   "operation_id": "getSiteContentRewrite",
+   "method": "GET",
+   "path": "/v1/sites/{id}/content-rewrite",
+   "summary": "Get the site's content rewrite rules",
+   "summary_zh": "读取网站的内容改写规则",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.read. 内容改写: link rewrite, text replace and force HTTPS rules the node runs on the site's HTML, CSS and JavaScript responses. A site without rules returns an empty list and the default max_bytes. domains are the site's active names (https rules with include_site_domains add them).",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current rules and the shared site version.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "SiteContentRewriteSettings",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "replaceSiteContentRewrite",
+   "method": "PUT",
+   "path": "/v1/sites/{id}/content-rewrite",
+   "summary": "Replace the site's content rewrite rules",
+   "summary_zh": "替换网站的内容改写规则",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and a strong If-Match value for the shared site version. The whole settings object is replaced; the update, automatic edge publication request and the site.content_rewrite.update audit event commit in one transaction. A refused rule answers 400 validation_error with details.field (e.g. rules[2].find) and reason. A replayed request carries a stale version and gets 409. Publishing a site with an enabled rule requires nodes with SITE_CONTENT_REWRITE.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted decimal version returned by ETag."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "max_bytes",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "Bytes of a response rewritten (0 = 2 MiB, else 64 KiB to 16 MiB); the rest passes unchanged."
+     },
+     {
+      "name": "rules",
+      "type": "array<SiteContentRewriteRule>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated state.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "SiteContentRewriteSettings",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "testSiteContentRewrite",
+   "method": "POST",
+   "path": "/v1/sites/{id}/content-rewrite/test",
+   "summary": "Run draft content rewrite rules on a pasted body",
+   "summary_zh": "用草稿规则试运行内容改写",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.read. Runs the draft settings on one response (path, content type, body up to 256 KiB) with the node's algorithm and the site's real domains; nothing is stored.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "settings",
+      "type": "SiteContentRewriteSettings",
+      "required": true
+     },
+     {
+      "name": "path",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "content_type",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "body",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The body as the node would send it.",
+     "fields": [
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "matched_rules",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "replacements",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "truncated",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
    "operation_id": "lockSite",
    "method": "POST",
    "path": "/v1/sites/{id}/lock",

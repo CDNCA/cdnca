@@ -3626,6 +3626,178 @@ paths:
         '502':
           description: dns_provider_unavailable (the provider records could not be listed).
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  /v1/admin/cname-labels/{kind}/{id}:
+    get:
+      operationId: getCNAMELabel
+      x-summary-zh: "读取管理员自定义的 CNAME 主机名或前缀"
+      summary: Read the administrator-defined CNAME host name or prefix
+      description: >-
+        Platform session only; a tenant session answers 403 permission_denied. kind site needs sites.manage, line-group node_scheduling.manage. site holds a complete host name (shop gives shop.<CNAME domain>); line-group holds a prefix (gd gives gd-xxxxxxxx.<CNAME domain>, at most 54 characters). Lowercase letters, digits and hyphens, not starting or ending with a hyphen. Errors: cname_label_invalid 400, cname_label_reserved 400, cname_label_taken 409, cname_label_follows_package 409 (a site that shares the CNAME of its package).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [site, line-group]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The stored value; empty when none is set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CNAMELabel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: putCNAMELabel
+      x-summary-zh: "设置管理员自定义的 CNAME 主机名或前缀"
+      summary: Set the administrator-defined CNAME host name or prefix
+      description: >-
+        Platform session only; a tenant session answers 403 permission_denied. kind site needs sites.manage, line-group node_scheduling.manage. site holds a complete host name (shop gives shop.<CNAME domain>); line-group holds a prefix (gd gives gd-xxxxxxxx.<CNAME domain>, at most 54 characters). Lowercase letters, digits and hyphens, not starting or ending with a hyphen. Errors: cname_label_invalid 400, cname_label_reserved 400, cname_label_taken 409, cname_label_follows_package 409 (a site that shares the CNAME of its package). Setting a site name re-allocates the CNAME of that site at once (a new generation, DNS synchronised, the old record retired). A line group prefix only shapes CNAMEs allocated later. An empty label clears the value.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [site, line-group]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label:
+                  type: string
+                  maxLength: 63
+      responses:
+        '200':
+          description: The stored value and the number of sites re-allocated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CNAMELabelResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/admin/cname-labels/{kind}/{id}/affected:
+    get:
+      operationId: countCNAMELabelAffected
+      x-summary-zh: "按新前缀重新生成会影响的网站数"
+      summary: Count the sites that regenerating under the current prefix would change
+      description: >-
+        Only for kind line-group. Sites with their own name or a legacy product host name are not counted.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [site, line-group]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Number of affected sites.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CNAMELabelAffected'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/admin/cname-labels/{kind}/{id}/regenerate:
+    post:
+      operationId: regenerateCNAMELabelSites
+      x-summary-zh: "按新前缀重新生成网站 CNAME"
+      summary: Re-allocate the CNAME of every affected site under the current prefix
+      description: >-
+        Only for kind line-group. Read the count with the affected route and confirm first. Sites of one package share one new CNAME.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [site, line-group]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Number of sites queued for re-allocation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CNAMELabelAffected'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /v1/dns/platform-zones:
     get:
       operationId: listPlatformDNSZones
@@ -6435,6 +6607,28 @@ components:
           schema:
             $ref: '#/components/schemas/ControlUpgradeRolloutActionRequest'
   schemas:
+    CNAMELabel:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+    CNAMELabelResult:
+      type: object
+      required: [label, regenerated]
+      properties:
+        label:
+          type: string
+        regenerated:
+          type: integer
+          minimum: 0
+    CNAMELabelAffected:
+      type: object
+      required: [sites]
+      properties:
+        sites:
+          type: integer
+          minimum: 0
     BillingBridgeKey:
       type: object
       required: [id, key_id, owner_scope_id, owner_kind, name, ip_allowlist, status, expires_at, last_used_at, created_by, revision, created_at, updated_at, revoked_at]
@@ -11007,6 +11201,24 @@ components:
             state: {type: string, enum: [applied, default, failed, restart_pending]}
             reason: {type: string, maxLength: 512}
             requested_log_directory: {type: string, maxLength: 256}
+        string_set_over_budget:
+          type: array
+          maxItems: 256
+          description: >-
+            节点因 worker 内存预算拒绝编译的 WAF 字符串集合（NodeTelemetryV1 字段 16）。按 set_id 升序、唯一；
+            没有被拒绝的集合与旧 Agent 不带。
+          items:
+            type: object
+            additionalProperties: false
+            required: [set_id, revision, mode, members, estimate_bytes, live_bytes, budget_bytes]
+            properties:
+              set_id: {type: string, minLength: 1, maxLength: 64}
+              revision: {type: integer, format: int64, minimum: 1}
+              mode: {type: string, minLength: 1, maxLength: 16}
+              members: {type: integer, format: int64, minimum: 0}
+              estimate_bytes: {type: integer, format: int64, minimum: 0}
+              live_bytes: {type: integer, format: int64, minimum: 0}
+              budget_bytes: {type: integer, format: int64, minimum: 0}
     UpdateNodeRequest:
       type: object
       additionalProperties: false

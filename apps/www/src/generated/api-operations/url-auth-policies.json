@@ -99,7 +99,8 @@
     "apiKey",
     "bearer"
    ],
-   "description": "Requires url_auth_policies.manage. The generated key secret is returned exactly once on the first successful request. An identical idempotent replay returns the same policy with replayed=true and no secret. Legacy Type A, Type B, and MD5 are migration provenance only and cannot be selected for new execution. This endpoint records a deterministic edge-compatible snapshot but does not publish it to Gateway or an edge node.",
+   "description": "An enabled policy is delivered to the scope's nodes that declare URL_AUTH with the write; they verify signed URLs before the cache and answer 503 until the policy is installed. Without the edge publication runtime an enabled policy returns 422 url_auth_unavailable and nothing is created. Requires url_auth_policies.manage. The generated key secret is returned exactly once on the first successful request. An identical idempotent replay returns the same policy with replayed=true and no secret. Legacy Type A, Type B, and MD5 are migration provenance only and cannot be selected for new execution. This endpoint records a deterministic edge-compatible snapshot but does not publish it to Gateway or an edge node.",
+   "description_zh": "启用的策略随写入下发到声明 URL_AUTH 的节点，节点在缓存之前验签；未下发到的节点返回 503，不放行。 主控未开启边缘发布时，创建启用的策略返回 422 url_auth_unavailable，不创建策略。",
    "params": [
     {
      "name": "Idempotency-Key",
@@ -230,6 +231,10 @@
      "status": "409",
      "description": "The requested state conflicts with an existing resource or idempotency fact.",
      "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "The request is well formed but breaks a business rule (error.code names it)."
     },
     {
      "status": "503",
@@ -418,7 +423,8 @@
     "apiKey",
     "bearer"
    ],
-   "description": "Requires url_auth_policies.manage. The algorithm remains fixed to hmac-sha256 and migration_marker is read-only.",
+   "description": "A write that leaves the policy enabled is delivered to its nodes again; without the edge publication runtime a body with enabled=true returns 422 url_auth_unavailable and leaves the policy unchanged. Requires url_auth_policies.manage. The algorithm remains fixed to hmac-sha256 and migration_marker is read-only.",
+   "description_zh": "启用状态的修改会重新下发到节点；主控未开启边缘发布时，带 enabled=true 的请求返回 422 url_auth_unavailable，策略不变。",
    "params": [
     {
      "name": "id",
@@ -555,6 +561,90 @@
      "description_zh": "请求的状态与已有资源或幂等记录冲突。"
     },
     {
+     "status": "422",
+     "description": "The request is well formed but breaks a business rule (error.code names it)."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "disableURLAuthPolicy",
+   "method": "POST",
+   "path": "/v1/url-auth-policies/{id}/disable",
+   "summary": "Disable a URL authentication policy",
+   "summary_zh": "停用 URL 鉴权策略",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires url_auth_policies.manage. The sites stop requiring signed URLs once their nodes take the next publication.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Policy with its new enabled state.",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "URLAuthPolicy",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
      "status": "500",
      "description": "The request could not be completed because of an internal failure.",
      "description_zh": "服务内部故障，请求未完成。"
@@ -626,6 +716,90 @@
      "status": "404",
      "description": "The requested resource was not found.",
      "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "enableURLAuthPolicy",
+   "method": "POST",
+   "path": "/v1/url-auth-policies/{id}/enable",
+   "summary": "Enable a URL authentication policy",
+   "summary_zh": "启用 URL 鉴权策略",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires url_auth_policies.manage. Delivers the policy to the scope's nodes that declare URL_AUTH; without the edge publication runtime returns 422 url_auth_unavailable and the policy stays disabled.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Policy with its new enabled state.",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "URLAuthPolicy",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "The request is well formed but breaks a business rule (error.code names it)."
     },
     {
      "status": "500",

@@ -1591,6 +1591,23 @@ message NodeTelemetryV1 {
   // The node storage settings in effect (NODE_STORAGE v1). Missing on old
   // Agents.
   NodeStorageV1 storage = 14;
+  // The WAF string sets the node refused to compile because the matchers of an
+  // OpenResty worker would exceed the 64 MiB memory budget, sorted by set_id,
+  // unique, at most 256. Missing when nothing is refused and on old Agents.
+  repeated NodeStringSetOverBudgetV1 string_set_over_budget = 16;
+}
+
+// NodeStringSetOverBudgetV1 is one refused WAF string set. estimate_bytes is
+// the set's estimated matcher memory, live_bytes the estimate of the matchers
+// the worker held when it refused, budget_bytes the budget (64 MiB).
+message NodeStringSetOverBudgetV1 {
+  string set_id = 1;
+  int64 revision = 2;
+  string mode = 3;
+  uint32 members = 4;
+  uint64 estimate_bytes = 5;
+  uint64 live_bytes = 6;
+  uint64 budget_bytes = 7;
 }
 
 // NodeStorageV1 is what the node runs: the cache directory and limit of the

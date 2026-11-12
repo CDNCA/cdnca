@@ -1196,7 +1196,7 @@ preflight_check_spare_disk() {
   local mount=$1 disk size
   read -r disk size <<<"$(preflight_spare_disks | head -1)" || true
   [ -n "${disk:-}" ] || return 0
-  preflight_record warn 数据盘 "$(msg "发现未使用的磁盘 $disk（$size GiB，无分区、未挂载）；安装器不会自动格式化或挂载" "found an unused disk $disk ($size GiB, no partitions, not mounted); the installer never formats or mounts disks itself")" \
+  preflight_record warn 数据盘 "$(msg "发现未使用的磁盘 ${disk}（$size GiB，无分区、未挂载）；安装器不会自动格式化或挂载" "found an unused disk $disk ($size GiB, no partitions, not mounted); the installer never formats or mounts disks itself")" \
     "$(msg "确认 $disk 是空盘后（lsblk -f；mkfs 会清空它），把它挂到主控数据目录 /var/lib（当前在 $mount 分区）再重新安装：" "after confirming $disk is empty (lsblk -f; mkfs erases it), mount it on the control data directory /var/lib (now on $mount) and rerun the install: ")mkfs.ext4 $disk && mkdir -p /mnt/cdnca-var && mount $disk /mnt/cdnca-var && cp -a /var/lib/. /mnt/cdnca-var/ && umount /mnt/cdnca-var && echo \"UUID=\$(blkid -s UUID -o value $disk) /var/lib ext4 defaults,nofail 0 2\" >> /etc/fstab && reboot"
 }
 
@@ -1219,12 +1219,12 @@ preflight_check_disk() {
     seen="$seen$mount "
     [ "$avail_mib" -ge "$warn_mib" ] || short="$short$mount "
     if [ "$avail_mib" -lt "$fail_mib" ]; then
-      preflight_record fail 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free, below $((fail_mib / 1024)) GiB")" "$(msg "请清理或扩容 $mount 分区" "free up or grow the $mount partition")"
+      preflight_record fail 磁盘空间 "$(msg "${path}（分区 ${mount}）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free, below $((fail_mib / 1024)) GiB")" "$(msg "请清理或扩容 $mount 分区" "free up or grow the $mount partition")"
     elif [ "$avail_mib" -lt "$warn_mib" ]; then
-      preflight_record warn 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" "$path (partition $mount) has $((avail_mib / 1024)) GiB free; $((warn_mib / 1024)) GiB+ recommended")" \
+      preflight_record warn 磁盘空间 "$(msg "${path}（分区 ${mount}）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" "$path (partition $mount) has $((avail_mib / 1024)) GiB free; $((warn_mib / 1024)) GiB+ recommended")" \
         "$(if [ "$role" = control ]; then msg '日志、分析数据和对象存储会持续增长，建议使用 100G 以上 SSD' 'logs, analytics and object storage keep growing; a 100G+ SSD is recommended'; else msg '缓存会占用磁盘，按缓存规模预留空间' 'the cache uses disk; reserve space for its size'; fi)"
     else
-      preflight_record pass 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free")"
+      preflight_record pass 磁盘空间 "$(msg "${path}（分区 ${mount}）可用 $((avail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free")"
     fi
   done
   [ "$role" = control ] || return 0
@@ -1266,7 +1266,7 @@ preflight_check_systemd() {
   if [ -z "$version" ]; then
     preflight_record fail systemd "$(msg '无法识别 systemd 版本' 'cannot detect the systemd version')"
   elif [ "$version" -lt 219 ]; then
-    preflight_record fail systemd "$(msg "版本 $version，低于 219" "version $version is older than 219")" "$(msg '请升级系统' 'upgrade the system')"
+    preflight_record fail systemd "$(msg "版本 ${version}，低于 219" "version $version is older than 219")" "$(msg '请升级系统' 'upgrade the system')"
   elif [ "$version" -lt "$minimum" ]; then
     # Older systemd: units get a compatibility drop-in (systemd-compat.sh) and
     # unknown hardening directives are ignored by systemd itself.
@@ -1278,7 +1278,7 @@ preflight_check_systemd() {
         systemd_compat_knows "$directive" || groups="$groups $directive"
       done
     fi
-    preflight_record warn systemd "$(msg "版本 $version（低于 $minimum）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:$groups，将不启用系统调用过滤}" "version $version (older than $minimum): reduced sandboxing${missing:+, unsupported:$missing}${groups:+; missing syscall filter groups:$groups, syscall filtering disabled}")" \
+    preflight_record warn systemd "$(msg "版本 ${version}（低于 ${minimum}）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:${groups}，将不启用系统调用过滤}" "version $version (older than $minimum): reduced sandboxing${missing:+, unsupported:$missing}${groups:+; missing syscall filter groups:$groups, syscall filtering disabled}")" \
       "$(msg '服务可以运行，但上述隔离措施不会生效；建议使用 systemd 249 以上的系统' 'services run, but the isolation above does not apply; systemd 249+ is recommended')"
   else
     preflight_record pass systemd "$(msg "版本 $version" "version $version")"
@@ -1349,7 +1349,7 @@ preflight_check_remote() {
   local label=$1 url='' headers='' local_epoch remote_date remote_epoch skew untrusted=false candidate rc
   shift
   if ! command -v curl >/dev/null 2>&1; then
-    preflight_record warn "连通性（$label）" "$(msg '未安装 curl，跳过检测' 'curl is not installed; check skipped')"
+    preflight_record warn "连通性（${label}）" "$(msg '未安装 curl，跳过检测' 'curl is not installed; check skipped')"
     return
   fi
   for candidate in "$@"; do
@@ -1361,15 +1361,15 @@ preflight_check_remote() {
     headers=''
   done
   if [ -z "$url" ]; then
-    preflight_record fail "连通性（$label）" "$(msg '无法连接' 'cannot connect to') $*" "$(msg '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址' 'check DNS, outbound firewall and proxy settings so this host can reach that HTTPS address')"
+    preflight_record fail "连通性（${label}）" "$(msg '无法连接' 'cannot connect to') $*" "$(msg '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址' 'check DNS, outbound firewall and proxy settings so this host can reach that HTTPS address')"
     return
   fi
   if [ "$untrusted" = true ]; then
-    preflight_record pass "连通性（$label）" "$url $(msg '可连接（证书不受系统信任，安装时用固定指纹校验）' 'reachable (certificate not trusted by the system; the install pins its fingerprint)')"
+    preflight_record pass "连通性（${label}）" "$url $(msg '可连接（证书不受系统信任，安装时用固定指纹校验）' 'reachable (certificate not trusted by the system; the install pins its fingerprint)')"
     preflight_record warn 时间偏差 "$(msg "证书不受系统信任，无法在检测阶段读取 $label 的服务器时间" "untrusted certificate: cannot read the server time of $label during the checks")" "$(msg '请确认已开启 NTP 时间同步（timedatectl set-ntp true）' 'make sure NTP time sync is on (timedatectl set-ntp true)')"
     return
   fi
-  preflight_record pass "连通性（$label）" "$url $(msg '可连接' 'reachable')"
+  preflight_record pass "连通性（${label}）" "$url $(msg '可连接' 'reachable')"
   remote_date=$(printf '%s\n' "$headers" | tr -d '\r' | awk 'tolower($1) == "date:" { sub(/^[^:]*: */, ""); print; exit }')
   remote_epoch=$(preflight_date_epoch "$remote_date")
   local_epoch=$(date -u +%s)
@@ -1391,9 +1391,9 @@ preflight_check_remote() {
 preflight_check_tcp() {
   local label=$1 host=$2 port=$3
   if timeout 6 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
-    preflight_record pass "连通性（$label）" "$host:$port $(msg '可连接' 'reachable')"
+    preflight_record pass "连通性（${label}）" "$host:$port $(msg '可连接' 'reachable')"
   else
-    preflight_record warn "连通性（$label）" "$host:$port $(msg '无法连接' 'unreachable')" "$(msg "请确认主控已放行 TCP $port，且本机出站未被拦截" "make sure the control plane allows TCP $port and outbound traffic from here is not blocked")"
+    preflight_record warn "连通性（${label}）" "$host:$port $(msg '无法连接' 'unreachable')" "$(msg "请确认主控已放行 TCP ${port}，且本机出站未被拦截" "make sure the control plane allows TCP $port and outbound traffic from here is not blocked")"
   fi
 }
 
@@ -1427,14 +1427,14 @@ preflight_check_coexistence() {
   if [ "$role" = node ]; then
     for path in /etc/cdnca-control /usr/local/cdnca-control /data/cdnca-native-root; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 主控共存 "$(msg "本机已安装主控（$path）" "a control plane is installed here ($path)")" "$(msg '节点不能与主控装在同一台机器上，请使用另一台服务器' 'a node cannot share a host with the control plane; use another server')"
+        preflight_record fail 主控共存 "$(msg "本机已安装主控（${path}）" "a control plane is installed here ($path)")" "$(msg '节点不能与主控装在同一台机器上，请使用另一台服务器' 'a node cannot share a host with the control plane; use another server')"
         return
       fi
     done
   else
     for path in /etc/cdnca-edge-agent /opt/cdnca-node /usr/lib/cdnca-edge-agent; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 节点共存 "$(msg "本机已安装节点（$path）" "a node is installed here ($path)")" "$(msg '主控不能与节点装在同一台机器上，请使用另一台服务器' 'the control plane cannot share a host with a node; use another server')"
+        preflight_record fail 节点共存 "$(msg "本机已安装节点（${path}）" "a node is installed here ($path)")" "$(msg '主控不能与节点装在同一台机器上，请使用另一台服务器' 'the control plane cannot share a host with a node; use another server')"
         return
       fi
     done
@@ -1568,7 +1568,7 @@ ssh_guard_setup() {
   ssh_guard_render >"${SSH_GUARD_JAIL}.new"
   mv -f -- "${SSH_GUARD_JAIL}.new" "$SSH_GUARD_JAIL"
   if ! fail2ban-client -t >/dev/null 2>&1; then
-    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
+    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 ${SSH_GUARD_JAIL}）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
     return 0
   fi
   systemctl enable fail2ban >/dev/null 2>&1 || true
@@ -2244,7 +2244,7 @@ $(bt_proxy_openlitespeed_config)"
     preflight_record warn 宝塔nginx "$(msg '未找到宝塔 nginx、Apache 或 OpenLiteSpeed' 'no BaoTa nginx, Apache or OpenLiteSpeed found')" "$(msg '请先在宝塔「软件商店」安装 Nginx（推荐），再按安装结束时打印的步骤配置反向代理' 'install Nginx from the BaoTa App Store first (recommended), then configure the reverse proxy with the steps printed at the end')"
   fi
   if [[ "$site" =~ ^[0-9.]+$ || "$site" == *:* ]]; then
-    preflight_record fail 管理端域名 "$(msg "宝塔模式需要域名（当前为 $site）" "BaoTa mode needs a domain (got $site)")" "$(msg '宝塔站点按域名反向代理；请用已解析到本机的域名作为 --master-host' 'BaoTa sites proxy by domain; use a domain resolving to this host as --master-host')"
+    preflight_record fail 管理端域名 "$(msg "宝塔模式需要域名（当前为 ${site}）" "BaoTa mode needs a domain (got $site)")" "$(msg '宝塔站点按域名反向代理；请用已解析到本机的域名作为 --master-host' 'BaoTa sites proxy by domain; use a domain resolving to this host as --master-host')"
   elif [ "$site" != "$unset_site" ]; then
     bt_check_site_certificate "$site"
   fi
@@ -2261,8 +2261,8 @@ $(bt_proxy_openlitespeed_config)"
         printf "$(msg '在站点「反向代理」里反向代理到 https://127.0.0.1:%s，发送域名 $host（或加 --bt-proxy 由安装器自动写入）' 'add a reverse proxy to https://127.0.0.1:%s with sent domain $host under the site Reverse proxy tab (or add --bt-proxy to let the installer write it)')" "$WEB_PORT"
     )$(msg '；③ 安装结束时会打印可复制的反向代理配置，并保存到 /etc/cdnca-control/bt-proxy.conf' '; 3) the end of the installation prints a copyable reverse proxy configuration, also saved to /etc/cdnca-control/bt-proxy.conf')"
   open="${MASTER_PORT:-443}、${GATEWAY_ENROLLMENT_PORT}、${GATEWAY_AGENT_PORT}"
-  [ "${INSTALL_MODE:-all}" != control ] || open="$open、$CONTROL_INTERNAL_REMOTE_PORT、$NATS_GATEWAY_WS_PORT、$REDIS_GATEWAY_TLS_PORT"
-  open="$open、${NODE_DOWNLOAD_PORT}$(msg '（节点升级下载）' ' (node upgrade downloads)')"
+  [ "${INSTALL_MODE:-all}" != control ] || open="${open}、${CONTROL_INTERNAL_REMOTE_PORT}、${NATS_GATEWAY_WS_PORT}、$REDIS_GATEWAY_TLS_PORT"
+  open="${open}、${NODE_DOWNLOAD_PORT}$(msg '（节点升级下载）' ' (node upgrade downloads)')"
   [ "${INSTALL_LANG:-zh}" != en ] || open=${open//、/, }
   preflight_record warn 宝塔防火墙 "$(msg "需在宝塔「安全」放行 TCP ${open}" "allow TCP ${open} under BaoTa Security")" \
     "$(msg "云服务器安全组同样放行；回环端口 ${WEB_PORT}、${PG_PORT}、${REDIS_PORT} 不要对外放行" "allow them in the cloud security group too; never expose the loopback ports ${WEB_PORT}, ${PG_PORT}, ${REDIS_PORT}")"
@@ -2729,18 +2729,18 @@ fetch_with_retry() {
       return 0
     fi
     case "$code" in
-      4[0-9][0-9]) warn "$(msg "$label 下载失败（HTTP $code），不重试" "$label download failed (HTTP $code); not retried")"; return "$status" ;;
+      4[0-9][0-9]) warn "$(msg "$label 下载失败（HTTP ${code}），不重试" "$label download failed (HTTP $code); not retried")"; return "$status" ;;
       5[0-9][0-9]) ;;
       *) case "$status" in
            6|7|16|18|28|35|52|55|56|92) ;;
-           *) warn "$(msg "$label 下载失败（curl 退出码 $status），不是网络错误，不重试" "$label download failed (curl exit $status); not a network error, not retried")"; return "$status" ;;
+           *) warn "$(msg "$label 下载失败（curl 退出码 ${status}），不是网络错误，不重试" "$label download failed (curl exit $status); not a network error, not retried")"; return "$status" ;;
          esac ;;
     esac
     if [ "$attempt" -ge 4 ]; then
-      warn "$(msg "$label 连续 $attempt 次下载失败（最后一次 curl 退出码 $status，HTTP ${code:-000}），放弃" "$label download failed $attempt times (last curl exit $status, HTTP ${code:-000}); giving up")"
+      warn "$(msg "$label 连续 $attempt 次下载失败（最后一次 curl 退出码 ${status}，HTTP ${code:-000}），放弃" "$label download failed $attempt times (last curl exit $status, HTTP ${code:-000}); giving up")"
       return "$status"
     fi
-    warn "$(msg "$label 第 $attempt 次下载失败（curl 退出码 $status，HTTP ${code:-000}），${FETCH_RETRY_DELAYS[$((attempt - 1))]} 秒后重试" "$label download attempt $attempt failed (curl exit $status, HTTP ${code:-000}); retrying in ${FETCH_RETRY_DELAYS[$((attempt - 1))]}s")"
+    warn "$(msg "$label 第 $attempt 次下载失败（curl 退出码 ${status}，HTTP ${code:-000}），${FETCH_RETRY_DELAYS[$((attempt - 1))]} 秒后重试" "$label download attempt $attempt failed (curl exit $status, HTTP ${code:-000}); retrying in ${FETCH_RETRY_DELAYS[$((attempt - 1))]}s")"
     sleep "${FETCH_RETRY_DELAYS[$((attempt - 1))]}"
     attempt=$((attempt + 1))
   done
@@ -4821,7 +4821,7 @@ origin_auth_secret() {
   if [ ! -e "$ORIGIN_AUTH_SECRET_FILE" ]; then
     (umask 077; openssl rand -hex 32 >"$ORIGIN_AUTH_SECRET_FILE.next")
     mv -f "$ORIGIN_AUTH_SECRET_FILE.next" "$ORIGIN_AUTH_SECRET_FILE"
-    log "$(msg "已生成 CDN 回源密钥 $ORIGIN_AUTH_SECRET_FILE（root 0600）" "CDN origin key created: $ORIGIN_AUTH_SECRET_FILE (root 0600)")" >&2
+    log "$(msg "已生成 CDN 回源密钥 ${ORIGIN_AUTH_SECRET_FILE}（root 0600）" "CDN origin key created: $ORIGIN_AUTH_SECRET_FILE (root 0600)")" >&2
   fi
   [ -f "$ORIGIN_AUTH_SECRET_FILE" ] && [ ! -L "$ORIGIN_AUTH_SECRET_FILE" ] || fail "$ORIGIN_AUTH_SECRET_FILE $(msg "不是普通文件" "is not a regular file")"
   secret=$(tr -d '\r\n' <"$ORIGIN_AUTH_SECRET_FILE")
@@ -4848,7 +4848,7 @@ origin_auth_import() {
   (umask 077; tr -d '\r\n' <"$ORIGIN_AUTH_IMPORT_FILE" >"$ORIGIN_AUTH_SECRET_FILE.next")
   chmod 0600 "$ORIGIN_AUTH_SECRET_FILE.next"
   mv -f "$ORIGIN_AUTH_SECRET_FILE.next" "$ORIGIN_AUTH_SECRET_FILE"
-  log "$(msg "已导入 CDN 回源密钥到 $ORIGIN_AUTH_SECRET_FILE（root 0600）" "CDN origin key imported to $ORIGIN_AUTH_SECRET_FILE (root 0600)")" >&2
+  log "$(msg "已导入 CDN 回源密钥到 ${ORIGIN_AUTH_SECRET_FILE}（root 0600）" "CDN origin key imported to $ORIGIN_AUTH_SECRET_FILE (root 0600)")" >&2
 }
 
 # 写 origin-auth.conf（root 0600）：回源密钥匹配且 real-ip 头是单个合法 IP（X-Forwarded-For 取最右一跳）时
@@ -4931,7 +4931,7 @@ origin_auth_main() {
     esac
   done
   [ "$EUID" -eq 0 ] || fail 'run this installer as root'
-  [ -f "$NGINX_CONF" ] || fail "$(msg "没有 $NGINX_CONF：本机未安装主控" "$NGINX_CONF missing: no control plane is installed here")"
+  [ -f "$NGINX_CONF" ] || fail "$(msg "没有 ${NGINX_CONF}：本机未安装主控" "$NGINX_CONF missing: no control plane is installed here")"
   ! grep -qxF '        set_real_ip_from 127.0.0.1;' "$NGINX_CONF" || bt=true
   origin_auth_check_header "$bt"
   nginx_bin=$(awk '/^ExecStart=/{sub(/^ExecStart=/, ""); print $1; exit}' "$unit" 2>/dev/null)
@@ -6065,7 +6065,7 @@ check_main() {
   if check_fetch http://127.0.0.1:8080/health/ready >/dev/null; then ok 'control-api /health/ready'; else bad 'control-api /health/ready'; fi
   if check_fetch http://127.0.0.1:8082/health/ready >/dev/null; then ok 'agent-gateway /health/ready'; else bad 'agent-gateway /health/ready'; fi
   if [ "$(jq -r '"\(.ready) \(.reason)"' "$UPGRADE_STATUS_FILE" 2>/dev/null)" = 'true ready' ]; then ok "$(msg '升级 runner 就绪' 'upgrade runner ready')"
-  else bad "$(msg "升级 runner 未就绪（$UPGRADE_STATUS_FILE）" "upgrade runner not ready ($UPGRADE_STATUS_FILE)")"; fi
+  else bad "$(msg "升级 runner 未就绪（${UPGRADE_STATUS_FILE}）" "upgrade runner not ready ($UPGRADE_STATUS_FILE)")"; fi
   if grep -Fxq step=done "$CONTROL_INSTALL_STATE_FILE" 2>/dev/null; then ok "$(msg '安装记录已完成' 'install record finished')"
   else bad "$(msg "安装记录未完成（$CONTROL_INSTALL_STATE_FILE 无 step=done）：安装没有走完" "install record unfinished ($CONTROL_INSTALL_STATE_FILE has no step=done): the installation did not complete")"; fi
   # 对外合同经本机 nginx 取（与节点、浏览器同一路径）：管理端源站来自 control.env。
@@ -6110,7 +6110,7 @@ check_main() {
     [ "$(sed -n 's/^window.__CDNCA_NODE_UPGRADE_TRUST_SHA256__ = "\([0-9a-f]\{64\}\)";$/\1/p' <<<"$body")" = "$trust_digest" ]; then
     ok "$(msg 'runtime-config.js 200，节点升级信任摘要一致' 'runtime-config.js 200, node upgrade trust digest matches')"
   else bad "$(msg 'runtime-config.js 取不到或节点升级信任摘要不一致' 'runtime-config.js unavailable or its node upgrade trust digest differs')"; fi
-  if [ "$(file_owner_mode "$CONTROL_SUMMARY_FILE")" = "$CHECK_OWNER_UID:600" ]; then ok "$(msg "安装汇总 $CONTROL_SUMMARY_FILE（root 0600）" "install summary $CONTROL_SUMMARY_FILE (root 0600)")"
+  if [ "$(file_owner_mode "$CONTROL_SUMMARY_FILE")" = "$CHECK_OWNER_UID:600" ]; then ok "$(msg "安装汇总 ${CONTROL_SUMMARY_FILE}（root 0600）" "install summary $CONTROL_SUMMARY_FILE (root 0600)")"
   else bad "$(msg "安装汇总 $CONTROL_SUMMARY_FILE 不存在或不是 root 0600" "install summary $CONTROL_SUMMARY_FILE missing or not root 0600")"; fi
   if [ -e "$ORIGIN_AUTH_SECRET_FILE" ] || [ -e "$ORIGIN_AUTH_CONF" ]; then
     if [ "$(file_owner_mode "$ORIGIN_AUTH_SECRET_FILE")" != "$CHECK_OWNER_UID:600" ]; then bad "$ORIGIN_AUTH_SECRET_FILE $(msg '不存在或不是 root 0600' 'missing or not root 0600')"

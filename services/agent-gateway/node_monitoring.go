@@ -343,7 +343,26 @@ func validateNodeTelemetry(telemetry *agentv1.NodeTelemetryV1) bool {
 	}
 	return validateNodeXDPStatus(telemetry.Xdp) && validateNodeSiteDrop(telemetry.SiteDrop) &&
 		validateNodeDDoSProtection(telemetry.DdosProtection) && validateNodeMounts(telemetry.Mounts) &&
-		validateNodePortGroupOverrides(telemetry.PortGroupOverrides) && validateNodeStorage(telemetry.Storage)
+		validateNodePortGroupOverrides(telemetry.PortGroupOverrides) && validateNodeStorage(telemetry.Storage) &&
+		validateNodeStringSetOverBudget(telemetry.StringSetOverBudget)
+}
+
+// validateNodeStringSetOverBudget: at most 256 refused string sets, sorted by
+// set_id and unique, a positive revision, counts within int64.
+func validateNodeStringSetOverBudget(sets []*agentv1.NodeStringSetOverBudgetV1) bool {
+	if len(sets) > 256 {
+		return false
+	}
+	previous := ""
+	for _, set := range sets {
+		if set == nil || set.SetId == "" || len(set.SetId) > 64 || set.SetId <= previous || !utf8.ValidString(set.SetId) ||
+			set.Revision < 1 || set.Mode == "" || len(set.Mode) > 16 || !utf8.ValidString(set.Mode) ||
+			set.EstimateBytes > math.MaxInt64 || set.LiveBytes > math.MaxInt64 || set.BudgetBytes > math.MaxInt64 {
+			return false
+		}
+		previous = set.SetId
+	}
+	return true
 }
 
 // validateNodeStorage: NodeStorageV1 (NODE_STORAGE v1) is missing or a valid

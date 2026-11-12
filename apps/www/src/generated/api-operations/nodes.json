@@ -938,7 +938,7 @@
       {
        "name": "gateway",
        "type": "object",
-       "description": "Only on POST /v1/nodes/{id}/enrollment-tokens. Direct Gateway entry the console writes into the reinstall command (\"Reinstall this node\") as --gateway-enrollment-address, --gateway-address and --gateway-server-name, the same values as the registration-credential response. Absent when the preferred entry is a WebSocket (CDN) tunnel or no Gateway entry is published."
+       "description": "Only on POST /v1/nodes/{id}/enrollment-tokens. Direct Gateway entry the console writes into the reinstall command (\"Reinstall this node\") as --gateway-enrollment-address, --gateway-address and --gateway-server-name (with --gateway-transport grpc). An initial token carries the registration-credential response's entry (absent when the preferred entry is a WebSocket (CDN) tunnel). A re_enrollment token carries it too, and when the preferred entry is a WebSocket tunnel the first published grpc entry instead (the installer falls back to the 443 WebSocket tunnel when that port does not answer). Absent when no usable grpc entry is published."
       }
      ]
     },

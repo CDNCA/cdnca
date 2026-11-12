@@ -12,7 +12,7 @@ const zhCN = {
   },
   fields: {
     name: '角色名称', permissions: '权限', permission: '权限名称', stepUpRequired: '二次认证要求',
-    stepUpProof: '二次认证证明', subjectUserId: '用户 ID', subjectUser: '用户', subjectUserPlaceholder: '搜索用户名、显示名称或邮箱', role: '角色', revision: '版本', status: '状态',
+    stepUpProof: '二次认证证明', subjectUserId: '用户 ID', subjectUser: '用户', subjectUserPlaceholder: '搜索用户名、显示名称或邮箱', role: '角色', status: '状态',
     actions: '操作', includeDeactivated: '包含已停用角色',
   },
   values: { required: '必需', notRequired: '不需要', stepUp: '需二次认证' },
@@ -50,7 +50,7 @@ const enUS: typeof zhCN = {
   },
   fields: {
     name: 'Role name', permissions: 'Permissions', permission: 'Permission', stepUpRequired: 'Step-up requirement',
-    stepUpProof: 'Step-up proof', subjectUserId: 'User ID', subjectUser: 'User', subjectUserPlaceholder: 'Search username, display name, or email', role: 'Role', revision: 'Revision', status: 'Status',
+    stepUpProof: 'Step-up proof', subjectUserId: 'User ID', subjectUser: 'User', subjectUserPlaceholder: 'Search username, display name, or email', role: 'Role', status: 'Status',
     actions: 'Actions', includeDeactivated: 'Include deactivated roles',
   },
   values: { required: 'Required', notRequired: 'Not required', stepUp: 'Step-up required' },

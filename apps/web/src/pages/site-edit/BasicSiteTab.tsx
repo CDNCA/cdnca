@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { App, Button, Input, InputNumber, Modal, Popconfirm, Radio, Select, Switch, Tag, Tooltip } from 'antd'
 import { CircleHelp, Clipboard, Globe2, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import '../../i18n/siteTransfer'
 import { useSearchParams } from 'react-router-dom'
 import { MODAL_WIDTH, ModalFooter } from '@cdnca/ui'
@@ -35,6 +36,7 @@ import { SiteOriginStatusCard } from './SiteOriginStatusCard'
 import CnameFailureReason from './CnameFailureReason'
 import CnameFailureActions from './CnameFailureActions'
 import CnamePending from './CnamePending'
+import CnameLabelEditor from '../../components/CnameLabelEditor'
 import { cnameFailureText } from './cnameFailureText'
 import { SiteGroupSelect } from './SitePackageGroupSelects'
 import '../../i18n/siteOriginForwarding'
@@ -121,6 +123,8 @@ export default function BasicSiteTab({
   const { t, i18n } = useTranslation(['sites', 'cnameAllocations', 'siteOriginForwarding'])
   const { t: tW } = useTranslation('originWeight')
   const { t: tCname } = useTranslation('siteCnameRegeneration')
+  const { t: tLabel } = useTranslation('cnameLabel')
+  const queryClient = useQueryClient()
   const { modal } = App.useApp()
   const { t: tV4 } = useTranslation('siteEditV4')
   const { t: tHttps } = useTranslation('siteHttps')
@@ -136,6 +140,11 @@ export default function BasicSiteTab({
   const [cnameOpen, setCnameOpen] = useState(false)
   const [cnameDomain, setCnameDomain] = useState('')
   const [cnameHostname, setCnameHostname] = useState('')
+  // 主机名保存后服务端已重新生成 CNAME：关闭弹窗，让本站点的详情重新读取。
+  const onCnameLabelSaved = () => {
+    setCnameOpen(false)
+    void queryClient.invalidateQueries({ predicate: (query) => JSON.stringify(query.queryKey).includes(detail.id) })
+  }
   const [originOpen, setOriginOpen] = useState(false)
   const [originDraft, setOriginDraft] = useState<SiteOrigin>(emptyOrigin)
   const [editingOrigin, setEditingOrigin] = useState<number | null>(null)
@@ -491,8 +500,15 @@ export default function BasicSiteTab({
         footer={<ModalFooter okText={t('actions.confirm')} cancelText={t('actions.cancel')} okDisabled={readOnly || !canManageDNS || !cnameDomain.trim()} onCancel={() => setCnameOpen(false)}
             onOk={() => { onChange({ ...value, cname_domain: cnameDomain.trim(), cname_hostname: cnameHostname.trim(), cname_regenerate: true }); setCnameOpen(false) }} />}>
         <div className="site-basic-modal-fields">
+          {value.cname_mode === 'package' ? (
+            <label><span>{t('cnameAllocations:columns.hostname')}</span><Input aria-label={t('cnameAllocations:columns.hostname')} value={cnameHostname} onChange={(event) => setCnameHostname(event.target.value)} /></label>
+          ) : (
+            <label><span>{tLabel('hostname')}</span>
+              <CnameLabelEditor kind="site" subjectID={detail.id} mode="full" domain={value.cname_domain ?? ''}
+                disabled={readOnly || !canManageDNS} onSaved={onCnameLabelSaved} />
+            </label>
+          )}
           <label><span>{t('cnameAllocations:columns.domain')}</span><Input aria-label={t('cnameAllocations:columns.domain')} value={cnameDomain} onChange={(event) => setCnameDomain(event.target.value)} /></label>
-          <label><span>{t('cnameAllocations:columns.hostname')}</span><Input aria-label={t('cnameAllocations:columns.hostname')} value={cnameHostname} onChange={(event) => setCnameHostname(event.target.value)} /></label>
         </div>
       </Modal>
 

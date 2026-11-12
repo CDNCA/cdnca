@@ -1,13 +1,16 @@
 package dynroute
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"syscall"
 
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/siteindex"
 	"github.com/cdnca/cdnca/libs/edgeconfig/siteobject"
 )
 
@@ -196,4 +199,24 @@ func (runtime *Runtime) StorageStatus() StorageStatus {
 		status.State, status.Reason, status.RequestedLogDirectory = StorageFailed, runtime.storageError, ""
 	}
 	return status
+}
+
+// StringSetOverBudget lists the WAF string sets OpenResty refused to compile
+// for the worker memory budget (site index control socket /status), sorted by
+// set id and unique. An unreachable socket reports none.
+func (runtime *Runtime) StringSetOverBudget(ctx context.Context) []siteindex.StringSetOver {
+	status, err := runtime.activator.Control.Status(ctx)
+	if err != nil || len(status.StringSetOver) == 0 {
+		return nil
+	}
+	byID := make(map[string]siteindex.StringSetOver, len(status.StringSetOver))
+	for _, set := range status.StringSetOver {
+		byID[set.ID] = set
+	}
+	sets := make([]siteindex.StringSetOver, 0, len(byID))
+	for _, set := range byID {
+		sets = append(sets, set)
+	}
+	sort.Slice(sets, func(i, j int) bool { return sets[i].ID < sets[j].ID })
+	return sets
 }

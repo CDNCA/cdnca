@@ -20,7 +20,7 @@ type queryer interface {
 // subscribed market node endpoint has no presence here: only its health counts.
 // The counts never leave this package.
 const componentStatesSQL = `
-SELECT c.id, c.name, c.description, c.source, c.line_group_id, c.manual_status,
+SELECT c.id, c.name, c.description, c.source, c.line_group_id, c.manual_status, c.hidden,
        g.id IS NOT NULL, COALESCE(g.name, ''), COALESCE(counts.total, 0), COALESCE(counts.available, 0)
 FROM status_page_components c
 LEFT JOIN node_line_groups g
@@ -62,7 +62,7 @@ func componentStates(ctx context.Context, q queryer, now time.Time) ([]AdminComp
 		var groupFound bool
 		var total, available int
 		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Source, &item.LineGroupID,
-			&item.ManualStatus, &groupFound, &item.LineGroupName, &total, &available); err != nil {
+			&item.ManualStatus, &item.Hidden, &groupFound, &item.LineGroupName, &total, &available); err != nil {
 			return nil, err
 		}
 		statuses := append([]string{item.ManualStatus}, impacts[item.ID]...)

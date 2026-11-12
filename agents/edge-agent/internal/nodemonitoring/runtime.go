@@ -59,6 +59,9 @@ type Runtime struct {
 	// portGroupOverrides holds a func(context.Context) []PortGroupOverrideMetrics
 	// (SetPortGroupOverrides).
 	portGroupOverrides atomic.Value
+	// stringSetOver holds a func(context.Context) []StringSetOverBudgetMetrics
+	// (SetStringSetOverBudget).
+	stringSetOver atomic.Value
 	// storage holds a func() *StorageMetrics (SetStorage).
 	storage         atomic.Value
 	wait            func(context.Context, time.Duration) error
@@ -135,6 +138,14 @@ func (runtime *Runtime) collectLoad(ctx context.Context, now time.Time) *LoadMet
 		if drops := source(ctx); validDDoSDrops(drops) {
 			telemetry := *load.Telemetry
 			telemetry.DDoSDrops = drops
+			load.Telemetry = &telemetry
+		}
+	}
+	overSource, _ := runtime.stringSetOver.Load().(func(context.Context) []StringSetOverBudgetMetrics)
+	if overSource != nil && load.Telemetry != nil {
+		if sets := overSource(ctx); len(sets) != 0 && validStringSetOverBudget(sets) {
+			telemetry := *load.Telemetry
+			telemetry.StringSetOverBudget = sets
 			load.Telemetry = &telemetry
 		}
 	}

@@ -3,6 +3,7 @@ import { Button, Form, Input, InputNumber, Modal, Radio, Select, Switch, Tooltip
 import { ArrowDown, ArrowUp, Check, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import CnameLabelEditor from '../../components/CnameLabelEditor'
 
 import { useFormSubmitError } from '@cdnca/ui'
 
@@ -67,6 +68,7 @@ export default function LineGroupSnapshotModal({
   onSubmit: (input: NodeLineGroupSnapshotInput) => void
 }) {
   const { t } = useTranslation('nodeScheduling')
+  const { t: tLabel } = useTranslation('cnameLabel')
   const [form] = Form.useForm<SnapshotFormValues>()
   const [advanced, setAdvanced] = useState(false)
   const referenceLineGroupFields = titleKey === undefined
@@ -184,6 +186,12 @@ export default function LineGroupSnapshotModal({
         >
           <Input placeholder={t(referenceLineGroupFields ? 'form.referenceNamePlaceholder' : 'form.namePlaceholder')} />
         </Form.Item>
+
+        {item && !referenceLineGroupFields ? (
+          <Form.Item label={tLabel('prefix')}>
+            <CnameLabelEditor kind="line-group" subjectID={item.id} mode="prefix" />
+          </Form.Item>
+        ) : null}
 
         {referenceLineGroupFields ? (
           <>

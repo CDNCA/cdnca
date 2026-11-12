@@ -24,7 +24,7 @@ const zhCN = {
   },
   empty: { description: '尚未选择实名认证案件' },
   details: {
-    title: '实名认证案件状态', id: '案件 ID', kind: '认证类型', status: '状态', revision: '版本',
+    title: '实名认证案件状态', id: '案件 ID', kind: '认证类型', status: '状态',
     createdAt: '创建时间', changedAt: '状态更新时间', expiresAt: '审核截止时间',
     decisionReason: '审核原因', retention: '证据保留状态', materialCount: '证据材料数量', relationship: '企业申请人关系',
   },
@@ -136,7 +136,7 @@ const enUS: MessageShape<typeof zhCN> = {
   },
   empty: { description: 'No identity verification case selected' },
   details: {
-    title: 'Identity verification case status', id: 'Case ID', kind: 'Verification type', status: 'Status', revision: 'Revision',
+    title: 'Identity verification case status', id: 'Case ID', kind: 'Verification type', status: 'Status',
     createdAt: 'Created at', changedAt: 'State updated at', expiresAt: 'Review deadline',
     decisionReason: 'Review reason', retention: 'Evidence retention', materialCount: 'Evidence materials', relationship: 'Enterprise applicant relationship',
   },

@@ -4,7 +4,7 @@ const zhCN = {
   title: '实名认证案件',
   details: {
     applicant: '申请人 ID', kind: '认证类型', status: '状态', reviewer: '审核人 ID',
-    revision: '版本', submittedAt: '提交时间', expiresAt: '审核截止时间',
+submittedAt: '提交时间', expiresAt: '审核截止时间',
     retention: '证据保留状态', unassigned: '尚未分配',
   },
   kinds: {
@@ -69,7 +69,7 @@ const enUS: MessageShape<typeof zhCN> = {
   title: 'Identity verification case',
   details: {
     applicant: 'Applicant ID', kind: 'Verification type', status: 'Status', reviewer: 'Reviewer ID',
-    revision: 'Revision', submittedAt: 'Submitted at', expiresAt: 'Review deadline',
+submittedAt: 'Submitted at', expiresAt: 'Review deadline',
     retention: 'Evidence retention', unassigned: 'Unassigned',
   },
   kinds: {

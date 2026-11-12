@@ -159,7 +159,10 @@ describe('SiteAccessReadinessCard (detail card)', () => {
     await user.click(button)
     expect(onRepublish).toHaveBeenCalledOnce()
     expect(await within(card).findByRole('status')).toHaveTextContent('已重新发布，等待节点回执。')
+    // antd Button 在 loading 期间忽略点击；先等第一次的 loading 结束，第二次点击才不会在高负载下被吞掉。
+    await waitFor(() => expect(button).not.toHaveClass('ant-btn-loading'))
     await user.click(button)
+    expect(onRepublish).toHaveBeenCalledTimes(2)
     expect(await within(card).findByText('正在发布中，请等这次发布完成后再试。')).toBeInTheDocument()
   })
 

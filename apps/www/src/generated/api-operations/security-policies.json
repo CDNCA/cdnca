@@ -2423,6 +2423,77 @@
    ]
   },
   {
+   "operation_id": "parseUserAgent",
+   "method": "POST",
+   "path": "/v1/security-policies/parse-user-agent",
+   "summary": "Parse a User-Agent",
+   "summary_zh": "解析 User-Agent",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. Returns what the edge's browser / device conditions see for one User-Agent (edgeconfig.ParseUserAgent, the same table as the node; the first 512 bytes are parsed).",
+   "permissions": [
+    "security_policies.read"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "user_agent",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The detected browser, version (major.minor.patch, null without one) and device.",
+     "fields": [
+      {
+       "name": "browser",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "device",
+       "type": "string: bot / desktop / mobile / tablet",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
    "operation_id": "getSecurityPolicy",
    "method": "GET",
    "path": "/v1/security-policies/{id}",

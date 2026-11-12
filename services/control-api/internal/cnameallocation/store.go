@@ -16,8 +16,8 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsacme"
 	"github.com/cdnca/cdnca/services/control-api/internal/dnsreconcile"
-	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/domaintrust"
+	"github.com/cdnca/cdnca/services/control-api/internal/edgeautopublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/jobstate"
 	"github.com/google/uuid"
@@ -116,12 +116,20 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 		return replayed, nil
 	}
 
+	// The key is needed by a generated label and by an administrator-defined
+	// name (a keyed, non-explicit claim); a legacy explicit hostname alone
+	// does not need it.
 	var activeKey Key
-	if req.Hostname == "" {
+	if store.keyring != nil {
 		activeKey, err = store.keyring.Active(ctx)
 		if err != nil || !validKey(activeKey) {
-			return Allocation{}, ErrUnavailable
+			activeKey = Key{}
+			if req.Hostname == "" {
+				return Allocation{}, ErrUnavailable
+			}
 		}
+	} else if req.Hostname == "" {
+		return Allocation{}, ErrUnavailable
 	}
 
 	// A tenant created after the platform DNS configuration was saved has no
@@ -209,6 +217,37 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 		if err != nil {
 			return err
 		}
+		// Administrator-defined names. A complete name becomes
+		// the hostname (a keyed, non-explicit claim, so the site projection is
+		// unchanged) and yields the legacy spec.cname.hostname; a prefix only
+		// shapes a newly generated label.
+		labels, err := loadLabelSource(ctx, tx, req)
+		if err != nil {
+			return err
+		}
+		customLabel, labelPrefix := labels.effectiveLabel(req.Hostname != "")
+		labelHostname := ""
+		if customLabel != "" {
+			labelHostname = customLabel + "." + zone.domain
+			if _, blocked, err := domaintrust.BlockedDomain(ctx, tx, []string{labelHostname}); err != nil {
+				return err
+			} else if blocked {
+				return ErrBlocked
+			}
+			if !validKey(activeKey) {
+				return ErrUnavailable
+			}
+			ownAllocation := uuid.Nil
+			if targetFound {
+				ownAllocation = target.id
+			}
+			if taken, err := labelTaken(ctx, tx, labelHostname, ownAllocation); err != nil {
+				return err
+			} else if taken {
+				return failWith(FailureLabelTaken, ErrInvalidInput)
+			}
+			req.Hostname = ""
+		}
 
 		if targetFound && req.Mode == ModePackage && req.platformIntentID != uuid.Nil && claimMatches(target.claim, zone, req.Hostname) {
 			var sameRequest bool
@@ -266,7 +305,8 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 			}
 		}
 
-		refresh := targetFound && req.platformIntentID != uuid.Nil && claimMatches(target.claim, zone, req.Hostname)
+		relabel := req.Regenerate && strings.HasPrefix(req.RequestID, RelabelRequestPrefix)
+		refresh := targetFound && !relabel && req.platformIntentID != uuid.Nil && claimMatches(target.claim, zone, req.Hostname)
 		operation := "allocate"
 		allocationID := uuid.New()
 		claimID := uuid.New()
@@ -293,9 +333,12 @@ func (store *Store) Allocate(ctx context.Context, req AllocateRequest) (Allocati
 			if req.Hostname != "" && claimMatches(target.claim, zone, req.Hostname) {
 				claimID = target.claim.id
 			}
+			if labelHostname != "" && target.claim.hostname == labelHostname && claimMatches(target.claim, zone, "") {
+				claimID = target.claim.id
+			}
 		}
 
-		hostname, keyID, err := allocationHostname(ctx, tx, activeKey, req, site.tenantID, zone, ownerID, uint64(generation))
+		hostname, keyID, err := allocationHostname(ctx, tx, activeKey, req, site.tenantID, zone, ownerID, uint64(generation), labelHostname, labelPrefix)
 		if err != nil {
 			return err
 		}
@@ -1917,14 +1960,18 @@ func allocationHostname(
 	zone zoneAuthority,
 	ownerID uuid.UUID,
 	generation uint64,
+	labelHostname, labelPrefix string,
 ) (string, *string, error) {
+	if labelHostname != "" {
+		return labelHostname, &key.ID, nil
+	}
 	if req.Hostname != "" {
 		if !hostnameWithinDomain(req.Hostname, zone.domain) {
 			return "", nil, ErrInvalidInput
 		}
 		return req.Hostname, nil, nil
 	}
-	hostname, err := freeGeneratedHostname(key, tenantID, zone.providerID, ownerID, req.Mode, zone.domain, generation,
+	hostname, err := freeGeneratedHostnamePrefixed(key, labelPrefix, tenantID, zone.providerID, ownerID, req.Mode, zone.domain, generation,
 		func(hostname string) (bool, error) {
 			var taken bool
 			err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM cname_hostname_claims WHERE lower(hostname)=$1)`,
@@ -1950,10 +1997,27 @@ func freeGeneratedHostname(
 	generation uint64,
 	taken func(string) (bool, error),
 ) (string, error) {
+	return freeGeneratedHostnamePrefixed(key, "", tenantID, providerID, ownerID, mode, domain, generation, taken)
+}
+
+// freeGeneratedHostnamePrefixed is freeGeneratedHostname with an optional
+// prefix template: <prefix>-<8 random> instead of <8 random>.
+func freeGeneratedHostnamePrefixed(
+	key Key,
+	prefix string,
+	tenantID, providerID, ownerID uuid.UUID,
+	mode Mode,
+	domain string,
+	generation uint64,
+	taken func(string) (bool, error),
+) (string, error) {
 	for attempt := uint64(0); attempt < MaxLabelAttempts; attempt++ {
 		label, err := GenerateLabel(key, tenantID, providerID, ownerID, mode, domain, generation+attempt)
 		if err != nil {
 			return "", err
+		}
+		if prefix != "" {
+			label = PrefixedLabel(prefix, label)
 		}
 		hostname := label + "." + normalizeName(domain)
 		used, err := taken(hostname)

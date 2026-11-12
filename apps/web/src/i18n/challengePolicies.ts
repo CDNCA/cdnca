@@ -16,7 +16,7 @@ const zhCN = {
   target: { label: '目标租户作用域', placeholder: '小写租户作用域 UUID', required: '请先选择要管理的租户作用域。', invalid: '请输入有效的小写租户作用域 UUID。' },
   filters: { site: '站点 ID', host: '主机名', enabled: '状态', all: '全部状态' },
   states: { enabled: '已启用', disabled: '已停用', configured: '已配置', notConfigured: '未配置' },
-  columns: { host: '主机名', site: '站点 ID', mode: '挑战方式', ttl: '挑战/通行 TTL', binding: '绑定', failures: '失败上限', status: '状态', publication: '边缘发布', revision: '修订', updatedAt: '更新时间', actions: '操作' },
+  columns: { host: '主机名', site: '站点 ID', mode: '挑战方式', ttl: '挑战/通行 TTL', binding: '绑定', failures: '失败上限', status: '状态', publication: '边缘发布', updatedAt: '更新时间', actions: '操作' },
   modes: { delay: '延迟验证', click: '点击验证', slider: '滑块验证', captcha: '验证码', external: '外部验证' },
   providers: {
     tencent: '腾讯云验证码', geetest: '极验 v4', turnstile: 'Cloudflare Turnstile', recaptcha: 'Google reCAPTCHA v3',
@@ -85,7 +85,7 @@ const enUS = {
   target: { label: 'Target tenant scope', placeholder: 'Lowercase tenant scope UUID', required: 'Select a tenant scope to manage first.', invalid: 'Enter a valid lowercase tenant scope UUID.' },
   filters: { site: 'Site ID', host: 'Host', enabled: 'Status', all: 'All statuses' },
   states: { enabled: 'Enabled', disabled: 'Disabled', configured: 'Configured', notConfigured: 'Not configured' },
-  columns: { host: 'Host', site: 'Site ID', mode: 'Challenge mode', ttl: 'Challenge/pass TTL', binding: 'Binding', failures: 'Failure limit', status: 'Status', publication: 'Edge publication', revision: 'Revision', updatedAt: 'Updated at', actions: 'Actions' },
+  columns: { host: 'Host', site: 'Site ID', mode: 'Challenge mode', ttl: 'Challenge/pass TTL', binding: 'Binding', failures: 'Failure limit', status: 'Status', publication: 'Edge publication', updatedAt: 'Updated at', actions: 'Actions' },
   modes: { delay: 'Delayed verification', click: 'Click verification', slider: 'Slider verification', captcha: 'CAPTCHA', external: 'External verification' },
   providers: {
     tencent: 'Tencent Cloud CAPTCHA', geetest: 'GeeTest v4', turnstile: 'Cloudflare Turnstile', recaptcha: 'Google reCAPTCHA v3',

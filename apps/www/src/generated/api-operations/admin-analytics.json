@@ -2444,6 +2444,154 @@
    ]
   },
   {
+   "operation_id": "getAdminSiteRUMReport",
+   "method": "GET",
+   "path": "/v1/admin/analytics/rum",
+   "summary": "Read the real user monitoring report of a site of any tenant scope",
+   "summary_zh": "读取任意租户网站的真实用户体验报表",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "range",
+     "in": "query",
+     "type": "string: 1h / 24h / 7d / 30d",
+     "description": "1h (1 minute steps), 24h (1 hour, default), 7d (6 hours), 30d (1 day)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's report.",
+     "fields": [
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "range",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rum_sample_percent",
+       "type": "integer | null",
+       "required": true,
+       "description": "the site's current setting; null is off"
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "from",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "to",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "step_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "views",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "dropped",
+       "type": "integer",
+       "required": true,
+       "description": "beacons the nodes refused or could not count"
+      },
+      {
+       "name": "thresholds",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "summary",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "series",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "pages",
+       "type": "array<Breakdown>",
+       "required": true
+      },
+      {
+       "name": "countries",
+       "type": "array<Breakdown>",
+       "required": true
+      },
+      {
+       "name": "devices",
+       "type": "array<Breakdown>",
+       "required": true
+      },
+      {
+       "name": "errors",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "An error."
+    },
+    {
+     "status": "401",
+     "description": "An error."
+    },
+    {
+     "status": "403",
+     "description": "An error."
+    },
+    {
+     "status": "404",
+     "description": "An error."
+    },
+    {
+     "status": "405",
+     "description": "An error."
+    },
+    {
+     "status": "503",
+     "description": "An error."
+    }
+   ]
+  },
+  {
    "operation_id": "getPlatformSiteMonitoring",
    "method": "GET",
    "path": "/v1/admin/analytics/site-monitoring",

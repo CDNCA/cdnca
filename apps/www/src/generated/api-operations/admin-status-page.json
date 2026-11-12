@@ -1,0 +1,483 @@
+{
+ "id": "admin-status-page",
+ "prefix": "/v1/admin/status-page",
+ "operations": [
+  {
+   "operation_id": "getAdminStatusPage",
+   "method": "GET",
+   "path": "/v1/admin/status-page",
+   "summary": "Read the status page editor view",
+   "summary_zh": "读取状态页编辑视图",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Settings",
+     "fields": [
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "Settings",
+       "required": true
+      },
+      {
+       "name": "components",
+       "type": "array<AdminComponent>",
+       "required": true
+      },
+      {
+       "name": "incidents",
+       "type": "array<Incident>",
+       "required": true
+      },
+      {
+       "name": "line_groups",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Error"
+    },
+    {
+     "status": "403",
+     "description": "Error"
+    },
+    {
+     "status": "503",
+     "description": "Error"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateAdminStatusPage",
+   "method": "PUT",
+   "path": "/v1/admin/status-page",
+   "summary": "Save the status page settings and components",
+   "summary_zh": "保存状态页设置与组件",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "settings",
+      "type": "SettingsInput",
+      "required": true
+     },
+     {
+      "name": "components",
+      "type": "array<ComponentInput>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved view",
+     "fields": [
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "Settings",
+       "required": true
+      },
+      {
+       "name": "components",
+       "type": "array<AdminComponent>",
+       "required": true
+      },
+      {
+       "name": "incidents",
+       "type": "array<Incident>",
+       "required": true
+      },
+      {
+       "name": "line_groups",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error"
+    },
+    {
+     "status": "401",
+     "description": "Error"
+    },
+    {
+     "status": "403",
+     "description": "Error"
+    },
+    {
+     "status": "409",
+     "description": "Duplicate component name"
+    },
+    {
+     "status": "412",
+     "description": "Revision conflict"
+    },
+    {
+     "status": "428",
+     "description": "If-Match revision is missing"
+    },
+    {
+     "status": "503",
+     "description": "Error"
+    }
+   ]
+  },
+  {
+   "operation_id": "createStatusPageIncident",
+   "method": "POST",
+   "path": "/v1/admin/status-page/incidents",
+   "summary": "Create an incident or a scheduled maintenance",
+   "summary_zh": "新建状态页事件或计划维护",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "kind",
+      "type": "string: incident / maintenance",
+      "required": true
+     },
+     {
+      "name": "title",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "impact",
+      "type": "string",
+      "description": "Required for an incident (degraded or outage); ignored for maintenance, which is always maintenance."
+     },
+     {
+      "name": "status",
+      "type": "string: investigating / identified / monitoring / resolved / scheduled / in_progress / completed",
+      "description": "Incident: investigating, identified, monitoring or resolved (default investigating). Maintenance: scheduled, in_progress or completed (default scheduled)."
+     },
+     {
+      "name": "message",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "component_ids",
+      "type": "array<string(uuid)>"
+     },
+     {
+      "name": "scheduled_start",
+      "type": "string(date-time)",
+      "description": "Maintenance only, required there."
+     },
+     {
+      "name": "scheduled_end",
+      "type": "string(date-time)",
+      "description": "Maintenance only, required there; after scheduled_start, at most 30 days after it, and in the future."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: incident / maintenance",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "impact",
+       "type": "string: degraded / outage / maintenance",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: investigating / identified / monitoring / resolved / scheduled / in_progress / completed",
+       "required": true
+      },
+      {
+       "name": "component_ids",
+       "type": "array<string(uuid)>",
+       "required": true
+      },
+      {
+       "name": "scheduled_start",
+       "type": "string(date-time)",
+       "description": "Maintenance only."
+      },
+      {
+       "name": "scheduled_end",
+       "type": "string(date-time)",
+       "description": "Maintenance only."
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "resolved_at",
+       "type": "string(date-time)",
+       "description": "Set once the incident is resolved or the maintenance completed."
+      },
+      {
+       "name": "updates",
+       "type": "array<IncidentUpdate>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error"
+    },
+    {
+     "status": "401",
+     "description": "Error"
+    },
+    {
+     "status": "403",
+     "description": "Error"
+    },
+    {
+     "status": "503",
+     "description": "Error"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteStatusPageIncident",
+   "method": "DELETE",
+   "path": "/v1/admin/status-page/incidents/{incident_id}",
+   "summary": "Delete an incident",
+   "summary_zh": "删除状态页事件",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "incident_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted"
+    },
+    {
+     "status": "401",
+     "description": "Error"
+    },
+    {
+     "status": "403",
+     "description": "Error"
+    },
+    {
+     "status": "404",
+     "description": "Error"
+    },
+    {
+     "status": "503",
+     "description": "Error"
+    }
+   ]
+  },
+  {
+   "operation_id": "addStatusPageIncidentUpdate",
+   "method": "POST",
+   "path": "/v1/admin/status-page/incidents/{incident_id}/updates",
+   "summary": "Add an update to an incident",
+   "summary_zh": "追加状态页事件进展",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "incident_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "status",
+      "type": "string: investigating / identified / monitoring / resolved / scheduled / in_progress / completed",
+      "required": true,
+      "description": "Must belong to the incident's kind."
+     },
+     {
+      "name": "message",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated incident",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: incident / maintenance",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "impact",
+       "type": "string: degraded / outage / maintenance",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: investigating / identified / monitoring / resolved / scheduled / in_progress / completed",
+       "required": true
+      },
+      {
+       "name": "component_ids",
+       "type": "array<string(uuid)>",
+       "required": true
+      },
+      {
+       "name": "scheduled_start",
+       "type": "string(date-time)",
+       "description": "Maintenance only."
+      },
+      {
+       "name": "scheduled_end",
+       "type": "string(date-time)",
+       "description": "Maintenance only."
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "resolved_at",
+       "type": "string(date-time)",
+       "description": "Set once the incident is resolved or the maintenance completed."
+      },
+      {
+       "name": "updates",
+       "type": "array<IncidentUpdate>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error"
+    },
+    {
+     "status": "401",
+     "description": "Error"
+    },
+    {
+     "status": "403",
+     "description": "Error"
+    },
+    {
+     "status": "404",
+     "description": "Error"
+    },
+    {
+     "status": "409",
+     "description": "The incident is already resolved or the maintenance completed"
+    },
+    {
+     "status": "503",
+     "description": "Error"
+    }
+   ]
+  }
+ ]
+}

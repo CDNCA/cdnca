@@ -124,6 +124,11 @@
        "name": "updated_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "reference_count",
+       "type": "integer",
+       "description": "Live policies (the tenant's; every scope's for the platform) referencing the list; 0 outside the list operation."
       }
      ]
     },
@@ -247,6 +252,11 @@
        "name": "updated_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "reference_count",
+       "type": "integer",
+       "description": "Live policies (the tenant's; every scope's for the platform) referencing the list; 0 outside the list operation."
       }
      ]
     },

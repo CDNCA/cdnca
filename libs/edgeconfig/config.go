@@ -1721,16 +1721,38 @@ func renderBoundSecurityCondition(siteIndex, policyIndex, ruleIndex int, rule WA
 	if match.NotJA4 != nil {
 		conditions = append(conditions, RenderWAFNotJA4Condition(match.NotJA4))
 	}
+	// WAF v6 client conditions: same position as in rulePlanConditions.
+	if match.Browser != nil {
+		conditions = append(conditions, renderWAFSpecCondition(RuleOpBrowserIn, match.Browser.Spec()))
+	}
+	if match.BrowserVersion != nil {
+		conditions = append(conditions, renderWAFSpecCondition(RuleOpBrowserVersion, match.BrowserVersion.Spec()))
+	}
+	if match.Device != nil {
+		conditions = append(conditions, renderWAFSpecCondition(RuleOpDeviceIn, match.Device.Spec()))
+	}
+	if match.Time != nil {
+		conditions = append(conditions, renderWAFSpecCondition(RuleOpTimeWindow, match.Time.Spec()))
+	}
 	for _, condition := range match.IPIntel {
 		conditions = append(conditions, RenderWAFIPIntelCondition(condition))
 	}
 	for _, list := range match.IPLists {
 		conditions = append(conditions, RenderWAFIPListCondition(list))
 	}
+	for _, ref := range match.StringSets {
+		conditions = append(conditions, renderWAFSpecCondition(RuleOpStringSet, StringSetConditionSpec(ref)))
+	}
 	for _, inspect := range match.Inspect {
 		conditions = append(conditions, RenderWAFInspectCondition(inspect))
 	}
 	return "(" + strings.Join(conditions, " and ") + ")"
+}
+
+// renderWAFSpecCondition is the Lua call of a condition whose value is a
+// rule plan spec: cdnca_waf.<op>(spec).
+func renderWAFSpecCondition(op, spec string) string {
+	return "require(" + strconv.Quote(wafInspectLuaModule) + ")." + op + "(" + luaLongString(spec) + ")"
 }
 
 func wafSourceVariable(siteIndex, ruleIndex int) string {

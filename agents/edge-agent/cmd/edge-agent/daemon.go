@@ -755,6 +755,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	// (snapshots are then refused with not_supported).
 	if nodeMonitoringRuntime != nil && dynamicRouting != nil {
 		nodeMonitoringRuntime.SetStorage(storageMetrics(dynamicRouting))
+		nodeMonitoringRuntime.SetStringSetOverBudget(stringSetOverBudgetMetrics(dynamicRouting))
 	}
 	nodeEvents := newNodeSecurityEvents(nodeID, time.Now)
 	ccRuleStats := newCCStats(nodeID, time.Now)

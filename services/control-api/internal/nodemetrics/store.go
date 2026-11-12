@@ -166,7 +166,8 @@ func validTelemetry(telemetry *Telemetry) bool {
 	if !validNetworkSelection(telemetry) || telemetry.SchemaVersion != 1 || telemetry.TotalRXBytes > math.MaxInt64 || telemetry.TotalTXBytes > math.MaxInt64 ||
 		len(telemetry.NetworkInterfaces) > 128 || len(telemetry.Disks) > 128 || !validDDoSDrops(telemetry.DDoSDrops) || !validXDPStatus(telemetry.XDP) ||
 		!validSiteDrop(telemetry.SiteDrop) || !validDDoSProtection(telemetry.DDoSProtection) ||
-		!validMounts(telemetry.Mounts) || !validPortGroupOverrides(telemetry.PortGroupOverrides) || !validStorage(telemetry.Storage) {
+		!validMounts(telemetry.Mounts) || !validPortGroupOverrides(telemetry.PortGroupOverrides) || !validStorage(telemetry.Storage) ||
+		!validStringSetOverBudget(telemetry.StringSetOverBudget) {
 		return false
 	}
 	previousName := ""

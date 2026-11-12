@@ -1073,6 +1073,10 @@
        "required": true
       },
       {
+       "name": "external_provider_summary",
+       "type": "ExternalProviderSummary"
+      },
+      {
        "name": "enabled",
        "type": "boolean",
        "required": true
@@ -1275,6 +1279,10 @@
        "name": "external_provider_configured",
        "type": "boolean",
        "required": true
+      },
+      {
+       "name": "external_provider_summary",
+       "type": "ExternalProviderSummary"
       },
       {
        "name": "enabled",
@@ -1501,6 +1509,10 @@
        "required": true
       },
       {
+       "name": "external_provider_summary",
+       "type": "ExternalProviderSummary"
+      },
+      {
        "name": "enabled",
        "type": "boolean",
        "required": true
@@ -1721,6 +1733,10 @@
        "name": "external_provider_configured",
        "type": "boolean",
        "required": true
+      },
+      {
+       "name": "external_provider_summary",
+       "type": "ExternalProviderSummary"
       },
       {
        "name": "enabled",
@@ -1946,6 +1962,10 @@
        "required": true
       },
       {
+       "name": "external_provider_summary",
+       "type": "ExternalProviderSummary"
+      },
+      {
        "name": "enabled",
        "type": "boolean",
        "required": true
@@ -2167,6 +2187,10 @@
        "name": "external_provider_configured",
        "type": "boolean",
        "required": true
+      },
+      {
+       "name": "external_provider_summary",
+       "type": "ExternalProviderSummary"
       },
       {
        "name": "enabled",

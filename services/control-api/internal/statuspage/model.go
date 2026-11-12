@@ -80,6 +80,7 @@ type ComponentInput struct {
 	Source       string     `json:"source"`
 	LineGroupID  *uuid.UUID `json:"line_group_id,omitempty"`
 	ManualStatus string     `json:"manual_status"`
+	Hidden       bool       `json:"hidden"`
 }
 
 type SaveRequest struct {
@@ -97,6 +98,7 @@ type AdminComponent struct {
 	LineGroupName    string     `json:"line_group_name,omitempty"`
 	LineGroupMissing bool       `json:"line_group_missing"`
 	ManualStatus     string     `json:"manual_status"`
+	Hidden           bool       `json:"hidden"`
 	AutoStatus       string     `json:"auto_status,omitempty"`
 	Status           string     `json:"status"`
 }

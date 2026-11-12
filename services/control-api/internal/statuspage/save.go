@@ -64,14 +64,20 @@ func (s *Service) saveComponents(ctx context.Context, tx pgx.Tx, actor Actor, re
 			scope = &actor.ScopeID
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO status_page_components
-			(id, name, description, source, line_group_scope_id, line_group_id, manual_status, sort_order, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+			(id, name, description, source, line_group_scope_id, line_group_id, manual_status, hidden, sort_order, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
 			ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description,
 			  source = EXCLUDED.source, line_group_scope_id = EXCLUDED.line_group_scope_id,
-			  line_group_id = EXCLUDED.line_group_id, manual_status = EXCLUDED.manual_status,
+			  line_group_id = EXCLUDED.line_group_id, manual_status = EXCLUDED.manual_status, hidden = EXCLUDED.hidden,
 			  sort_order = EXCLUDED.sort_order, updated_at = EXCLUDED.updated_at`,
-			*item.ID, item.Name, item.Description, item.Source, scope, item.LineGroupID, item.ManualStatus, order, now); err != nil {
+			*item.ID, item.Name, item.Description, item.Source, scope, item.LineGroupID, item.ManualStatus, item.Hidden, order, now); err != nil {
 			return err
+		}
+		if item.Source == SourceLineGroup {
+			if _, err := tx.Exec(ctx, `INSERT INTO status_page_line_group_seen (line_group_id, seen_at) VALUES ($1, $2)
+				ON CONFLICT DO NOTHING`, *item.LineGroupID, now); err != nil {
+				return err
+			}
 		}
 		all = append(all, *item.ID)
 	}
@@ -84,6 +90,9 @@ func (s *Service) saveComponents(ctx context.Context, tx pgx.Tx, actor Actor, re
 	if _, err := tx.Exec(ctx, `UPDATE status_page_settings SET enabled = $1, title = $2, description = $3, show_logo = $4,
 		revision = revision + 1, updated_at = $5, updated_by_user_id = $6 WHERE id = 1`,
 		settings.Enabled, settings.Title, settings.Description, settings.ShowLogo, now, actor.UserID); err != nil {
+		return err
+	}
+	if _, err := syncLineGroups(ctx, tx, now); err != nil {
 		return err
 	}
 	return s.auditor.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID, Action: OperationSave,

@@ -45,6 +45,8 @@ local memcmp = ffi.C.cdnca_rule_interp_memcmp
 local _M = { _VERSION = "1", SCHEMA = "cdnca.edge.rule-plan/v1" }
 
 local MAX_SEGMENTS = 32
+-- Stands for a string set skipped for the memory budget (compile_condition).
+local SKIPPED_SET = {}
 local MAX_RULES = 65536
 local MAX_CONDITIONS = 16
 local MAX_HEADERS = 100
@@ -294,8 +296,13 @@ local function compile_condition(condition, out, sets)
         end
         local matcher = sets[ref.id .. "\0" .. string.format("%d", ref.revision)]
         if not matcher then return "string_set " .. ref.id .. " revision " .. string.format("%d", ref.revision) .. " missing" end
-        if ref.target == "ja4" and (matcher.mode ~= "exact" or matcher.caseless) then return "string_set ja4 target" end
-        code, a, b = OP_STRSET, { matcher = matcher, target = ref.target, key = ref.key ~= "" and ref.key or nil }, ref.negate
+        if matcher == SKIPPED_SET then
+            -- over the memory budget: the condition never holds (expires_before 0).
+            code, a = OP_EXPIRES, 0
+        else
+            if ref.target == "ja4" and (matcher.mode ~= "exact" or matcher.caseless) then return "string_set ja4 target" end
+            code, a, b = OP_STRSET, { matcher = matcher, target = ref.target, key = ref.key ~= "" and ref.key or nil }, ref.negate
+        end
     elseif op == "browser_in" or op == "device_in" then
         -- a = name set, b = negate.
         if not ua_parser then ua_parser = require("cdnca_ua") end
@@ -514,8 +521,55 @@ local function reverse_all(members)
     return out
 end
 
+-- Memory budget: the matchers a worker holds may not exceed
+-- STRING_SET_BUDGET estimated bytes. Checked only when a matcher is built (a
+-- cache miss); a set that would exceed it is skipped (reported, the plan is
+-- not refused: a condition naming a skipped set never holds, the plan's other
+-- rules apply) and recorded in the shared dictionary cdnca_site_state as
+-- strset_over:<id>, which the control socket /status reports (the Agent turns
+-- it into node telemetry). The estimate: exact = member bytes + 64 per member
+-- (table node, string header); the trie / PCRE modes = 13 (trie) or 32
+-- (wildcard PCRE) bytes per member byte + 64 per member.
+local STRING_SET_BUDGET = 64 * 1024 * 1024
+local STRING_SET_RETRY = 60
+local STRING_SET_OVER_TTL = 600
+local STRING_SET_BYTES_PER_BYTE = { exact = 1, prefix = 13, suffix = 13, contains = 13, wildcard = 32 }
+local string_set_sizes = {}
+local string_set_refused = {}
+
+local function estimate_string_set(set)
+    local members, total = set.members, 0
+    for index = 1, #members do total = total + #members[index] end
+    return total * STRING_SET_BYTES_PER_BYTE[set.mode] + 64 * #members
+end
+
+-- live_string_set_bytes sums the estimates of the matchers still alive
+-- (weak values: a collected matcher's estimate is dropped here).
+local function live_string_set_bytes()
+    local live = 0
+    for key, bytes in pairs(string_set_sizes) do
+        if string_set_matchers[key] then live = live + bytes else string_set_sizes[key] = nil end
+    end
+    return live
+end
+
+local function string_set_state(set, over, estimate, live)
+    local dict = ngx.shared and ngx.shared.cdnca_site_state
+    if not dict then return end
+    local key = "strset_over:" .. set.id
+    if not over then
+        dict:delete(key)
+        return
+    end
+    dict:set(key, cjson.encode({ id = set.id, revision = set.revision, mode = set.mode, members = #set.members,
+        estimate_bytes = estimate, live_bytes = live, budget_bytes = STRING_SET_BUDGET, at = ngx.time() }),
+        STRING_SET_OVER_TTL)
+end
+
 -- compile_string_set builds the matcher of one published set
 -- (edgeconfig.WAFStringSet: members canonical, lower case when caseless).
+-- nil, "over budget" when the worker's matchers would exceed the budget (the
+-- set is skipped); nil alone when the set is invalid.
 local function compile_string_set(set)
     if type(set) ~= "table" or not is_string(set.id) or not is_integer(set.revision, 1, MAX_UNIX) or
         not STRSET_MODES[set.mode] or type(set.case_sensitive) ~= "boolean" or type(set.members) ~= "table" or
@@ -530,6 +584,20 @@ local function compile_string_set(set)
         tostring(set.case_sensitive) .. "\0" .. #members
     local matcher = string_set_matchers[key]
     if matcher then return matcher end
+    local refused_at = string_set_refused[key]
+    if refused_at and ngx.now() - refused_at < STRING_SET_RETRY then return nil, "over budget" end
+    local estimate = estimate_string_set(set)
+    local live = live_string_set_bytes()
+    if live + estimate > STRING_SET_BUDGET then
+        collectgarbage("collect")
+        live = live_string_set_bytes()
+        if live + estimate > STRING_SET_BUDGET then
+            string_set_refused[key] = ngx.now()
+            string_set_state(set, true, estimate, live)
+            return nil, "over budget"
+        end
+    end
+    string_set_refused[key] = nil
     local caseless = not set.case_sensitive
     matcher = { mode = set.mode, caseless = caseless, fold = caseless and LOWER or IDENTITY }
     if set.mode == "exact" then
@@ -555,6 +623,8 @@ local function compile_string_set(set)
         if not ok then return nil end
     end
     string_set_matchers[key] = matcher
+    string_set_sizes[key] = estimate
+    string_set_state(set, false)
     return matcher
 end
 
@@ -784,9 +854,9 @@ local function compile(plan, consume)
         local list = plan.string_sets
         if type(list) ~= "table" or #list == 0 or #list > MAX_STRING_SETS then return nil, "string_sets" end
         for index, set in ipairs(list) do
-            local matcher = compile_string_set(set)
-            if not matcher then return nil, "string set " .. index end
-            sets[set.id .. "\0" .. string.format("%d", set.revision)] = matcher
+            local matcher, problem = compile_string_set(set)
+            if not matcher and problem ~= "over budget" then return nil, "string set " .. index end
+            sets[set.id .. "\0" .. string.format("%d", set.revision)] = matcher or SKIPPED_SET
         end
     end
     local program = { overflow = plan.header_overflow, telemetry = plan.telemetry, segments = {} }

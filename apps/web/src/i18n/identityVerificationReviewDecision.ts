@@ -5,7 +5,7 @@ const zhCN = {
   introduction: '审批仅记录稳定决定和原因码，不接受自由文本或敏感身份材料。',
   details: {
     title: '实名认证审批状态', id: '案件 ID', applicant: '申请人 ID', kind: '认证类型',
-    status: '状态', revision: '版本', changedAt: '状态更新时间', materialCount: '证据材料数量',
+    status: '状态', changedAt: '状态更新时间', materialCount: '证据材料数量',
   },
   kinds: { personal_initial: '个人首次认证', personal_reverification: '个人重新认证', enterprise: '企业认证' },
   states: {
@@ -56,7 +56,7 @@ const enUS: MessageShape<typeof zhCN> = {
   introduction: 'Reviews record only stable decisions and reason codes. Free text and sensitive identity material are not accepted.',
   details: {
     title: 'Identity review status', id: 'Case ID', applicant: 'Applicant ID', kind: 'Verification type',
-    status: 'Status', revision: 'Revision', changedAt: 'State updated at', materialCount: 'Evidence materials',
+    status: 'Status', changedAt: 'State updated at', materialCount: 'Evidence materials',
   },
   kinds: { personal_initial: 'Initial personal verification', personal_reverification: 'Personal reverification', enterprise: 'Enterprise verification' },
   states: {

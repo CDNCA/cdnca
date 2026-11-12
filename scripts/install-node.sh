@@ -901,7 +901,7 @@ preflight_check_spare_disk() {
   local mount=$1 disk size
   read -r disk size <<<"$(preflight_spare_disks | head -1)" || true
   [ -n "${disk:-}" ] || return 0
-  preflight_record warn 数据盘 "$(msg "发现未使用的磁盘 $disk（$size GiB，无分区、未挂载）；安装器不会自动格式化或挂载" "found an unused disk $disk ($size GiB, no partitions, not mounted); the installer never formats or mounts disks itself")" \
+  preflight_record warn 数据盘 "$(msg "发现未使用的磁盘 ${disk}（$size GiB，无分区、未挂载）；安装器不会自动格式化或挂载" "found an unused disk $disk ($size GiB, no partitions, not mounted); the installer never formats or mounts disks itself")" \
     "$(msg "确认 $disk 是空盘后（lsblk -f；mkfs 会清空它），把它挂到主控数据目录 /var/lib（当前在 $mount 分区）再重新安装：" "after confirming $disk is empty (lsblk -f; mkfs erases it), mount it on the control data directory /var/lib (now on $mount) and rerun the install: ")mkfs.ext4 $disk && mkdir -p /mnt/cdnca-var && mount $disk /mnt/cdnca-var && cp -a /var/lib/. /mnt/cdnca-var/ && umount /mnt/cdnca-var && echo \"UUID=\$(blkid -s UUID -o value $disk) /var/lib ext4 defaults,nofail 0 2\" >> /etc/fstab && reboot"
 }
 
@@ -924,12 +924,12 @@ preflight_check_disk() {
     seen="$seen$mount "
     [ "$avail_mib" -ge "$warn_mib" ] || short="$short$mount "
     if [ "$avail_mib" -lt "$fail_mib" ]; then
-      preflight_record fail 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free, below $((fail_mib / 1024)) GiB")" "$(msg "请清理或扩容 $mount 分区" "free up or grow the $mount partition")"
+      preflight_record fail 磁盘空间 "$(msg "${path}（分区 ${mount}）可用 $((avail_mib / 1024)) GiB，低于 $((fail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free, below $((fail_mib / 1024)) GiB")" "$(msg "请清理或扩容 $mount 分区" "free up or grow the $mount partition")"
     elif [ "$avail_mib" -lt "$warn_mib" ]; then
-      preflight_record warn 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" "$path (partition $mount) has $((avail_mib / 1024)) GiB free; $((warn_mib / 1024)) GiB+ recommended")" \
+      preflight_record warn 磁盘空间 "$(msg "${path}（分区 ${mount}）可用 $((avail_mib / 1024)) GiB，建议 $((warn_mib / 1024)) GiB 以上" "$path (partition $mount) has $((avail_mib / 1024)) GiB free; $((warn_mib / 1024)) GiB+ recommended")" \
         "$(if [ "$role" = control ]; then msg '日志、分析数据和对象存储会持续增长，建议使用 100G 以上 SSD' 'logs, analytics and object storage keep growing; a 100G+ SSD is recommended'; else msg '缓存会占用磁盘，按缓存规模预留空间' 'the cache uses disk; reserve space for its size'; fi)"
     else
-      preflight_record pass 磁盘空间 "$(msg "$path（分区 $mount）可用 $((avail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free")"
+      preflight_record pass 磁盘空间 "$(msg "${path}（分区 ${mount}）可用 $((avail_mib / 1024)) GiB" "$path (partition $mount) has $((avail_mib / 1024)) GiB free")"
     fi
   done
   [ "$role" = control ] || return 0
@@ -971,7 +971,7 @@ preflight_check_systemd() {
   if [ -z "$version" ]; then
     preflight_record fail systemd "$(msg '无法识别 systemd 版本' 'cannot detect the systemd version')"
   elif [ "$version" -lt 219 ]; then
-    preflight_record fail systemd "$(msg "版本 $version，低于 219" "version $version is older than 219")" "$(msg '请升级系统' 'upgrade the system')"
+    preflight_record fail systemd "$(msg "版本 ${version}，低于 219" "version $version is older than 219")" "$(msg '请升级系统' 'upgrade the system')"
   elif [ "$version" -lt "$minimum" ]; then
     # Older systemd: units get a compatibility drop-in (systemd-compat.sh) and
     # unknown hardening directives are ignored by systemd itself.
@@ -983,7 +983,7 @@ preflight_check_systemd() {
         systemd_compat_knows "$directive" || groups="$groups $directive"
       done
     fi
-    preflight_record warn systemd "$(msg "版本 $version（低于 $minimum）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:$groups，将不启用系统调用过滤}" "version $version (older than $minimum): reduced sandboxing${missing:+, unsupported:$missing}${groups:+; missing syscall filter groups:$groups, syscall filtering disabled}")" \
+    preflight_record warn systemd "$(msg "版本 ${version}（低于 ${minimum}）：沙箱加固降级${missing:+，不支持:$missing}${groups:+；系统调用过滤分组缺失:${groups}，将不启用系统调用过滤}" "version $version (older than $minimum): reduced sandboxing${missing:+, unsupported:$missing}${groups:+; missing syscall filter groups:$groups, syscall filtering disabled}")" \
       "$(msg '服务可以运行，但上述隔离措施不会生效；建议使用 systemd 249 以上的系统' 'services run, but the isolation above does not apply; systemd 249+ is recommended')"
   else
     preflight_record pass systemd "$(msg "版本 $version" "version $version")"
@@ -1054,7 +1054,7 @@ preflight_check_remote() {
   local label=$1 url='' headers='' local_epoch remote_date remote_epoch skew untrusted=false candidate rc
   shift
   if ! command -v curl >/dev/null 2>&1; then
-    preflight_record warn "连通性（$label）" "$(msg '未安装 curl，跳过检测' 'curl is not installed; check skipped')"
+    preflight_record warn "连通性（${label}）" "$(msg '未安装 curl，跳过检测' 'curl is not installed; check skipped')"
     return
   fi
   for candidate in "$@"; do
@@ -1066,15 +1066,15 @@ preflight_check_remote() {
     headers=''
   done
   if [ -z "$url" ]; then
-    preflight_record fail "连通性（$label）" "$(msg '无法连接' 'cannot connect to') $*" "$(msg '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址' 'check DNS, outbound firewall and proxy settings so this host can reach that HTTPS address')"
+    preflight_record fail "连通性（${label}）" "$(msg '无法连接' 'cannot connect to') $*" "$(msg '请检查 DNS、出站防火墙与代理设置，确认本机能访问该 HTTPS 地址' 'check DNS, outbound firewall and proxy settings so this host can reach that HTTPS address')"
     return
   fi
   if [ "$untrusted" = true ]; then
-    preflight_record pass "连通性（$label）" "$url $(msg '可连接（证书不受系统信任，安装时用固定指纹校验）' 'reachable (certificate not trusted by the system; the install pins its fingerprint)')"
+    preflight_record pass "连通性（${label}）" "$url $(msg '可连接（证书不受系统信任，安装时用固定指纹校验）' 'reachable (certificate not trusted by the system; the install pins its fingerprint)')"
     preflight_record warn 时间偏差 "$(msg "证书不受系统信任，无法在检测阶段读取 $label 的服务器时间" "untrusted certificate: cannot read the server time of $label during the checks")" "$(msg '请确认已开启 NTP 时间同步（timedatectl set-ntp true）' 'make sure NTP time sync is on (timedatectl set-ntp true)')"
     return
   fi
-  preflight_record pass "连通性（$label）" "$url $(msg '可连接' 'reachable')"
+  preflight_record pass "连通性（${label}）" "$url $(msg '可连接' 'reachable')"
   remote_date=$(printf '%s\n' "$headers" | tr -d '\r' | awk 'tolower($1) == "date:" { sub(/^[^:]*: */, ""); print; exit }')
   remote_epoch=$(preflight_date_epoch "$remote_date")
   local_epoch=$(date -u +%s)
@@ -1096,9 +1096,9 @@ preflight_check_remote() {
 preflight_check_tcp() {
   local label=$1 host=$2 port=$3
   if timeout 6 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
-    preflight_record pass "连通性（$label）" "$host:$port $(msg '可连接' 'reachable')"
+    preflight_record pass "连通性（${label}）" "$host:$port $(msg '可连接' 'reachable')"
   else
-    preflight_record warn "连通性（$label）" "$host:$port $(msg '无法连接' 'unreachable')" "$(msg "请确认主控已放行 TCP $port，且本机出站未被拦截" "make sure the control plane allows TCP $port and outbound traffic from here is not blocked")"
+    preflight_record warn "连通性（${label}）" "$host:$port $(msg '无法连接' 'unreachable')" "$(msg "请确认主控已放行 TCP ${port}，且本机出站未被拦截" "make sure the control plane allows TCP $port and outbound traffic from here is not blocked")"
   fi
 }
 
@@ -1132,14 +1132,14 @@ preflight_check_coexistence() {
   if [ "$role" = node ]; then
     for path in /etc/cdnca-control /usr/local/cdnca-control /data/cdnca-native-root; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 主控共存 "$(msg "本机已安装主控（$path）" "a control plane is installed here ($path)")" "$(msg '节点不能与主控装在同一台机器上，请使用另一台服务器' 'a node cannot share a host with the control plane; use another server')"
+        preflight_record fail 主控共存 "$(msg "本机已安装主控（${path}）" "a control plane is installed here ($path)")" "$(msg '节点不能与主控装在同一台机器上，请使用另一台服务器' 'a node cannot share a host with the control plane; use another server')"
         return
       fi
     done
   else
     for path in /etc/cdnca-edge-agent /opt/cdnca-node /usr/lib/cdnca-edge-agent; do
       if [ -e "${PREFLIGHT_ROOT}$path" ]; then
-        preflight_record fail 节点共存 "$(msg "本机已安装节点（$path）" "a node is installed here ($path)")" "$(msg '主控不能与节点装在同一台机器上，请使用另一台服务器' 'the control plane cannot share a host with a node; use another server')"
+        preflight_record fail 节点共存 "$(msg "本机已安装节点（${path}）" "a node is installed here ($path)")" "$(msg '主控不能与节点装在同一台机器上，请使用另一台服务器' 'the control plane cannot share a host with a node; use another server')"
         return
       fi
     done
@@ -1273,7 +1273,7 @@ ssh_guard_setup() {
   ssh_guard_render >"${SSH_GUARD_JAIL}.new"
   mv -f -- "${SSH_GUARD_JAIL}.new" "$SSH_GUARD_JAIL"
   if ! fail2ban-client -t >/dev/null 2>&1; then
-    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
+    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 ${SSH_GUARD_JAIL}）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
     return 0
   fi
   systemctl enable fail2ban >/dev/null 2>&1 || true
@@ -3631,7 +3631,7 @@ check_installed() {
     grep -Eq 'node network inventory report|gateway session ended; reconnecting established=true'; then
     check_ok "$(msg "网关会话：本次启动已与 ${value} 握手" "Gateway session: this start completed the handshake with ${value}")"
   else check_bad "$(msg "网关会话：未连上 ${value:-?}（journalctl -u $SERVICE_NAME | grep 'gateway session'）" "Gateway session: not connected to ${value:-?} (journalctl -u $SERVICE_NAME | grep 'gateway session')")"; fi
-  if install_state_has step=done; then check_ok "$(msg "install-state 记录已完成（$INSTALL_STATE_FILE）" "install-state record finished ($INSTALL_STATE_FILE)")"
+  if install_state_has step=done; then check_ok "$(msg "install-state 记录已完成（${INSTALL_STATE_FILE}）" "install-state record finished ($INSTALL_STATE_FILE)")"
   else check_bad "$(msg "安装未完成（$INSTALL_STATE_FILE 无 step=done）：在原安装命令最后一个参数后面加上 --resume 续装" "the installation did not finish ($INSTALL_STATE_FILE has no step=done): rerun the original install command with --resume")"; fi
   version=$(/usr/local/openresty/bin/openresty -V 2>&1) || version=''
   value=$(jq -r '.openresty.version // empty' "$CONFIG_FILE" 2>/dev/null)

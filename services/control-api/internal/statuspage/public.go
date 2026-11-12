@@ -33,6 +33,9 @@ func (s *Service) Public(ctx context.Context) (PublicView, error) {
 		}
 		statuses := []string{}
 		for _, item := range components {
+			if item.Hidden {
+				continue
+			}
 			days, total := history.series(item.ID, now)
 			view.Components = append(view.Components, PublicComponent{ID: item.ID, Name: item.Name,
 				Description: item.Description, Status: item.Status, Uptime90: total, History: days})
@@ -115,6 +118,9 @@ func (s *Service) Sample(ctx context.Context) error {
 	now := s.clock()
 	minute := now.Truncate(time.Minute)
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := syncLineGroups(ctx, tx, now); err != nil {
+			return err
+		}
 		components, err := componentStates(ctx, tx, now)
 		if err != nil || len(components) == 0 {
 			return err

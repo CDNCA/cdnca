@@ -18,9 +18,9 @@ const zhCN = {
   providers: { s3: 'S3 / S3 兼容', oss: '阿里云 OSS', cos: '腾讯云 COS' },
   statuses: { pending: '待验证', verified: '已验证', disabled: '已停用', deleted: '已删除' },
   columns: {
-    name: '名称', provider: '服务商', status: '状态', revision: '版本',
+    name: '名称', provider: '服务商', status: '状态',
     notBefore: '生效时间', expiresAt: '到期时间', updatedAt: '更新时间', actions: '操作',
-    id: '凭据 ID', scope: '租户作用域', revisionRef: '版本引用', verifiedAt: '验证时间',
+    id: '凭据 ID', scope: '租户作用域', verifiedAt: '验证时间',
   },
   pagination: { page: '第 {{page}} 页' },
   data: { loading: '正在加载源站鉴权凭据', empty: '暂无源站鉴权凭据', detailLoading: '正在加载凭据详情' },
@@ -68,9 +68,9 @@ const enUS: typeof zhCN = {
   providers: { s3: 'S3 / S3-compatible', oss: 'Alibaba Cloud OSS', cos: 'Tencent Cloud COS' },
   statuses: { pending: 'Pending verification', verified: 'Verified', disabled: 'Disabled', deleted: 'Deleted' },
   columns: {
-    name: 'Name', provider: 'Provider', status: 'Status', revision: 'Revision',
+    name: 'Name', provider: 'Provider', status: 'Status',
     notBefore: 'Not before', expiresAt: 'Expires at', updatedAt: 'Updated at', actions: 'Actions',
-    id: 'Credential ID', scope: 'Tenant scope', revisionRef: 'Revision reference', verifiedAt: 'Verified at',
+    id: 'Credential ID', scope: 'Tenant scope', verifiedAt: 'Verified at',
   },
   pagination: { page: 'Page {{page}}' },
   data: { loading: 'Loading origin authentication credentials', empty: 'No origin authentication credentials', detailLoading: 'Loading credential detail' },

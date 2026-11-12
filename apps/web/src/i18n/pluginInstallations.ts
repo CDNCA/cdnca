@@ -46,7 +46,7 @@ const zhCN = {
     noReason: '未注明',
   },
   detail: {
-    title: '插件详情', plugin: '插件', version: '版本', status: '状态', revision: '状态版本号',
+    title: '插件详情', plugin: '插件', version: '版本', status: '状态',
     installation: '主控编号', verification: '签名校验记录 ID', manifestDigest: '插件清单指纹（SHA-256）', schemaDigest: '配置格式指纹（SHA-256）',
     scopes: '插件申请的权限', approved: '已同意的权限', sensitive: '需要特别确认的权限', added: '本次新增的权限',
     generation: '访问凭据版本', lkg: '可回退版本', compatibility: '版本兼容', reason: '状态说明', updated: '更新时间',
@@ -177,7 +177,7 @@ const enUS = {
     noReason: 'not given',
   },
   detail: {
-    title: 'Plugin installation details', plugin: 'Plugin ID', version: 'Target version', status: 'Status', revision: 'Revision',
+    title: 'Plugin installation details', plugin: 'Plugin ID', version: 'Target version', status: 'Status',
     installation: 'Control installation ID', verification: 'Verification', manifestDigest: 'Manifest digest', schemaDigest: 'Configuration schema digest',
     scopes: 'Declared scopes', approved: 'Approved scopes', sensitive: 'Sensitive scopes', added: 'New scopes',
     generation: 'Identity generation', lkg: 'Last known good', compatibility: 'Version compatibility', reason: 'Stable reason', updated: 'Updated',

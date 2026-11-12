@@ -1,0 +1,93 @@
+{
+ "id": "status-page",
+ "prefix": "/v1/status-page",
+ "operations": [
+  {
+   "operation_id": "getPublicStatusPage",
+   "method": "GET",
+   "path": "/v1/status-page/public",
+   "summary": "Read the public status page",
+   "summary_zh": "读取公开状态页",
+   "auth": [
+    "none"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Public view",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "show_logo",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: operational / degraded / outage / maintenance",
+       "required": true
+      },
+      {
+       "name": "components",
+       "type": "array<PublicComponent>",
+       "required": true
+      },
+      {
+       "name": "active",
+       "type": "array<Incident>",
+       "required": true
+      },
+      {
+       "name": "upcoming",
+       "type": "array<Incident>",
+       "required": true
+      },
+      {
+       "name": "recent",
+       "type": "array<Incident>",
+       "required": true
+      },
+      {
+       "name": "generated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "304",
+     "description": "Not modified (conditional request)"
+    },
+    {
+     "status": "405",
+     "description": "Only GET and HEAD are served"
+    },
+    {
+     "status": "404",
+     "description": "The status page is disabled"
+    },
+    {
+     "status": "429",
+     "description": "Rate limited by source address"
+    },
+    {
+     "status": "503",
+     "description": "Status storage is unavailable"
+    }
+   ]
+  }
+ ]
+}

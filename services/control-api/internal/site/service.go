@@ -1327,3 +1327,21 @@ func mergePorts(httpPorts, httpsPorts []string) []string {
 	}
 	return result
 }
+
+// Administrator-defined CNAME names (cname_label.go).
+
+func (s *Service) GetCNAMELabel(ctx context.Context, actor Actor, kind string, subjectID uuid.UUID) (string, error) {
+	return s.store.GetCNAMELabel(ctx, actor, kind, subjectID)
+}
+
+func (s *Service) SetCNAMELabel(ctx context.Context, actor Actor, req CNAMELabelRequest) (CNAMELabelResult, error) {
+	return s.store.SetCNAMELabel(ctx, actor, req)
+}
+
+func (s *Service) CountPrefixAffected(ctx context.Context, actor Actor, kind string, subjectID uuid.UUID) (int, error) {
+	return s.store.CountPrefixAffected(ctx, actor, kind, subjectID)
+}
+
+func (s *Service) RegeneratePrefix(ctx context.Context, actor Actor, kind string, subjectID uuid.UUID, requestID string) (int, error) {
+	return s.store.RegeneratePrefix(ctx, actor, kind, subjectID, requestID)
+}

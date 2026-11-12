@@ -75,8 +75,8 @@ function PageTab({ token, canManage }: { token: string; canManage: boolean }) {
     setRows(query.data.components.map((item) => ({ ...item, key: item.id })))
   }, [query.data, changed])
   const save = useMutation({
-    mutationFn: () => statusPageApi.save(token, query.data!.revision, settings!, rows.map(({ id, name, description, source, line_group_id, manual_status }) =>
-      ({ ...(id ? { id } : {}), name: name.trim(), description: description.trim(), source, ...(source === 'line_group' ? { line_group_id } : {}), manual_status }))),
+    mutationFn: () => statusPageApi.save(token, query.data!.revision, settings!, rows.map(({ id, name, description, source, line_group_id, manual_status, hidden }) =>
+      ({ ...(id ? { id } : {}), name: name.trim(), description: description.trim(), source, ...(source === 'line_group' ? { line_group_id } : {}), manual_status, hidden: !!hidden }))),
     onSuccess: (view) => { queryClient.setQueryData(['status-page'], view); setChanged(false); setSavedNote(true) },
     onError: (error) => feedback.error(statusPageErrorText(error)),
   })
@@ -117,7 +117,7 @@ function PageTab({ token, canManage }: { token: string; canManage: boolean }) {
         </Form.Item>
       </Form>
       <Typography.Title level={5}>{t('components')}</Typography.Title>
-      <Table<Row> rowKey="key" size="small" pagination={false} dataSource={rows} scroll={{ x: 960 }}
+      <Table<Row> rowKey="key" size="small" pagination={false} dataSource={rows} scroll={{ x: 1030 }}
         locale={{ emptyText: <Empty description={t('noComponents')} /> }}
         columns={[
           { title: t('name'), width: 180, render: (_, row) => <Input aria-label={t('name')} disabled={!canManage} maxLength={64} status={row.name.trim() ? undefined : 'error'} value={row.name} onChange={(event) => update(row.key, { name: event.target.value })} /> },
@@ -131,9 +131,12 @@ function PageTab({ token, canManage }: { token: string; canManage: boolean }) {
                 status={row.line_group_id ? undefined : 'error'} onChange={(line_group_id) => update(row.key, { line_group_id, line_group_missing: false })} />
               {row.line_group_missing && <Tag color="warning">{t('lineGroupMissing')}</Tag>}
             </Space>) },
-          { title: t('autoStatus'), width: 90, render: (_, row) => row.auto_status && !row.line_group_missing ? <StatusTag status={row.auto_status} /> : '-' },
+          { title: t('autoStatus'), width: 120, render: (_, row) => row.source === 'line_group' && !row.line_group_missing
+            ? <Space size={4}><Tag color="blue" title={t('modeAutoHint')}>{t('modeAuto')}</Tag>{row.auto_status && <StatusTag status={row.auto_status} />}</Space>
+            : <Tag>{t('modeManual')}</Tag> },
           { title: t('manualStatus'), width: 120, render: (_, row) => <Select aria-label={t('manualStatus')} disabled={!canManage} style={{ width: '100%' }} value={row.manual_status}
             options={statuses.map((value) => ({ value, label: t(`status.${value}`) }))} onChange={(manual_status) => update(row.key, { manual_status })} /> },
+          { title: t('hidden'), width: 70, render: (_, row) => <Switch size="small" aria-label={t('hidden')} disabled={!canManage} checked={!!row.hidden} onChange={(hidden) => update(row.key, { hidden })} /> },
           { title: t('currentStatus'), width: 90, render: (_, row) => row.status ? <StatusTag status={row.status} /> : '-' },
           { title: t('actions'), width: 170, fixed: 'right', render: (_, row, index) => canManage && (
             <Space size={0} wrap>

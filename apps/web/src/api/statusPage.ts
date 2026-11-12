@@ -17,6 +17,7 @@ export interface StatusPageComponent {
   line_group_name?: string
   line_group_missing: boolean
   manual_status: ComponentStatus
+  hidden: boolean
   auto_status?: ComponentStatus
   status: ComponentStatus
 }
@@ -28,6 +29,7 @@ export interface StatusPageComponentInput {
   source: 'manual' | 'line_group'
   line_group_id?: string
   manual_status: ComponentStatus
+  hidden?: boolean
 }
 
 export interface StatusPageIncidentUpdate { id: string; status: IncidentStatus; message: string; created_at: string }

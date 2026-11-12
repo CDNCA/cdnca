@@ -4,8 +4,8 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 676,
- "api_key_count": 144,
+ "total": 707,
+ "api_key_count": 159,
  "groups": [
   {
    "id": "-health-live",
@@ -458,7 +458,7 @@
   {
    "id": "admin-analytics",
    "prefix": "/v1/admin/analytics",
-   "count": 27,
+   "count": 28,
    "api_key_count": 0,
    "operations": [
     {
@@ -724,6 +724,18 @@
      "api_key": false,
      "source": "api/control-market-security.openapi.yaml",
      "operation_id": "listAdminMarketSecurityLogs"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/analytics/rum",
+     "summary": "Read the real user monitoring report of a site of any tenant scope",
+     "summary_zh": "读取任意租户网站的真实用户体验报表",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-rum.openapi.yaml",
+     "operation_id": "getAdminSiteRUMReport"
     },
     {
      "method": "GET",
@@ -1336,6 +1348,62 @@
      ],
      "source": "api/control-cname-allocations.openapi.yaml",
      "operation_id": "adminGetCnameAllocation"
+    }
+   ]
+  },
+  {
+   "id": "admin-cname-labels",
+   "prefix": "/v1/admin/cname-labels",
+   "count": 4,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/admin/cname-labels/{kind}/{id}",
+     "summary": "Read the administrator-defined CNAME host name or prefix",
+     "summary_zh": "读取管理员自定义的 CNAME 主机名或前缀",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "getCNAMELabel"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/admin/cname-labels/{kind}/{id}",
+     "summary": "Set the administrator-defined CNAME host name or prefix",
+     "summary_zh": "设置管理员自定义的 CNAME 主机名或前缀",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "putCNAMELabel"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/cname-labels/{kind}/{id}/affected",
+     "summary": "Count the sites that regenerating under the current prefix would change",
+     "summary_zh": "按新前缀重新生成会影响的网站数",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "countCNAMELabelAffected"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/cname-labels/{kind}/{id}/regenerate",
+     "summary": "Re-allocate the CNAME of every affected site under the current prefix",
+     "summary_zh": "按新前缀重新生成网站 CNAME",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "regenerateCNAMELabelSites"
     }
    ]
   },
@@ -2534,6 +2602,92 @@
    ]
   },
   {
+   "id": "admin-security-string-sets",
+   "prefix": "/v1/admin/security-string-sets",
+   "count": 6,
+   "api_key_count": 6,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/admin/security-string-sets",
+     "summary": "List string sets",
+     "summary_zh": "平台：列出字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "listAdminSecurityStringSets"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/security-string-sets",
+     "summary": "Create a string set",
+     "summary_zh": "平台：创建字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "createAdminSecurityStringSet"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/security-string-sets/{set_id}",
+     "summary": "Get a string set",
+     "summary_zh": "平台：查看字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "getAdminSecurityStringSet"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/admin/security-string-sets/{set_id}",
+     "summary": "Replace a string set",
+     "summary_zh": "平台：替换字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "updateAdminSecurityStringSet"
+    },
+    {
+     "method": "DELETE",
+     "path": "/v1/admin/security-string-sets/{set_id}",
+     "summary": "Delete a string set",
+     "summary_zh": "平台：删除字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "deleteAdminSecurityStringSet"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/admin/security-string-sets/{set_id}/references",
+     "summary": "List the policies referencing a string set",
+     "summary_zh": "平台：列出引用字符串集合的策略",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "listAdminSecurityStringSetReferences"
+    }
+   ]
+  },
+  {
    "id": "admin-site-groups",
    "prefix": "/v1/admin/site-groups",
    "count": 1,
@@ -2722,6 +2876,74 @@
      "api_key": false,
      "source": "api/control-site-publications.openapi.yaml",
      "operation_id": "startSiteRollout"
+    }
+   ]
+  },
+  {
+   "id": "admin-status-page",
+   "prefix": "/v1/admin/status-page",
+   "count": 5,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/admin/status-page",
+     "summary": "Read the status page editor view",
+     "summary_zh": "读取状态页编辑视图",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-status-page.openapi.yaml",
+     "operation_id": "getAdminStatusPage"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/admin/status-page",
+     "summary": "Save the status page settings and components",
+     "summary_zh": "保存状态页设置与组件",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-status-page.openapi.yaml",
+     "operation_id": "updateAdminStatusPage"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/status-page/incidents",
+     "summary": "Create an incident or a scheduled maintenance",
+     "summary_zh": "新建状态页事件或计划维护",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-status-page.openapi.yaml",
+     "operation_id": "createStatusPageIncident"
+    },
+    {
+     "method": "DELETE",
+     "path": "/v1/admin/status-page/incidents/{incident_id}",
+     "summary": "Delete an incident",
+     "summary_zh": "删除状态页事件",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-status-page.openapi.yaml",
+     "operation_id": "deleteStatusPageIncident"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/admin/status-page/incidents/{incident_id}/updates",
+     "summary": "Add an update to an incident",
+     "summary_zh": "追加状态页事件进展",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-status-page.openapi.yaml",
+     "operation_id": "addStatusPageIncidentUpdate"
     }
    ]
   },
@@ -3248,7 +3470,7 @@
   {
    "id": "analytics",
    "prefix": "/v1/analytics",
-   "count": 27,
+   "count": 28,
    "api_key_count": 15,
    "operations": [
     {
@@ -3529,6 +3751,18 @@
     },
     {
      "method": "GET",
+     "path": "/v1/analytics/rum",
+     "summary": "Read the real user monitoring report of a site of the session tenant",
+     "summary_zh": "读取会话租户网站的真实用户体验报表",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-rum.openapi.yaml",
+     "operation_id": "getSiteRUMReport"
+    },
+    {
+     "method": "GET",
      "path": "/v1/analytics/site-monitoring",
      "summary": "Read site monitoring for the authenticated tenant",
      "summary_zh": "读取当前租户的网站监控",
@@ -3642,7 +3876,7 @@
   {
    "id": "auth",
    "prefix": "/v1/auth",
-   "count": 12,
+   "count": 13,
    "api_key_count": 2,
    "operations": [
     {
@@ -3794,6 +4028,21 @@
      ],
      "source": "api/openapi/v1/account-registration-challenge.yaml",
      "operation_id": "createAccountRegistrationChallenge"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/auth/registration-config",
+     "summary": "Public sign-up and password-reset configuration",
+     "summary_zh": "注册与找回密码页面的公开配置：要求哪些验证、各通道能否发码、人机校验方式",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "tags": [
+      "Account registration challenge"
+     ],
+     "source": "api/openapi/v1/account-registration-challenge.yaml",
+     "operation_id": "getAccountRegistrationConfig"
     },
     {
      "method": "POST",
@@ -7181,8 +7430,8 @@
   {
    "id": "security-policies",
    "prefix": "/v1/security-policies",
-   "count": 21,
-   "api_key_count": 21,
+   "count": 22,
+   "api_key_count": 22,
    "operations": [
     {
      "method": "GET",
@@ -7406,6 +7655,19 @@
      "operation_id": "enableSecurityPolicyMatcher"
     },
     {
+     "method": "POST",
+     "path": "/v1/security-policies/parse-user-agent",
+     "summary": "Parse a User-Agent",
+     "summary_zh": "解析 User-Agent",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "parseUserAgent"
+    },
+    {
      "method": "GET",
      "path": "/v1/security-policies/{id}",
      "summary": "Get one active WAF, CC or ACL policy",
@@ -7456,6 +7718,92 @@
      "api_key": true,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "evaluateSecurityPolicy"
+    }
+   ]
+  },
+  {
+   "id": "security-string-sets",
+   "prefix": "/v1/security-string-sets",
+   "count": 6,
+   "api_key_count": 6,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/security-string-sets",
+     "summary": "List string sets",
+     "summary_zh": "列出字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "listSecurityStringSets"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/security-string-sets",
+     "summary": "Create a string set",
+     "summary_zh": "创建字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "createSecurityStringSet"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/security-string-sets/{set_id}",
+     "summary": "Get a string set",
+     "summary_zh": "查看字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "getSecurityStringSet"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/security-string-sets/{set_id}",
+     "summary": "Replace a string set",
+     "summary_zh": "替换字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "updateSecurityStringSet"
+    },
+    {
+     "method": "DELETE",
+     "path": "/v1/security-string-sets/{set_id}",
+     "summary": "Delete a string set",
+     "summary_zh": "删除字符串集合",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "deleteSecurityStringSet"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/security-string-sets/{set_id}/references",
+     "summary": "List the policies referencing a string set",
+     "summary_zh": "列出引用字符串集合的策略",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "listSecurityStringSetReferences"
     }
    ]
   },
@@ -7757,7 +8105,7 @@
   {
    "id": "sites",
    "prefix": "/v1/sites",
-   "count": 29,
+   "count": 32,
    "api_key_count": 6,
    "operations": [
     {
@@ -7870,6 +8218,42 @@
      "api_key": false,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "syncSiteAutoDNS"
+    },
+    {
+     "method": "GET",
+     "path": "/v1/sites/{id}/content-rewrite",
+     "summary": "Get the site's content rewrite rules",
+     "summary_zh": "读取网站的内容改写规则",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/sites.yaml",
+     "operation_id": "getSiteContentRewrite"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/sites/{id}/content-rewrite",
+     "summary": "Replace the site's content rewrite rules",
+     "summary_zh": "替换网站的内容改写规则",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/sites.yaml",
+     "operation_id": "replaceSiteContentRewrite"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/sites/{id}/content-rewrite/test",
+     "summary": "Run draft content rewrite rules on a pasted body",
+     "summary_zh": "用草稿规则试运行内容改写",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/sites.yaml",
+     "operation_id": "testSiteContentRewrite"
     },
     {
      "method": "POST",
@@ -8137,6 +8521,26 @@
      ],
      "source": "api/control-site-traffic-limit.openapi.yaml",
      "operation_id": "putSiteTrafficLimit"
+    }
+   ]
+  },
+  {
+   "id": "status-page",
+   "prefix": "/v1/status-page",
+   "count": 1,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/status-page/public",
+     "summary": "Read the public status page",
+     "summary_zh": "读取公开状态页",
+     "auth": [
+      "none"
+     ],
+     "api_key": false,
+     "source": "api/control-status-page.openapi.yaml",
+     "operation_id": "getPublicStatusPage"
     }
    ]
   },
@@ -9343,8 +9747,8 @@
   {
    "id": "url-auth-policies",
    "prefix": "/v1/url-auth-policies",
-   "count": 7,
-   "api_key_count": 7,
+   "count": 9,
+   "api_key_count": 9,
    "operations": [
     {
      "method": "GET",
@@ -9399,6 +9803,19 @@
      "operation_id": "updateURLAuthPolicy"
     },
     {
+     "method": "POST",
+     "path": "/v1/url-auth-policies/{id}/disable",
+     "summary": "Disable a URL authentication policy",
+     "summary_zh": "停用 URL 鉴权策略",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "disableURLAuthPolicy"
+    },
+    {
      "method": "GET",
      "path": "/v1/url-auth-policies/{id}/edge-snapshot",
      "summary": "Get the deterministic edge-compatible policy snapshot",
@@ -9410,6 +9827,19 @@
      "api_key": true,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "getURLAuthPolicyEdgeSnapshot"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/url-auth-policies/{id}/enable",
+     "summary": "Enable a URL authentication policy",
+     "summary_zh": "启用 URL 鉴权策略",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "enableURLAuthPolicy"
     },
     {
      "method": "POST",

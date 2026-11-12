@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -175,6 +176,38 @@ type Telemetry struct {
 	PortGroupOverrides []PortGroupOverride `json:"port_group_overrides,omitempty"`
 	// Storage: the node storage in effect (NODE_STORAGE v1).
 	Storage *Storage `json:"storage,omitempty"`
+	// StringSetOverBudget: the WAF string sets the node refused to compile for
+	// the worker memory budget (NodeTelemetryV1 field 16).
+	StringSetOverBudget []StringSetOverBudget `json:"string_set_over_budget,omitempty"`
+}
+
+// StringSetOverBudget is one refused WAF string set (NodeStringSetOverBudgetV1).
+type StringSetOverBudget struct {
+	SetID         string `json:"set_id"`
+	Revision      int64  `json:"revision"`
+	Mode          string `json:"mode"`
+	Members       uint32 `json:"members"`
+	EstimateBytes uint64 `json:"estimate_bytes"`
+	LiveBytes     uint64 `json:"live_bytes"`
+	BudgetBytes   uint64 `json:"budget_bytes"`
+}
+
+// validStringSetOverBudget: at most 256, ascending by set id and unique, a
+// positive revision, counts within int64.
+func validStringSetOverBudget(sets []StringSetOverBudget) bool {
+	if len(sets) > 256 {
+		return false
+	}
+	previous := ""
+	for _, set := range sets {
+		if set.SetID == "" || len(set.SetID) > 64 || set.SetID <= previous || set.Revision < 1 ||
+			set.Mode == "" || len(set.Mode) > 16 ||
+			set.EstimateBytes > math.MaxInt64 || set.LiveBytes > math.MaxInt64 || set.BudgetBytes > math.MaxInt64 {
+			return false
+		}
+		previous = set.SetID
+	}
+	return true
 }
 
 // Storage is the node's cache directory, cache limit and log directory in

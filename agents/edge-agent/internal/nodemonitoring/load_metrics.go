@@ -78,6 +78,9 @@ type TelemetryMetrics struct {
 	PortGroupOverrides []PortGroupOverrideMetrics `json:"port_group_overrides,omitempty"`
 	// Storage: the node storage in effect (NODE_STORAGE v1, NodeStorageV1).
 	Storage *StorageMetrics `json:"storage,omitempty"`
+	// StringSetOverBudget: the string sets refused for the worker memory
+	// budget (NodeTelemetryV1 field 16).
+	StringSetOverBudget []StringSetOverBudgetMetrics `json:"string_set_over_budget,omitempty"`
 }
 
 // StorageMetrics is the node storage in effect (NodeStorageV1).
@@ -969,7 +972,8 @@ func validTelemetry(telemetry *TelemetryMetrics) bool {
 	}
 	if !validDDoSDrops(telemetry.DDoSDrops) || !validXDPStatus(telemetry.XDP) || !validSiteDrop(telemetry.SiteDrop) ||
 		!validDDoSProtection(telemetry.DDoSProtection) || !validMounts(telemetry.Mounts) ||
-		!validPortGroupOverrides(telemetry.PortGroupOverrides) {
+		!validPortGroupOverrides(telemetry.PortGroupOverrides) ||
+		!validStringSetOverBudget(telemetry.StringSetOverBudget) {
 		return false
 	}
 	previousPath := ""

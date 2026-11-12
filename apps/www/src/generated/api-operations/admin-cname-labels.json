@@ -1,0 +1,298 @@
+{
+ "id": "admin-cname-labels",
+ "prefix": "/v1/admin/cname-labels",
+ "operations": [
+  {
+   "operation_id": "getCNAMELabel",
+   "method": "GET",
+   "path": "/v1/admin/cname-labels/{kind}/{id}",
+   "summary": "Read the administrator-defined CNAME host name or prefix",
+   "summary_zh": "读取管理员自定义的 CNAME 主机名或前缀",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform session only; a tenant session answers 403 permission_denied. kind site needs sites.manage, line-group node_scheduling.manage. site holds a complete host name (shop gives shop.<CNAME domain>); line-group holds a prefix (gd gives gd-xxxxxxxx.<CNAME domain>, at most 54 characters). Lowercase letters, digits and hyphens, not starting or ending with a hyphen. Errors: cname_label_invalid 400, cname_label_reserved 400, cname_label_taken 409, cname_label_follows_package 409 (a site that shares the CNAME of its package).",
+   "params": [
+    {
+     "name": "kind",
+     "in": "path",
+     "type": "string: site / line-group",
+     "required": true
+    },
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The stored value; empty when none is set.",
+     "fields": [
+      {
+       "name": "label",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "putCNAMELabel",
+   "method": "PUT",
+   "path": "/v1/admin/cname-labels/{kind}/{id}",
+   "summary": "Set the administrator-defined CNAME host name or prefix",
+   "summary_zh": "设置管理员自定义的 CNAME 主机名或前缀",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform session only; a tenant session answers 403 permission_denied. kind site needs sites.manage, line-group node_scheduling.manage. site holds a complete host name (shop gives shop.<CNAME domain>); line-group holds a prefix (gd gives gd-xxxxxxxx.<CNAME domain>, at most 54 characters). Lowercase letters, digits and hyphens, not starting or ending with a hyphen. Errors: cname_label_invalid 400, cname_label_reserved 400, cname_label_taken 409, cname_label_follows_package 409 (a site that shares the CNAME of its package). Setting a site name re-allocates the CNAME of that site at once (a new generation, DNS synchronised, the old record retired). A line group prefix only shapes CNAMEs allocated later. An empty label clears the value.",
+   "params": [
+    {
+     "name": "kind",
+     "in": "path",
+     "type": "string: site / line-group",
+     "required": true
+    },
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "label",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The stored value and the number of sites re-allocated.",
+     "fields": [
+      {
+       "name": "label",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "regenerated",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "countCNAMELabelAffected",
+   "method": "GET",
+   "path": "/v1/admin/cname-labels/{kind}/{id}/affected",
+   "summary": "Count the sites that regenerating under the current prefix would change",
+   "summary_zh": "按新前缀重新生成会影响的网站数",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only for kind line-group. Sites with their own name or a legacy product host name are not counted.",
+   "params": [
+    {
+     "name": "kind",
+     "in": "path",
+     "type": "string: site / line-group",
+     "required": true
+    },
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Number of affected sites.",
+     "fields": [
+      {
+       "name": "sites",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "regenerateCNAMELabelSites",
+   "method": "POST",
+   "path": "/v1/admin/cname-labels/{kind}/{id}/regenerate",
+   "summary": "Re-allocate the CNAME of every affected site under the current prefix",
+   "summary_zh": "按新前缀重新生成网站 CNAME",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only for kind line-group. Read the count with the affected route and confirm first. Sites of one package share one new CNAME.",
+   "params": [
+    {
+     "name": "kind",
+     "in": "path",
+     "type": "string: site / line-group",
+     "required": true
+    },
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Number of sites queued for re-allocation.",
+     "fields": [
+      {
+       "name": "sites",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

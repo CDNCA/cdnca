@@ -6,7 +6,7 @@ const zhCN = {
   actions: { view: '查看详情', refresh: '刷新' },
   fields: {
     id: '节点 ID', description: '描述', region: '区域', ipv4: 'IPv4', ipv6: 'IPv6',
-    adminState: '管理状态', revision: '版本', createdAt: '创建时间', updatedAt: '更新时间',
+    adminState: '管理状态', createdAt: '创建时间', updatedAt: '更新时间',
     presence: '在线状态', agentVersion: 'Agent 版本', lastHeartbeat: '最近心跳',
     sequence: '会话与心跳序列', projection: '投影状态', lease: '租约信号', projectedAt: '投影时间',
     marketProbe: '市场探测', openRestyVersion: 'OpenResty 运行时', nativeRuntime: '原生运行时', nativeRuntimePrevious: '原',
@@ -40,7 +40,6 @@ const zhCN = {
   lease: { present: '租约有效', absent: '租约缺失', unavailable: '租约信号不可用' },
   telemetry: {
     sequence: '会话 {{epoch}} / 心跳 {{sequence}}',
-    revision: '版本 {{revision}}',
     ticketUntil: '有效至 {{time}}',
     notReported: '未上报',
     notSet: '未设置',
@@ -62,7 +61,6 @@ const zhCN = {
   transition: {
     title: '主控通信端口切换',
     modalTitle: '创建通信端口切换',
-    revision: '切换修订 {{revision}}',
     created: '通信端口切换已创建',
     finalized: '通信端口切换已提交最终确认',
     rollbackAccepted: '通信端口回滚已提交',
@@ -95,7 +93,7 @@ const enUS: typeof zhCN = {
   actions: { view: 'View details', refresh: 'Refresh' },
   fields: {
     id: 'Node ID', description: 'Description', region: 'Region', ipv4: 'IPv4', ipv6: 'IPv6',
-    adminState: 'Administrative state', revision: 'Revision', createdAt: 'Created at', updatedAt: 'Updated at',
+    adminState: 'Administrative state', createdAt: 'Created at', updatedAt: 'Updated at',
     presence: 'Presence', agentVersion: 'Agent version', lastHeartbeat: 'Last heartbeat',
     sequence: 'Session and heartbeat sequence', projection: 'Projection status', lease: 'Lease signal', projectedAt: 'Projected at',
     marketProbe: 'Market probe', openRestyVersion: 'OpenResty runtime', nativeRuntime: 'Native runtime', nativeRuntimePrevious: 'was',
@@ -129,7 +127,6 @@ const enUS: typeof zhCN = {
   lease: { present: 'Lease valid', absent: 'Lease missing', unavailable: 'Lease signal unavailable' },
   telemetry: {
     sequence: 'Session {{epoch}} / heartbeat {{sequence}}',
-    revision: 'Revision {{revision}}',
     ticketUntil: 'Valid until {{time}}',
     notReported: 'Not reported',
     notSet: 'Not set',
@@ -151,7 +148,6 @@ const enUS: typeof zhCN = {
   transition: {
     title: 'Controller communication-port transition',
     modalTitle: 'Create communication-port transition',
-    revision: 'Transition revision {{revision}}',
     created: 'Communication-port transition created',
     finalized: 'Communication-port finalization submitted',
     rollbackAccepted: 'Communication-port rollback submitted',

@@ -15,7 +15,7 @@ describe('customRolesPageMessages', () => {
       'actions.create', 'actions.rename', 'actions.publish', 'actions.deactivate',
       'actions.assign', 'actions.revoke', 'actions.retry', 'actions.exactRetry', 'actions.abandon',
       'fields.name', 'fields.permissions', 'fields.stepUpProof', 'fields.subjectUserId',
-      'fields.revision', 'fields.includeDeactivated', 'data.loadingRoles', 'data.emptyRoles', 'data.emptyGrants',
+      'fields.includeDeactivated', 'data.loadingRoles', 'data.emptyRoles', 'data.emptyGrants',
       'errors.forbidden', 'errors.load', 'errors.revisionConflict', 'errors.stepUpRequired',
       'errors.permissionNotDelegable', 'errors.serviceUnavailable', 'dialogs.unknownTitle',
       'pagination.roles', 'pagination.grants',

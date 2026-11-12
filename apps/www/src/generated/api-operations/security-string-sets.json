@@ -1,0 +1,576 @@
+{
+ "id": "security-string-sets",
+ "prefix": "/v1/security-string-sets",
+ "operations": [
+  {
+   "operation_id": "listSecurityStringSets",
+   "method": "GET",
+   "path": "/v1/security-string-sets",
+   "summary": "List string sets",
+   "summary_zh": "列出字符串集合",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. Tenant identities only: the tenant's own sets (writable) and the platform sets (read only, platform true). Items carry no entries; reference_count counts the tenant's live policies referencing the set.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sets ordered own first, then by name.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SecurityStringSetSummary>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createSecurityStringSet",
+   "method": "POST",
+   "path": "/v1/security-string-sets",
+   "summary": "Create a string set",
+   "summary_zh": "创建字符串集合",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage. Entries are trimmed, deduplicated and byte ordered (A-Z lower-cased when not case sensitive); a refused entry is validation_error with details.field entries[i] and a reason (too_long, invalid_utf8, control_character, wildcard_too_many_stars, wildcard_only_wildcards, empty); the set as a whole entries with too_many_entries or too_large. match_mode and case_sensitive cannot change later. At most 200 live sets per scope (422 string_set_limit). Audit security.string_set.create.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string"
+     },
+     {
+      "name": "match_mode",
+      "type": "string: exact / prefix / suffix / contains / wildcard",
+      "required": true,
+      "description": "Fixed at creation. prefix compares bytes (/api also matches /apiary); wildcard: * any bytes, ? one byte, at most 3 * and 2000 entries."
+     },
+     {
+      "name": "case_sensitive",
+      "type": "boolean",
+      "required": true,
+      "description": "Fixed at creation. When false A-Z are lower-cased (other letters compare as they are)."
+     },
+     {
+      "name": "entries",
+      "type": "array<string>",
+      "required": true,
+      "description": "At most 256 KiB together."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created, or an identical request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "match_mode",
+       "type": "string: exact / prefix / suffix / contains / wildcard",
+       "required": true
+      },
+      {
+       "name": "case_sensitive",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "entry_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reference_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "entries",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical entries in byte order."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "The request is well formed but breaks a business rule (error.code names it)."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityStringSet",
+   "method": "GET",
+   "path": "/v1/security-string-sets/{set_id}",
+   "summary": "Get a string set",
+   "summary_zh": "查看字符串集合",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. An own or platform set, with its canonical entries.",
+   "params": [
+    {
+     "name": "set_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The set.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "match_mode",
+       "type": "string: exact / prefix / suffix / contains / wildcard",
+       "required": true
+      },
+      {
+       "name": "case_sensitive",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "entry_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reference_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "entries",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical entries in byte order."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSecurityStringSet",
+   "method": "PUT",
+   "path": "/v1/security-string-sets/{set_id}",
+   "summary": "Replace a string set",
+   "summary_zh": "替换字符串集合",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage and the current revision; match_mode / case_sensitive in the body are refused. Every tenant whose bound WAF policy references the set is republished automatically (system trigger string_set). Audit security.string_set.update.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "set_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string"
+     },
+     {
+      "name": "entries",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Replaced (revision + 1), or an identical request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "match_mode",
+       "type": "string: exact / prefix / suffix / contains / wildcard",
+       "required": true
+      },
+      {
+       "name": "case_sensitive",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "entry_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reference_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "entries",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical entries in byte order."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSecurityStringSet",
+   "method": "DELETE",
+   "path": "/v1/security-string-sets/{set_id}",
+   "summary": "Delete a string set",
+   "summary_zh": "删除字符串集合",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage and the current revision. A set any live policy version references is refused (409 string_set_in_use). Audit security.string_set.delete.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "set_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "expected_revision",
+     "in": "query",
+     "type": "integer",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listSecurityStringSetReferences",
+   "method": "GET",
+   "path": "/v1/security-string-sets/{set_id}/references",
+   "summary": "List the policies referencing a string set",
+   "summary_zh": "列出引用字符串集合的策略",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. The caller's live policies with a version referencing the set (the platform sees every scope); rule_count is from the latest referencing version.",
+   "params": [
+    {
+     "name": "set_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Policies by name.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SecurityStringSetReference>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

@@ -33,7 +33,7 @@ mkdir "$W/author"; cd "$W/author"
 # 这个目录里没有平台源码：确认上层也不是 git 仓库，套件不能偷偷用到源码树。
 ! git rev-parse --show-toplevel >/dev/null 2>&1 || die "$W 在 git 仓库里"
 
-step "下载、校验、解包（卖家文档命令，下载源 $BASE）"
+step "下载、校验、解包（卖家文档命令，下载源 ${BASE}）"
 CDNCA_KIT="$BASE/dev-kit"
 curl --fail --location --show-error --output cdnca-dev-kit.tar.gz "$CDNCA_KIT/cdnca-dev-kit.tar.gz"
 curl --fail --location --show-error --output dev-kit.manifest.json "$CDNCA_KIT/dev-kit.manifest.json"

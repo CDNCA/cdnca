@@ -160,6 +160,8 @@ var dynamicActionSites = map[string][]string{
 	"internal/pluginwebhookcontrol/audit.go:appendWebhookAudit": {"plugin_webhook.subscription.create",
 		"plugin_webhook.test_delivery.create", "plugin_webhook.delivery.replay", "plugin_webhook.secret.rotate",
 		"plugin_webhook.secret.activate", "plugin_webhook.subscription.revoke"},
+	"internal/site/cname_label.go:SetCNAMELabel":    {"site.cname_label.set", "line_group.cname_label.set"},
+	"internal/site/cname_label.go:RegeneratePrefix": {"line_group.cname_label.regenerate"},
 	// statusRecoveryKind + "." + validRecoveryTrigger.
 	"internal/site/status_recovery.go:requestStatusRecovery": {"site.status_recovery.renewal",
 		"site.status_recovery.traffic_top_up", "site.status_recovery.unlock"},

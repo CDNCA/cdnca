@@ -179,6 +179,7 @@
       "components/CertificateFailureReason.css",
       "components/CertificatePEMDialog.css",
       "components/CertificateSyncStatus.css",
+      "components/CnameLabelEditor.css",
       "components/NodeFrozenTag.css",
       "components/ResourceID.css",
       "pages/AccountApiKeysPage.css",
@@ -564,6 +565,7 @@
     "used_in": [
       "@cdnca/ui/console.css",
       "@cdnca/ui/styles.css",
+      "components/CnameLabelEditor.css",
       "pages/AccountApiKeysPage.css",
       "pages/AccountIdentityVerificationPage.css",
       "pages/AccountMessagesPage.css",
@@ -695,6 +697,7 @@
       "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
       "components/CacheOperationOutcome.css",
+      "components/CnameLabelEditor.css",
       "pages/AccountApiKeysPage.css",
       "pages/AccountLogPage.css",
       "pages/AccountMessagesPage.css",

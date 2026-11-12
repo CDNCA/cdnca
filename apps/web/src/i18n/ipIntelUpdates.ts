@@ -19,7 +19,7 @@ const zhCN = {
     outcomes: { '': '尚未拉取', published: '已构建新库', unchanged: '数据未变', not_modified: '没有新快照', pending: 'dnspup 生成中，稍后重试', failed: '失败' },
   },
   libraries: {
-    title: 'IP 库', base: '基础库（授权端）', local: '本地库（本插件）', none: '无', revision: '修订 {{revision}}',
+    title: 'IP 库', base: '基础库（授权端）', local: '本地库（本插件）', none: '无',
     dataUpdated: '数据时间 {{time}}', unusable: '授权不含本模块，节点不使用', nodeUses: '节点当前使用',
     reasons: { only_base: '只有基础库', only_local: '只有本地库', local_newer: '本地库数据较新', base_newer_or_equal: '基础库数据不旧于本地库', local_unreadable: '本地库无法打开，回落基础库' },
   },
@@ -57,7 +57,7 @@ const enUS: Messages = {
     outcomes: { '': 'Not pulled yet', published: 'New library built', unchanged: 'Data unchanged', not_modified: 'No new snapshot', pending: 'dnspup is generating, retrying', failed: 'Failed' },
   },
   libraries: {
-    title: 'IP libraries', base: 'Base (licence service)', local: 'Local (this plugin)', none: 'None', revision: 'revision {{revision}}',
+    title: 'IP libraries', base: 'Base (licence service)', local: 'Local (this plugin)', none: 'None',
     dataUpdated: 'data {{time}}', unusable: 'Not used: the licence lacks this module', nodeUses: 'Nodes use',
     reasons: { only_base: 'Only the base library', only_local: 'Only the local library', local_newer: 'Local data is newer', base_newer_or_equal: 'Base data is not older', local_unreadable: 'Local library unreadable; base used' },
   },

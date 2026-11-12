@@ -280,6 +280,8 @@ export interface SiteBasicConfig {
   cname_mode?: 'site' | 'package' | ''
   cname_domain?: string
   cname_hostname?: string
+  /** 管理员自定义的完整主机名；只有平台会话的读取结果带它（租户会话没有）。 */
+  cname_custom_label?: string
   cname_regenerate?: boolean
   package_name: string | null
   group_id: string | null

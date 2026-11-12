@@ -1,0 +1,7 @@
+.cname-label-editor { display: flex; flex-direction: column; gap: 6px; }
+.cname-label-editor-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cname-label-editor-row .ant-input { flex: 1 1 200px; min-width: 160px; }
+.cname-label-editor-preview { margin: 0; color: var(--cdnca-color-text-secondary); overflow-wrap: anywhere; }
+.cname-label-editor-preview code { color: var(--cdnca-color-title); background: transparent; padding: 0; }
+.cname-label-editor-help { margin: 0; color: var(--cdnca-color-text-secondary); }
+.cname-label-editor-error { margin: 0; color: var(--cdnca-color-error, #ed4014); }

@@ -1364,6 +1364,7 @@ components:
         cname_domain: {type: string, maxLength: 253, readOnly: true}
         cname_hostname: {type: string, maxLength: 253, readOnly: true}
         cname_regenerate: {type: boolean, writeOnly: true, default: false}
+        cname_custom_label: {type: string, maxLength: 63, readOnly: true, description: 管理员自定义的完整主机名，仅平台会话返回，租户会话不含此字段}
         package_name: {type: [string, 'null'], maxLength: 128}
         group_id: {type: [string, 'null'], format: uuid}
         group_name: {type: [string, 'null'], maxLength: 128}

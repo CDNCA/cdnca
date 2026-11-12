@@ -250,7 +250,16 @@ func decodeTelemetry(value *agentv1.NodeTelemetryV1) (*Telemetry, error) {
 		telemetry.Storage = &Storage{CacheDirectory: storage.CacheDirectory, CacheMaxBytes: storage.CacheMaxBytes,
 			LogDirectory: storage.LogDirectory, State: storage.State, Reason: storage.Reason, RequestedLogDirectory: storage.RequestedLogDirectory}
 	}
-	if !validMounts(telemetry.Mounts) || !validPortGroupOverrides(telemetry.PortGroupOverrides) || !validStorage(telemetry.Storage) {
+	for _, item := range value.StringSetOverBudget {
+		if item == nil {
+			return nil, ErrInvalidSample
+		}
+		telemetry.StringSetOverBudget = append(telemetry.StringSetOverBudget, StringSetOverBudget{SetID: item.SetId,
+			Revision: item.Revision, Mode: item.Mode, Members: item.Members, EstimateBytes: item.EstimateBytes,
+			LiveBytes: item.LiveBytes, BudgetBytes: item.BudgetBytes})
+	}
+	if !validMounts(telemetry.Mounts) || !validPortGroupOverrides(telemetry.PortGroupOverrides) || !validStorage(telemetry.Storage) ||
+		!validStringSetOverBudget(telemetry.StringSetOverBudget) {
 		return nil, ErrInvalidSample
 	}
 	if status := value.Xdp; status != nil {

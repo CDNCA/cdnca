@@ -1,6 +1,7 @@
 // 公开状态页 /status/ 的中英词条（独立入口，不加载控制台的 i18next）。
 const zhCN = {
   defaultTitle: '服务状态',
+  defaultDescription: '各项服务的实时运行状态、近 90 天可用率与事件记录。',
   language: 'English',
   languageHref: 'en',
   banner: {
@@ -43,6 +44,7 @@ const zhCN = {
 type Messages = typeof zhCN
 const enUS: Messages = {
   defaultTitle: 'Service status',
+  defaultDescription: 'Live status of each service, 90-day uptime and incident history.',
   language: '中文',
   languageHref: 'zh',
   banner: {

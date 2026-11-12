@@ -57,6 +57,20 @@ type Status struct {
 	EpochOK       bool              `json:"epoch_ok"`
 	Rebuild       *RebuildStatus    `json:"rebuild"`
 	Workers       map[string]uint64 `json:"workers"`
+	// StringSetOver: the string sets a worker refused for the memory budget
+	// (cdnca_rule_interp), sorted by id; empty when none.
+	StringSetOver []StringSetOver `json:"string_set_over"`
+}
+
+// StringSetOver is one string set refused for the worker memory budget.
+type StringSetOver struct {
+	ID            string `json:"id"`
+	Revision      int64  `json:"revision"`
+	Mode          string `json:"mode"`
+	Members       uint32 `json:"members"`
+	EstimateBytes uint64 `json:"estimate_bytes"`
+	LiveBytes     uint64 `json:"live_bytes"`
+	BudgetBytes   uint64 `json:"budget_bytes"`
 }
 
 type RebuildStatus struct {
