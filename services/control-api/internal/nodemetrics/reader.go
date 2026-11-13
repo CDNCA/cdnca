@@ -145,8 +145,24 @@ func (reader *PostgresReader) LatestBatch(ctx context.Context, scopeID uuid.UUID
 		       (SELECT facts.capabilities_snapshot FROM node_session_capabilities facts
 		        WHERE facts.node_id=node.id ORDER BY facts.session_epoch DESC LIMIT 1)
 		FROM scoped_nodes node
-		LEFT JOIN node_load_latest metric ON metric.node_id = node.id
-		LEFT JOIN node_recovery_latest recovery ON recovery.node_id = node.id
+		LEFT JOIN LATERAL (
+			SELECT m.config_revision, m.publication_sequence, m.observed_at, m.active_config_revision, m.probe_port,
+			       m.healthy, m.probe_succeeded, m.consecutive_failures, m.consecutive_successes, m.probes_total,
+			       m.probe_failures_total, m.recovered, m.recovery_notified, m.rolled_back, m.metrics_known,
+			       m.cpu_percent, m.memory_used_bytes, m.memory_total_bytes, m.active_connections,
+			       m.rx_bandwidth_bps, m.tx_bandwidth_bps, m.telemetry_json, m.total_rx_bytes, m.total_tx_bytes,
+			       m.puback_stream, m.puback_sequence, m.consumer_durable, m.consumer_sequence, m.ingested_at, m.record_kind
+			FROM node_metric_samples m
+			WHERE m.node_id = node.id AND m.record_kind IN ('metric','host_metric')
+			ORDER BY m.host_epoch DESC, m.publication_sequence DESC LIMIT 1
+		) metric ON true
+		LEFT JOIN LATERAL (
+			SELECT r.config_revision, r.publication_sequence, r.observed_at, r.recovery_reason_code,
+			       r.puback_stream, r.puback_sequence
+			FROM node_metric_samples r
+			WHERE r.node_id = node.id AND r.record_kind = 'recovery_notification'
+			ORDER BY r.host_epoch DESC, r.publication_sequence DESC LIMIT 1
+		) recovery ON true
 		WHERE (SELECT count(*) FROM scoped_nodes)=cardinality($2::uuid[])
 		ORDER BY node.position`, scopeID, nodeIDs)
 	if err != nil {

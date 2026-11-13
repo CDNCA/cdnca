@@ -8,6 +8,7 @@ import '../i18n/cnameAllocations'
 import '../i18n/customRolesPage'
 import '../i18n/adminAccess'
 import '../i18n/adminInbox'
+import '../i18n/tenantMembers'
 import '../i18n/dnsReconcilePage'
 import '../i18n/errorPagesPage'
 import '../i18n/identityVerificationReviewQueue'
@@ -200,7 +201,7 @@ const adminNavigation: NavigationDefinition[] = [
     key: 'stream',
     labelKey: 'navigation:streams',
     icon: 'stream',
-    children: [{ key: '/stream/list', labelKey: 'navigation:streamList', implemented: true }],
+    children: [{ key: '/stream/list', labelKey: 'navigation:streamList', implemented: true, requiredPermission: 'streams.read' }],
   },
   {
     key: 'config',
@@ -293,6 +294,8 @@ const userNavigation: NavigationDefinition[] = [
       { key: '/site/rule-packs', labelKey: 'navigation:rulePacks', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/security-bans', labelKey: 'navigation:securityBans', implemented: true, requiredPermission: 'security_policies.read' },
       { key: '/site/lists', labelKey: 'navigation:securityLists', implemented: true, requiredPermission: 'security_policies.read' },
+      // 租户自己的网站防火墙动作策略（firewall.read/manage，后端按 target_scope_id 校验本租户）。
+      { key: '/config/firewall-action', labelKey: 'navigation:firewallActionPolicy', implemented: true, requiredPermission: firewallReadPermission, platformAdminFallback: false },
       // ADR 0020 §3.4：用户自有多家 DNS 账号的域名解析统一管理（只用户端；平台副本账号不出现）。
       { key: '/site/dns-hub', labelKey: 'navigation:dnsHub', implemented: true, requiredPermission: 'dns.read', platformAdminFallback: false },
     ],
@@ -318,8 +321,11 @@ const userNavigation: NavigationDefinition[] = [
         platformAdminFallback: false,
       },
       { key: '/account/message', labelKey: 'navigation:messageQuery', implemented: true, requiredPermission: 'announcements.read' },
-      { key: '/account/subscribe', labelKey: 'navigation:messageSubscription', implemented: true },
-      { key: '/account/api', labelKey: 'navigation:apiKeys', implemented: true },
+      { key: '/account/subscribe', labelKey: 'navigation:messageSubscription', implemented: true, requiredPermission: 'announcements.read' },
+      { key: '/account/api', labelKey: 'navigation:apiKeys', implemented: true, requiredPermission: 'api_keys.self.manage' },
+      // 子账号：租户管理员管理本租户成员与自定义角色。
+      { key: '/account/members', labelKey: 'tenantMembers:title', implemented: true, requiredPermission: 'identity.roles.manage', platformAdminFallback: false },
+      { key: '/account/custom-roles', labelKey: 'customRolesPage:title', implemented: true, requiredPermission: 'identity.roles.manage', requiredRuntime: 'custom_rbac', platformAdminFallback: false },
       { key: '/account/tickets', labelKey: 'tickets:title', implemented: true },
     ],
   },
@@ -385,6 +391,7 @@ const publicPaths = [
   '/forget-password',
   '/forgot-password',
   '/reset-password',
+  '/accept-invitation',
   '/403',
   '/500',
 ]

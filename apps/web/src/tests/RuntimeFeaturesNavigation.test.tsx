@@ -26,8 +26,9 @@ describe('runtime feature menu gates (GET /v1/runtime-features)', () => {
     const user = ['sites.read', 'identity.roles.manage']
     expect(menuKeys('user', user, [])).not.toContain('/site/cache-clean')
     expect(menuKeys('user', user, ['cache_control'])).toEqual(expect.arrayContaining(['/site/cache-clean']))
-    // tp-b1: custom roles are no longer a tenant menu entry, even with custom_rbac mounted.
-    expect(menuKeys('user', user, ['cache_control', 'custom_rbac'])).not.toContain('/account/custom-roles')
+    // 子账号恢复：自定义角色是账号中心下的租户菜单，只在 custom_rbac 运行时挂载后出现。
+    expect(menuKeys('user', user, ['cache_control'])).not.toContain('/account/custom-roles')
+    expect(menuKeys('user', user, ['cache_control', 'custom_rbac'])).toContain('/account/custom-roles')
     expect(isImplementedPath('user', '/site/cache-clean/history', ['sites.read'], [], [])).toBe(false)
     expect(isImplementedPath('user', '/site/cache-clean/history', ['sites.read'], [], ['cache_control'])).toBe(true)
     // approval center: hidden while off, needs approvals.read (platform.admin alone is not enough).

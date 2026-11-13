@@ -96,7 +96,8 @@ func (s *Service) CreateIncident(ctx context.Context, actor Actor, input Inciden
 			return err
 		}
 		var known int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM status_page_components WHERE id = ANY($1::uuid[])`,
+		if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM status_page_components WHERE id = ANY($1::uuid[]))
+			+ (SELECT count(*) FROM status_page_groups WHERE id = ANY($1::uuid[]))`,
 			input.ComponentIDs).Scan(&known); err != nil {
 			return err
 		}

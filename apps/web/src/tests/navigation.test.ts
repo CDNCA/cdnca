@@ -128,6 +128,7 @@ describe('role navigation', () => {
         '/site/rule-packs',
         '/site/security-bans',
         '/site/lists',
+        '/config/firewall-action',
         '/site/dns-hub',
       ] },
       { key: 'stream', children: ['/stream/list'] },
@@ -137,6 +138,8 @@ describe('role navigation', () => {
         '/account/message',
         '/account/subscribe',
         '/account/api',
+        '/account/members',
+        '/account/custom-roles',
         '/account/tickets',
       ] },
     ])
@@ -230,6 +233,8 @@ describe('role navigation', () => {
       '/account/message',
       '/account/subscribe',
       '/account/api',
+      '/account/members',
+      '/account/custom-roles',
       '/account/tickets',
     ])
     // 社区版：账户中心不再有余额与消费记录；套餐页面全部删除。
@@ -370,7 +375,7 @@ describe('role navigation', () => {
     expect(getDeclaredPaths()).toContain('/config/firewall-action')
     expect(isImplementedPath('admin', '/config/firewall-action', [firewallReadPermission])).toBe(true)
     expect(isImplementedPath('admin', '/config/firewall-action', [])).toBe(false)
-    expect(isImplementedPath('user', '/config/firewall-action', [firewallReadPermission])).toBe(false)
+    expect(isImplementedPath('user', '/config/firewall-action', [firewallReadPermission])).toBe(true)
     expect(getParentNavigationKey('admin', '/config/firewall-action')).toBe('config')
     expect(getBreadcrumbLabels('admin', '/config/waf')).toEqual(['首页', '全局配置', '防火墙配置'])
   })
@@ -430,7 +435,9 @@ describe('role navigation', () => {
       const siteChildren = getNavigation(role).find((item) => item.key === 'site')?.children
         ?.map(({ key, label }) => ({ key, label }))
       // ADR 0020 §3.4：域名解析只在用户端。
-      expect(siteChildren).toEqual(role === 'user' ? [...expectedAdmin, { key: '/site/dns-hub', label: '域名解析' }] : expectedAdmin)
+      expect(siteChildren).toEqual(role === 'user'
+        ? [...expectedAdmin, { key: '/config/firewall-action', label: '防火墙动作策略' }, { key: '/site/dns-hub', label: '域名解析' }]
+        : expectedAdmin)
       expect(isImplementedPath(role, '/site/acl')).toBe(true)
     }
     expect(getDeclaredPaths()).toContain('/site/acl')
@@ -700,7 +707,7 @@ describe('role navigation', () => {
   it('keeps tenant-only custom roles out of the platform console', () => {
     expect(isImplementedPath('admin', '/sys/custom-roles', ['identity.roles.manage', 'platform.admin'])).toBe(false)
     expect(getDeclaredPaths()).not.toContain('/sys/custom-roles')
-    expect(isImplementedPath('user', '/account/custom-roles', ['identity.roles.manage'])).toBe(false)
+    expect(isImplementedPath('user', '/account/custom-roles', ['identity.roles.manage'])).toBe(true)
   })
 
   it('anchors hidden capability routes to a visible baseline item', () => {
@@ -793,15 +800,18 @@ describe('role navigation', () => {
     expect(getDeclaredPaths()).toContain('/monitor/site/cc-coordination')
   })
 
-  it('removes the log centre, balance ledger, members, custom roles and theme from the tenant account centre', () => {
-    const all = ['identity.self.read', 'billing.account.read', 'identity.roles.manage', 'announcements.read']
-    for (const path of ['/account/log-center', '/account/balance-log', '/account/members', '/account/custom-roles', '/account/theme']) {
+  it('removes the log centre, balance ledger and theme from the tenant account centre, and lists team members', () => {
+    const all = ['identity.self.read', 'billing.account.read', 'identity.roles.manage', 'announcements.read', 'api_keys.self.manage']
+    for (const path of ['/account/log-center', '/account/balance-log', '/account/theme']) {
       expect(isImplementedPath('user', path, all, [], ['custom_rbac']), path).toBe(false)
       expect(getDeclaredPaths(), path).not.toContain(path)
     }
+    expect(isImplementedPath('user', '/account/members', all)).toBe(true)
+    expect(isImplementedPath('user', '/account/members', ['identity.self.read'])).toBe(false)
+    expect(isImplementedPath('user', '/account/custom-roles', all, [], ['custom_rbac'])).toBe(true)
     expect(isImplementedPath('admin', '/sys/log-center', ['platform.admin'])).toBe(true)
     expect(getNavigation('user', undefined, [...all, 'package_subscriptions.read']).find((item) => item.key === 'account')?.children?.map((item) => item.label))
-      .toEqual(['个人资料', '日志查询', '消息查询', '消息订阅', 'API密钥', '工单'])
+      .toEqual(['个人资料', '日志查询', '消息查询', '消息订阅', 'API密钥', '团队成员', '自定义角色', '工单'])
     expect(getNavigation('user', undefined, ['package_subscriptions.read', 'traffic_packages.read']).some((item) => item.key === 'user-package')).toBe(false)
   })
 
@@ -921,6 +931,8 @@ describe('route metadata guard', () => {
   const exempt = new Set([
     '/login', '/register', '/forgot-password', '/reset-password', '/forget-password', '/sso/bridge',
     '/403', '/500', '*', '/plugin-ui/:pluginId/:pageId',
+    // 成员邀请接受页：匿名公开页，没有侧栏面包屑。
+    '/accept-invitation',
     // 纯重定向（Navigate / AliasRedirect）
     '/sys/custom-roles', '/sys/notification', '/sys/log', '/finance/recharge',
     // IP 名单 moved into 列表与对象 (?tab=ip).

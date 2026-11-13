@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 918 个 operation，并包含
-892 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 959 个 operation，并包含
+933 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -43,7 +43,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，643 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，681 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -101,6 +101,7 @@
 | `control.yaml` | `POST` | `/v1/admin/analytics/logs/cc-coordination/{state_id}/release` | `releasePlatformCCCoordinationState` |
 | `control.yaml` | `GET` | `/v1/admin/analytics/logs/{kind}/geo-evidence/{event_id}` | `getPlatformAnalyticsGeoEvidence` |
 | `control.yaml` | `GET` | `/v1/admin/analytics/market-security` | `listAdminMarketSecurityLogs` |
+| `control.yaml` | `GET` | `/v1/admin/analytics/rum` | `getAdminSiteRUMReport` |
 | `control.yaml` | `GET` | `/v1/admin/analytics/site-monitoring` | `getPlatformSiteMonitoring` |
 | `control.yaml` | `GET` | `/v1/admin/analytics/site-quality-diagnostics` | `getPlatformQualityDiagnostics` |
 | `control.yaml` | `GET` | `/v1/admin/analytics/site-realtime` | `getPlatformSiteRealtime` |
@@ -147,6 +148,10 @@
 | `control.yaml` | `GET` | `/v1/admin/cname-allocations` | `adminListCnameAllocations` |
 | `control.yaml` | `GET` | `/v1/admin/cname-allocations/diagnose` | `adminDiagnoseCnameAllocation` |
 | `control.yaml` | `GET` | `/v1/admin/cname-allocations/{allocation_id}` | `adminGetCnameAllocation` |
+| `control.yaml` | `GET` | `/v1/admin/cname-labels/{kind}/{id}` | `getCNAMELabel` |
+| `control.yaml` | `PUT` | `/v1/admin/cname-labels/{kind}/{id}` | `putCNAMELabel` |
+| `control.yaml` | `GET` | `/v1/admin/cname-labels/{kind}/{id}/affected` | `countCNAMELabelAffected` |
+| `control.yaml` | `POST` | `/v1/admin/cname-labels/{kind}/{id}/regenerate` | `regenerateCNAMELabelSites` |
 | `control.yaml` | `GET` | `/v1/admin/control-backup` | `getControlBackupStatus` |
 | `control.yaml` | `POST` | `/v1/admin/control-backup/backups` | `requestControlBackup` |
 | `control.yaml` | `DELETE` | `/v1/admin/control-backup/backups/{backup_id}` | `deleteControlBackup` |
@@ -229,6 +234,12 @@
 | `control.yaml` | `POST` | `/v1/admin/security-ip-lists` | `createAdminSecurityIPList` |
 | `control.yaml` | `PUT` | `/v1/admin/security-ip-lists/{list_id}` | `updateAdminSecurityIPList` |
 | `control.yaml` | `DELETE` | `/v1/admin/security-ip-lists/{list_id}` | `deleteAdminSecurityIPList` |
+| `control.yaml` | `GET` | `/v1/admin/security-string-sets` | `listAdminSecurityStringSets` |
+| `control.yaml` | `POST` | `/v1/admin/security-string-sets` | `createAdminSecurityStringSet` |
+| `control.yaml` | `GET` | `/v1/admin/security-string-sets/{set_id}` | `getAdminSecurityStringSet` |
+| `control.yaml` | `PUT` | `/v1/admin/security-string-sets/{set_id}` | `updateAdminSecurityStringSet` |
+| `control.yaml` | `DELETE` | `/v1/admin/security-string-sets/{set_id}` | `deleteAdminSecurityStringSet` |
+| `control.yaml` | `GET` | `/v1/admin/security-string-sets/{set_id}/references` | `listAdminSecurityStringSetReferences` |
 | `control.yaml` | `GET` | `/v1/admin/security/cc-stats` | `getAdminSiteCCStats` |
 | `control.yaml` | `GET` | `/v1/admin/security/coordination/metrics` | `getSecurityCoordinationMetrics` |
 | `control.yaml` | `POST` | `/v1/admin/security/ja4-blocks` | `createAdminJA4BlockWorkflow` |
@@ -247,6 +258,11 @@
 | `control.yaml` | `POST` | `/v1/admin/site-rollouts/{rollout_id}/resume` | `resumeSiteRollout` |
 | `control.yaml` | `POST` | `/v1/admin/site-rollouts/{rollout_id}/retry-failed` | `retryFailedSiteRolloutDeployments` |
 | `control.yaml` | `POST` | `/v1/admin/site-rollouts/{rollout_id}/start` | `startSiteRollout` |
+| `control.yaml` | `GET` | `/v1/admin/status-page` | `getAdminStatusPage` |
+| `control.yaml` | `PUT` | `/v1/admin/status-page` | `updateAdminStatusPage` |
+| `control.yaml` | `POST` | `/v1/admin/status-page/incidents` | `createStatusPageIncident` |
+| `control.yaml` | `DELETE` | `/v1/admin/status-page/incidents/{incident_id}` | `deleteStatusPageIncident` |
+| `control.yaml` | `POST` | `/v1/admin/status-page/incidents/{incident_id}/updates` | `addStatusPageIncidentUpdate` |
 | `control.yaml` | `GET` | `/v1/admin/system-backup-runs` | `listSystemBackupRuns` |
 | `control.yaml` | `GET` | `/v1/admin/system-cleanup-settings` | `getPlatformSystemCleanupSettings` |
 | `control.yaml` | `PUT` | `/v1/admin/system-cleanup-settings` | `updatePlatformSystemCleanupSettings` |
@@ -305,6 +321,7 @@
 | `control.yaml` | `POST` | `/v1/analytics/logs/cc-coordination/{state_id}/release` | `releaseTenantCCCoordinationState` |
 | `control.yaml` | `GET` | `/v1/analytics/logs/{kind}/geo-evidence/{event_id}` | `getTenantAnalyticsGeoEvidence` |
 | `control.yaml` | `GET` | `/v1/analytics/market-security` | `listMarketSecurityLogs` |
+| `control.yaml` | `GET` | `/v1/analytics/rum` | `getSiteRUMReport` |
 | `control.yaml` | `GET` | `/v1/analytics/site-monitoring` | `getTenantSiteMonitoring` |
 | `control.yaml` | `GET` | `/v1/analytics/site-quality-diagnostics` | `getTenantQualityDiagnostics` |
 | `control.yaml` | `GET` | `/v1/analytics/site-realtime` | `getTenantSiteRealtime` |
@@ -320,10 +337,12 @@
 | `control.yaml` | `GET` | `/v1/auth/login-methods` | `getAccountLoginMethods` |
 | `control.yaml` | `POST` | `/v1/auth/logout` | `logout` |
 | `control.yaml` | `GET` | `/v1/auth/me` | `getCurrentIdentity` |
+| `control.yaml` | `POST` | `/v1/auth/member-invitations/accept` | `acceptTenantMemberInvitation` |
 | `control.yaml` | `POST` | `/v1/auth/refresh` | `refresh` |
 | `control.yaml` | `POST` | `/v1/auth/register` | `registerAccount` |
 | `control.yaml` | `POST` | `/v1/auth/registration-challenge-verifications` | `verifyAccountRegistrationChallenge` |
 | `control.yaml` | `POST` | `/v1/auth/registration-challenges` | `createAccountRegistrationChallenge` |
+| `control.yaml` | `GET` | `/v1/auth/registration-config` | `getAccountRegistrationConfig` |
 | `control.yaml` | `POST` | `/v1/auth/session-region-verifications` | `verifySessionRegion` |
 | `control.yaml` | `GET` | `/v1/brand-assets/{slot}` | `readPublicBrandAsset` |
 | `control.yaml` | `GET` | `/v1/cache-operation-requests/{idempotency_key}` | `getTenantCacheWriteReceipt` |
@@ -562,10 +581,17 @@
 | `control.yaml` | `DELETE` | `/v1/security-policies/matchers/{id}` | `deleteSecurityPolicyMatcher` |
 | `control.yaml` | `POST` | `/v1/security-policies/matchers/{id}/disable` | `disableSecurityPolicyMatcher` |
 | `control.yaml` | `POST` | `/v1/security-policies/matchers/{id}/enable` | `enableSecurityPolicyMatcher` |
+| `control.yaml` | `POST` | `/v1/security-policies/parse-user-agent` | `parseUserAgent` |
 | `control.yaml` | `GET` | `/v1/security-policies/{id}` | `getSecurityPolicy` |
 | `control.yaml` | `PATCH` | `/v1/security-policies/{id}` | `updateSecurityPolicy` |
 | `control.yaml` | `DELETE` | `/v1/security-policies/{id}` | `deleteSecurityPolicy` |
 | `control.yaml` | `POST` | `/v1/security-policies/{id}/evaluate` | `evaluateSecurityPolicy` |
+| `control.yaml` | `GET` | `/v1/security-string-sets` | `listSecurityStringSets` |
+| `control.yaml` | `POST` | `/v1/security-string-sets` | `createSecurityStringSet` |
+| `control.yaml` | `GET` | `/v1/security-string-sets/{set_id}` | `getSecurityStringSet` |
+| `control.yaml` | `PUT` | `/v1/security-string-sets/{set_id}` | `updateSecurityStringSet` |
+| `control.yaml` | `DELETE` | `/v1/security-string-sets/{set_id}` | `deleteSecurityStringSet` |
+| `control.yaml` | `GET` | `/v1/security-string-sets/{set_id}/references` | `listSecurityStringSetReferences` |
 | `control.yaml` | `GET` | `/v1/security/cc-stats` | `getSiteCCStats` |
 | `control.yaml` | `POST` | `/v1/security/ja4-blocks` | `createTenantJA4BlockWorkflow` |
 | `control.yaml` | `GET` | `/v1/security/ja4-blocks/{workflow_id}` | `getTenantJA4BlockWorkflow` |
@@ -596,6 +622,7 @@
 | `control.yaml` | `POST` | `/v1/sites/{site_id}/dns-reconcile/tasks/{task_id}/commit` | `commitDNSReconciliationTask` |
 | `control.yaml` | `GET` | `/v1/sites/{site_id}/traffic-limit` | `getSiteTrafficLimit` |
 | `control.yaml` | `PUT` | `/v1/sites/{site_id}/traffic-limit` | `putSiteTrafficLimit` |
+| `control.yaml` | `GET` | `/v1/status-page/public` | `getPublicStatusPage` |
 | `control.yaml` | `GET` | `/v1/stream-groups` | `listStreamGroups` |
 | `control.yaml` | `POST` | `/v1/stream-groups` | `createStreamGroup` |
 | `control.yaml` | `PATCH` | `/v1/stream-groups/{id}` | `updateStreamGroup` |
@@ -672,7 +699,16 @@
 | `control.yaml` | `POST` | `/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/secret-rotations` | `rotatePluginWebhookSecret` |
 | `control.yaml` | `POST` | `/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/secret-rotations/{rotation_id}/activate` | `activatePluginWebhookSecret` |
 | `control.yaml` | `POST` | `/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/test-deliveries` | `createPluginWebhookTestDelivery` |
+| `control.yaml` | `GET` | `/v1/tenant/member-invitations` | `listTenantMemberInvitations` |
+| `control.yaml` | `POST` | `/v1/tenant/member-invitations` | `inviteTenantMember` |
+| `control.yaml` | `POST` | `/v1/tenant/member-invitations/{invitation_id}/revoke` | `revokeTenantMemberInvitation` |
 | `control.yaml` | `GET` | `/v1/tenant/members` | `listTenantMembers` |
+| `control.yaml` | `POST` | `/v1/tenant/members` | `createTenantMember` |
+| `control.yaml` | `DELETE` | `/v1/tenant/members/{user_id}` | `deleteTenantMember` |
+| `control.yaml` | `PUT` | `/v1/tenant/members/{user_id}/password-change` | `setTenantMemberPasswordChange` |
+| `control.yaml` | `POST` | `/v1/tenant/members/{user_id}/password-reset` | `resetTenantMemberPassword` |
+| `control.yaml` | `POST` | `/v1/tenant/members/{user_id}/resume` | `resumeTenantMember` |
+| `control.yaml` | `POST` | `/v1/tenant/members/{user_id}/suspend` | `suspendTenantMember` |
 | `control.yaml` | `GET` | `/v1/theme/assets/{sha}` | `getThemeAsset` |
 | `control.yaml` | `GET` | `/v1/theme/auth-style` | `getThemeAuthStyle` |
 | `control.yaml` | `GET` | `/v1/theme/auth-style/assets/{sha}` | `getThemeAuthStyleAsset` |
@@ -683,7 +719,9 @@
 | `control.yaml` | `POST` | `/v1/url-auth-policies` | `createURLAuthPolicy` |
 | `control.yaml` | `GET` | `/v1/url-auth-policies/{id}` | `getURLAuthPolicy` |
 | `control.yaml` | `PATCH` | `/v1/url-auth-policies/{id}` | `updateURLAuthPolicy` |
+| `control.yaml` | `POST` | `/v1/url-auth-policies/{id}/disable` | `disableURLAuthPolicy` |
 | `control.yaml` | `GET` | `/v1/url-auth-policies/{id}/edge-snapshot` | `getURLAuthPolicyEdgeSnapshot` |
+| `control.yaml` | `POST` | `/v1/url-auth-policies/{id}/enable` | `enableURLAuthPolicy` |
 | `control.yaml` | `POST` | `/v1/url-auth-policies/{id}/revoke` | `revokeURLAuthPolicyPreviousKey` |
 | `control.yaml` | `POST` | `/v1/url-auth-policies/{id}/rotate` | `rotateURLAuthPolicyKey` |
 | `control.yaml` | `GET` | `/v1/user-configs` | `listUserConfigs` |
@@ -959,7 +997,7 @@
 
 ## sites.yaml
 
-源文件：[`sites.yaml`](../../api/openapi/v1/sites.yaml)，23 个 operation。
+源文件：[`sites.yaml`](../../api/openapi/v1/sites.yaml)，26 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -976,6 +1014,9 @@
 | `sites.yaml` | `DELETE` | `/v1/sites/{id}` | `deleteSite` |
 | `sites.yaml` | `POST` | `/v1/sites/{id}/access-check` | `checkSiteAccess` |
 | `sites.yaml` | `POST` | `/v1/sites/{id}/auto-dns/sync` | `syncSiteAutoDNS` |
+| `sites.yaml` | `GET` | `/v1/sites/{id}/content-rewrite` | `getSiteContentRewrite` |
+| `sites.yaml` | `PUT` | `/v1/sites/{id}/content-rewrite` | `replaceSiteContentRewrite` |
+| `sites.yaml` | `POST` | `/v1/sites/{id}/content-rewrite/test` | `testSiteContentRewrite` |
 | `sites.yaml` | `POST` | `/v1/sites/{id}/lock` | `lockSite` |
 | `sites.yaml` | `POST` | `/v1/sites/{id}/origin-failback` | `failbackSiteOrigin` |
 | `sites.yaml` | `GET` | `/v1/sites/{id}/origin-routing` | `getSiteOriginRouting` |

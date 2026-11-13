@@ -2,6 +2,7 @@ package statuspage
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +68,11 @@ func syncLineGroups(ctx context.Context, tx pgx.Tx, now time.Time) (bool, error)
 		if err := tx.QueryRow(ctx, `SELECT COALESCE(max(sort_order) + 1, 0) FROM status_page_components`).Scan(&order); err != nil {
 			return false, err
 		}
+		// New line-group components join the access network group when the administrator has one.
+		var access *uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM status_page_groups WHERE lower(name) = lower($1)`, accessGroupName).Scan(&access); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return false, err
+		}
 		for _, item := range groups {
 			if existing >= MaxComponents || order > 1000 {
 				break // recorded as seen only once a component exists for it
@@ -77,9 +83,9 @@ func syncLineGroups(ctx context.Context, tx pgx.Tx, now time.Time) (bool, error)
 			}
 			name := uniqueName(componentNameFrom(item.name), names)
 			if _, err := tx.Exec(ctx, `INSERT INTO status_page_components
-				(id, name, description, source, line_group_scope_id, line_group_id, manual_status, sort_order, created_at, updated_at)
-				VALUES ($1, $2, '', 'line_group', $3, $4, 'operational', $5, $6, $6)`,
-				id, name, item.scope, item.id, order, now); err != nil {
+				(id, name, description, source, line_group_scope_id, line_group_id, group_id, manual_status, sort_order, created_at, updated_at)
+				VALUES ($1, $2, '', 'line_group', $3, $4, $7, 'operational', $5, $6, $6)`,
+				id, name, item.scope, item.id, order, now, access); err != nil {
 				return false, err
 			}
 			if _, err := tx.Exec(ctx, `INSERT INTO status_page_line_group_seen (line_group_id, seen_at) VALUES ($1, $2)

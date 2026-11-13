@@ -2072,6 +2072,15 @@ func (s *Store) changeLock(
 	}
 	var result WriteResult
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		// sitedel-500 同类：sites 触发器会推进 scope 修订，先锁 scope 行再锁站点行，
+		// 与边缘发布、删除同序；反序会与并发发布死锁（40P01）。
+		targetScopeID, err := mutationTargetScope(ctx, tx, actor, siteID)
+		if err != nil {
+			return err
+		}
+		if err := lockEdgeConfigurationScope(ctx, tx, targetScopeID); err != nil {
+			return err
+		}
 		scopeID, deleted, _, currentlyLocked, currentRevision, err := s.lockSite(ctx, tx, actor, siteID)
 		if err != nil {
 			return err

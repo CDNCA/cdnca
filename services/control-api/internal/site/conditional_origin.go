@@ -306,6 +306,10 @@ func (s *Store) UpdateConditionalOrigin(
 		if err := authorizeAutomaticMutation(ctx, tx, actor, targetScopeID); err != nil {
 			return err
 		}
+		// sitedel-500 同类：先锁 scope 行再锁站点行，与边缘发布、删除同序。
+		if err := lockEdgeConfigurationScope(ctx, tx, targetScopeID); err != nil {
+			return err
+		}
 		scopeID, deleted, _, locked, currentRevision, err := s.lockSite(ctx, tx, actor, request.ID)
 		if err != nil {
 			return err

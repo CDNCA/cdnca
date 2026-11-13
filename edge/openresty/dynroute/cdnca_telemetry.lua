@@ -74,7 +74,10 @@ local SENSITIVE_QUERY_NAMES = {
 -- line stays valid UTF-8 without control characters, as the Agent requires),
 -- cut to at most limit bytes without splitting a %XX.
 local function ascii_prefix(value, limit)
-    value = string.gsub(value, "[^\33-\126]", function(byte) return string.format("%%%02X", string.byte(byte)) end)
+    -- an already clean value (every call after redact_query) skips the gsub
+    if string.find(value, "[^\33-\126]") then
+        value = string.gsub(value, "[^\33-\126]", function(byte) return string.format("%%%02X", string.byte(byte)) end)
+    end
     if limit <= 0 then return "" end
     if #value <= limit then return value end
     return (string.gsub(str_sub(value, 1, limit), "%%%x?$", ""))
@@ -83,14 +86,29 @@ end
 -- redact_query: the query (no leading "?") with sensitive values masked,
 -- at most SECURITY_QUERY_BYTES bytes. Pairs keep their order and raw
 -- encoding; a name is compared after %XX decoding and "+" as space.
+-- query_name_sensitive: the verdict for a raw parameter name, cached per
+-- worker (parameter names repeat across requests; the verdict depends only on
+-- the name). The table is dropped when it reaches QUERY_NAME_CACHE_MAX, so
+-- attacker-chosen names cannot grow it.
+local QUERY_NAME_CACHE_MAX = 4096
+local query_name_verdicts, query_name_count = {}, 0
+local function query_name_sensitive(name)
+    local verdict = query_name_verdicts[name]
+    if verdict ~= nil then return verdict end
+    local plain = string.gsub(name, "%+", " ")
+    local decoded = ngx.unescape_uri(plain)
+    verdict = (decoded and (SENSITIVE_QUERY_NAMES[string.lower(decoded)] or sensitive_name(decoded))) and true or false
+    if query_name_count >= QUERY_NAME_CACHE_MAX then query_name_verdicts, query_name_count = {}, 0 end
+    query_name_verdicts[name], query_name_count = verdict, query_name_count + 1
+    return verdict
+end
+
 local function redact_query(query)
     if type(query) ~= "string" or query == "" then return "" end
     local parts = {}
     for pair in string.gmatch(query, "[^&]+") do
         local name = string.match(pair, "^([^=]*)=")
-        local plain = name and string.gsub(name, "%+", " ")
-        local decoded = plain and ngx.unescape_uri(plain)
-        if decoded and (SENSITIVE_QUERY_NAMES[string.lower(decoded)] or sensitive_name(decoded)) then
+        if name and query_name_sensitive(name) then
             parts[#parts + 1] = name .. "=***"
         else
             parts[#parts + 1] = pair
@@ -362,8 +380,9 @@ local function run_capture(max_value, max_body, max_event, capture_methods, capt
           ja4=ja4, origin_connect_us=origin_connect_us, origin_first_byte_us=origin_first_byte_us, origin_total_us=origin_total_us
         }
         local cdnca_blocked = ngx.var.cdnca_security_block_page == "1"
-        local access, security = {}, {}
-        for key, value in pairs(common) do access[key]=value; security[key]=value end
+        local want_security = ngx.var.cdnca_security_emit == "1"
+        local access, security = {}, want_security and {} or nil
+        for key, value in pairs(common) do access[key]=value; if want_security then security[key]=value end end
         access.type="access.v1"; access.method=ngx.var.request_method; access.protocol=ngx.var.server_protocol
 		access.connection=ngx.var.connection; access.connection_requests=tonumber(ngx.var.connection_requests)
         access.cache_status=ngx.var.cdnca_telemetry_cache_status; access.blocked=cdnca_blocked
@@ -371,6 +390,8 @@ local function run_capture(max_value, max_body, max_event, capture_methods, capt
         access.client_browser=ngx.var.cdnca_client_browser or "other"; access.client_os=ngx.var.cdnca_client_os or "other"
         local upstream_addr = ngx.var.cdnca_upstream_addr_log
         if upstream_addr ~= nil then access.upstream_addr = upstream_addr end
+        local security_json = '{"schema_version":0}'
+        if want_security then
 		security.type="security.v1"; security.security_type=ngx.var.cdnca_security_type
 		security.action=ngx.var.cdnca_security_action; security.severity=ngx.var.cdnca_security_severity
 		security.rule_id=ngx.var.cdnca_security_rule_id; security.method=ngx.var.request_method
@@ -379,14 +400,17 @@ local function run_capture(max_value, max_body, max_event, capture_methods, capt
 		security.request_body_excerpt=ngx.var.cdnca_security_body or ""
 		security.listen_port=tonumber(ngx.var.cdnca_site_port); security.protocol=ngx.var.scheme
 		security.request_class=ngx.var.cdnca_security_request_class; security.path=ngx.var.cdnca_security_path
-        local access_json, security_json = cjson.encode(access), cjson.encode(security)
-        if not access_json or not security_json or #access_json > max_event or #security_json > max_event then
+        security_json = cjson.encode(security)
+        end
+        local access_json = cjson.encode(access)
+        if not access_json or #access_json > max_event or (want_security and (not security_json or #security_json > max_event)) then
           for _, event in ipairs({access, security}) do
             event.request_headers, event.response_headers, event.request_body, event.response_body = null, null, null, null
           end
-          access_json, security_json = cjson.encode(access), cjson.encode(security)
+          access_json = cjson.encode(access)
+          if want_security then security_json = cjson.encode(security) end
         end
-        if not access_json or not security_json or #access_json > max_event or #security_json > max_event then
+        if not access_json or #access_json > max_event or (want_security and (not security_json or #security_json > max_event)) then
           access_json, security_json = '{"schema_version":0}', '{"schema_version":0}'
         end
         ngx.var.cdnca_access_telemetry_json = access_json

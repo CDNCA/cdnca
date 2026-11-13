@@ -61,6 +61,11 @@ func openNodeMetricsRuntime(
 	if err != nil {
 		return nil, runtimeStageError{stage: "configure node metrics store", err: err}
 	}
+	// Samples stored between the migration and this binary taking over (hot
+	// upgrade) are not in the hour buckets yet; rebuild the recent hours.
+	if err := store.RepairRecentTraffic(ctx, time.Now().UTC()); err != nil {
+		return nil, runtimeStageError{stage: "repair recent node traffic buckets", err: err}
+	}
 	processor, err := nodemetrics.NewProcessor(
 		nodemetrics.NewDecoder(nodemetrics.DefaultDecoderConfig()),
 		store,

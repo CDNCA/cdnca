@@ -126,6 +126,15 @@ type AnonymousDispatchMux struct {
 	recovery     notification.AnonymousDispatcher
 	registration notification.AnonymousDispatcher
 	login        notification.AnonymousDispatcher
+	invitation   notification.AnonymousDispatcher
+}
+
+// WithInvitation routes tenant member invitation mails.
+func (mux *AnonymousDispatchMux) WithInvitation(dispatcher notification.AnonymousDispatcher) *AnonymousDispatchMux {
+	if mux != nil {
+		mux.invitation = dispatcher
+	}
+	return mux
 }
 
 func NewAnonymousDispatchMux(
@@ -163,6 +172,11 @@ func (mux *AnonymousDispatchMux) Dispatch(
 			return temporaryContactDispatchFailure("anonymous_dispatch_mux_unavailable")
 		}
 		return mux.login.Dispatch(ctx, attempt)
+	case notification.EventTypeTenantMemberInvitation:
+		if mux.invitation == nil {
+			return temporaryContactDispatchFailure("anonymous_dispatch_mux_unavailable")
+		}
+		return mux.invitation.Dispatch(ctx, attempt)
 	default:
 		return permanentContactDispatchFailure("anonymous_dispatch_event_invalid")
 	}

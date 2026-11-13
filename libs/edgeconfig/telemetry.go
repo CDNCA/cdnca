@@ -758,8 +758,9 @@ const telemetryCaptureLogBody = `        local function capture_matches(method, 
           ja4=ja4, origin_connect_us=origin_connect_us, origin_first_byte_us=origin_first_byte_us, origin_total_us=origin_total_us
         }
         local cdnca_blocked = ngx.var.cdnca_security_block_page == "1"
-        local access, security = {}, {}
-        for key, value in pairs(common) do access[key]=value; security[key]=value end
+        local want_security = ngx.var.cdnca_security_emit == "1"
+        local access, security = {}, want_security and {} or nil
+        for key, value in pairs(common) do access[key]=value; if want_security then security[key]=value end end
         access.type="access.v1"; access.method=ngx.var.request_method; access.protocol=ngx.var.server_protocol
 		access.connection=ngx.var.connection; access.connection_requests=tonumber(ngx.var.connection_requests)
         access.cache_status=ngx.var.cdnca_telemetry_cache_status; access.blocked=cdnca_blocked
@@ -767,6 +768,8 @@ const telemetryCaptureLogBody = `        local function capture_matches(method, 
         access.client_browser=ngx.var.cdnca_client_browser or "other"; access.client_os=ngx.var.cdnca_client_os or "other"
         local upstream_addr = ngx.var.cdnca_upstream_addr_log
         if upstream_addr ~= nil then access.upstream_addr = upstream_addr end
+        local security_json = '{"schema_version":0}'
+        if want_security then
 		security.type="security.v1"; security.security_type=ngx.var.cdnca_security_type
 		security.action=ngx.var.cdnca_security_action; security.severity=ngx.var.cdnca_security_severity
 		security.rule_id=ngx.var.cdnca_security_rule_id; security.method=ngx.var.request_method
@@ -775,14 +778,17 @@ const telemetryCaptureLogBody = `        local function capture_matches(method, 
 		security.request_body_excerpt=ngx.var.cdnca_security_body or ""
 		security.listen_port=tonumber(ngx.var.server_port); security.protocol=ngx.var.scheme
 		security.request_class=ngx.var.cdnca_security_request_class
-        local access_json, security_json = cjson.encode(access), cjson.encode(security)
-        if not access_json or not security_json or #access_json > max_event or #security_json > max_event then
+        security_json = cjson.encode(security)
+        end
+        local access_json = cjson.encode(access)
+        if not access_json or #access_json > max_event or (want_security and (not security_json or #security_json > max_event)) then
           for _, event in ipairs({access, security}) do
             event.request_headers, event.response_headers, event.request_body, event.response_body = null, null, null, null
           end
-          access_json, security_json = cjson.encode(access), cjson.encode(security)
+          access_json = cjson.encode(access)
+          if want_security then security_json = cjson.encode(security) end
         end
-        if not access_json or not security_json or #access_json > max_event or #security_json > max_event then
+        if not access_json or #access_json > max_event or (want_security and (not security_json or #security_json > max_event)) then
           access_json, security_json = '{"schema_version":0}', '{"schema_version":0}'
         end
         ngx.var.cdnca_access_telemetry_json = access_json

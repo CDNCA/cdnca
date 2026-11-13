@@ -83,6 +83,12 @@ func (store *PostgresStore) Put(ctx context.Context, sample Sample) (bool, error
 			return err
 		}
 		if result.RowsAffected() == 1 {
+			if sample.Kind != RecordMetric && sample.Kind != RecordHostMetric {
+				return nil
+			}
+			if rx, txBytes, ok := selectedCounterTotals(sample.Telemetry); ok {
+				return recordTrafficHour(ctx, tx, sample.NodeID, monthlyTrafficPoint{observedAt: sample.ObservedAt, rxBytes: rx, txBytes: txBytes})
+			}
 			return nil
 		}
 		var existing []byte

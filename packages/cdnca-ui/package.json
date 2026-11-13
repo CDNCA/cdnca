@@ -14,7 +14,9 @@
     "./offer-terms": "./src/offerTerms.ts",
     "./market-reasons": "./src/marketReasons.ts",
     "./stale-chunk-reload": "./src/staleChunkReload.ts",
-    "./prefetch": "./src/prefetch.ts"
+    "./prefetch": "./src/prefetch.ts",
+    "./status/*": "./src/status/*.ts",
+    "./status.css": "./src/status/status.css"
   },
   "peerDependencies": {
     "antd": "5.29.3",

@@ -17,6 +17,7 @@ const uiStyles = join(src, '..', '..', '..', 'packages', 'cdnca-ui', 'src', 'sty
 
 const exempt: Record<string, string> = {
   'pages/RegisterPage.tsx#RegisterPage': '全屏注册页（AccountRecoveryLayout）',
+  'pages/MemberInvitationAcceptPage.tsx': '全屏邀请接受页（AccountRecoveryLayout）',
   'pages/UserHomePage.tsx#UserHomePage': '服务概览：多块白底 .user-dashboard-card 分块，根是网格',
   'pages/AdminHomePage.tsx#AdminHomePage': '运营数据：根 .overview-card 白底',
   'pages/AccountSubscriptionsPage.tsx': '消息订阅：包一层 NotificationSettingsPage，其根 .identity-page 由 .account-subscriptions-page > .identity-page 上白底',
@@ -43,6 +44,7 @@ const exempt: Record<string, string> = {
 // 标题在白底页卡里这一条的豁免：只有不在外壳里的全屏页。
 const titleExempt: Record<string, string> = {
   'pages/RegisterPage.tsx#RegisterPage': '全屏注册页（AccountRecoveryLayout）',
+  'pages/MemberInvitationAcceptPage.tsx': '全屏邀请接受页（AccountRecoveryLayout）',
 }
 
 function files(dir: string, ext: RegExp): string[] {

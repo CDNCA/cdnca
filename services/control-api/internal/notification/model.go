@@ -62,6 +62,8 @@ const (
 	EventTypeAccountRegistrationVerification = "identity.account_registration_verification"
 	EventTypeAccountLoginVerification        = "identity.account_login_verification"
 	EventTypeAccountRegistrationSuccess      = "identity.account_registration_success"
+	// Tenant member email invitation (migration 398).
+	EventTypeTenantMemberInvitation = "identity.tenant_member_invitation"
 
 	// Platform operations alerts, delivered to platform members (FX33).
 	EventTypeNodeOffline   = "node.availability.offline"

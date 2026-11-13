@@ -40,6 +40,7 @@ import '../i18n/appShellReference'
 import '../i18n/themes'
 import '../i18n/adminAccess'
 import '../i18n/adminInbox'
+import '../i18n/tenantMembers'
 import './AppShell.css'
 
 const iconMap = {

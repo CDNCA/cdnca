@@ -3,7 +3,7 @@
 //
 //   platform-admin  主控平台管理员（control-api bootstrap-user，up.sh 建）
 //   tenant-admin    主控租户主账号 tenant_owner（POST /v1/admin/users）
-//   tenant-user     主控只读租户账号 tenant_viewer（POST /v1/admin/users；租户成员增删接口 1.0.35 已删）
+//   tenant-user     主控租户成员（租户主账号 POST /v1/tenant/members）
 //   seller          客户门户客户（POST /portal/v1/accounts 注册）→ 门户/卖家站
 //   operator        运营后台受限运营员（owner 邀请 + 自定义角色，只给读权限）
 //   owner           运营后台 owner（license-bootstrap，up.sh 建），只用于建种子与运营后台全权限巡检
@@ -85,7 +85,7 @@ const previous = fs.existsSync(`${STATE}/identities.json`) ? JSON.parse(fs.readF
 const ids = { ...previous, password: PW, identities: {} }
 const log = (...a) => console.log('[seed]', ...a)
 
-// ---- 主控：平台管理员登录 → 建租户主账号 → 建只读租户账号 ----
+// ---- 主控：平台管理员登录 → 建租户主账号 → 租户主账号建成员 ----
 const admin = new Jar()
 must(await call(admin, WEB, 'POST', '/v1/auth/login', { username: 'admin', password: PW }), 'admin login')
 const tenantOwner = await call(admin, WEB, 'POST', '/v1/admin/users', { username: 'tenant1', password: PW, display_name: '测试租户', email: 'tenant1@example.test', role: 'tenant_owner' })
@@ -93,10 +93,10 @@ must(tenantOwner, 'create tenant owner', [201, 409])
 log('tenant-admin', tenantOwner.status)
 const tenant = new Jar()
 must(await call(tenant, WEB, 'POST', '/v1/auth/login', { username: 'tenant1', password: PW }), 'tenant login')
-const member = await call(admin, WEB, 'POST', '/v1/admin/users', { username: 'member1', password: PW, display_name: '测试成员', email: 'member1@example.test', role: 'tenant_viewer' })
+const member = await call(tenant, WEB, 'POST', '/v1/tenant/members', { username: 'member1', display_name: '测试成员', email: 'member1@example.test', password: PW })
 log('tenant-user', member.status, member.status >= 300 ? member.text.slice(0, 200) : '')
-// 种子替该账号改一次口令（若要求下次登录改密，components/PasswordChangeGate.tsx 也就此解除），
-// 改成同一测试口令的变体，之后巡检直接用新口令。
+// 租户主账号建的成员首次登录必须改密（components/PasswordChangeGate.tsx）：
+// 种子替成员完成这一步，改成同一测试口令的变体，之后巡检直接用新口令。
 const memberPW = PW + 'M'
 const mem = new Jar()
 const ml = await call(mem, WEB, 'POST', '/v1/auth/login', { username: 'member1', password: PW })

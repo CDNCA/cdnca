@@ -55,7 +55,7 @@ describe('account center sidebar entries', () => {
 // AA-NAV01：从菜单「API密钥」进入后落在 /account/api-key，标题、面包屑与高亮要跟着这一项。
 describe('API key page shell metadata', () => {
   it('titles the page API密钥 and highlights its account-centre entry', async () => {
-    const { container } = renderTenant([], '/account/api-key')
+    const { container } = renderTenant(['api_keys.self.manage'], '/account/api-key')
     const entry = await screen.findByRole('menuitem', { name: 'API密钥' })
     expect(entry.closest('li')).toHaveClass('ant-menu-item-selected')
     expect(container.querySelector('.shell-breadcrumb-current')).toHaveTextContent('API密钥')

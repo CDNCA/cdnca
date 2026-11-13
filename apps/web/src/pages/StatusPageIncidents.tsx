@@ -43,7 +43,8 @@ export function StatusPageIncidents({ token, canManage }: { token: string; canMa
     },
   })
   const components = query.data?.components ?? []
-  const names = new Map(components.map((item) => [item.id, item.name]))
+  const groups = query.data?.groups ?? []
+  const names = new Map<string, string>([...groups, ...components].map((item) => [item.id, item.name]))
   const open = (kind: IncidentKind) => setDraft({
     kind, title: '', impact: kind === 'maintenance' ? 'maintenance' : 'degraded', status: incidentStatuses[kind][0], message: '', component_ids: [], window: null,
   })
@@ -95,7 +96,7 @@ export function StatusPageIncidents({ token, canManage }: { token: string; canMa
             </Form.Item>
             <Form.Item label={t('affected')}>
               <Select mode="multiple" value={draft.component_ids} onChange={(component_ids) => setDraft({ ...draft, component_ids })}
-                options={components.map((item) => ({ value: item.id, label: item.name }))} />
+                options={[...groups.map((item) => ({ value: item.id, label: `${item.name} (${t('group')})` })), ...components.map((item) => ({ value: item.id, label: item.name }))]} />
             </Form.Item>
             <Form.Item label={t('message')} extra={t('messageHint')} required>
               <Input.TextArea maxLength={2000} autoSize={{ minRows: 3, maxRows: 8 }} value={draft.message} onChange={(event) => setDraft({ ...draft, message: event.target.value })} />

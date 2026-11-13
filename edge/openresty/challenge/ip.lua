@@ -10,21 +10,23 @@ local function parse_ipv4(value)
     if type(value) ~= "string" or #value == 0 or #value > 15 then
         return nil
     end
-    local bytes = {}
-    for part in (value .. "."):gmatch("(.-)%.") do
-        if part == "" or part:find("[^0-9]") or (#part > 1 and part:sub(1, 1) == "0") then
-            return nil
-        end
-        local byte = tonumber(part)
-        if not byte or byte > 255 then
-            return nil
-        end
-        bytes[#bytes + 1] = byte
-    end
-    if #bytes ~= 4 then
+    -- one match instead of a gmatch loop (same algorithm as the CC v2 engine);
+    -- the canonical form is formatted directly: resty.string.to_hex is a loop
+    -- LuaJIT aborts the trace on (leaving loop in root trace)
+    local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if not a then
         return nil
     end
-    return { family = 4, bytes = bytes, display = value, canonical = "4:" .. resty_string.to_hex(string.char(unpack(bytes))) }
+    if (#a > 1 and a:byte(1) == 48) or (#b > 1 and b:byte(1) == 48) or
+        (#c > 1 and c:byte(1) == 48) or (#d > 1 and d:byte(1) == 48) then
+        return nil
+    end
+    a, b, c, d = tonumber(a), tonumber(b), tonumber(c), tonumber(d)
+    if a > 255 or b > 255 or c > 255 or d > 255 then
+        return nil
+    end
+    return { family = 4, bytes = { a, b, c, d }, display = value,
+        canonical = string.format("4:%02x%02x%02x%02x", a, b, c, d) }
 end
 
 local function ipv6_side(value)

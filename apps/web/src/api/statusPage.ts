@@ -2,20 +2,31 @@ import { ApiError, networkApiError, responseApiError } from './auth'
 
 // 公开状态页编辑接口。公开页 /status/ 自己读 /v1/status-page/public。
 
-export type ComponentStatus = 'operational' | 'degraded' | 'outage' | 'maintenance'
+export type ComponentStatus = 'operational' | 'degraded' | 'outage' | 'maintenance' | 'unconfigured'
+export type ComponentSource = 'manual' | 'line_group' | 'node' | 'node_overall' | 'gateway' | 'control_api' | 'web_console' | 'dns_sync' | 'cert_issue'
+export const componentSources: ComponentSource[] = ['line_group', 'node', 'node_overall', 'gateway', 'control_api', 'web_console', 'dns_sync', 'cert_issue', 'manual']
 export type IncidentKind = 'incident' | 'maintenance'
 export type IncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved' | 'scheduled' | 'in_progress' | 'completed'
 
 export interface StatusPageSettings { enabled: boolean; title: string; description: string; show_logo: boolean }
 
+export interface StatusPageText { zh: string; en: string }
+
+export interface StatusPageGroup { id: string; name: string; name_en: string; hidden: boolean }
+
 export interface StatusPageComponent {
   id: string
   name: string
+  name_en: string
   description: string
-  source: 'manual' | 'line_group'
+  source: ComponentSource
   line_group_id?: string
   line_group_name?: string
   line_group_missing: boolean
+  node_id?: string
+  node_name?: string
+  group_id?: string
+  note: StatusPageText
   manual_status: ComponentStatus
   hidden: boolean
   auto_status?: ComponentStatus
@@ -25,9 +36,12 @@ export interface StatusPageComponent {
 export interface StatusPageComponentInput {
   id?: string
   name: string
+  name_en: string
   description: string
-  source: 'manual' | 'line_group'
+  source: ComponentSource
   line_group_id?: string
+  node_id?: string
+  group_id?: string
   manual_status: ComponentStatus
   hidden?: boolean
 }
@@ -51,9 +65,11 @@ export interface StatusPageIncident {
 export interface StatusPageAdminView {
   revision: number
   settings: StatusPageSettings
+  groups: StatusPageGroup[]
   components: StatusPageComponent[]
   incidents: StatusPageIncident[]
   line_groups: { id: string; name: string }[]
+  nodes: { id: string; name: string }[]
   updated_at: string
 }
 
@@ -74,7 +90,7 @@ const root = '/v1/admin/status-page'
 function isAdminView(value: unknown): value is StatusPageAdminView {
   const view = value as StatusPageAdminView | null
   return typeof view === 'object' && view !== null && Number.isSafeInteger(view.revision) && typeof view.settings === 'object' &&
-    Array.isArray(view.components) && Array.isArray(view.incidents) && Array.isArray(view.line_groups)
+    Array.isArray(view.groups) && Array.isArray(view.components) && Array.isArray(view.incidents) && Array.isArray(view.line_groups) && Array.isArray(view.nodes)
 }
 
 async function call<T>(path: string, token: string, operation: string, init: RequestInit = {}, check?: (value: unknown) => value is T): Promise<T> {
@@ -100,8 +116,8 @@ async function call<T>(path: string, token: string, operation: string, init: Req
 
 export const statusPageApi = {
   get: (token: string) => call('', token, 'get', {}, isAdminView),
-  save: (token: string, revision: number, settings: StatusPageSettings, components: StatusPageComponentInput[]) =>
-    call('', token, 'save', { method: 'PUT', body: JSON.stringify({ settings, components }), headers: { 'If-Match': `"${revision}"` } }, isAdminView),
+  save: (token: string, revision: number, settings: StatusPageSettings, groups: StatusPageGroup[], components: StatusPageComponentInput[]) =>
+    call('', token, 'save', { method: 'PUT', body: JSON.stringify({ settings, groups, components }), headers: { 'If-Match': `"${revision}"` } }, isAdminView),
   createIncident: (token: string, input: StatusPageIncidentInput) =>
     call<StatusPageIncident>('/incidents', token, 'incident-create', { method: 'POST', body: JSON.stringify(input) }),
   addUpdate: (token: string, id: string, status: IncidentStatus, message: string) =>

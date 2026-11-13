@@ -63,6 +63,7 @@ const shellFreePages: Record<string, (() => Promise<unknown>) | undefined> = {
   '/forgot-password': loadRecoveryRequestPage,
   '/reset-password': loadRecoveryResetPage,
   '/forget-password': undefined,
+  '/accept-invitation': undefined,
 }
 if (typeof window !== 'undefined') {
   const initialPath = window.location.pathname.replace(/^\/dashboard(?=\/|$)/, '') || '/'
@@ -81,6 +82,8 @@ const SitePublicationsPage = lazy(() => import('./pages/SitePublicationsPage'))
 const SiteProtocolBatchPage = lazy(() => import('./pages/site-protocols/SiteProtocolBatchPage'))
 const SiteEditPage = lazy(() => import('./pages/SiteEditPage'))
 const UserListPage = lazy(() => import('./pages/UserListPage'))
+const CustomRolesPage = lazy(() => import('./pages/CustomRolesPage'))
+const TenantMembersPage = lazy(() => import('./pages/TenantMembersPage'))
 const AccountUserPage = lazy(() => import('./pages/AccountUserPage'))
 const StreamListPage = lazy(() => import('./pages/StreamListPage'))
 const StreamDetailPage = lazy(() => import('./pages/StreamDetailPage'))
@@ -154,6 +157,7 @@ const PluginStorePage = lazy(() => import('./pages/market/MarketStorePage'))
 const PluginUIPage = lazy(() => import('./pluginui/PluginPage'))
 const AdminAccessPage = lazy(() => import('./pages/AdminAccessPage'))
 const AdminInboxPage = lazy(() => import('./pages/AdminInboxPage'))
+const MemberInvitationAcceptPage = lazy(() => import('./pages/MemberInvitationAcceptPage'))
 const IPIntelUpdatesPage = lazy(() => import('./pages/ip-intel-updates/IPIntelUpdatesPage'))
 const ProbeDNSPupPage = lazy(() => import('./pages/probe-dnspup/ProbeDNSPupPage'))
 const PluginProvidersPage = lazy(() => import('./pages/plugin-providers/PluginProvidersPage'))
@@ -351,13 +355,11 @@ function LegacySiteEditRedirect() {
 
 // Account pages removed from the tenant console. Old links land on the
 // closest remaining page: the log centre
-// moves into 日志查询; members, custom roles and the theme page go to the
-// account home. Their back ends stay; the admin
+// moves into 日志查询; the theme page goes to the
+// account home (members and custom roles came back). Their back ends stay; the admin
 // log centre is /sys/log-center.
 const retiredAccountRoutes: readonly { from: string; to: string }[] = [
   { from: '/account/log-center', to: '/account/log' },
-  { from: '/account/members', to: '/account/user' },
-  { from: '/account/custom-roles', to: '/account/user' },
   { from: '/account/theme', to: '/account/user' },
 ]
 
@@ -394,6 +396,7 @@ const appRouteTree = (
       <Route path="/forgot-password" element={<Suspense fallback={<RouteFallback />}><AccountRecoveryRequestPage /></Suspense>} />
       <Route path="/reset-password" element={<Suspense fallback={<RouteFallback />}><AccountRecoveryResetPage /></Suspense>} />
       <Route path="/forget-password" element={<LegacyRecoveryRedirect />} />
+      <Route path="/accept-invitation" element={<Suspense fallback={<RouteFallback />}><MemberInvitationAcceptPage /></Suspense>} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Suspense fallback={<RouteFallback />}><AppShell /></Suspense>}>
           <Route element={<ImpersonationRouteBoundary />}>
@@ -1173,6 +1176,30 @@ const appRouteTree = (
             }
           />
           <Route
+            path="/account/members"
+            element={
+              <RoleRoute role="user" mismatch="not-found">
+                <PermissionRoute permission="identity.roles.manage" platformAdminFallback={false}>
+                  <Suspense fallback={<RouteFallback />}>
+                    <TenantMembersPage />
+                  </Suspense>
+                </PermissionRoute>
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/account/custom-roles"
+            element={
+              <RoleRoute role="user" mismatch="not-found">
+                <PermissionRoute permission="identity.roles.manage" platformAdminFallback={false}>
+                  <Suspense fallback={<RouteFallback />}>
+                    <CustomRolesPage />
+                  </Suspense>
+                </PermissionRoute>
+              </RoleRoute>
+            }
+          />
+          <Route
             path="/account/tickets"
             element={
               <RoleRoute role="user" mismatch="not-found">
@@ -1371,13 +1398,11 @@ const appRouteTree = (
           <Route
             path="/config/firewall-action"
             element={
-              <RoleRoute role="admin" mismatch="not-found">
-                <PermissionRoute permission={firewallReadPermission} platformAdminFallback>
-                  <Suspense fallback={<RouteFallback />}>
-                    <FirewallActionPoliciesPage />
-                  </Suspense>
-                </PermissionRoute>
-              </RoleRoute>
+              <PermissionRoute permission={firewallReadPermission} platformAdminFallback>
+                <Suspense fallback={<RouteFallback />}>
+                  <FirewallActionPoliciesPage />
+                </Suspense>
+              </PermissionRoute>
             }
           />
           {/* PA-19 ui_page plugin pages; the page list is already filtered for this principal. */}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoverycontext"
@@ -29,6 +31,10 @@ func buildStatusPageHandlerFactory(ctx context.Context, pool *pgxpool.Pool, iden
 	if err != nil {
 		return nil, err
 	}
+	service.SetProbeConfig(statuspage.ProbeConfig{
+		ConsoleURL:          consoleProbeURL(os.Getenv),
+		LocalGatewayAddress: strings.TrimSpace(os.Getenv("CDNCA_GATEWAY_LOCAL_ADDRESS")),
+	})
 	go service.Run(ctx)
 	return func() (http.Handler, error) {
 		return statuspagehttp.New(service, func(request *http.Request, rawSession string) (identity.AuthenticatedSession, error) {
@@ -41,4 +47,18 @@ func buildStatusPageHandlerFactory(ctx context.Context, pool *pgxpool.Pool, iden
 			return host
 		})
 	}, nil
+}
+
+// consoleProbeURL is where the console is probed: CDNCA_STATUS_CONSOLE_PROBE_URL when set
+// (override), else the controller's own public origin (PAYMENT_CHANNELS_NOTIFY_BASE, the
+// installer's CONTROL_ORIGIN, present on every installed controller), else the local nginx
+// on the loopback.
+func consoleProbeURL(lookup func(string) string) string {
+	if value := strings.TrimSpace(lookup("CDNCA_STATUS_CONSOLE_PROBE_URL")); value != "" {
+		return value
+	}
+	if origin := strings.TrimRight(strings.TrimSpace(lookup("PAYMENT_CHANNELS_NOTIFY_BASE")), "/"); strings.HasPrefix(origin, "https://") {
+		return origin + "/dashboard/"
+	}
+	return "https://127.0.0.1/dashboard/"
 }

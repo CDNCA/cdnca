@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 707,
+ "total": 717,
  "api_key_count": 159,
  "groups": [
   {
@@ -3876,7 +3876,7 @@
   {
    "id": "auth",
    "prefix": "/v1/auth",
-   "count": 13,
+   "count": 14,
    "api_key_count": 2,
    "operations": [
     {
@@ -3971,6 +3971,17 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "getCurrentIdentity"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/auth/member-invitations/accept",
+     "summary": "Accept an invitation and create the read-only sub-account (anonymous; the token is the credential)",
+     "auth": [
+      "none"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "acceptTenantMemberInvitation"
     },
     {
      "method": "POST",
@@ -8739,9 +8750,42 @@
   {
    "id": "tenant",
    "prefix": "/v1/tenant",
-   "count": 1,
+   "count": 10,
    "api_key_count": 0,
    "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/tenant/member-invitations",
+     "summary": "List the caller's tenant member invitations (pending ones past expiry read expired)",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "listTenantMemberInvitations"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/tenant/member-invitations",
+     "summary": "Email a one-time invitation link (72 hours) to become a read-only sub-account",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "inviteTenantMember"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/tenant/member-invitations/{invitation_id}/revoke",
+     "summary": "Withdraw a pending invitation",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "revokeTenantMemberInvitation"
+    },
     {
      "method": "GET",
      "path": "/v1/tenant/members",
@@ -8753,6 +8797,72 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "listTenantMembers"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/tenant/members",
+     "summary": "Add a sub-account to the caller's tenant scope (tenant_viewer role; grant more with /v1/custom-rbac)",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "createTenantMember"
+    },
+    {
+     "method": "DELETE",
+     "path": "/v1/tenant/members/{user_id}",
+     "summary": "Delete a sub-account of the caller's tenant scope",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "deleteTenantMember"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/tenant/members/{user_id}/password-change",
+     "summary": "Require (or withdraw) a password change at the member's next sign-in",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "setTenantMemberPasswordChange"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/tenant/members/{user_id}/password-reset",
+     "summary": "Give a sub-account a generated password (revokes its sessions, requires a change at the next sign-in)",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "resetTenantMemberPassword"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/tenant/members/{user_id}/resume",
+     "summary": "Resume a suspended member",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "resumeTenantMember"
+    },
+    {
+     "method": "POST",
+     "path": "/v1/tenant/members/{user_id}/suspend",
+     "summary": "Suspend a member (revokes its sessions; its sites stop serving, see account_suspension)",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/openapi/v1/control.yaml",
+     "operation_id": "suspendTenantMember"
     }
    ]
   },

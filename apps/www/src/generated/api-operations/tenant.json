@@ -3,6 +3,134 @@
  "prefix": "/v1/tenant",
  "operations": [
   {
+   "operation_id": "listTenantMemberInvitations",
+   "method": "GET",
+   "path": "/v1/tenant/member-invitations",
+   "summary": "List the caller's tenant member invitations (pending ones past expiry read expired)",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Up to 200, newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<TenantMemberInvitation>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "inviteTenantMember",
+   "method": "POST",
+   "path": "/v1/tenant/member-invitations",
+   "summary": "Email a one-time invitation link (72 hours) to become a read-only sub-account",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Audited identity.tenant_member.invite. The mail goes through the notification outbox (email channel); a new invitation to the same address revokes the pending one.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "email",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Invitation queued.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / accepted / revoked / expired",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "tenant_member_email_taken."
+    },
+    {
+     "status": "503",
+     "description": "tenant_member_invitation_unavailable (email channel off or account mail runtime not configured)."
+    }
+   ]
+  },
+  {
+   "operation_id": "revokeTenantMemberInvitation",
+   "method": "POST",
+   "path": "/v1/tenant/member-invitations/{invitation_id}/revoke",
+   "summary": "Withdraw a pending invitation",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "invitation_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Revoked (audited identity.tenant_member.invitation.revoke)."
+    },
+    {
+     "status": "404",
+     "description": "tenant_member_invitation_not_found."
+    }
+   ]
+  },
+  {
    "operation_id": "listTenantMembers",
    "method": "GET",
    "path": "/v1/tenant/members",
@@ -33,6 +161,477 @@
      "status": "403",
      "description": "The authenticated principal is not allowed to perform the action.",
      "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createTenantMember",
+   "method": "POST",
+   "path": "/v1/tenant/members",
+   "summary": "Add a sub-account to the caller's tenant scope (tenant_viewer role; grant more with /v1/custom-rbac)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Suspend, delete, password reset and forced password change answer 403 tenant_member_outranks for a member holding permissions the caller lacks.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "username",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "display_name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "email",
+      "type": "string"
+     },
+     {
+      "name": "password",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created (audited identity.tenant_member.create).",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / suspended / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "password_change_required",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteTenantMember",
+   "method": "DELETE",
+   "path": "/v1/tenant/members/{user_id}",
+   "summary": "Delete a sub-account of the caller's tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The user is disabled and marked deleted, every session is revoked at once (audited identity.tenant_member.delete). Refused for the owner, yourself and a user that also belongs to another scope. With transfer_to, the member's sites, layer-4 forward groups, certificates, security policies, URL authentication policies and own CC matchers/filters go to that member in the same transaction (audited identity.tenant_member.resources.transfer with the count per kind). Active package subscriptions, layer-4 forwards and sites bound to a package, a CNAME allocation or a live HTTP policy cannot change owner and always refuse the deletion; without transfer_to any owned resource refuses it. History (audit events, deleted resources, ticket messages, grant history) keeps the user ID; API keys and custom role grants stop working because they require an active user.",
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "transfer_to",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Active member of the same tenant scope that receives the resources."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "404",
+     "description": "tenant_member_not_found."
+    },
+    {
+     "status": "409",
+     "description": "tenant_member_protected, tenant_member_shared or tenant_member_owns_resources (with the counts)."
+    },
+    {
+     "status": "422",
+     "description": "tenant_member_transfer_target_invalid (transfer_to is not another active member of the scope)."
+    }
+   ]
+  },
+  {
+   "operation_id": "setTenantMemberPasswordChange",
+   "method": "PUT",
+   "path": "/v1/tenant/members/{user_id}/password-change",
+   "summary": "Require (or withdraw) a password change at the member's next sign-in",
+   "auth": [
+    "bearer"
+   ],
+   "description": "While required, the member's session requests are refused with 403 password_change_required except GET /v1/auth/me and POST /v1/account/password; sign-in (with sign-in code, MFA and step-up as configured) is unchanged. Changing the password clears it. Audited identity.tenant_member.password_change.require / .release.",
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "required",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated member.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / suspended / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "password_change_required",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "tenant_member_not_found."
+    },
+    {
+     "status": "409",
+     "description": "tenant_member_protected or tenant_member_shared."
+    }
+   ]
+  },
+  {
+   "operation_id": "resetTenantMemberPassword",
+   "method": "POST",
+   "path": "/v1/tenant/members/{user_id}/password-reset",
+   "summary": "Give a sub-account a generated password (revokes its sessions, requires a change at the next sign-in)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The generated password is kept encrypted for 10 minutes, bound to the caller and the Idempotency-Key. If the response was lost, sending the same request with the same key returns it once (replayed=true) without resetting again; afterwards the key answers 410.",
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Reset (audited identity.tenant_member.password.reset) or the retained result retrieved once (identity.tenant_member.password.reset_result.retrieve). Cache-Control no-store.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "temporary_password",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "password_change_required",
+       "type": "boolean: true",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "result_expires_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "validation_error (Idempotency-Key missing or invalid)."
+    },
+    {
+     "status": "410",
+     "description": "tenant_member_password_reset_result_gone — the key's result was already retrieved, expired or replaced; nothing was reset."
+    },
+    {
+     "status": "503",
+     "description": "tenant_member_password_reset_unavailable."
+    },
+    {
+     "status": "404",
+     "description": "tenant_member_not_found."
+    },
+    {
+     "status": "409",
+     "description": "tenant_member_protected, tenant_member_shared, or idempotency_conflict (the key belongs to another caller or member)."
+    }
+   ]
+  },
+  {
+   "operation_id": "resumeTenantMember",
+   "method": "POST",
+   "path": "/v1/tenant/members/{user_id}/resume",
+   "summary": "Resume a suspended member",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Resumed.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / suspended / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "password_change_required",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "tenant_member_not_found."
+    }
+   ]
+  },
+  {
+   "operation_id": "suspendTenantMember",
+   "method": "POST",
+   "path": "/v1/tenant/members/{user_id}/suspend",
+   "summary": "Suspend a member (revokes its sessions; its sites stop serving, see account_suspension)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "With transfer_to, the member's transferable resources first go to that member in the same transaction (see deleteTenantMember; audited identity.tenant_member.resources.transfer).",
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "transfer_to",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Active member of the same tenant scope that receives the resources."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Suspended.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / suspended / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "password_change_required",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "tenant_member_not_found."
+    },
+    {
+     "status": "409",
+     "description": "tenant_member_protected (the owner or yourself) or tenant_member_status_conflict."
     }
    ]
   }

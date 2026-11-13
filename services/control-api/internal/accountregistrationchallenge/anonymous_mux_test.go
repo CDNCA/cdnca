@@ -44,6 +44,25 @@ func TestAnonymousDispatchMuxRoutesAllAccountEventsExactly(t *testing.T) {
 	}
 }
 
+func TestAnonymousDispatchMuxRoutesTenantMemberInvitation(t *testing.T) {
+	t.Parallel()
+
+	recovery, login, invitation := new(muxTestDispatcher), new(muxTestDispatcher), new(muxTestDispatcher)
+	mux, err := NewAnonymousDispatchMux(recovery, nil, login)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt := notification.AnonymousDeliveryAttempt{EventType: notification.EventTypeTenantMemberInvitation}
+	if result := mux.Dispatch(context.Background(), attempt); result.Failure == nil || result.Failure.Class != notification.FailureTemporary {
+		t.Fatalf("unrouted invitation result=%+v", result)
+	}
+	mux.WithInvitation(invitation)
+	if result := mux.Dispatch(context.Background(), attempt); result.Disposition != notification.AnonymousDispatchAccepted ||
+		invitation.calls != 1 || recovery.calls != 0 || login.calls != 0 {
+		t.Fatalf("invitation result=%+v calls=%d", result, invitation.calls)
+	}
+}
+
 func TestAnonymousDispatchMuxAllowsLoginWithoutRegistration(t *testing.T) {
 	t.Parallel()
 

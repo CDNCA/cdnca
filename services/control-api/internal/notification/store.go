@@ -366,7 +366,8 @@ func (s *Store) enqueueDispatchTx(
 	if err != nil {
 		return EnqueueResult{}, err
 	}
-	if eventType == EventTypeAccountRegistrationVerification || eventType == EventTypeAccountLoginVerification {
+	if eventType == EventTypeAccountRegistrationVerification || eventType == EventTypeAccountLoginVerification ||
+		eventType == EventTypeTenantMemberInvitation {
 		enabled := (request.SelectedChannel == ChannelEmail && switches.Email) ||
 			(request.SelectedChannel == ChannelSMS && switches.SMS)
 		if !enabled {
@@ -521,7 +522,11 @@ func validateDispatchEnqueueRequest(request DispatchEnqueueRequest) error {
 	if !validAnonymousEventType(eventType) {
 		return ErrInvalidDispatch
 	}
-	if eventType == EventTypeAccountRegistrationVerification || eventType == EventTypeAccountLoginVerification {
+	if eventType == EventTypeTenantMemberInvitation && request.SelectedChannel != ChannelEmail {
+		return ErrInvalidDispatch
+	}
+	if eventType == EventTypeAccountRegistrationVerification || eventType == EventTypeAccountLoginVerification ||
+		eventType == EventTypeTenantMemberInvitation {
 		if (request.SelectedChannel != ChannelEmail && request.SelectedChannel != ChannelSMS) ||
 			len(request.Templates) != 1 {
 			return ErrInvalidDispatch
@@ -550,7 +555,7 @@ func dispatchEventType(request DispatchEnqueueRequest) string {
 
 func validAnonymousEventType(eventType string) bool {
 	return eventType == EventTypeAccountRecovery || eventType == EventTypeAccountRegistrationVerification ||
-		eventType == EventTypeAccountLoginVerification
+		eventType == EventTypeAccountLoginVerification || eventType == EventTypeTenantMemberInvitation
 }
 
 // requireRecipientMembership admits tenant members for every event and

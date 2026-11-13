@@ -681,6 +681,337 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+    post:
+      operationId: createTenantMember
+      summary: Add a sub-account to the caller's tenant scope (tenant_viewer role; grant more with /v1/custom-rbac)
+      description: >-
+        Suspend, delete, password reset and forced password change answer 403 tenant_member_outranks for a
+        member holding permissions the caller lacks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, display_name, password]
+              properties:
+                username: {type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
+                display_name: {type: string, minLength: 1, maxLength: 128}
+                email: {type: string, maxLength: 254}
+                password: {type: string, minLength: 12, maxLength: 1024, writeOnly: true}
+      responses:
+        '201':
+          description: Created (audited identity.tenant_member.create).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/tenant/members/{user_id}/suspend:
+    post:
+      operationId: suspendTenantMember
+      summary: Suspend a member (revokes its sessions; its sites stop serving, see account_suspension)
+      description: >-
+        With transfer_to, the member's transferable resources first go to that member in the same
+        transaction (see deleteTenantMember; audited identity.tenant_member.resources.transfer).
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: transfer_to, in: query, required: false, schema: {type: string, format: uuid}, description: Active member of the same tenant scope that receives the resources.}
+      responses:
+        '200':
+          description: Suspended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMember'
+        '404':
+          description: tenant_member_not_found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: tenant_member_protected (the owner or yourself) or tenant_member_status_conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/tenant/members/{user_id}/resume:
+    post:
+      operationId: resumeTenantMember
+      summary: Resume a suspended member
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Resumed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMember'
+        '404':
+          description: tenant_member_not_found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/tenant/members/{user_id}:
+    delete:
+      operationId: deleteTenantMember
+      summary: Delete a sub-account of the caller's tenant scope
+      description: >-
+        The user is disabled and marked deleted, every session is revoked at once (audited
+        identity.tenant_member.delete). Refused for the owner, yourself and a user that also belongs
+        to another scope. With transfer_to, the member's sites, layer-4 forward groups, certificates,
+        security policies, URL authentication policies and own CC matchers/filters go to that member
+        in the same transaction (audited identity.tenant_member.resources.transfer with the count per
+        kind). Active package subscriptions, layer-4 forwards and sites bound to a package, a CNAME
+        allocation or a live HTTP policy cannot change owner and always refuse the deletion; without
+        transfer_to any owned resource refuses it. History (audit events, deleted resources, ticket
+        messages, grant history) keeps the user ID; API keys and custom role grants stop working
+        because they require an active user.
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: transfer_to, in: query, required: false, schema: {type: string, format: uuid}, description: Active member of the same tenant scope that receives the resources.}
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          description: tenant_member_not_found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: tenant_member_protected, tenant_member_shared or tenant_member_owns_resources (with the counts).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorEnvelope'
+                  - $ref: '#/components/schemas/TenantMemberOwnsResourcesError'
+        '422':
+          description: tenant_member_transfer_target_invalid (transfer_to is not another active member of the scope).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/tenant/members/{user_id}/password-change:
+    put:
+      operationId: setTenantMemberPasswordChange
+      summary: Require (or withdraw) a password change at the member's next sign-in
+      description: >-
+        While required, the member's session requests are refused with 403 password_change_required
+        except GET /v1/auth/me and POST /v1/account/password; sign-in (with sign-in code, MFA and
+        step-up as configured) is unchanged. Changing the password clears it. Audited
+        identity.tenant_member.password_change.require / .release.
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [required]
+              properties:
+                required: {type: boolean}
+      responses:
+        '200':
+          description: Updated member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMember'
+        '404':
+          description: tenant_member_not_found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: tenant_member_protected or tenant_member_shared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/tenant/members/{user_id}/password-reset:
+    post:
+      operationId: resetTenantMemberPassword
+      summary: Give a sub-account a generated password (revokes its sessions, requires a change at the next sign-in)
+      description: >-
+        The generated password is kept encrypted for 10 minutes, bound to the caller and the Idempotency-Key.
+        If the response was lost, sending the same request with the same key returns it once (replayed=true)
+        without resetting again; afterwards the key answers 410.
+      parameters:
+        - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}}
+      responses:
+        '200':
+          description: >-
+            Reset (audited identity.tenant_member.password.reset) or the retained result retrieved once
+            (identity.tenant_member.password.reset_result.retrieve). Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [user_id, temporary_password, password_change_required, replayed, result_expires_at]
+                properties:
+                  user_id: {type: string, format: uuid}
+                  temporary_password: {type: string, minLength: 24, maxLength: 24}
+                  password_change_required: {type: boolean, enum: [true]}
+                  replayed: {type: boolean}
+                  result_expires_at: {type: string, format: date-time}
+        '400':
+          description: validation_error (Idempotency-Key missing or invalid).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: tenant_member_password_reset_result_gone — the key's result was already retrieved, expired or replaced; nothing was reset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: tenant_member_password_reset_unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: tenant_member_not_found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: tenant_member_protected, tenant_member_shared, or idempotency_conflict (the key belongs to another caller or member).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/tenant/member-invitations:
+    get:
+      operationId: listTenantMemberInvitations
+      summary: List the caller's tenant member invitations (pending ones past expiry read expired)
+      responses:
+        '200':
+          description: Up to 200, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TenantMemberInvitation'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      operationId: inviteTenantMember
+      summary: Email a one-time invitation link (72 hours) to become a read-only sub-account
+      description: >-
+        Audited identity.tenant_member.invite. The mail goes through the notification outbox (email channel);
+        a new invitation to the same address revokes the pending one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: {type: string, maxLength: 254}
+      responses:
+        '201':
+          description: Invitation queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMemberInvitation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: tenant_member_email_taken.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: tenant_member_invitation_unavailable (email channel off or account mail runtime not configured).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/tenant/member-invitations/{invitation_id}/revoke:
+    post:
+      operationId: revokeTenantMemberInvitation
+      summary: Withdraw a pending invitation
+      parameters:
+        - {name: invitation_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '204':
+          description: Revoked (audited identity.tenant_member.invitation.revoke).
+        '404':
+          description: tenant_member_invitation_not_found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/auth/member-invitations/accept:
+    post:
+      operationId: acceptTenantMemberInvitation
+      summary: Accept an invitation and create the read-only sub-account (anonymous; the token is the credential)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, username, display_name, password]
+              properties:
+                token: {type: string, minLength: 43, maxLength: 43}
+                username: {type: string, minLength: 3, maxLength: 128}
+                display_name: {type: string, minLength: 1, maxLength: 128}
+                password: {type: string, minLength: 12, maxLength: 1024, writeOnly: true}
+      responses:
+        '201':
+          description: Created (audited identity.tenant_member.invitation.accept); sign in normally next.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: username_conflict or tenant_member_email_taken.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: tenant_member_invitation_invalid (unknown, used, revoked or expired).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /v1/admin/admin-access-policy:
     get:
       operationId: getAdminAccessPolicy
@@ -9034,6 +9365,38 @@ components:
         owner: {type: boolean}
         created_at: {type: string, format: date-time}
         password_change_required: {type: boolean}
+    TenantMemberOwnsResourcesError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id, resources]
+          properties:
+            code: {type: string, enum: [tenant_member_owns_resources]}
+            message: {type: string}
+            request_id: {type: string}
+            resources:
+              type: object
+              additionalProperties: false
+              required: [package_subscriptions, l4_forwards, package_sites, transferable]
+              properties:
+                package_subscriptions: {type: integer, minimum: 0}
+                l4_forwards: {type: integer, minimum: 0}
+                package_sites: {type: integer, minimum: 0}
+                transferable: {type: integer, minimum: 0}
+    TenantMemberInvitation:
+      type: object
+      additionalProperties: false
+      required: [id, email, status, created_at, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        status: {type: string, enum: [pending, accepted, revoked, expired]}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
     AdminAccessPolicy:
       type: object
       additionalProperties: false

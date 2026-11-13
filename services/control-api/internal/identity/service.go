@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/mfacipher"
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/google/uuid"
 )
@@ -68,8 +70,11 @@ type Service struct {
 	adminAccess                        adminAccessCache
 	regionResolver                     RegionResolver
 	regionPolicy                       sessionRegionPolicy
+	invitationKey                      []byte
+	invitationOutbox                   *notification.Store
 	legacyPasswords                    LegacyPasswordVerifier
 	loginAllow                         LoginAllowRecorder
+	passwordResetCipher                *mfacipher.Cipher
 }
 
 // LoginAllowRecorder is told about every successful sign-in (auto defense

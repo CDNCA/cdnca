@@ -17,7 +17,8 @@ const (
 // runSecondaryVerificationEnforcement stops the sites of overdue FX57 requests
 // and restores them once the reverification is approved, every minute; each
 // change is republished at once (edgeautopublish.RequestRepublicationTx).
-// Errors are logged and retried on the next tick.
+// Errors are logged and retried on the next tick. The same tick purges
+// expired tenant member password reset results.
 func runSecondaryVerificationEnforcement(ctx context.Context, store *identity.Store, logger *slog.Logger) {
 	ticker := time.NewTicker(secondaryVerificationPollInterval)
 	defer ticker.Stop()
@@ -27,6 +28,10 @@ func runSecondaryVerificationEnforcement(ctx context.Context, store *identity.St
 			logger.Warn("secondary verification enforcement failed", "error", err)
 		} else if pass.Held+pass.Released > 0 {
 			logger.Info("secondary verification enforcement", "stopped_requests", pass.Held, "restored_requests", pass.Released)
+		}
+		// Same minute loop: drop expired tenant member password reset results (TENANT-PWRESET-UNKNOWN).
+		if _, err := store.PurgeTenantMemberPasswordResetResults(ctx); err != nil && ctx.Err() == nil {
+			logger.Warn("tenant member password reset result purge failed", "error", err)
 		}
 		select {
 		case <-ctx.Done():

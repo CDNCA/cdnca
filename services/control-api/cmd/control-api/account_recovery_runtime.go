@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoveryhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
+	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/google/uuid"
@@ -43,6 +46,10 @@ type accountRecoveryRuntimeDependencies struct {
 	Notifications          accountRecoveryNotificationBridge
 	RegistrationDispatcher notification.AnonymousDispatcher
 	LoginDispatcher        notification.AnonymousDispatcher
+	// Identity, when set, gets tenant member invitations enabled: the link
+	// is <ACCOUNT_RECOVERY_BASE_URL origin>/accept-invitation and the mail
+	// goes through the recovery sender.
+	Identity *identity.Service
 }
 
 type accountRecoveryHealthSnapshot struct {
@@ -126,7 +133,14 @@ func openAccountRecoveryRuntime(
 		return nil, runtimeStageError{stage: "configure account recovery HTTP handler", err: err}
 	}
 	anonymousDispatcher := notification.AnonymousDispatcher(dispatcher)
-	if dependencies.RegistrationDispatcher != nil || dependencies.LoginDispatcher != nil {
+	var invitations *identity.TenantMemberInvitationDispatcher
+	if dependencies.Identity != nil {
+		invitations, err = openTenantMemberInvitations(config, pool, notificationStore, dependencies)
+		if err != nil {
+			return nil, runtimeStageError{stage: "configure tenant member invitations", err: err}
+		}
+	}
+	if dependencies.RegistrationDispatcher != nil || dependencies.LoginDispatcher != nil || invitations != nil {
 		login := dependencies.LoginDispatcher
 		if dependencies.RegistrationDispatcher == nil && login == nil {
 			// The mux needs one account-flow dispatcher; as without the mux, a
@@ -138,6 +152,9 @@ func openAccountRecoveryRuntime(
 		)
 		if err != nil {
 			return nil, runtimeStageError{stage: "configure account recovery account-flow dispatcher mux", err: err}
+		}
+		if invitations != nil {
+			mux.WithInvitation(invitations)
 		}
 		anonymousDispatcher = mux
 	}
@@ -280,5 +297,40 @@ func withControlRuntimeHealthDetail(
 			return
 		}
 		next.ServeHTTP(writer, request)
+	})
+}
+
+// openTenantMemberInvitations enables tenant member invitations on the
+// identity service and returns their outbox dispatcher.
+func openTenantMemberInvitations(
+	config accountRecoveryRuntimeConfig,
+	pool *pgxpool.Pool,
+	outbox *notification.Store,
+	dependencies accountRecoveryRuntimeDependencies,
+) (*identity.TenantMemberInvitationDispatcher, error) {
+	base, err := url.Parse(config.RecoveryURL)
+	if err != nil {
+		return nil, err
+	}
+	acceptURL := url.URL{Scheme: base.Scheme, Host: base.Host, Path: "/accept-invitation"}
+	key := sha256.Sum256(append([]byte("cdnca.identity.tenant-member-invitation.v1\x00"), config.DigestKey...))
+	if err := dependencies.Identity.SetTenantMemberInvitationKey(key[:], outbox); err != nil {
+		return nil, err
+	}
+	return identity.NewTenantMemberInvitationDispatcher(pool, key[:], acceptURL.String(),
+		tenantMemberInvitationSender{sender: dependencies.Notifications.RecoverySender()})
+}
+
+// tenantMemberInvitationSender sends invitation mails through the recovery
+// provider path (same SMTP transport, ActionURL appended to the body).
+type tenantMemberInvitationSender struct {
+	sender accountrecovery.RecoverySender
+}
+
+func (s tenantMemberInvitationSender) SendTenantMemberInvitation(ctx context.Context, mail identity.TenantMemberInvitationMail) notification.SendResult {
+	return s.sender.SendRecovery(ctx, accountrecovery.RecoveryDelivery{
+		OutboxID: mail.OutboxID, Channel: notification.ChannelEmail, Contact: mail.Contact,
+		Subject: mail.Subject, Body: mail.Body, RecoveryURL: mail.ActionURL,
+		IdempotencyKey: mail.IdempotencyKey, AttemptNumber: mail.AttemptNumber, TemplateID: mail.TemplateID,
 	})
 }

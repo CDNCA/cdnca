@@ -1168,6 +1168,20 @@ func runServer() error {
 	if err := identityService.SetLoginThrottleKey(throttleKey[:]); err != nil {
 		return runtimeStageError{stage: "initialize sign-in throttle", err: err}
 	}
+	// Retained tenant member password reset results (10 minutes, retrieved
+	// once) are sealed with the MFA secret envelope (mfacipher, AES-256-GCM)
+	// under a key derived from the access secret like the throttle key, so the
+	// reset works on every installation whether or not MFA is enabled.
+	passwordResetKey := sha256.Sum256(append([]byte("cdnca.identity.tenant-member-password-reset.v1\x00"), cfg.AccessSecret...))
+	passwordResetCipher, err := mfacipher.New(mfacipher.Key{ID: "access-secret-v1", Material: passwordResetKey[:]})
+	clear(passwordResetKey[:])
+	if err != nil {
+		return runtimeStageError{stage: "initialize tenant member password reset cipher", err: err}
+	}
+	defer passwordResetCipher.Close()
+	if err := identityService.SetTenantMemberPasswordResetCipher(passwordResetCipher); err != nil {
+		return runtimeStageError{stage: "initialize tenant member password reset cipher", err: err}
+	}
 	// Session region binding uses the downloaded IP intelligence library
 	// (country, or country-province); unknown addresses are not checked.
 	identityService.SetRegionResolver(ipIntelRegionResolver{lookup: analyticslog.NewPostgresIPIntelLookup(pool, slog.Default())})
@@ -1467,6 +1481,7 @@ func runServer() error {
 			TrustedContext: trustedRecoveryContext, Notifications: notificationRuntime,
 			RegistrationDispatcher: registrationDispatcher,
 			LoginDispatcher:        accountLoginRuntime.Dispatcher(),
+			Identity:               identityService,
 		},
 	)
 	if err != nil {

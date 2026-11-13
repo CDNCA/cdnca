@@ -798,7 +798,7 @@ func readAdminResources(ctx context.Context, tx pgx.Tx, asOf time.Time) (AdminRe
 	)
 	SELECT count(*),
 		count(*) FILTER (WHERE enabled AND status='active'),
-		count(*) FILTER (WHERE site_sync_status_503(scope_id, id)='failed'),
+		(SELECT count(*) FROM site_sync_status_batch_663(NULL) WHERE sync_status='failed'),
 		(SELECT count(*) FROM current_site_domains WHERE action='activate')
 		FROM sites WHERE deleted_at IS NULL`).Scan(
 		&result.SitesTotal, &result.SitesActive, &result.SitesSyncFailed, &result.DomainsTotal,
@@ -833,7 +833,7 @@ func readTenantResources(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (Ten
 	)
 	SELECT count(*),
 		count(*) FILTER (WHERE enabled AND status='active'),
-		count(*) FILTER (WHERE site_sync_status_503(scope_id, id)='failed'),
+		(SELECT count(*) FROM site_sync_status_batch_663(ARRAY[$1]::uuid[]) WHERE sync_status='failed'),
 		(SELECT count(*) FROM current_site_domains WHERE action='activate'),
 		(SELECT count(*) FROM l4_forwards WHERE scope_id=$1 AND deleted_at IS NULL),
 		(SELECT count(*) FROM nodes WHERE scope_id=$1 AND admin_state<>'retired')

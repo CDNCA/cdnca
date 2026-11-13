@@ -114,13 +114,12 @@ function expandAway(css) {
 // tech theme, not the default look), fully transparent black (no color to
 // theme) and themeColorAlpha's rgba() template. theme/customize.ts writes
 // theme token values (shadow text), it paints nothing itself.
-export const colorExceptions = { files: ['apps/web/src/styles/tech-look.css', 'apps/web/src/theme/themeColor.ts', 'apps/web/src/theme/customize.ts', 'apps/web/src/status/status.css'], literals: ['rgba(0, 0, 0, 0)'] }
+export const colorExceptions = { files: ['apps/web/src/styles/tech-look.css', 'apps/web/src/theme/themeColor.ts', 'apps/web/src/theme/customize.ts'], literals: ['rgba(0, 0, 0, 0)'] }
 
-// Stylesheets of standalone entries that never load the console theme (the
-// public status page /status/ has its own light/dark palette and no @cdnca/ui
-// styles). They are not part of the default look, so the base-commit
-// comparison and the shared-colour check skip them.
-export const standaloneStylesheets = ['apps/web/src/status/status.css']
+// Stylesheets of standalone entries that never load the console theme. The public
+// status page /status/ used to be one; its stylesheet now lives in packages/cdnca-ui
+// (src/status/status.css), outside apps/web, so the list is empty.
+export const standaloneStylesheets = []
 
 /** "file: literal" for every hard-coded color apps/web still has. */
 export function leftoverColors(files, read) {

@@ -136,7 +136,11 @@ func loadOriginForwardingFacts(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID
 		       websocket_enabled,websocket_allowed_origins,trusted_proxy_cidrs::text[],
 		       follow_redirect,follow_redirect_max_hops,follow_redirect_cross_origin,
 		       COALESCE(search_engine_origin,''),acme_passthrough,response_buffering,request_buffering,
-		       l2_mode,l2_config_id,
+		       -- 套餐 l2_origin 明确为 false 的站点按 off 处理（租户套餐层开关；缺键保持原行为）
+		       CASE WHEN (SELECT subscription.product_snapshot#>>'{spec,limits,l2_origin}'
+		                  FROM sites bound JOIN package_subscriptions subscription
+		                    ON subscription.id=bound.package_subscription_id AND subscription.tenant_scope_id=bound.scope_id
+		                  WHERE bound.id=pool.site_id)='false' THEN 'off' ELSE l2_mode END,l2_config_id,
 		       (SELECT site.is_default FROM sites site WHERE site.id=pool.site_id)
 		FROM site_origin_pools pool WHERE site_id=ANY($1::uuid[])`, siteIDs)
 	if err != nil {

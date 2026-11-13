@@ -69,7 +69,8 @@ func (r *DispatcherRegistry) Dispatch(
 	r.mu.RLock()
 	slot, registered := r.slots[attempt.EventType]
 	if !registered && (attempt.EventType == notification.EventTypeAccountRegistrationVerification ||
-		attempt.EventType == notification.EventTypeAccountLoginVerification) {
+		attempt.EventType == notification.EventTypeAccountLoginVerification ||
+		attempt.EventType == notification.EventTypeTenantMemberInvitation) {
 		slot, registered = r.slots[notification.EventTypeAccountRecovery]
 	}
 	closed := r.closed

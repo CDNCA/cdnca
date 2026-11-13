@@ -74,7 +74,8 @@ func siteServingNodes(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteIDs
 		     pool.l2_mode='package' AND config.tenant_scope_id=line_group.tenant_scope_id AND config.id=line_group.l2_config_id)
 		JOIN l2_topology_nodes member ON member.tenant_scope_id=config.tenant_scope_id AND member.config_id=config.id
 		 AND member.enabled AND member.deleted_at IS NULL
-		WHERE site.scope_id=$1 AND site.id=ANY($2::uuid[]) AND site.deleted_at IS NULL`, scopeID, ids)
+		WHERE site.scope_id=$1 AND site.id=ANY($2::uuid[]) AND site.deleted_at IS NULL
+		  AND COALESCE(subscription.product_snapshot#>>'{spec,limits,l2_origin}','')<>'false'`, scopeID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("%w: read website line group nodes", ErrPersistence)
 	}

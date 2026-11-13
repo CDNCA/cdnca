@@ -14,8 +14,8 @@ const body = `
   </div>`
 
 const view = {
-  schema: 'cdnca.status-page/v1', title: '服务状态', show_logo: false, status: 'operational',
-  components: [{ id: 'c1', name: '华东线路', status: 'operational', uptime_90d: 1, history: [] }],
+  schema: 'cdnca.status-page/v2', title: '服务状态', show_logo: false, status: 'operational',
+  components: [{ key: 'c1', name: { zh: '华东线路', en: 'East line' }, note: { zh: '', en: '' }, status: 'operational', uptime_90d: 1, history: [] }],
   active: [], upcoming: [], recent: [], generated_at: '2026-11-12T00:00:00Z',
 }
 

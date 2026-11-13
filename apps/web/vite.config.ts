@@ -10,10 +10,10 @@ import { configDefaults, defineConfig } from 'vitest/config'
 type ModuleInfoLookup = (id: string) => { importers: readonly string[] } | null
 
 // 控制台壳（菜单标题）与全量资源 resources.ts 一起加载的翻译模块合成一个块：分散成
-// 几十个小块时压缩率差、请求多（实测合并后少约 31 KB gzip）。公开页（注册）
+// 几十个小块时压缩率差、请求多（实测合并后少约 31 KB gzip）。公开页（邀请接受、注册）
 // 也用到的翻译模块不并入，免得公开页为一个命名空间拉下整块。
 const consoleI18nOwners = /\/src\/(?:routes\/navigation\.ts|components\/AppShell\.tsx|i18n\/resources\.ts)$/
-const publicPageModules = /\/src\/pages\/RegisterPage\.tsx$/
+const publicPageModules = /\/src\/pages\/(?:MemberInvitationAcceptPage|RegisterPage)\.tsx$/
 const translationModule = /\/src\/(?:i18n\/([^/]+\.ts)|pages\/[^/]+\/(?:i18n|messages)\.ts)$/
 // i18n 运行时与首包核心资源：按文件名精确列出，不算翻译模块。手动块会连带吸收成员的
 // 静态依赖，每个翻译模块都导入 i18n/index.ts，所以这些文件（连同动态导入用的

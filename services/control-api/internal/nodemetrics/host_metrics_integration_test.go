@@ -13,6 +13,7 @@ import (
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
+	controlmigrations "github.com/cdnca/cdnca/services/control-api/migrations"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -62,6 +63,18 @@ func TestHostMetricsFormalSchema(t *testing.T) {
 	// so only 1..275 are loaded.
 	const currentMigration = 275
 	if err := databasetest.MigrateThrough(ctx, pool, "up", currentMigration); err != nil {
+		t.Fatal(err)
+	}
+	// Put also maintains the hour buckets of migration 661, which this 275 schema
+	// predates: add the table from that migration so the store can run.
+	script, err := controlmigrations.FS.ReadFile("661_node_traffic_hourly.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	createTable := string(script)
+	createTable = createTable[strings.Index(createTable, "CREATE TABLE node_traffic_hourly"):]
+	createTable = createTable[:strings.Index(createTable, "\n);")+3]
+	if _, err := pool.Exec(ctx, createTable); err != nil {
 		t.Fatal(err)
 	}
 	assertMigrationHead := func(want int) {
@@ -180,6 +193,11 @@ func TestHostMetricsFormalSchema(t *testing.T) {
 	// 补一张只含所读列的空表（不进迁移账本，不影响下面 275→269 的回滚断言）。
 	if _, err := pool.Exec(ctx, `CREATE TABLE node_session_capabilities(
 		node_id uuid NOT NULL, session_epoch bigint NOT NULL, capabilities_snapshot bytea NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	// The latest-sample query orders by host_epoch (migration 626), which this 275
+	// schema predates; every sample here belongs to epoch 0.
+	if _, err := pool.Exec(ctx, `ALTER TABLE node_metric_samples ADD COLUMN host_epoch integer NOT NULL DEFAULT 0`); err != nil {
 		t.Fatal(err)
 	}
 	reader, _ := NewPostgresReader(pool)
