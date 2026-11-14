@@ -2398,6 +2398,18 @@ func (g *Gateway) serveSessionWithInstallation(
 			}
 			command := delivered.delivery.Command()
 			if err := g.validateDeploymentCommand(command, artifactEncryptionKeyID, activeIdentityCapable); err != nil {
+				// A command that fails validation never becomes valid on a later
+				// delivery: end the message and report the deployment as failed
+				// instead of dropping the session on every redelivery.
+				handled, rejectErr := g.rejectInvalidDurableCommand(stream.Context(), identity.NodeID, delivered.delivery,
+					command, err, activeIdentityCapable, multiTenantEnabled)
+				if rejectErr != nil {
+					nakCommand(delivered.delivery, g.config.CommandOperationTimeout)
+					return rejectErr
+				}
+				if handled {
+					continue
+				}
 				nakCommand(delivered.delivery, g.config.CommandOperationTimeout)
 				return status.Error(codes.InvalidArgument, "durable deployment command is invalid")
 			}

@@ -783,6 +783,7 @@ func (database *integrationDatabase) create(t *testing.T) {
 		"025_security_event_count.up.sql",
 		"028_access_upstream_addr.up.sql",
 		"030_analytics_log_list_digest.up.sql",
+		"035_log_page_event_key.up.sql",
 	} {
 		migration, err := os.ReadFile(filepath.Join(root, "infra", "clickhouse", "migrations", name))
 		if err != nil {

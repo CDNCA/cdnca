@@ -62,7 +62,7 @@ func TestPageQueriesUseWindowCandidatesBeforeLatestVersionResolution(t *testing.
 			// 5787→1712ms (4.24→1.11 GiB read), 7d OOM→11.4s; keeping the join
 			// next to the IN made 7d slower (13.7→43.1s). Page output with a
 			// fixed snapshot is byte-identical.
-			if !strings.Contains(latestScan, "AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at") {
+			if !strings.Contains(latestScan, "AND event_key IN (SELECT reinterpretAsUInt128(sipHash128(event_id)) FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at") {
 				t.Fatal("latest-version scan is not restricted to candidate event IDs")
 			}
 			if !strings.Contains(latestScan, "FROM "+test.candidateSource) ||
@@ -97,7 +97,7 @@ func TestPageQueriesTreatOnlyDistinctEqualIngestedPayloadsAsAmbiguous(t *testing
 				t.Fatal("query result SELECT is missing")
 			}
 			for _, clause := range []string{
-				"now64(3, 'UTC') - INTERVAL 1 MILLISECOND",
+				"toDateTime64(initialQueryStartTime(), 3, 'UTC') - INTERVAL 1 MILLISECOND",
 				"durable_version_count",
 			} {
 				if !strings.Contains(test.query, clause) {
@@ -111,10 +111,10 @@ func TestPageQueriesTreatOnlyDistinctEqualIngestedPayloadsAsAmbiguous(t *testing
 				"argMaxMerge(latest_payload_state) AS latest",
 				"uniqExactMerge(version_pair_state)",
 				"> uniqExactMerge(ingested_at_state)",
-				"AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
+				"AND event_key IN (SELECT reinterpretAsUInt128(sipHash128(event_id)) FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
 				"toUInt64(ifNull(durable_version_count, 1)) AS latest_version_count",
 				"HAVING durable_version_count > 1 OR",
-				"event_id IN (SELECT event_id FROM selected_rows)",
+				"(tenant_id, event_id) IN (SELECT tupleElement(key, 1), tupleElement(key, 2) FROM (SELECT arrayJoin(tupleElement(selected_keys, 1)) AS key))\n\t\t\tOR event_id IN (SELECT arrayJoin(tupleElement(selected_keys, 2)))",
 			} {
 				if !strings.Contains(test.query, clause) {
 					t.Fatalf("%s query is missing %q", test.name, clause)

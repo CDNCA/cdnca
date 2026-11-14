@@ -32,8 +32,8 @@ func TestAccessQueryUsesPrecomputedStateOnly(t *testing.T) {
 		"uniqExactMerge(ingested_at_state)",
 		"argMaxMerge(latest_filter_state) AS latest_filter",
 		"argMaxMerge(latest_payload_state) AS latest",
-		"AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
-		"event_id IN (SELECT event_id FROM selected_rows)",
+		"AND event_key IN (SELECT reinterpretAsUInt128(sipHash128(event_id)) FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
+		"(tenant_id, event_id) IN (SELECT tupleElement(key, 1), tupleElement(key, 2) FROM (SELECT arrayJoin(tupleElement(selected_keys, 1)) AS key))\n\t\t\tOR event_id IN (SELECT arrayJoin(tupleElement(selected_keys, 2)))",
 		"{has_cursor:UInt8} = 0",
 		"event_id < {cursor_event_id:String}",
 	} {
@@ -89,7 +89,7 @@ func TestAccessConflictStatePreservesReplacementSemantics(t *testing.T) {
 func TestAccessQueryUsesOneCandidateJoinAndOneEventAggregate(t *testing.T) {
 	// candidates restrict the state scan in PREWHERE; a join
 	// after the scan read the scope's whole retention per page.
-	if got := strings.Count(accessPageSQL, "AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at"); got != 1 {
+	if got := strings.Count(accessPageSQL, "AND event_key IN (SELECT reinterpretAsUInt128(sipHash128(event_id)) FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at"); got != 1 {
 		t.Fatalf("candidate pre-filter count=%d, want 1", got)
 	}
 	if strings.Contains(accessPageSQL, "INNER JOIN candidate_event_ids") {
@@ -99,7 +99,7 @@ func TestAccessQueryUsesOneCandidateJoinAndOneEventAggregate(t *testing.T) {
 		t.Fatal("access query still materializes the candidate-bound conflict aggregate separately")
 	}
 	for _, required := range []string{
-		"SELECT event_id, latest_filter_state, version_pair_state, ingested_at_state",
+		"SELECT event_id, tenant_id, latest_filter_state, version_pair_state, ingested_at_state",
 		"FROM access_event_query_index_state_v1",
 		"WHERE ingested_at <= snapshot_at",
 		"uniqExactMerge(version_pair_state)",
@@ -107,7 +107,7 @@ func TestAccessQueryUsesOneCandidateJoinAndOneEventAggregate(t *testing.T) {
 		"GROUP BY access.event_id",
 		"LIMIT {row_limit:UInt16}",
 		"FROM access_event_query_payload_state_v1",
-		"event_id IN (SELECT event_id FROM selected_rows)",
+		"(tenant_id, event_id) IN (SELECT tupleElement(key, 1), tupleElement(key, 2) FROM (SELECT arrayJoin(tupleElement(selected_keys, 1)) AS key))\n\t\t\tOR event_id IN (SELECT arrayJoin(tupleElement(selected_keys, 2)))",
 		"SETTINGS max_threads = 2",
 	} {
 		if !strings.Contains(accessPageSQL, required) {

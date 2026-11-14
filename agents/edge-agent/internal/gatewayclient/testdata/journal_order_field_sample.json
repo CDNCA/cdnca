@@ -1,0 +1,10 @@
+{
+  "comment": "Structure of the gateway-journal record found on a production node: statuses in file order. Identifiers and payloads are omitted.",
+  "execution_done": true,
+  "statuses": [
+    {"state": "DELIVERED", "sequence": 1},
+    {"state": "AGENT_QUEUED", "sequence": 2},
+    {"state": "FAILED", "sequence": 4},
+    {"state": "STARTED", "sequence": 3}
+  ]
+}

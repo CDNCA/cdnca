@@ -75,7 +75,7 @@ func TestVersionEvidenceContract(t *testing.T) {
 			"argMaxMerge(latest_payload_state)",
 			"uniqExactMerge(version_pair_state)",
 			"uniqExactMerge(ingested_at_state)",
-			"AND event_id IN (SELECT event_id FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
+			"AND event_key IN (SELECT reinterpretAsUInt128(sipHash128(event_id)) FROM candidate_event_ids)\n\t\tWHERE ingested_at <= snapshot_at",
 		} {
 			if !strings.Contains(query, required) {
 				t.Errorf("%s query does not use precomputed evidence state %q", name, required)

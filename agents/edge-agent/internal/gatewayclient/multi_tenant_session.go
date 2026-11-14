@@ -411,3 +411,21 @@ func sameStrings(left, right []string) bool {
 	}
 	return true
 }
+
+// recordScopedStarted appends STARTED for a queued scoped deployment. It runs
+// on the worker goroutine, the only writer of that record once the item is
+// handed off, so STARTED always precedes the terminal status in the journal.
+func (c *Client) recordScopedStarted(key string) error {
+	record, err := c.store.record(key)
+	if err != nil {
+		return err
+	}
+	if record == nil || record.ExecutionDone || recordHasState(record, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_STARTED) {
+		return nil
+	}
+	command := commandFromBytes(record.Command)
+	if command == nil {
+		return nil
+	}
+	return c.store.appendStatuses(key, []*agentv1.DeploymentStatus{scopedStartedStatus(command, c.now())}, false)
+}

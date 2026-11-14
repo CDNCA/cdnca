@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -114,11 +116,17 @@ func (s *durableStore) appendStatuses(key string, statuses []*agentv1.Deployment
 	}
 	existing := make(map[string]struct{}, len(record.Statuses))
 	scoped := false
+	var highest uint64
+	terminal := false
 	for _, encoded := range record.Statuses {
 		status := new(agentv1.DeploymentStatus)
 		if proto.Unmarshal(encoded, status) == nil && status.Event != nil {
 			existing[status.Event.EventId] = struct{}{}
 			scoped = scoped || status.State == agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_AGENT_QUEUED
+			if status.TransitionSequence > highest {
+				highest = status.TransitionSequence
+			}
+			terminal = terminal || terminalDeploymentState(status.State)
 		}
 	}
 	command := commandFromBytes(record.Command)
@@ -141,12 +149,24 @@ func (s *durableStore) appendStatuses(key string, statuses []*agentv1.Deployment
 		if _, exists := existing[status.Event.EventId]; exists {
 			continue
 		}
+		// One deployment's states only move forward: nothing non-terminal is
+		// written after a terminal status or below a sequence already stored.
+		if !terminalDeploymentState(status.State) && (terminal || status.TransitionSequence < highest) {
+			slog.Warn("gateway journal dropped an out-of-order deployment status",
+				"deployment_id", record.DeploymentID, "attempt", record.Attempt,
+				"state", status.State.String(), "transition_sequence", status.TransitionSequence)
+			continue
+		}
 		encoded, err := marshalStatus(status, s.maxStatusBytes)
 		if err != nil {
 			return err
 		}
 		record.Statuses = append(record.Statuses, encoded)
 		existing[status.Event.EventId] = struct{}{}
+		if status.TransitionSequence > highest {
+			highest = status.TransitionSequence
+		}
+		terminal = terminal || terminalDeploymentState(status.State)
 	}
 	if executionDone {
 		record.ExecutionDone = true
@@ -387,7 +407,62 @@ func statusesFromRecord(record *durableRecord) ([]*agentv1.DeploymentStatus, err
 		}
 		statuses = append(statuses, status)
 	}
+	// Records written by older agents can hold statuses out of order (a late
+	// STARTED behind its terminal status); the sequence is the true order.
+	sort.SliceStable(statuses, func(i, j int) bool { return statuses[i].TransitionSequence < statuses[j].TransitionSequence })
 	return statuses, nil
+}
+
+// validateRecordStatusOrder reports whether a record is self-consistent once its
+// statuses are ordered by sequence: no non-terminal status after a terminal one,
+// and a finished record ends in a terminal status. Nothing is invented.
+func validateRecordStatusOrder(record *durableRecord) error {
+	statuses, err := statusesFromRecord(record)
+	if err != nil || len(statuses) == 0 {
+		return fmt.Errorf("gateway journal status is corrupt")
+	}
+	seenTerminal := false
+	for _, status := range statuses {
+		if seenTerminal && !terminalDeploymentState(status.State) {
+			return fmt.Errorf("gateway journal terminal status is corrupt")
+		}
+		seenTerminal = seenTerminal || terminalDeploymentState(status.State)
+	}
+	if record.ExecutionDone && !seenTerminal {
+		return fmt.Errorf("gateway journal terminal status is corrupt")
+	}
+	return nil
+}
+
+const journalQuarantineDirectory = "quarantine"
+
+// quarantineRecordLocked moves a record that cannot be made consistent, with
+// every state file that belongs to its key, into <journal>/quarantine so replay
+// continues. The files are kept for inspection, never deleted or rewritten.
+func (s *durableStore) quarantineRecordLocked(record *durableRecord, reason error) error {
+	quarantine := filepath.Join(s.directory, journalQuarantineDirectory)
+	if err := os.MkdirAll(quarantine, 0o700); err != nil {
+		return fmt.Errorf("create gateway journal quarantine: %w", err)
+	}
+	entries, err := os.ReadDir(s.directory)
+	if err != nil {
+		return err
+	}
+	moved := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, record.RecordKey) {
+			continue
+		}
+		if err := os.Rename(filepath.Join(s.directory, name), filepath.Join(quarantine, name)); err != nil {
+			return fmt.Errorf("quarantine gateway journal file: %w", err)
+		}
+		moved++
+	}
+	slog.Error("gateway journal record quarantined; replay continues",
+		"deployment_id", record.DeploymentID, "attempt", record.Attempt,
+		"record_key", record.RecordKey, "files", moved, "reason", reason.Error())
+	return nil
 }
 
 func cloneRecord(record *durableRecord) *durableRecord {

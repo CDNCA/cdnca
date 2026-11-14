@@ -137,6 +137,8 @@ class Schema:
                 table["constraints"][m[2]] = m[3]
             elif m := re.match(r"DROP CONSTRAINT (IF EXISTS )?(\w+)$", action, re.I):
                 table["constraints"].pop(m[2], None)
+            elif re.match(r"MATERIALIZE COLUMN \w+$", action, re.I):
+                continue  # rewrites stored data only, the schema is unchanged
             else:
                 raise AssertionError(f"ALTER action outside the modelled subset: {action[:120]}")
 

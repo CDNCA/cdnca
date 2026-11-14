@@ -1825,6 +1825,9 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 	work := make(chan workItem)
 	workResults := make(chan workResult, 1)
 	workerDone := make(chan struct{})
+	// scopedStart marks queued scoped deployments whose STARTED the worker
+	// records itself, so STARTED and the terminal status come from one writer.
+	var scopedStart sync.Map
 	go func() {
 		defer close(workerDone)
 		for {
@@ -1842,7 +1845,12 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				}
 				switch item.kind {
 				case workDeployment:
-					err = c.executeRecord(ctx, gateway, item.key, gatewayHello.MaximumArtifactChunkBytes, activeIdentityEnabled)
+					if _, scoped := scopedStart.LoadAndDelete(item.key); scoped {
+						err = c.recordScopedStarted(item.key)
+					}
+					if err == nil {
+						err = c.executeRecord(ctx, gateway, item.key, gatewayHello.MaximumArtifactChunkBytes, activeIdentityEnabled)
+					}
 				case workACMEHTTP01Overlay:
 					err = c.executeACMEHTTP01OverlayRecord(ctx, gateway, item.key, gatewayHello.MaximumArtifactChunkBytes)
 				default:
@@ -1930,6 +1938,7 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			inFlight[item] = true
 			if recordIsScoped(record) {
 				pendingScopeKeys[item] = supersedeKey(commandFromBytes(record.Command))
+				scopedStart.Store(item.key, struct{}{})
 			}
 		}
 	}
@@ -1999,18 +2008,9 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 			pending = pending[1:]
 			if _, scoped := pendingScopeKeys[nextItem]; scoped {
 				delete(pendingScopeKeys, nextItem)
-				// The worker owns the record now; STARTED is recorded and sent
-				// before it can append anything else.
-				record, err := c.store.record(nextItem.key)
-				if err != nil {
-					return true, err
-				}
-				if command := commandFromBytes(record.Command); command != nil && !record.ExecutionDone &&
-					!recordHasState(record, agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_STARTED) {
-					if err := c.store.appendStatuses(nextItem.key, []*agentv1.DeploymentStatus{scopedStartedStatus(command, c.now())}, false); err != nil {
-						return true, err
-					}
-				}
+				// The worker owns the record now and records STARTED itself
+				// before executing (recordScopedStarted). Appending it here
+				// raced the worker's terminal status and could land after it.
 			}
 		case nextCacheWork <- nextCacheItem:
 			cachePending = cachePending[1:]
@@ -2328,9 +2328,11 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 					case scopedEnqueued:
 						inFlight[item] = true
 						pendingScopeKeys[item] = key
+						scopedStart.Store(item.key, struct{}{})
 						if replaced != nil {
 							delete(inFlight, *replaced)
 							delete(pendingScopeKeys, *replaced)
+							scopedStart.Delete(replaced.key)
 							replacedRecord, err := c.store.record(replaced.key)
 							if err != nil {
 								return true, err

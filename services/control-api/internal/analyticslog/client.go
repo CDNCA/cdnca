@@ -61,16 +61,22 @@ const accessPageSQL = `WITH
 if(
     {has_snapshot:UInt8} = 1,
     fromUnixTimestamp64Milli({snapshot_ms:Int64}, 'UTC'),
-	    now64(3, 'UTC') - INTERVAL 1 MILLISECOND
+	    toDateTime64(initialQueryStartTime(), 3, 'UTC') - INTERVAL 1 MILLISECOND
 ) AS snapshot_at,
+-- the query start time is one value for the whole query (now64 is
+-- evaluated per reference, tens of ms apart around the scalar subqueries);
+-- it has second precision, so a first page's snapshot is up to 1 s older.
+-- Without a non-deterministic function ClickHouse also evaluates each scalar
+-- subquery below once instead of once per reference: the security page read
+-- selected_rows three times and the digest six times (10M rows: 111M rows read).
 -- the page reads only the segment [segment_from, to) of the
 -- window chosen by the client (querySegmentedPage); when it yields row_limit
 -- rows they are the window's newest, every event outside it being older.
 fromUnixTimestamp64Milli({segment_from_ms:Int64}, 'UTC') AS segment_from,
 -- Ambiguous events (two payloads at one ingested_at) anywhere in the window
 -- stay candidates whatever the segment, so they still sort first. The client
--- finds them in migration 030's digest table (one streaming FINAL pass, the
--- scalar count skips the index scan when there are none); keys are
+-- finds them in migration 030's digest table (one streaming FINAL pass into
+-- the scalar conflict_key_set; an empty set skips the index scan); keys are
 -- cityHash64(event_id), and an event that merely shares a key is resolved
 -- from the merged states like any candidate. conflict_scan 0 skips both on a
 -- later segment once the first one proved the window has none.
@@ -85,6 +91,7 @@ conflict_keys AS
 		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
 	WHERE ingested_at <= snapshot_at AND version_digest_min != version_digest_max
 ),
+(SELECT groupUniqArray(event_key) FROM conflict_keys) AS conflict_key_set,
 conflict_event_ids AS
 (
 	SELECT event_id
@@ -94,8 +101,8 @@ conflict_event_ids AS
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
 		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
 		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
-		AND (SELECT count() FROM conflict_keys) > 0
-		AND cityHash64(event_id) IN (SELECT event_key FROM conflict_keys)
+		AND notEmpty(conflict_key_set)
+		AND cityHash64(event_id) IN (SELECT arrayJoin(conflict_key_set))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
 ),
@@ -118,6 +125,8 @@ candidate_event_ids AS
 	SELECT
 		access.event_id AS event_id,
 		argMaxMerge(latest_filter_state) AS latest_filter,
+		min(access.tenant_id) AS tenant_lo,
+		max(access.tenant_id) AS tenant_hi,
 		if(
 			uniqExactMerge(version_pair_state) > uniqExactMerge(ingested_at_state),
 			toUInt64(2),
@@ -125,15 +134,19 @@ candidate_event_ids AS
 		) AS durable_version_count
 	FROM
 	(
-		SELECT event_id, latest_filter_state, version_pair_state, ingested_at_state
+		SELECT event_id, tenant_id, latest_filter_state, version_pair_state, ingested_at_state
 		FROM access_event_query_index_state_v1
 		PREWHERE metric_version = 1
 			AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
 			-- Only the window's candidates, filtered before the state columns
 			-- are read (an INNER JOIN after the scan read the scope's whole
 			-- retention per page, log-read-perf). All versions of a candidate
-			-- are still merged.
-			AND event_id IN (SELECT event_id FROM candidate_event_ids)
+			-- are still merged. Candidates match by the 16-byte event_key (migration 035,
+			-- sipHash128 of event_id; a clash, ~2^-128 as for 030's digests, would
+			-- add the other event to the candidates). The candidates' versions may
+			-- sit anywhere in the retention, so this scan still covers the scope's
+			-- whole retention (10M rows: 152 MiB of keys, 657 MiB of event_id).
+			AND event_key IN (SELECT reinterpretAsUInt128(sipHash128(event_id)) FROM candidate_event_ids)
 		WHERE ingested_at <= snapshot_at
 	) AS access
 	GROUP BY access.event_id
@@ -175,6 +188,13 @@ candidate_event_ids AS
 	ORDER BY durable_version_count > 1 DESC, tupleElement(latest_filter, 1) DESC, event_id DESC
 	LIMIT {row_limit:UInt16}
 ),
+-- The state tables below are keyed (tenant_id, event_id, ...); the
+-- platform scope reads them by (tenant, event) instead of most of the table.
+-- An event whose versions carry one tenant (always, in a tenant scope) is
+-- looked up by that pair; one whose versions span tenants by event_id alone.
+-- min/max keep the aggregation state fixed-size per candidate.
+(SELECT (groupArrayIf((tenant_lo, event_id), tenant_lo = tenant_hi), groupArrayIf(event_id, tenant_lo != tenant_hi))
+	FROM selected_rows) AS selected_keys,
 payload_rows AS
 (
 	SELECT
@@ -190,7 +210,8 @@ payload_rows AS
 	FROM access_event_query_payload_state_v1
 	PREWHERE metric_version = 1
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
-		AND event_id IN (SELECT event_id FROM selected_rows)
+		AND ((tenant_id, event_id) IN (SELECT tupleElement(key, 1), tupleElement(key, 2) FROM (SELECT arrayJoin(tupleElement(selected_keys, 1)) AS key))
+			OR event_id IN (SELECT arrayJoin(tupleElement(selected_keys, 2))))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
 )
@@ -239,16 +260,22 @@ const blockEventPageSQL = `WITH
 if(
     {has_snapshot:UInt8} = 1,
     fromUnixTimestamp64Milli({snapshot_ms:Int64}, 'UTC'),
-	    now64(3, 'UTC') - INTERVAL 1 MILLISECOND
+	    toDateTime64(initialQueryStartTime(), 3, 'UTC') - INTERVAL 1 MILLISECOND
 ) AS snapshot_at,
+-- the query start time is one value for the whole query (now64 is
+-- evaluated per reference, tens of ms apart around the scalar subqueries);
+-- it has second precision, so a first page's snapshot is up to 1 s older.
+-- Without a non-deterministic function ClickHouse also evaluates each scalar
+-- subquery below once instead of once per reference: the security page read
+-- selected_rows three times and the digest six times (10M rows: 111M rows read).
 -- the page reads only the segment [segment_from, to) of the
 -- window chosen by the client (querySegmentedPage); when it yields row_limit
 -- rows they are the window's newest, every event outside it being older.
 fromUnixTimestamp64Milli({segment_from_ms:Int64}, 'UTC') AS segment_from,
 -- Ambiguous events (two payloads at one ingested_at) anywhere in the window
 -- stay candidates whatever the segment, so they still sort first. The client
--- finds them in migration 030's digest table (one streaming FINAL pass, the
--- scalar count skips the index scan when there are none); keys are
+-- finds them in migration 030's digest table (one streaming FINAL pass into
+-- the scalar conflict_key_set; an empty set skips the index scan); keys are
 -- cityHash64(event_id), and an event that merely shares a key is resolved
 -- from the merged states like any candidate. conflict_scan 0 skips both on a
 -- later segment once the first one proved the window has none.
@@ -263,6 +290,7 @@ conflict_keys AS
 		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
 	WHERE ingested_at <= snapshot_at AND version_digest_min != version_digest_max
 ),
+(SELECT groupUniqArray(event_key) FROM conflict_keys) AS conflict_key_set,
 conflict_event_ids AS
 (
 	SELECT event_id
@@ -272,8 +300,8 @@ conflict_event_ids AS
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
 		AND occurred_at >= fromUnixTimestamp64Milli({from_ms:Int64}, 'UTC')
 		AND occurred_at < fromUnixTimestamp64Milli({to_ms:Int64}, 'UTC')
-		AND (SELECT count() FROM conflict_keys) > 0
-		AND cityHash64(event_id) IN (SELECT event_key FROM conflict_keys)
+		AND notEmpty(conflict_key_set)
+		AND cityHash64(event_id) IN (SELECT arrayJoin(conflict_key_set))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
 ),
@@ -296,6 +324,8 @@ candidate_event_ids AS
 	SELECT
 		security.event_id AS event_id,
 		argMaxMerge(latest_filter_state) AS latest_filter,
+		min(security.tenant_id) AS tenant_lo,
+		max(security.tenant_id) AS tenant_hi,
 		if(
 			uniqExactMerge(version_pair_state) > uniqExactMerge(ingested_at_state),
 			toUInt64(2),
@@ -303,15 +333,19 @@ candidate_event_ids AS
 		) AS durable_version_count
 	FROM
 	(
-		SELECT event_id, latest_filter_state, version_pair_state, ingested_at_state
+		SELECT event_id, tenant_id, latest_filter_state, version_pair_state, ingested_at_state
 		FROM security_event_query_index_state_v1
 		PREWHERE metric_version = 1
 			AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
 			-- Only the window's candidates, filtered before the state columns
 			-- are read (an INNER JOIN after the scan read the scope's whole
 			-- retention per page, log-read-perf). All versions of a candidate
-			-- are still merged.
-			AND event_id IN (SELECT event_id FROM candidate_event_ids)
+			-- are still merged. Candidates match by the 16-byte event_key (migration 035,
+			-- sipHash128 of event_id; a clash, ~2^-128 as for 030's digests, would
+			-- add the other event to the candidates). The candidates' versions may
+			-- sit anywhere in the retention, so this scan still covers the scope's
+			-- whole retention (10M rows: 152 MiB of keys, 657 MiB of event_id).
+			AND event_key IN (SELECT reinterpretAsUInt128(sipHash128(event_id)) FROM candidate_event_ids)
 		WHERE ingested_at <= snapshot_at
 	) AS security
 	GROUP BY security.event_id
@@ -346,6 +380,13 @@ candidate_event_ids AS
 	ORDER BY durable_version_count > 1 DESC, tupleElement(latest_filter, 1) DESC, event_id DESC
 	LIMIT {row_limit:UInt16}
 ),
+-- The state tables below are keyed (tenant_id, event_id, ...); the
+-- platform scope reads them by (tenant, event) instead of most of the table.
+-- An event whose versions carry one tenant (always, in a tenant scope) is
+-- looked up by that pair; one whose versions span tenants by event_id alone.
+-- min/max keep the aggregation state fixed-size per candidate.
+(SELECT (groupArrayIf((tenant_lo, event_id), tenant_lo = tenant_hi), groupArrayIf(event_id, tenant_lo != tenant_hi))
+	FROM selected_rows) AS selected_keys,
 payload_rows AS
 (
 	SELECT
@@ -359,7 +400,8 @@ payload_rows AS
 	FROM security_event_query_payload_state_v1
 	PREWHERE metric_version = 1
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
-		AND event_id IN (SELECT event_id FROM selected_rows)
+		AND ((tenant_id, event_id) IN (SELECT tupleElement(key, 1), tupleElement(key, 2) FROM (SELECT arrayJoin(tupleElement(selected_keys, 1)) AS key))
+			OR event_id IN (SELECT arrayJoin(tupleElement(selected_keys, 2))))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
 ),
@@ -369,7 +411,8 @@ evidence_rows AS
 	FROM security_event_evidence_state_v1
 	PREWHERE metric_version = 1
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
-		AND event_id IN (SELECT event_id FROM selected_rows)
+		AND ((tenant_id, event_id) IN (SELECT tupleElement(key, 1), tupleElement(key, 2) FROM (SELECT arrayJoin(tupleElement(selected_keys, 1)) AS key))
+			OR event_id IN (SELECT arrayJoin(tupleElement(selected_keys, 2))))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
 ),
@@ -379,7 +422,8 @@ count_rows AS
 	FROM security_event_count_state_v1
 	PREWHERE metric_version = 1
 		AND ({tenant_scoped:UInt8} = 0 OR tenant_id = toUUID({tenant_id:String}))
-		AND event_id IN (SELECT event_id FROM selected_rows)
+		AND ((tenant_id, event_id) IN (SELECT tupleElement(key, 1), tupleElement(key, 2) FROM (SELECT arrayJoin(tupleElement(selected_keys, 1)) AS key))
+			OR event_id IN (SELECT arrayJoin(tupleElement(selected_keys, 2))))
 	WHERE ingested_at <= snapshot_at
 	GROUP BY event_id
 )

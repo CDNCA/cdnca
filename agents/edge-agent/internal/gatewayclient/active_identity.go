@@ -1306,6 +1306,12 @@ func (s *durableStore) scanDeploymentRecordsLocked(visit func(*durableRecord) er
 			if record == nil {
 				continue
 			}
+			if orderErr := validateRecordStatusOrder(record); orderErr != nil {
+				if err := s.quarantineRecordLocked(record, orderErr); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := visit(record); err != nil {
 				return err
 			}
