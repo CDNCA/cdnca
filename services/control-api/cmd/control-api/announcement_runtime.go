@@ -84,7 +84,8 @@ type announcementRuntime struct {
 	consecutiveFail     atomic.Uint32
 }
 
-func buildNotificationHandlerFactory(pool *pgxpool.Pool, now func() time.Time, transports notificationcontrol.ChannelTransports) (httpapi.NotificationHandlerFactory, error) {
+func buildNotificationHandlerFactory(pool *pgxpool.Pool, now func() time.Time, transports notificationcontrol.ChannelTransports,
+	live ...func() notificationcontrol.ChannelTransports) (httpapi.NotificationHandlerFactory, error) {
 	if pool == nil || now == nil {
 		return nil, errors.New("notification control HTTP dependencies are required")
 	}
@@ -93,6 +94,9 @@ func buildNotificationHandlerFactory(pool *pgxpool.Pool, now func() time.Time, t
 		return nil, err
 	}
 	control.WithChannelTransports(transports)
+	if len(live) == 1 && live[0] != nil {
+		control.WithChannelTransportSource(live[0])
+	}
 	return func(authenticate notificationhttp.AuthenticateFunc) (http.Handler, error) {
 		return notificationhttp.New(control, authenticate)
 	}, nil

@@ -6,6 +6,9 @@ export interface PlatformSystemMailSettings {
   smtp_port: number
   smtp_user: string
   smtp_password_reference: string
+  // SMTP sender; empty falls back to smtp_user (when an address), then the runtime environment.
+  smtp_from: string
+  smtp_from_name: string
   sms_provider: string
   sms_access_key_id: string
   sms_access_key_reference: string
@@ -51,6 +54,9 @@ export interface PlatformSystemMailSettingsDocument {
   mail_secret_configured?: boolean
   mail_secret_provider?: OfficialMailProvider
   mail_secret_fingerprint?: string
+  // The SMTP password typed on the page, likewise write-only.
+  smtp_password_configured?: boolean
+  smtp_password_fingerprint?: string
 }
 
 export interface MailTestResult {
@@ -58,16 +64,20 @@ export interface MailTestResult {
   provider: string
   message_id?: string
   code?: string
+  // code config_incomplete: the save body fields the sender still lacks
+  missing?: string[]
 }
 
 // Write-only secrets of one PUT (omitted keeps the stored ones).
 export interface MailSettingsSecrets {
   smsAccessKeySecret?: string
   mailSecret?: string
+  // undefined keeps the stored SMTP password, '' clears it.
+  smtpPassword?: string
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
-const settingKeys = ['smtp_address', 'smtp_ssl', 'smtp_port', 'smtp_user', 'smtp_password_reference', 'sms_provider', 'sms_access_key_id', 'sms_access_key_reference', 'sms_signature_name', 'sms_template_map', 'mail_provider', 'mail_region', 'mail_access_key_id', 'mail_from', 'mail_from_name'] as const
+const settingKeys = ['smtp_address', 'smtp_ssl', 'smtp_port', 'smtp_user', 'smtp_password_reference', 'smtp_from', 'smtp_from_name', 'sms_provider', 'sms_access_key_id', 'sms_access_key_reference', 'sms_signature_name', 'sms_template_map', 'mail_provider', 'mail_region', 'mail_access_key_id', 'mail_from', 'mail_from_name'] as const
 
 function record(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value) }
 function exact(value: Record<string, unknown>) { const keys = Object.keys(value); return keys.length === settingKeys.length && settingKeys.every((key) => Object.hasOwn(value, key)) }
@@ -75,7 +85,7 @@ function text(value: unknown, max: number) { return typeof value === 'string' &&
 function reference(value: unknown) { return text(value, 1024) && (value === '' || String(value).startsWith('vault://') && String(value).length > 8 || String(value).startsWith('kms-envelope://') && String(value).length > 15) }
 function isSettings(value: unknown): value is PlatformSystemMailSettings {
   if (!record(value) || !exact(value) || typeof value.smtp_ssl !== 'boolean' || !Number.isSafeInteger(value.smtp_port) || Number(value.smtp_port) < 1 || Number(value.smtp_port) > 65535) return false
-  return text(value.smtp_address, 512) && text(value.smtp_user, 256) && reference(value.smtp_password_reference) && text(value.sms_provider, 64) && text(value.sms_access_key_id, 256) && reference(value.sms_access_key_reference) && text(value.sms_signature_name, 256) && text(value.sms_template_map, 16384) &&
+  return text(value.smtp_address, 512) && text(value.smtp_user, 256) && reference(value.smtp_password_reference) && text(value.smtp_from, 254) && text(value.smtp_from_name, 64) && text(value.sms_provider, 64) && text(value.sms_access_key_id, 256) && reference(value.sms_access_key_reference) && text(value.sms_signature_name, 256) && text(value.sms_template_map, 16384) &&
     mailProviderKind(String(value.mail_provider)) !== null && text(value.mail_region, 32) && text(value.mail_access_key_id, 256) && text(value.mail_from, 254) && text(value.mail_from_name, 64)
 }
 function isDocument(value: unknown): value is PlatformSystemMailSettingsDocument {
@@ -85,6 +95,8 @@ function isDocument(value: unknown): value is PlatformSystemMailSettingsDocument
   if (Object.hasOwn(value, 'mail_secret_configured') && typeof value.mail_secret_configured !== 'boolean') return false
   if (Object.hasOwn(value, 'mail_secret_provider') && !(officialMailProviders as readonly unknown[]).includes(value.mail_secret_provider)) return false
   if (Object.hasOwn(value, 'mail_secret_fingerprint') && !(typeof value.mail_secret_fingerprint === 'string' && /^[0-9a-f]{16}$/.test(value.mail_secret_fingerprint))) return false
+  if (Object.hasOwn(value, 'smtp_password_configured') && typeof value.smtp_password_configured !== 'boolean') return false
+  if (Object.hasOwn(value, 'smtp_password_fingerprint') && !(typeof value.smtp_password_fingerprint === 'string' && /^[0-9a-f]{16}$/.test(value.smtp_password_fingerprint))) return false
   return !Object.hasOwn(value, 'updated_at') || typeof value.updated_at === 'string' && Number.isFinite(Date.parse(value.updated_at))
 }
 
@@ -103,7 +115,8 @@ async function request(accessToken: string, method: 'GET' | 'PUT', revision?: nu
       },
       ...(method === 'PUT' ? { body: JSON.stringify({ value,
         ...(secrets.smsAccessKeySecret ? { sms_access_key_secret: secrets.smsAccessKeySecret } : {}),
-        ...(secrets.mailSecret ? { mail_secret: secrets.mailSecret } : {}) }) } : {}),
+        ...(secrets.mailSecret ? { mail_secret: secrets.mailSecret } : {}),
+        ...(secrets.smtpPassword !== undefined ? { smtp_password: secrets.smtpPassword } : {}) }) } : {}),
     })
   } catch { throw networkApiError() }
   if (!response.ok) throw await responseApiError(response)
@@ -115,7 +128,8 @@ async function request(accessToken: string, method: 'GET' | 'PUT', revision?: nu
 
 function isTestResult(value: unknown): value is MailTestResult {
   return record(value) && typeof value.ok === 'boolean' && typeof value.provider === 'string' &&
-    (!Object.hasOwn(value, 'message_id') || typeof value.message_id === 'string') && (!Object.hasOwn(value, 'code') || typeof value.code === 'string')
+    (!Object.hasOwn(value, 'message_id') || typeof value.message_id === 'string') && (!Object.hasOwn(value, 'code') || typeof value.code === 'string') &&
+    (!Object.hasOwn(value, 'missing') || Array.isArray(value.missing) && value.missing.every((item) => typeof item === 'string'))
 }
 
 async function sendTest(accessToken: string, value: PlatformSystemMailSettings, to: string, mailSecret?: string): Promise<MailTestResult> {

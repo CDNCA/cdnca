@@ -27,9 +27,16 @@ type registrationConfigSource struct {
 	builtIn          *accountregistration.BuiltInService
 	termsVersion     string
 	turnstileSiteKey string
-	// sendable: channels a registration code can go out by.
+	// sendable: channels a registration code can go out by; channels, when
+	// set, answers it live (the auto mode rebuilds the senders).
 	sendEmail, sendSMS bool
+	channels           registrationCodeChannels
 	recovery           accountRecoveryRuntimeConfig
+}
+
+// registrationCodeChannels reports which channels can carry a code now.
+type registrationCodeChannels interface {
+	Channels() (email, sms bool)
 }
 
 func newRegistrationConfigSource(
@@ -37,19 +44,17 @@ func newRegistrationConfigSource(
 	settings *systemusersettings.Service,
 	registration accountRegistrationRuntimeConfig,
 	builtIn *accountregistration.BuiltInService,
-	verification *builtInRegistrationVerification,
+	channels registrationCodeChannels,
 	recovery accountRecoveryRuntimeConfig,
 ) *registrationConfigSource {
 	source := &registrationConfigSource{pool: pool, settings: settings, builtIn: builtIn, recovery: recovery,
-		termsVersion: builtInRegistrationTermsVersion}
+		termsVersion: builtInRegistrationTermsVersion, channels: channels}
 	if registration.Enabled {
 		source.verified = true
 		source.termsVersion = registration.TermsVersion
 		source.turnstileSiteKey = os.Getenv("ACCOUNT_REGISTRATION_TURNSTILE_SITE_KEY")
 		_, source.sendEmail = registration.Templates[notification.ChannelEmail]
 		_, source.sendSMS = registration.Templates[notification.ChannelSMS]
-	} else {
-		source.sendEmail, source.sendSMS = verification.Channels()
 	}
 	return source
 }
@@ -66,8 +71,12 @@ func (source *registrationConfigSource) RegistrationConfig(ctx context.Context) 
 		Scan(&switches.SMS, &switches.Email); err != nil {
 		switches = notification.ChannelSwitches{}
 	}
-	config.Email = httpapi.RegistrationChannel{Required: policy.EmailVerificationRequired, Available: source.sendEmail && switches.Email}
-	config.SMS = httpapi.RegistrationChannel{Required: policy.PhoneVerificationRequired, Available: source.sendSMS && switches.SMS}
+	sendEmail, sendSMS := source.sendEmail, source.sendSMS
+	if source.channels != nil {
+		sendEmail, sendSMS = source.channels.Channels()
+	}
+	config.Email = httpapi.RegistrationChannel{Required: policy.EmailVerificationRequired, Available: sendEmail && switches.Email}
+	config.SMS = httpapi.RegistrationChannel{Required: policy.PhoneVerificationRequired, Available: sendSMS && switches.SMS}
 	config.EmailRequired, config.PhoneRequired = policy.EmailRequired, policy.PhoneRequired
 	if source.verified {
 		config.HumanCheck, config.TurnstileSiteKey = "turnstile", source.turnstileSiteKey

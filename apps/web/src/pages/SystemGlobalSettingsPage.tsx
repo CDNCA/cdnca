@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Alert, App, Button, Checkbox, Collapse, Divider, Form, Input, InputNumber, Radio, Result, Select, Space, Spin, Switch, Tabs, Tag, Tooltip, Typography, Upload } from 'antd'
+import { Alert, App, Button, Checkbox, Collapse, Divider, Form, Input, InputNumber, Popconfirm, Radio, Result, Select, Space, Spin, Switch, Tabs, Tag, Tooltip, Typography, Upload } from 'antd'
 import { CircleHelp, RefreshCw, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -597,6 +597,10 @@ function MailPanel() {
   // Write-only official mail credential, likewise.
   const [mailSecret, setMailSecret] = useState('')
   const mailSecretRef = useRef('')
+  // Write-only SMTP password; undefined keeps the stored one, '' clears it.
+  const [smtpPassword, setSMTPPassword] = useState('')
+  const smtpPasswordRef = useRef<string | undefined>(undefined)
+  const [smtpReferenceOpen, setSMTPReferenceOpen] = useState(false)
 
   const write = useBaselineWrite<PlatformSystemMailSettings, PlatformSystemMailSettingsDocument>({
     ownerKey,
@@ -604,13 +608,15 @@ function MailPanel() {
     revision: document?.revision,
     scope: 'mail',
     submit: (token, attempt) => systemMailSettingsApi.put(token, attempt.revision, attempt.value, attempt.requestId, attempt.idempotencyKey,
-      { smsAccessKeySecret: smsSecretRef.current || undefined, mailSecret: mailSecretRef.current || undefined }),
+      { smsAccessKeySecret: smsSecretRef.current || undefined, mailSecret: mailSecretRef.current || undefined, smtpPassword: smtpPasswordRef.current }),
     onSuccess: (next, attempt) => {
       setDocument(next)
       smsSecretRef.current = ''
       setSMSSecret('')
       mailSecretRef.current = ''
       setMailSecret('')
+      smtpPasswordRef.current = undefined
+      setSMTPPassword('')
       setDraft((current) => current ? {
         ...next.value,
         ...Object.fromEntries(Object.entries(current).filter(([key, value]) => value !== attempt.value[key as keyof PlatformSystemMailSettings])),
@@ -630,11 +636,12 @@ function MailPanel() {
   const persistedUnsupportedProvider = !supportedProvider(document.value.sms_provider)
   const nativeProvider = (nativeSMSProviders as readonly string[]).includes(draft.sms_provider)
   const update = <K extends keyof PlatformSystemMailSettings>(key: K, value: PlatformSystemMailSettings[K]) => setDraft((current) => current ? { ...current, [key]: value } : current)
-  const text = (key: keyof PlatformSystemMailSettings, placeholder?: string) => <Input value={String(draft[key])} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`fields.${key === 'smtp_password_reference' ? 'smtpPassword' : key === 'sms_access_key_reference' ? 'accessKeySecret' : key === 'sms_access_key_id' ? 'accessKeyID' : key === 'smtp_address' ? 'smtpAddress' : key === 'smtp_user' ? 'smtpUser' : 'signatureName'}`)} />
-  const save = (section: 'smtp' | 'sms' | 'provider') => {
+  const text = (key: keyof PlatformSystemMailSettings, placeholder?: string) => <Input value={String(draft[key])} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`fields.${key === 'smtp_password_reference' ? 'smtpPasswordReference' : key === 'sms_access_key_reference' ? 'accessKeySecret' : key === 'sms_access_key_id' ? 'accessKeyID' : key === 'smtp_address' ? 'smtpAddress' : key === 'smtp_user' ? 'smtpUser' : key === 'smtp_from' ? 'smtpFrom' : key === 'smtp_from_name' ? 'smtpFromName' : 'signatureName'}`)} />
+  const save = (section: 'smtp' | 'sms' | 'provider', clearSMTPPassword = false) => {
     if (write.saving || write.uncertain || (section === 'sms' ? unsupportedProvider : persistedUnsupportedProvider)) return
     const value = section === 'smtp'
-      ? { ...document.value, smtp_address: draft.smtp_address, smtp_ssl: draft.smtp_ssl, smtp_port: draft.smtp_port, smtp_user: draft.smtp_user, smtp_password_reference: draft.smtp_password_reference }
+      ? { ...document.value, smtp_address: draft.smtp_address, smtp_ssl: draft.smtp_ssl, smtp_port: draft.smtp_port, smtp_user: draft.smtp_user, smtp_password_reference: draft.smtp_password_reference,
+        smtp_from: draft.smtp_from, smtp_from_name: draft.smtp_from_name }
       : section === 'provider'
         // Only the sender fields: the SMTP section keeps its own draft.
         ? { ...document.value, mail_provider: draft.mail_provider, mail_region: mailProviderKind(draft.mail_provider) === 'official' ? draft.mail_region : document.value.mail_region,
@@ -645,10 +652,11 @@ function MailPanel() {
             sms_template_map: nativeProvider ? draft.sms_template_map : '' }
     smsSecretRef.current = section === 'sms' && nativeProvider ? smsSecret : ''
     mailSecretRef.current = section === 'provider' && mailProviderKind(draft.mail_provider) === 'official' ? mailSecret : ''
+    smtpPasswordRef.current = section !== 'smtp' ? undefined : clearSMTPPassword ? '' : smtpPassword || undefined
     write.save(value, section)
   }
   // A refusal of a field on this tab goes under it (fix-fielderr-be2).
-  const { status: fieldStatus, shown: refusedShown } = refusedFieldStatus(write.error, ['smtp_address', 'smtp_port', 'smtp_user', 'smtp_password_reference',
+  const { status: fieldStatus, shown: refusedShown } = refusedFieldStatus(write.error, ['smtp_address', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_password_reference', 'smtp_from', 'smtp_from_name',
     'sms_provider', 'sms_access_key_id', 'sms_access_key_reference', 'sms_access_key_secret', 'sms_signature_name', 'sms_template_map',
     'mail_provider', 'mail_region', 'mail_access_key_id', 'mail_secret', 'mail_from', 'mail_from_name'], i18n.resolvedLanguage)
   return <div data-testid="system-settings-baseline-mail" className="system-settings-baseline-panel">
@@ -665,7 +673,21 @@ function MailPanel() {
         <Form.Item label={t('fields.smtpSSL')}><Switch checked={draft.smtp_ssl} disabled={!canManage} onChange={(value) => update('smtp_ssl', value)} aria-label={t('fields.smtpSSL')} /></Form.Item>
         <Form.Item label={t('fields.smtpPort')} {...fieldStatus('smtp_port')}><InputNumber min={1} max={65535} value={draft.smtp_port} disabled={!canManage} onChange={(value) => update('smtp_port', value ?? 465)} style={{ width: '100%' }} aria-label={t('fields.smtpPort')} /></Form.Item>
         <Form.Item label={t('fields.smtpUser')} {...fieldStatus('smtp_user')}>{text('smtp_user')}</Form.Item>
-        <Form.Item label={t('fields.smtpPassword')} {...fieldStatus('smtp_password_reference')}>{text('smtp_password_reference', t('placeholders.secretReference'))}</Form.Item>
+        <Form.Item label={t('fields.smtpPassword')} {...fieldStatus('smtp_password')}
+          extra={document.smtp_password_configured ? t('smtpPassword.set', { fingerprint: document.smtp_password_fingerprint }) : t('smtpPassword.unset')}>
+          <Space.Compact style={{ width: '100%' }}>
+            <Input.Password value={smtpPassword} disabled={!canManage} autoComplete="new-password" placeholder={document.smtp_password_configured ? t('smtpPassword.keep') : ''}
+              onChange={(event) => setSMTPPassword(event.target.value)} aria-label={t('fields.smtpPassword')} />
+            {document.smtp_password_configured ? <Popconfirm title={t('smtpPassword.clearConfirm')} disabled={!canManage || write.uncertain || write.saving || persistedUnsupportedProvider} onConfirm={() => save('smtp', true)}>
+              <Button disabled={!canManage || write.uncertain || write.saving || persistedUnsupportedProvider}>{t('smtpPassword.clear')}</Button>
+            </Popconfirm> : null}
+          </Space.Compact>
+        </Form.Item>
+        <Form.Item label={t('fields.smtpFrom')} {...fieldStatus('smtp_from')} extra={t('smtpPassword.fromHint')}>{text('smtp_from')}</Form.Item>
+        <Form.Item label={t('fields.smtpFromName')} {...fieldStatus('smtp_from_name')}>{text('smtp_from_name')}</Form.Item>
+        {smtpReferenceOpen || draft.smtp_password_reference !== ''
+          ? <Form.Item label={t('fields.smtpPasswordReference')} {...fieldStatus('smtp_password_reference')} extra={t('smtpPassword.advancedHint')}>{text('smtp_password_reference', t('placeholders.secretReference'))}</Form.Item>
+          : <Form.Item label=" "><Button type="link" style={{ padding: 0 }} onClick={() => setSMTPReferenceOpen(true)}>{t('smtpPassword.advanced')}</Button></Form.Item>}
         <Typography.Text type="secondary">{t('states.sensitive')}</Typography.Text>
         <div><Button aria-label={t('mailActions.smtp')} aria-busy={write.saving && write.savingScope === 'smtp'} disabled={!canManage || write.uncertain || write.saving || persistedUnsupportedProvider} type="primary" loading={write.saving && write.savingScope === 'smtp'} onClick={() => save('smtp')}>{t('mailActions.smtp')}</Button></div>
       </section>

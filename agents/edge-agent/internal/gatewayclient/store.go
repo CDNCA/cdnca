@@ -87,6 +87,15 @@ func (s *durableStore) putCommand(command *agentv1.DeploymentCommand, firstStatu
 		}
 		return cloneRecord(record), false, nil
 	}
+	if tombstoned, err := s.tombstonedRecordLocked(key, command, commandBytes, statusBytes, firstStatus, firstStatus.Event.OccurredTime.AsTime()); err != nil {
+		return nil, false, err
+	} else if tombstoned != nil {
+		// Quarantined earlier: finished with an unknown outcome, never run again.
+		if err := s.finishTombstonedLocked(tombstoned, command); err != nil {
+			return nil, false, err
+		}
+		return cloneRecord(tombstoned), true, nil
+	}
 	record = &durableRecord{
 		Version:         durableRecordVersion,
 		RecordKey:       key,
@@ -458,6 +467,11 @@ func (s *durableStore) quarantineRecordLocked(record *durableRecord, reason erro
 			return fmt.Errorf("quarantine gateway journal file: %w", err)
 		}
 		moved++
+	}
+	// Keep the command's identity so a redelivery is answered FAILED, not rerun.
+	if err := s.writeTombstoneLocked(record); err != nil {
+		slog.Error("gateway journal tombstone not written; a redelivered command may run again",
+			"deployment_id", record.DeploymentID, "attempt", record.Attempt, "error", err.Error())
 	}
 	slog.Error("gateway journal record quarantined; replay continues",
 		"deployment_id", record.DeploymentID, "attempt", record.Attempt,

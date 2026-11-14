@@ -87,9 +87,8 @@ func mergePersistedMailProvider(config *notificationRuntimeConfig, value systemm
 	}
 	switch systemmailsettings.MailProviderKind(value.MailProvider) {
 	case systemmailsettings.MailKindSMTP:
-		if config.EmailProvider == notificationEmailProviderSettings {
-			return errors.New("NOTIFICATION_EMAIL_PROVIDER=settings needs an official mail service or a mail plugin chosen in the system settings")
-		}
+		// settings left unchanged here: the page has no SMTP address, which
+		// resolveNotificationRuntime reports as email unavailable
 		return nil
 	case systemmailsettings.MailKindOfficial:
 		if open == nil {
@@ -280,12 +279,15 @@ func (transport *officialMailTransport) current(ctx context.Context) (mail.Sende
 var _ notificationruntime.ProviderTransport = (*officialMailTransport)(nil)
 
 // newSystemMailTestSender sends the system settings page's test mail with
-// the provider on the page: SMTP uses the runtime SMTP configuration (its
-// password lives in the environment) with the page's SMTP fields, an
-// official service the given credential, a plugin its usable client. nil
-// when email is not enabled for this runtime.
+// the provider on the page. base is the runtime configuration from the
+// environment only (before the persisted settings are merged). SMTP uses the
+// page's SMTP fields and saved password, filling the gaps from
+// NOTIFICATION_SMTP_* (smtp_tls/smtp_starttls); what is still missing comes
+// back as a systemmailsettings.MissingError. An official service uses the
+// given credential, a plugin its usable client. nil only when the runtime is
+// forced off (NOTIFICATION_RUNTIME_ENABLED=off).
 func newSystemMailTestSender(base notificationRuntimeConfig, plugins pluginproviders.Clients) systemmailsettings.TestSender {
-	if !base.Enabled || base.EmailProvider == "" {
+	if !base.Requested {
 		return nil
 	}
 	return func(ctx context.Context, target systemmailsettings.TestTarget) (string, error) {
@@ -297,13 +299,26 @@ func newSystemMailTestSender(base notificationRuntimeConfig, plugins pluginprovi
 			open = func() ([]byte, error) { return append([]byte(nil), target.Secret...), nil }
 		}
 		if systemmailsettings.MailProviderKind(value.MailProvider) == systemmailsettings.MailKindSMTP {
-			// The SMTP password only exists in the environment
-			// (NOTIFICATION_SMTP_PASSWORD): without it there is no SMTP to test.
+			// The password saved on the page (target.SMTPPassword) wins, so a
+			// stale reference does not matter then.
+			reference := value.SMTPPasswordReference
+			if len(target.SMTPPassword) > 0 {
+				reference = ""
+			}
 			if err := mergePersistedNotificationMailSettings(&config, systemmailsettings.RuntimeSettings{Configured: true,
 				Value: systemmailsettings.Settings{SMTPAddress: value.SMTPAddress, SMTPSSL: value.SMTPSSL, SMTPPort: value.SMTPPort,
-					SMTPUser: value.SMTPUser, SMTPPasswordReference: value.SMTPPasswordReference}}); err != nil ||
-				len(config.SMTP.Password) == 0 || config.EmailProvider != notificationEmailProviderSMTPTLS &&
-				config.EmailProvider != notificationEmailProviderSMTPSTARTTLS {
+					SMTPUser: value.SMTPUser, SMTPPasswordReference: reference, SMTPFrom: value.SMTPFrom,
+					SMTPFromName: value.SMTPFromName}}); err != nil {
+				return "", &mail.Error{Disposition: mail.Permanent, Code: mail.CodeInvalidConfig}
+			}
+			if len(target.SMTPPassword) > 0 {
+				config.SMTP.Password = append([]byte(nil), target.SMTPPassword...)
+				defer clear(config.SMTP.Password)
+			}
+			if missing := smtpMissing(config.SMTP); len(missing) > 0 {
+				return "", &systemmailsettings.MissingError{Fields: missing}
+			}
+			if config.EmailProvider != notificationEmailProviderSMTPTLS && config.EmailProvider != notificationEmailProviderSMTPSTARTTLS {
 				return "", &mail.Error{Disposition: mail.Permanent, Code: mail.CodeInvalidConfig}
 			}
 		} else if err := mergePersistedMailProvider(&config, value, open); err != nil {

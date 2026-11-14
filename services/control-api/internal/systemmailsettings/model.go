@@ -48,6 +48,10 @@ type Settings struct {
 	SMTPPort              int    `json:"smtp_port"`
 	SMTPUser              string `json:"smtp_user"`
 	SMTPPasswordReference string `json:"smtp_password_reference"`
+	// SMTPFrom is the built-in SMTP sender address; empty falls back to
+	// SMTPUser when that is an address, then to NOTIFICATION_SMTP_FROM.
+	SMTPFrom              string `json:"smtp_from"`
+	SMTPFromName          string `json:"smtp_from_name"`
 	SMSProvider           string `json:"sms_provider"`
 	SMSAccessKeyID        string `json:"sms_access_key_id"`
 	SMSAccessKeyReference string `json:"sms_access_key_reference"`
@@ -117,7 +121,10 @@ type Document struct {
 	MailSecretConfigured  bool   `json:"mail_secret_configured"`
 	MailSecretProvider    string `json:"mail_secret_provider,omitempty"`
 	MailSecretFingerprint string `json:"mail_secret_fingerprint,omitempty"`
-	Replayed              bool   `json:"-"`
+	// The SMTP password entered on the page, likewise write-only.
+	SMTPPasswordConfigured  bool   `json:"smtp_password_configured"`
+	SMTPPasswordFingerprint string `json:"smtp_password_fingerprint,omitempty"`
+	Replayed                bool   `json:"-"`
 }
 
 type SaveRequest struct {
@@ -127,7 +134,11 @@ type SaveRequest struct {
 	SMSAccessKeySecret string
 	// MailSecret is the official mail service credential (DirectMail
 	// AccessKeySecret / SendGrid API key), write-only; empty keeps it.
-	MailSecret     string
+	MailSecret string
+	// SMTPPassword is the SMTP password, write-only: nil keeps the stored
+	// one, "" clears it, anything else replaces it. It cannot coexist with
+	// Value.SMTPPasswordReference.
+	SMTPPassword   *string
 	IdempotencyKey string
 	RequestID      string
 }

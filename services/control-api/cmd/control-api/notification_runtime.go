@@ -56,6 +56,24 @@ type notificationRuntimeHealthSnapshot struct {
 	EnabledChannels     int    `json:"enabled_channels"`
 	ConsecutiveFailures int    `json:"consecutive_failures"`
 	LastErrorClass      string `json:"last_error_class,omitempty"`
+	// Mode: explicit (NOTIFICATION_RUNTIME_ENABLED=true), auto or off.
+	Mode string `json:"mode,omitempty"`
+	// Channels: email / sms state (disabled_by_env, not_configured, ready,
+	// degraded with a reason code, rebuilding).
+	Channels map[string]notificationChannelHealth `json:"channels,omitempty"`
+	// AccountSenders (auto mode): account_login / account_registration /
+	// registration_verification / account_recovery as ready,
+	// not_configured or degraded.
+	AccountSenders map[string]string `json:"account_senders,omitempty"`
+	// LastRebuildAt / LastRebuildError (auto mode): the last settings
+	// rebuild and its error code; never a server address or secret.
+	LastRebuildAt    string `json:"last_rebuild_at,omitempty"`
+	LastRebuildError string `json:"last_rebuild_error,omitempty"`
+}
+
+type notificationChannelHealth struct {
+	State  string `json:"state"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type notificationRuntimeReadinessProbe struct {
@@ -339,12 +357,16 @@ func runRequiredNotificationRuntime(
 	}
 }
 
-func withNotificationRuntimeHealth(next http.Handler, runtime *notificationProcessRuntime) http.Handler {
+func withNotificationRuntimeHealth(next http.Handler, health func() notificationRuntimeHealthSnapshot) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet && (request.URL.Path == notificationRuntimeHealthPath || request.URL.Path == notificationRuntimeHealthAPIPath) {
 			writer.Header().Set("Content-Type", "application/json")
 			writer.Header().Set("Cache-Control", "no-store")
-			_ = json.NewEncoder(writer).Encode(runtime.Health())
+			snapshot := notificationRuntimeHealthSnapshot{State: "disabled"}
+			if health != nil {
+				snapshot = health()
+			}
+			_ = json.NewEncoder(writer).Encode(snapshot)
 			return
 		}
 		next.ServeHTTP(writer, request)

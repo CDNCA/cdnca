@@ -1,0 +1,83 @@
+{
+ "id": "notification-runtime-health",
+ "prefix": "/v1/notification-runtime-health",
+ "operations": [
+  {
+   "operation_id": "getNotificationRuntimeHealth",
+   "method": "GET",
+   "path": "/v1/notification-runtime-health",
+   "summary": "Read notification delivery runtime health",
+   "summary_zh": "读取通知发送运行时健康状态",
+   "auth": [
+    "none"
+   ],
+   "description": "Outbox worker state with each channel's state, the account flow senders and the last settings rebuild. Reasons and errors are fixed codes and never contain a server address, account name or secret. Also served as the notification member of GET /health/detail. Notification state never makes GET /health/ready fail in the auto mode.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Notification runtime health.",
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: disabled / built / running / ready / backoff / stopping / stopped / failed",
+       "required": true
+      },
+      {
+       "name": "ready",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "worker_running",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "enabled_channels",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "consecutive_failures",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "last_error_class",
+       "type": "string"
+      },
+      {
+       "name": "mode",
+       "type": "string: explicit / auto / off",
+       "description": "NOTIFICATION_RUNTIME_ENABLED: true (explicit), unset/auto/false (auto, follows the system settings without a restart) or off."
+      },
+      {
+       "name": "channels",
+       "type": "object"
+      },
+      {
+       "name": "account_senders",
+       "type": "object",
+       "description": "Auto mode. Senders of the account flows, rebuilt with the outbox worker."
+      },
+      {
+       "name": "last_rebuild_at",
+       "type": "string(date-time)",
+       "description": "Auto mode. Last settings rebuild."
+      },
+      {
+       "name": "last_rebuild_error",
+       "type": "string",
+       "description": "Auto mode. Error code of the last rebuild (settings_unreadable, worker_start_failed, <flow>_unavailable); absent when it succeeded."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

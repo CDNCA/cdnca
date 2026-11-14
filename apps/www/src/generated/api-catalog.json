@@ -4,7 +4,7 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 717,
+ "total": 718,
  "api_key_count": 159,
  "groups": [
   {
@@ -6799,6 +6799,26 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "getLatestNodeMetrics"
+    }
+   ]
+  },
+  {
+   "id": "notification-runtime-health",
+   "prefix": "/v1/notification-runtime-health",
+   "count": 1,
+   "api_key_count": 0,
+   "operations": [
+    {
+     "method": "GET",
+     "path": "/v1/notification-runtime-health",
+     "summary": "Read notification delivery runtime health",
+     "summary_zh": "读取通知发送运行时健康状态",
+     "auth": [
+      "none"
+     ],
+     "api_key": false,
+     "source": "api/control-notifications.openapi.yaml",
+     "operation_id": "getNotificationRuntimeHealth"
     }
    ]
   },

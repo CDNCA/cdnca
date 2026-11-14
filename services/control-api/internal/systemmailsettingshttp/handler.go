@@ -130,12 +130,14 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request, requestID string, 
 		SMSAccessKeySecret string `json:"sms_access_key_secret,omitempty"`
 		// Write-only official mail service credential; omitted keeps it.
 		MailSecret string `json:"mail_secret,omitempty"`
+		// Write-only SMTP password: omitted keeps it, "" clears it.
+		SMTPPassword *string `json:"smtp_password,omitempty"`
 	}
 	if err := decodeStrict(http.MaxBytesReader(w, r.Body, 128<<10), &body); err != nil {
 		h.error(w, requestID, http.StatusBadRequest, "system_mail_settings_validation_error", "发信配置字段无效")
 		return
 	}
-	value, err := h.service.Save(r.Context(), actor, systemmailsettings.SaveRequest{ExpectedRevision: expected, Value: body.Value, SMSAccessKeySecret: body.SMSAccessKeySecret, MailSecret: body.MailSecret, IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID})
+	value, err := h.service.Save(r.Context(), actor, systemmailsettings.SaveRequest{ExpectedRevision: expected, Value: body.Value, SMSAccessKeySecret: body.SMSAccessKeySecret, MailSecret: body.MailSecret, SMTPPassword: body.SMTPPassword, IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID})
 	h.writeResult(w, requestID, value, err)
 }
 
@@ -143,7 +145,7 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request, requestID string, 
 func (h *Handler) test(w http.ResponseWriter, r *http.Request, requestID string, actor systemmailsettings.Actor) {
 	tester, ok := h.service.(Tester)
 	if !ok || h.sendTest == nil {
-		h.error(w, requestID, http.StatusServiceUnavailable, "system_mail_settings_test_unavailable", "发送测试邮件需要启用通知运行时")
+		h.error(w, requestID, http.StatusServiceUnavailable, "system_mail_settings_test_unavailable", "通知运行时已被运维关闭（NOTIFICATION_RUNTIME_ENABLED=off）")
 		return
 	}
 	var body struct {

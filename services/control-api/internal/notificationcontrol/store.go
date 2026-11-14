@@ -58,6 +58,9 @@ type Store struct {
 	// process (main.go always sets it). Unset keeps the earlier contract:
 	// both channels supported, no platform switch check.
 	transports *ChannelTransports
+	// transportSource, when set, is asked on every use instead: the auto
+	// notification runtime follows the system settings without a restart.
+	transportSource func() ChannelTransports
 }
 
 // ChannelTransports reports which delivery transports the runtime built.
@@ -70,7 +73,16 @@ func (s *Store) WithChannelTransports(transports ChannelTransports) *Store {
 	return s
 }
 
+// WithChannelTransportSource makes the configured transports live.
+func (s *Store) WithChannelTransportSource(source func() ChannelTransports) *Store {
+	s.transportSource = source
+	return s
+}
+
 func (s *Store) configured() ChannelTransports {
+	if s.transportSource != nil {
+		return s.transportSource()
+	}
 	if s.transports == nil {
 		return ChannelTransports{SMS: true, Email: true}
 	}

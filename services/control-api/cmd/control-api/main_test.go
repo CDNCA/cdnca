@@ -1048,7 +1048,7 @@ func TestValidateCacheControlShutdownPeriod(t *testing.T) {
 
 func TestCacheControlRuntimeHealthDetailUsesComponentReadiness(t *testing.T) {
 	disabled := httptest.NewRecorder()
-	withCacheControlRuntimeHealthDetail(http.NotFoundHandler(), nil, nil, nil).ServeHTTP(
+	withCacheControlRuntimeHealthDetail(http.NotFoundHandler(), nil, nil, nil, nil).ServeHTTP(
 		disabled, httptest.NewRequest(http.MethodGet, "/health/detail", nil),
 	)
 	var disabledHealth struct {
@@ -1071,7 +1071,7 @@ func TestCacheControlRuntimeHealthDetailUsesComponentReadiness(t *testing.T) {
 	go func() { runDone <- runtime.Run(ctx) }()
 	<-started
 	ready := httptest.NewRecorder()
-	withCacheControlRuntimeHealthDetail(http.NotFoundHandler(), nil, nil, runtime).ServeHTTP(
+	withCacheControlRuntimeHealthDetail(http.NotFoundHandler(), nil, nil, runtime, nil).ServeHTTP(
 		ready, httptest.NewRequest(http.MethodGet, "/health/detail", nil),
 	)
 	var readyHealth struct {
@@ -1088,7 +1088,7 @@ func TestCacheControlRuntimeHealthDetailUsesComponentReadiness(t *testing.T) {
 		t.Fatalf("stop cache control runtime: %v", err)
 	}
 	unavailable := httptest.NewRecorder()
-	withCacheControlRuntimeHealthDetail(http.NotFoundHandler(), nil, nil, runtime).ServeHTTP(
+	withCacheControlRuntimeHealthDetail(http.NotFoundHandler(), nil, nil, runtime, nil).ServeHTTP(
 		unavailable, httptest.NewRequest(http.MethodGet, "/health/detail", nil),
 	)
 	var unavailableHealth struct {

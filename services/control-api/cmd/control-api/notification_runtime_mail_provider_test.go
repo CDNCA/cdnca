@@ -67,7 +67,6 @@ func TestMergePersistedMailProviderFailsClosed(t *testing.T) {
 		value  systemmailsettings.Settings
 		open   func() ([]byte, error)
 	}{
-		"settings mode with smtp": {notificationRuntimeConfig{EmailProvider: notificationEmailProviderSettings}, systemmailsettings.DefaultSettings(), nil},
 		"credential unavailable": {notificationRuntimeConfig{EmailProvider: notificationEmailProviderSMTPTLS}, officialMailSettings("aliyun"),
 			func() ([]byte, error) { return nil, errors.New("no key") }},
 		"no keyring": {notificationRuntimeConfig{EmailProvider: notificationEmailProviderSMTPTLS}, officialMailSettings("aliyun"), nil},
@@ -167,14 +166,15 @@ func TestSystemMailTestSenderUsesThePageProvider(t *testing.T) {
 		writer.WriteHeader(http.StatusAccepted)
 	}))
 	defer server.Close()
-	if newSystemMailTestSender(notificationRuntimeConfig{Enabled: true}, nil) != nil {
-		t.Fatal("test sender without email enabled")
+	if newSystemMailTestSender(notificationRuntimeConfig{}, nil) != nil {
+		t.Fatal("test sender while the runtime is forced off")
 	}
-	send := newSystemMailTestSender(notificationRuntimeConfig{Enabled: true, EmailProvider: notificationEmailProviderSettings}, nil)
-	// SMTP without an environment password cannot be tested.
-	if _, err := send(t.Context(), systemmailsettings.TestTarget{Value: systemmailsettings.DefaultSettings(), To: "ops@example.com"}); mail.ErrorOf(err) == nil ||
-		mail.ErrorOf(err).Code != mail.CodeInvalidConfig {
-		t.Fatalf("smtp without password err=%v", err)
+	send := newSystemMailTestSender(notificationRuntimeConfig{Requested: true, Auto: true, EmailProvider: notificationEmailProviderSettings}, nil)
+	// SMTP with nothing on the page names what is missing.
+	var missing *systemmailsettings.MissingError
+	if _, err := send(t.Context(), systemmailsettings.TestTarget{Value: systemmailsettings.DefaultSettings(), To: "ops@example.com"}); !errors.As(err, &missing) ||
+		len(missing.Fields) != 4 {
+		t.Fatalf("smtp with nothing configured err=%v", err)
 	}
 	value := officialMailSettings("sendgrid")
 	value.MailRegion = ""

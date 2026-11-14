@@ -39,6 +39,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoverycontext"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoveryhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
+	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
 	"github.com/cdnca/cdnca/services/control-api/internal/acmehttp01"
 	"github.com/cdnca/cdnca/services/control-api/internal/analytics"
 	"github.com/cdnca/cdnca/services/control-api/internal/analyticsdiagnostichttp"
@@ -121,6 +122,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/nodepresence"
 	"github.com/cdnca/cdnca/services/control-api/internal/nodeschedulerhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
+	"github.com/cdnca/cdnca/services/control-api/internal/notificationcontrol"
 	"github.com/cdnca/cdnca/services/control-api/internal/observabilitylog"
 	"github.com/cdnca/cdnca/services/control-api/internal/observabilityloghttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/openrestysecurityhttp"
@@ -155,7 +157,6 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/smartsched"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemconfig"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemconfigpublish"
-	"github.com/cdnca/cdnca/services/control-api/internal/systemmailsettings"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/cdnca/cdnca/services/control-api/internal/theme"
 	"github.com/cdnca/cdnca/services/control-api/internal/urlauthpolicy"
@@ -582,8 +583,9 @@ func isNilCacheControlNATSCloser(connection cacheControlNATSCloser) bool {
 func withCacheControlRuntimeHealthDetail(
 	next http.Handler,
 	analyticsRuntime *analyticsIngestProcessRuntime,
-	accountRuntime *accountRecoveryRuntime,
+	accountRuntime accountRecoveryHealthSource,
 	cacheRuntime *cacheControlRuntime,
+	notificationHealth func() notificationRuntimeHealthSnapshot,
 ) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet && request.URL.Path == "/health/detail" {
@@ -595,15 +597,23 @@ func withCacheControlRuntimeHealthDetail(
 					cacheHealth.State = "ready"
 				}
 			}
+			accountHealth := accountRecoveryHealthSnapshot{State: "disabled"}
+			if accountRuntime != nil {
+				accountHealth = accountRuntime.Health()
+			}
+			// notification is detail only: the readiness probe does not wait
+			// for it (the console runs without a sender)
+			notificationHealth := notificationHealthOrDisabled(notificationHealth)
 			writer.Header().Set("Content-Type", "application/json")
 			writer.Header().Set("Cache-Control", "no-store")
 			_ = json.NewEncoder(writer).Encode(struct {
 				AnalyticsIngest analyticsIngestHealthSnapshot     `json:"analytics_ingest"`
 				AccountRecovery accountRecoveryHealthSnapshot     `json:"account_recovery"`
 				CacheControl    cacheControlRuntimeHealthSnapshot `json:"cache_control"`
+				Notification    notificationRuntimeHealthSnapshot `json:"notification"`
 			}{
-				AnalyticsIngest: analyticsRuntime.Health(), AccountRecovery: accountRuntime.Health(),
-				CacheControl: cacheHealth,
+				AnalyticsIngest: analyticsRuntime.Health(), AccountRecovery: accountHealth,
+				CacheControl: cacheHealth, Notification: notificationHealth,
 			})
 			return
 		}
@@ -988,23 +998,37 @@ func runServer() error {
 	// borrowed connections, and LISTEN loops (marketsupply security reconciler)
 	// hold theirs until ctx ends, so an early error return would hang forever.
 	defer closePoolAfterStop(stop, pool)
-	if notificationConfig.Enabled {
-		persistedMailSettings, settingsErr := systemmailsettings.ReadRuntime(ctx, pool)
-		if settingsErr != nil {
-			return runtimeStageError{stage: "read persisted system mail settings", err: settingsErr}
+	// The system settings test mail fills gaps from the environment only, so
+	// it gets the configuration before the persisted settings are merged.
+	notificationEnvironmentConfig := notificationConfig
+	if notificationConfig.Requested {
+		// explicit (true): a broken persisted setting stops the start as
+		// before; auto: it only leaves the runtime (or a channel) off
+		if err := applyPersistedNotificationSettings(ctx, cfg, pool, &notificationConfig); err != nil {
+			if !notificationConfig.Auto {
+				return err
+			}
+			notificationConfig.unavailable("settings", err.Error())
 		}
-		mailCipher, cipherErr := newConfiguredDNSCredentialCipher(cfg)
-		if cipherErr != nil {
-			return runtimeStageError{stage: "initialize system mail credential keyring", err: cipherErr}
+		resolveNotificationRuntime(&notificationConfig)
+		for channel, reason := range notificationConfig.Unavailable {
+			slog.Default().Warn("notification channel unavailable", "channel", channel, "reason", reason)
 		}
-		settingsErr = mergePersistedNotificationMailSettings(&notificationConfig, persistedMailSettings, mailCipher)
-		_ = mailCipher.Close()
-		if settingsErr != nil {
-			return runtimeStageError{stage: "apply persisted system mail settings", err: settingsErr}
-		}
+		slog.Default().Info("notification runtime", "enabled", notificationConfig.Enabled, "auto", notificationConfig.Auto,
+			"email", notificationEmailConfigured(notificationConfig), "sms", notificationSMSConfigured(notificationConfig))
+	}
+	// auto mode: the outbox worker and the offered channels follow the
+	// settings without a restart (notificationAutoRuntime)
+	var notificationAuto *notificationAutoRuntime
+	var liveNotificationTransports func() notificationcontrol.ChannelTransports
+	if notificationConfig.Auto {
+		notificationAuto = newNotificationAutoRuntime(notificationEnvironmentConfig, notificationConfig, cfg, pool,
+			notificationRuntimeDependencies{Logger: slog.Default(), MailPlugins: lazyPluginProviderClients{cfg: cfg, pool: pool}})
+		liveNotificationTransports = notificationAuto.Transports
 	}
 	var notificationHandlerFactory httpapi.NotificationHandlerFactory
-	notificationHandlerFactory, err = buildNotificationHandlerFactory(pool, time.Now, notificationChannelTransports(notificationConfig))
+	notificationHandlerFactory, err = buildNotificationHandlerFactory(pool, time.Now, notificationChannelTransports(notificationConfig),
+		liveNotificationTransports)
 	if err != nil {
 		return runtimeStageError{stage: "initialize notification control HTTP handler", err: err}
 	}
@@ -1400,12 +1424,21 @@ func runServer() error {
 	// official mail services send only while their module is granted
 	// (module.mail.<provider>); set after the persisted choice is merged
 	notificationConfig.Mail.Granted = leaseModuleGranted(pool, entitlementguard.NewGuard(pool, time.Now, trust))
-	notificationRuntime, err := openNotificationProcessRuntime(
-		ctx, notificationConfig, pool, notificationRuntimeDependencies{Logger: slog.Default(),
-			MailPlugins: lazyPluginProviderClients{cfg: cfg, pool: pool}},
-	)
-	if err != nil {
-		return err
+	var notificationRuntime *notificationProcessRuntime
+	var recoveryNotifications accountRecoveryNotificationBridge
+	if notificationAuto != nil {
+		notificationAuto.Start(ctx, notificationConfig.Mail.Granted)
+		defer notificationAuto.Close()
+		recoveryNotifications = notificationAuto
+	} else {
+		notificationRuntime, err = openNotificationProcessRuntime(
+			ctx, notificationConfig, pool, notificationRuntimeDependencies{Logger: slog.Default(),
+				MailPlugins: lazyPluginProviderClients{cfg: cfg, pool: pool}},
+		)
+		if err != nil {
+			return err
+		}
+		recoveryNotifications = notificationRuntime
 	}
 	if notificationRuntime != nil {
 		defer notificationRuntime.Close()
@@ -1415,18 +1448,39 @@ func runServer() error {
 	accountRegistrationRuntime, err := openAccountRegistrationRuntime(
 		ctx, accountRegistrationConfig, notificationConfig, pool, slog.Default(),
 	)
+	registrationErr := err
 	if err != nil {
-		return runtimeStageError{stage: "initialize account registration runtime", err: err}
+		// degraded: registration falls back to the built-in flow below (auto
+		// mode: the Turnstile flow stays mounted and gets its sender later)
+		slog.Default().Warn("account registration runtime unavailable", "error", err)
+		accountRegistrationRuntime, err = nil, nil
 	}
-	if accountRegistrationRuntime != nil {
+	// auto mode: the account flows rebuild their senders with the outbox
+	// worker when the settings change (accountMailSlot)
+	var accountSlots []*accountMailSlot
+	var registrationSlot *accountMailSlot
+	if notificationAuto != nil && accountRegistrationConfig.Enabled {
+		registrationSlot = newAccountMailSlot("account_registration", slog.Default(),
+			func(ctx context.Context, next notificationRuntimeConfig) (*accountMailParts, error) {
+				if !next.Enabled {
+					return nil, nil
+				}
+				runtime, err := openAccountRegistrationRuntime(ctx, accountRegistrationConfig, next, pool, slog.Default())
+				return runtime.parts(), err
+			}, accountRegistrationRuntime.parts(), accountMailStartError(notificationConfig.Enabled, registrationErr))
+		accountSlots = append(accountSlots, registrationSlot)
+		defer registrationSlot.Close()
+	} else if accountRegistrationRuntime != nil {
 		defer accountRegistrationRuntime.Close()
 	}
+	registrationMounted := accountRegistrationRuntime != nil || registrationSlot != nil
 	// builtin registration: without the Turnstile registration runtime (the fresh
 	// install default) 开放注册 uses the built-in CAPTCHA instead.
 	var builtInRegistration httpapi.BuiltInRegistration
 	var builtInRegistrationService *accountregistration.BuiltInService
 	var builtInVerification *builtInRegistrationVerification
-	if accountRegistrationRuntime == nil {
+	var builtInSlot *accountMailSlot
+	if !registrationMounted {
 		service, err := openBuiltInRegistration(pool, publicSystemSettings, identityService, cfg.AccessSecret)
 		if err != nil {
 			return runtimeStageError{stage: "initialize built-in account registration", err: err}
@@ -1435,32 +1489,99 @@ func runServer() error {
 		// email / SMS codes for built-in registration.
 		builtInVerification, err = openBuiltInRegistrationVerification(ctx, pool, notificationConfig, publicSystemSettings,
 			identityService, service, cfg.AccessSecret, slog.Default())
+		verificationErr := err
+		if err != nil && notificationConfig.Auto {
+			// a sender saved on the settings page that does not answer (wrong
+			// password, host down) must not keep the console from starting:
+			// codes stay unavailable until the settings change (builtInSlot)
+			slog.Default().Warn("built-in registration verification unavailable", "error", err)
+			builtInVerification, err = nil, nil
+		}
 		if err != nil {
 			return runtimeStageError{stage: "initialize built-in registration verification", err: err}
 		}
-		if builtInVerification != nil {
+		if notificationAuto != nil {
+			// proofs are enabled once at start (the service is not rebuilt);
+			// they only exist while a sender delivered the code
+			proofs, err := accountregistrationproof.NewAuthority(pool, accountregistrationproof.Config{
+				DigestKey: builtInRegistrationKey(cfg.AccessSecret, "")})
+			if err != nil {
+				return runtimeStageError{stage: "initialize built-in registration proofs", err: err}
+			}
+			service.EnableContactVerification(proofs)
+			builtInSlot = newAccountMailSlot("registration_verification", slog.Default(),
+				func(ctx context.Context, next notificationRuntimeConfig) (*accountMailParts, error) {
+					verification, err := openBuiltInRegistrationVerification(ctx, pool, next, publicSystemSettings,
+						identityService, service, cfg.AccessSecret, slog.Default())
+					return verification.parts(), err
+				}, builtInVerification.parts(), verificationErr)
+			accountSlots = append(accountSlots, builtInSlot)
+			defer builtInSlot.Close()
+		} else if builtInVerification != nil {
+			builtInVerification.EnableContactVerification(service)
 			defer builtInVerification.Close()
 		}
 	}
 	registrationDispatcher := accountRegistrationRuntime.Dispatcher()
-	if builtInVerification != nil {
-		registrationDispatcher = builtInVerification.Dispatcher()
-		if !accountRecoveryConfig.Enabled && notificationRuntime != nil {
-			if err := builtInVerification.RegisterAlone(ctx, notificationRuntime); err != nil {
+	var registrationChannels registrationCodeChannels
+	switch {
+	case registrationSlot != nil:
+		registrationDispatcher, registrationChannels = registrationSlot, registrationSlot
+	case builtInSlot != nil:
+		registrationDispatcher, registrationChannels = builtInSlot, builtInSlot
+		if !accountRecoveryConfig.Enabled {
+			registration, err := registerBuiltInRegistrationAlone(ctx, builtInSlot, notificationAuto)
+			if err != nil {
 				return runtimeStageError{stage: "register built-in registration dispatcher", err: err}
+			}
+			defer func() {
+				closeCtx, cancel := context.WithTimeout(context.Background(), notificationConfig.ShutdownTimeout)
+				defer cancel()
+				_ = registration.Close(closeCtx)
+			}()
+		}
+	case accountRegistrationRuntime == nil:
+		registrationChannels = builtInVerification
+		if builtInVerification != nil {
+			registrationDispatcher = builtInVerification.Dispatcher()
+			if !accountRecoveryConfig.Enabled && notificationRuntime != nil {
+				if err := builtInVerification.RegisterAlone(ctx, recoveryNotifications); err != nil {
+					return runtimeStageError{stage: "register built-in registration dispatcher", err: err}
+				}
 			}
 		}
 	}
 	registrationConfig := newRegistrationConfigSource(pool, publicSystemSettings, accountRegistrationConfig,
-		builtInRegistrationService, builtInVerification, accountRecoveryConfig)
+		builtInRegistrationService, registrationChannels, accountRecoveryConfig)
 	accountLoginRuntime, err := openAccountLoginRuntime(
 		ctx, accountRecoveryConfig, notificationConfig, pool, identityService, cfg.CookieSecure, cfg.CookieDomain,
-		accountRegistrationRuntime != nil,
+		registrationMounted,
 	)
+	loginErr := err
 	if err != nil {
-		return runtimeStageError{stage: "initialize account login runtime", err: err}
+		// degraded: GET /v1/auth/login-methods offers no code login
+		slog.Default().Warn("account login runtime unavailable", "error", err)
+		accountLoginRuntime, err = nil, nil
 	}
-	if accountLoginRuntime != nil {
+	var loginSlot *accountMailSlot
+	loginDispatcher := accountLoginRuntime.Dispatcher()
+	if notificationAuto != nil && accountRecoveryConfig.Enabled {
+		loginSlot = newAccountMailSlot("account_login", slog.Default(),
+			func(ctx context.Context, next notificationRuntimeConfig) (*accountMailParts, error) {
+				if !next.Enabled || len(accountLoginTemplates(next)) == 0 {
+					return nil, nil
+				}
+				runtime, err := openAccountLoginRuntime(ctx, accountRecoveryConfig, next, pool, identityService,
+					cfg.CookieSecure, cfg.CookieDomain, registrationMounted)
+				return runtime.parts(), err
+			}, accountLoginRuntime.parts(),
+			accountMailStartError(notificationConfig.Enabled && len(accountLoginTemplates(notificationConfig)) > 0, loginErr))
+		identityService.SetLoginChallengeConsumer(loginSlot)
+		loginDispatcher = loginSlot
+		accountSlots = append(accountSlots, loginSlot)
+		defer loginSlot.Close()
+	} else if accountLoginRuntime != nil {
+		identityService.SetLoginChallengeConsumer(accountLoginRuntime.Consumer())
 		defer accountLoginRuntime.Close()
 	}
 	var trustedRecoveryContext accountrecoveryhttp.ResolveTrustedContext
@@ -1476,19 +1597,29 @@ func runServer() error {
 		}
 		trustedRecoveryContext = resolver.Resolve
 	}
-	accountRecoveryRuntime, err := openAccountRecoveryRuntime(
-		ctx, accountRecoveryConfig, pool, slog.Default(), accountRecoveryRuntimeDependencies{
-			TrustedContext: trustedRecoveryContext, Notifications: notificationRuntime,
-			RegistrationDispatcher: registrationDispatcher,
-			LoginDispatcher:        accountLoginRuntime.Dispatcher(),
-			Identity:               identityService,
-		},
-	)
-	if err != nil {
-		return err
+	openRecovery := func(ctx context.Context) (*accountRecoveryRuntime, error) {
+		return openAccountRecoveryRuntime(
+			ctx, accountRecoveryConfig, pool, slog.Default(), accountRecoveryRuntimeDependencies{
+				TrustedContext: trustedRecoveryContext, Notifications: recoveryNotifications,
+				RegistrationDispatcher: registrationDispatcher,
+				LoginDispatcher:        loginDispatcher,
+				Identity:               identityService,
+			},
+		)
 	}
-	if accountRecoveryRuntime != nil {
-		defer accountRecoveryRuntime.Close()
+	recoveryRuntime, err := openRecovery(ctx)
+	if err != nil {
+		// degraded: the recovery routes answer 503 (withLiveAccountRecoveryRoutes);
+		// auto mode opens it once the settings allow (accountRecoverySlot)
+		slog.Default().Warn("account recovery runtime unavailable", "error", err)
+		recoveryRuntime = nil
+	}
+	accountRecoveryRuntime := &accountRecoverySlot{open: openRecovery, logger: slog.Default(), current: recoveryRuntime,
+		failed: err != nil, retryAt: time.Now().Add(accountMailRetryInterval)}
+	err = nil
+	defer accountRecoveryRuntime.Close()
+	if notificationAuto != nil {
+		notificationAuto.SetAccountRuntimes(&accountMailRuntimes{slots: accountSlots, recovery: accountRecoveryRuntime})
 	}
 	var jobQueryReader jobhttp.Reader
 	var jobCommandReader *jobhttp.PostgresReader
@@ -2168,7 +2299,7 @@ func runServer() error {
 		return runtimeStageError{stage: "initialize system user settings runtime", err: err}
 	}
 	systemMailSettingsHandlerFactory, err := buildSystemMailSettingsHandlerFactory(systemSettingsConfig, pool, identityService, credentialCipher,
-		newSystemMailTestSender(notificationConfig, lazyPluginProviderClients{cfg: cfg, pool: pool}),
+		newSystemMailTestSender(notificationEnvironmentConfig, lazyPluginProviderClients{cfg: cfg, pool: pool}),
 		leaseModuleGate(entitlementguard.NewGuard(pool, time.Now, trust)))
 	if err != nil {
 		return runtimeStageError{stage: "initialize system mail settings runtime", err: err}
@@ -2937,10 +3068,10 @@ func runServer() error {
 		NodeSSHInstallHandlerFactory:               nodeSSHInstallHandlerFactory,
 		NodeInstallGateway:                         nodeInstallGatewayForAPI(gatewayRegistry),
 		NodeReinstallGateway:                       nodeReinstallGatewayForAPI(gatewayRegistry),
-		AccountRegistrationHandlerFactory:          accountRegistrationRuntime.HandlerFactory(),
-		AccountLoginHandlerFactory:                 accountLoginRuntime.HandlerFactory(),
+		AccountRegistrationHandlerFactory:          registrationSlot.HandlerFactory(accountRegistrationRuntime.HandlerFactory()),
+		AccountLoginHandlerFactory:                 loginSlot.HandlerFactory(accountLoginRuntime.HandlerFactory()),
 		BuiltInRegistration:                        builtInRegistration,
-		BuiltInRegistrationChallengeHandler:        builtInVerification.Handler(),
+		BuiltInRegistrationChallengeHandler:        builtInSlot.ChallengeHandler(builtInVerification.Handler()),
 		RegistrationConfig:                         registrationConfig,
 		CertificateAssetHandlerFactory:             certificateAssetHandlerFactory,
 		CertificatePublicationStatusHandlerFactory: certificatePublicationStatusHandlerFactory,
@@ -3086,17 +3217,24 @@ func runServer() error {
 		}
 		readinessProbes = append(readinessProbes, certificatePublicationRuntime)
 	}
+	// auto mode: a login runtime without a sender answers login-methods as
+	// unmounted (password sign-in only) until the settings give it one
+	loginSlot.SetLoginMethodsFallback(api.LoginMethodsDisabledHandler())
+	// notification health is detail only (/health/detail, notification
+	// runtime health): not a readiness probe in the auto mode
+	notificationHealth := notificationHealthSource(notificationConfig, notificationRuntime, notificationAuto)
 	server := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: api.WithClientSourceIP(api.WithImpersonationDelegate(withAnalyticsReplicaMetrics(withAnnouncementRuntimeHealth(withNotificationRuntimeHealth(withCacheControlRuntimeHealthDetail(
 			requireReadiness(
-				withAccountRecoveryRoutes(withOpenRestySecurityRoutes(
+				withLiveAccountRecoveryRoutes(withOpenRestySecurityRoutes(
 					withFirewallRoutes(api.Handler(), firewallHandler), openRestySecurityHandler,
-				), accountRecoveryRuntime), readinessProbes...),
+				), accountRecoveryRuntime.runtime), readinessProbes...),
 			analyticsIngestRuntime,
 			accountRecoveryRuntime,
 			cacheRuntime,
-		), notificationRuntime), announcementRuntime), analyticsReplicaMetricsRuntime))),
+			notificationHealth,
+		), notificationHealth), announcementRuntime), analyticsReplicaMetricsRuntime))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

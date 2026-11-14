@@ -88,6 +88,13 @@ export const accountNotificationEventTypes = [
 
 export type AccountNotificationEventType = typeof accountNotificationEventTypes[number]
 
+export type NotificationChannelHealthState = 'disabled_by_env' | 'not_configured' | 'ready' | 'degraded' | 'rebuilding'
+
+export interface NotificationChannelHealth {
+  state: NotificationChannelHealthState
+  reason?: string
+}
+
 export interface NotificationRuntimeHealth {
   enabled: boolean
   state: string
@@ -96,6 +103,11 @@ export interface NotificationRuntimeHealth {
   enabled_channels: number
   consecutive_failures?: number
   last_error_class?: string
+  mode?: 'explicit' | 'auto' | 'off'
+  channels?: { email?: NotificationChannelHealth, sms?: NotificationChannelHealth }
+  account_senders?: Record<string, 'ready' | 'not_configured' | 'degraded'>
+  last_rebuild_at?: string
+  last_rebuild_error?: string
 }
 
 export type NotificationDeliveryState =
@@ -372,10 +384,29 @@ function isNotificationSubscription(value: unknown): value is NotificationSubscr
     typeof value.changed === 'boolean'
 }
 
+const channelHealthStates = new Set(['disabled_by_env', 'not_configured', 'ready', 'degraded', 'rebuilding'])
+const accountSenderStates = new Set(['ready', 'not_configured', 'degraded'])
+
+function isChannelHealth(value: unknown): value is NotificationChannelHealth {
+  return isRecord(value) && hasAllowedKeys(value, ['state'], ['reason']) && channelHealthStates.has(value.state as string) &&
+    (value.reason === undefined || typeof value.reason === 'string')
+}
+
+function isOptionalHealthDetail(value: Record<string, unknown>) {
+  return (value.mode === undefined || value.mode === 'explicit' || value.mode === 'auto' || value.mode === 'off') &&
+    (value.channels === undefined || isRecord(value.channels) && hasAllowedKeys(value.channels, [], ['email', 'sms']) &&
+      Object.values(value.channels).every(isChannelHealth)) &&
+    (value.account_senders === undefined || isRecord(value.account_senders) &&
+      Object.values(value.account_senders).every((state) => accountSenderStates.has(state as string))) &&
+    (value.last_rebuild_at === undefined || typeof value.last_rebuild_at === 'string') &&
+    (value.last_rebuild_error === undefined || typeof value.last_rebuild_error === 'string')
+}
+
 function isNotificationRuntimeHealth(value: unknown): value is NotificationRuntimeHealth {
   return isRecord(value) && hasAllowedKeys(value, [
     'enabled', 'state', 'ready', 'worker_running', 'enabled_channels',
-  ], ['consecutive_failures', 'last_error_class']) && typeof value.enabled === 'boolean' && typeof value.state === 'string' &&
+  ], ['consecutive_failures', 'last_error_class', 'mode', 'channels', 'account_senders', 'last_rebuild_at', 'last_rebuild_error']) &&
+    isOptionalHealthDetail(value) && typeof value.enabled === 'boolean' && typeof value.state === 'string' &&
     typeof value.ready === 'boolean' && typeof value.worker_running === 'boolean' &&
     Number.isSafeInteger(value.enabled_channels) && (value.enabled_channels as number) >= 0 &&
     (value.consecutive_failures === undefined ||

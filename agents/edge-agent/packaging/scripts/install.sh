@@ -422,14 +422,26 @@ pin_or_check_public_key "${public_key}"
 install_system_account_layout
 establish_completed_state_layout
 release_path=${package_root}/versions/${VERIFIED_VERSION}
+# Same version, different signed manifest: a re-release (lib.sh
+# stage_rerelease_release); only an upgrade may replace an installed release.
+rerelease=false
 if [ -e "${release_path}" ] || [ -L "${release_path}" ]; then
   record_transaction_release false
+  if [ "${upgrade}" = true ] && ! cmp -s "${manifest}" "${release_path}/manifest"; then
+    rerelease=true
+  fi
 else
   record_transaction_release true
 fi
-install_release "${artifact}" "${sbom}" "${manifest}" "${signature}" "${native_package}"
+release_binary=${release_path}/edge-agent
+if [ "${rerelease}" = true ]; then
+  stage_rerelease_release "${artifact}" "${sbom}" "${manifest}" "${signature}" "${native_package}"
+  release_binary=${RERELEASE_STAGED}/edge-agent
+else
+  install_release "${artifact}" "${sbom}" "${manifest}" "${signature}" "${native_package}"
+fi
 failpoint_sigkill after-release-install
-probe_release_version "${package_root}/versions/${VERIFIED_VERSION}/edge-agent" "${VERIFIED_VERSION}"
+probe_release_version "${release_binary}" "${VERIFIED_VERSION}"
 
 if [ "${upgrade}" = false ]; then
   if [ -z "${old_target}" ]; then
@@ -450,7 +462,7 @@ if [ "${upgrade}" = false ]; then
   exit 0
 fi
 
-[ "${old_version}" != "${VERIFIED_VERSION}" ] || {
+[ "${old_version}" != "${VERIFIED_VERSION}" ] || [ "${rerelease}" = true ] || {
   verify_installed_release "${VERIFIED_VERSION}"
   service_action daemon-reload
   record_transaction_commit
@@ -463,21 +475,29 @@ fi
   exit 0
 }
 
-probe_release_config "${package_root}/versions/${VERIFIED_VERSION}/edge-agent" "${config_path}"
+probe_release_config "${release_binary}" "${config_path}"
 record_transaction_service_stop
 service_action stop
 backup_state "${old_version}" "${VERIFIED_VERSION}" upgrade
 record_transaction_state_backup "${STATE_BACKUP}"
 record_transaction_current_switch
+if [ "${rerelease}" = true ]; then
+  swap_rerelease_release
+fi
 atomic_switch_current "versions/${VERIFIED_VERSION}"
 failpoint_sigkill after-current-switch
 service_action daemon-reload
 service_action restart
 wait_for_health "${health_timeout}" "${health_stable}" || die "new release did not become healthy"
-publish_last_upgrade_backup
+# A re-release within one version keeps last-upgrade on the backup of the
+# version change before it, the one rollback.sh to the older version needs.
+if [ "${old_version}" != "${VERIFIED_VERSION}" ]; then
+  publish_last_upgrade_backup
+fi
 record_transaction_commit
 publish_accepted_manifest
 commit_state_layout_migration
+cleanup_transaction_rerelease
 clear_package_transaction
 refresh_toolset_after_upgrade "${package_root}/versions/${VERIFIED_VERSION}" || \
   printf 'cdnca-edge-agent packaging: toolset refresh could not be recorded\n' >&2

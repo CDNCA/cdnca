@@ -29,9 +29,9 @@ func TestNotificationRuntimeConfigRequiresEveryProductionBoundary(t *testing.T) 
 		"NOTIFICATION_RUNTIME_ERROR_BACKOFF_MAX", "NOTIFICATION_RUNTIME_MAX_CONSECUTIVE_FAILURES",
 		"NOTIFICATION_RUNTIME_SEND_TIMEOUT", "NOTIFICATION_RUNTIME_STARTUP_TIMEOUT",
 		"NOTIFICATION_RUNTIME_SHUTDOWN_TIMEOUT", "ACCOUNT_RECOVERY_EMAIL_TEMPLATE_ID",
-		"ACCOUNT_RECOVERY_EMAIL_TEMPLATE_VERSION", "NOTIFICATION_EMAIL_PROVIDER",
-		"NOTIFICATION_SMTP_ADDRESS", "NOTIFICATION_SMTP_SERVER_NAME",
-		"NOTIFICATION_SMTP_USERNAME", "NOTIFICATION_SMTP_PASSWORD", "NOTIFICATION_SMTP_FROM",
+		"ACCOUNT_RECOVERY_EMAIL_TEMPLATE_VERSION",
+		// The SMTP provider values may come from the
+		// system settings page instead, so they are no longer required here
 	}
 	for _, name := range required {
 		t.Run(name, func(t *testing.T) {
@@ -180,7 +180,8 @@ func TestNotificationRuntimeConfigRequiresEverySMSBoundary(t *testing.T) {
 	valid := validNotificationSMSRuntimeEnvironment()
 	for _, name := range []string{
 		"ACCOUNT_RECOVERY_SMS_TEMPLATE_ID", "ACCOUNT_RECOVERY_SMS_TEMPLATE_VERSION",
-		"NOTIFICATION_SMS_PROVIDER", "NOTIFICATION_SMS_ENDPOINT",
+		// NOTIFICATION_SMS_PROVIDER may be left to the page's native provider
+		"NOTIFICATION_SMS_ENDPOINT",
 		"NOTIFICATION_SMS_READY_ENDPOINT", "NOTIFICATION_SMS_AUTH_TOKEN",
 	} {
 		t.Run(name, func(t *testing.T) {

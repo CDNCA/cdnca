@@ -51,6 +51,15 @@
       {
        "name": "mail_secret_fingerprint",
        "type": "string"
+      },
+      {
+       "name": "smtp_password_configured",
+       "type": "boolean",
+       "description": "An SMTP password entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "smtp_password_fingerprint",
+       "type": "string"
       }
      ]
     },
@@ -117,6 +126,12 @@
       "description": "Official mail service credential (DirectMail AccessKeySecret or SendGrid API key) for value.mail_provider. Omitted keeps the stored one; required when choosing an official provider whose credential is not stored."
      },
      {
+      "name": "smtp_password",
+      "type": "string",
+      "description": "SMTP password in plaintext, stored encrypted under the control-api credential keyring and never returned. Omitted keeps the stored one, an empty string clears it. A stored password cannot coexist with value.smtp_password_reference; sending both is refused (smtp_password invalid), and a reference while a password stays stored is refused (value.smtp_password_reference invalid).",
+      "description_zh": "SMTP 明文密码，用 control-api 凭据钥匙串加密保存，从不回显。省略保留原值，空串清除。已存密码与 value.smtp_password_reference 不能同时存在：两者同时填写被拒（smtp_password invalid），保留已存密码时填写引用被拒（value.smtp_password_reference invalid）。"
+     },
+     {
       "name": "value",
       "type": "object",
       "required": true
@@ -159,6 +174,15 @@
       },
       {
        "name": "mail_secret_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "smtp_password_configured",
+       "type": "boolean",
+       "description": "An SMTP password entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "smtp_password_fingerprint",
        "type": "string"
       }
      ]

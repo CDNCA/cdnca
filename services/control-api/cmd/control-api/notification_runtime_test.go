@@ -283,7 +283,7 @@ func TestNotificationProcessRuntimeCloseIsBoundedConcurrentAndHealthIsSafe(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := withNotificationRuntimeHealth(http.NotFoundHandler(), runtime)
+	handler := withNotificationRuntimeHealth(http.NotFoundHandler(), runtime.Health)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, notificationRuntimeHealthPath, nil))
 	body := response.Body.String()

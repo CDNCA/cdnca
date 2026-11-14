@@ -224,6 +224,7 @@ type accountRegistrationRuntime struct {
 	handler        http.Handler
 	dispatcher     notification.AnonymousDispatcher
 	provider       *accountRegistrationContactProvider
+	email, sms     bool
 	shutdownPeriod time.Duration
 }
 
@@ -351,10 +352,21 @@ func openAccountRegistrationRuntime(
 	mux.Handle("POST /v1/auth/registration-challenges", challengeHandler)
 	mux.Handle("POST /v1/auth/registration-challenge-verifications", challengeHandler)
 	providerOwned = false
+	_, email := config.Templates[notification.ChannelEmail]
+	_, sms := config.Templates[notification.ChannelSMS]
 	return &accountRegistrationRuntime{
-		handler: mux, dispatcher: dispatcher, provider: provider,
+		handler: mux, dispatcher: dispatcher, provider: provider, email: email, sms: sms,
 		shutdownPeriod: notificationConfig.ShutdownTimeout,
 	}, nil
+}
+
+// parts is the runtime as an accountMailSlot serves it.
+func (runtime *accountRegistrationRuntime) parts() *accountMailParts {
+	if runtime == nil {
+		return nil
+	}
+	return &accountMailParts{handler: runtime.handler, dispatcher: runtime.dispatcher,
+		email: runtime.email, sms: runtime.sms, close: runtime.Close}
 }
 
 func (runtime *accountRegistrationRuntime) HandlerFactory() httpapi.MountedHandlerFactory {

@@ -83,10 +83,11 @@ func (s *Service) Get(ctx context.Context, actor Actor) (Document, error) {
 		var revision int64
 		var raw []byte
 		var updatedAt time.Time
-		var fingerprint, mailProvider, mailFingerprint *string
-		err := tx.QueryRow(ctx, `SELECT revision,settings,updated_at,sms_secret_fingerprint,mail_secret_provider,mail_secret_fingerprint
+		var fingerprint, mailProvider, mailFingerprint, smtpFingerprint *string
+		err := tx.QueryRow(ctx, `SELECT revision,settings,updated_at,sms_secret_fingerprint,mail_secret_provider,mail_secret_fingerprint,
+			       smtp_password_fingerprint
 			FROM platform_system_mail_settings WHERE platform_scope_id=$1`, actor.ScopeID).
-			Scan(&revision, &raw, &updatedAt, &fingerprint, &mailProvider, &mailFingerprint)
+			Scan(&revision, &raw, &updatedAt, &fingerprint, &mailProvider, &mailFingerprint, &smtpFingerprint)
 		if err == pgx.ErrNoRows {
 			result = Document{Schema: schema, Value: DefaultSettings()}
 			return nil
@@ -103,6 +104,7 @@ func (s *Service) Get(ctx context.Context, actor Actor) (Document, error) {
 			result.SMSSecretConfigured, result.SMSSecretFingerprint = true, *fingerprint
 		}
 		result.setMailSecret(mailProvider, mailFingerprint)
+		result.setSMTPPassword(smtpFingerprint)
 		return nil
 	})
 	if err != nil {
@@ -125,7 +127,11 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 			return Document{}, refusal
 		}
 	}
-	if (request.SMSAccessKeySecret != "" || request.MailSecret != "") && s.cipher == nil {
+	if err := smtpPasswordFieldError(request.Value, request.SMTPPassword, false); err != nil {
+		return Document{}, err
+	}
+	newSMTPPassword := request.SMTPPassword != nil && *request.SMTPPassword != ""
+	if (request.SMSAccessKeySecret != "" || request.MailSecret != "" || newSMTPPassword) && s.cipher == nil {
 		return Document{}, ErrInvalidInput
 	}
 	digest, err := requestDigest(request)
@@ -168,11 +174,14 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		var ciphertext []byte
 		var mailKeyID, mailFingerprint, mailProvider *string
 		var mailCiphertext []byte
+		var smtpKeyID, smtpFingerprint *string
+		var smtpCiphertext []byte
 		err = tx.QueryRow(ctx, `SELECT revision,settings,sms_secret_key_id,sms_secret_ciphertext,sms_secret_fingerprint,
-			       mail_secret_key_id,mail_secret_ciphertext,mail_secret_fingerprint,mail_secret_provider
+			       mail_secret_key_id,mail_secret_ciphertext,mail_secret_fingerprint,mail_secret_provider,
+			       smtp_password_key_id,smtp_password_ciphertext,smtp_password_fingerprint
 			FROM platform_system_mail_settings
 			WHERE platform_scope_id=$1 FOR UPDATE`, actor.ScopeID).Scan(&currentRevision, &currentRaw, &keyID, &ciphertext, &fingerprint,
-			&mailKeyID, &mailCiphertext, &mailFingerprint, &mailProvider)
+			&mailKeyID, &mailCiphertext, &mailFingerprint, &mailProvider, &smtpKeyID, &smtpCiphertext, &smtpFingerprint)
 		exists := err == nil
 		if err != nil && err != pgx.ErrNoRows {
 			return err
@@ -225,21 +234,40 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 			provider, value := request.Value.MailProvider, mailSecretFingerprint(request.MailSecret)
 			mailKeyID, mailCiphertext, mailFingerprint, mailProvider = &sealedKey, sealed, &value, &provider
 		}
+		if err := smtpPasswordFieldError(request.Value, request.SMTPPassword, smtpKeyID != nil); err != nil {
+			return err
+		}
+		smtpPassword := "unchanged"
+		switch {
+		case newSMTPPassword:
+			sealedKey, sealed, sealErr := sealSMTPPassword(s.cipher, actor.ScopeID.String(), *request.SMTPPassword)
+			if sealErr != nil {
+				return sealErr
+			}
+			value := smtpPasswordFingerprint(*request.SMTPPassword)
+			smtpKeyID, smtpCiphertext, smtpFingerprint, smtpPassword = &sealedKey, sealed, &value, "replaced"
+		case request.SMTPPassword != nil && smtpKeyID != nil:
+			smtpKeyID, smtpCiphertext, smtpFingerprint, smtpPassword = nil, nil, nil, "cleared"
+		}
 		nextRevision := currentRevision + 1
 		if exists {
 			_, err = tx.Exec(ctx, `UPDATE platform_system_mail_settings
 				SET revision=$2,settings=$3,updated_by_user_id=$4,updated_at=$5,
 				    sms_secret_key_id=$6,sms_secret_ciphertext=$7,sms_secret_fingerprint=$8,
-				    mail_secret_key_id=$9,mail_secret_ciphertext=$10,mail_secret_fingerprint=$11,mail_secret_provider=$12
+				    mail_secret_key_id=$9,mail_secret_ciphertext=$10,mail_secret_fingerprint=$11,mail_secret_provider=$12,
+				    smtp_password_key_id=$13,smtp_password_ciphertext=$14,smtp_password_fingerprint=$15
 				WHERE platform_scope_id=$1`, actor.ScopeID, nextRevision, string(encoded), actor.UserID, now,
-				keyID, ciphertext, fingerprint, mailKeyID, mailCiphertext, mailFingerprint, mailProvider)
+				keyID, ciphertext, fingerprint, mailKeyID, mailCiphertext, mailFingerprint, mailProvider,
+				smtpKeyID, smtpCiphertext, smtpFingerprint)
 		} else {
 			_, err = tx.Exec(ctx, `INSERT INTO platform_system_mail_settings
 				(platform_scope_id,revision,settings,updated_by_user_id,updated_at,
 				 sms_secret_key_id,sms_secret_ciphertext,sms_secret_fingerprint,
-				 mail_secret_key_id,mail_secret_ciphertext,mail_secret_fingerprint,mail_secret_provider)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, actor.ScopeID, nextRevision, string(encoded), actor.UserID, now,
-				keyID, ciphertext, fingerprint, mailKeyID, mailCiphertext, mailFingerprint, mailProvider)
+				 mail_secret_key_id,mail_secret_ciphertext,mail_secret_fingerprint,mail_secret_provider,
+				 smtp_password_key_id,smtp_password_ciphertext,smtp_password_fingerprint)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, actor.ScopeID, nextRevision, string(encoded), actor.UserID, now,
+				keyID, ciphertext, fingerprint, mailKeyID, mailCiphertext, mailFingerprint, mailProvider,
+				smtpKeyID, smtpCiphertext, smtpFingerprint)
 		}
 		if err != nil {
 			return err
@@ -249,6 +277,7 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 			result.SMSSecretConfigured, result.SMSSecretFingerprint = true, *fingerprint
 		}
 		result.setMailSecret(mailProvider, mailFingerprint)
+		result.setSMTPPassword(smtpFingerprint)
 		mailSecret := "unchanged"
 		if !keepMail {
 			mailSecret = "replaced"
@@ -256,7 +285,7 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		if err := s.auditor.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID,
 			Action: operationUpdate, ResourceType: "platform_system_mail_settings", ResourceID: actor.ScopeID.String(),
 			RequestID: request.RequestID, Result: "success", Payload: map[string]any{"revision": nextRevision,
-				"mail_provider": request.Value.MailProvider, "mail_secret": mailSecret}}); err != nil {
+				"mail_provider": request.Value.MailProvider, "mail_secret": mailSecret, "smtp_password": smtpPassword}}); err != nil {
 			return err
 		}
 		response, err := json.Marshal(result)
@@ -278,6 +307,12 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 func (document *Document) setMailSecret(provider, fingerprint *string) {
 	if provider != nil && fingerprint != nil {
 		document.MailSecretConfigured, document.MailSecretProvider, document.MailSecretFingerprint = true, *provider, *fingerprint
+	}
+}
+
+func (document *Document) setSMTPPassword(fingerprint *string) {
+	if fingerprint != nil {
+		document.SMTPPasswordConfigured, document.SMTPPasswordFingerprint = true, *fingerprint
 	}
 }
 
@@ -319,6 +354,12 @@ func settingsFieldError(value Settings) error {
 	if value.SMTPPort < 1 || value.SMTPPort > 65535 {
 		return field("smtp_port", fielderr.OutOfRange)
 	}
+	if value.SMTPFrom != "" && !mail.ValidAddress(value.SMTPFrom) {
+		return field("smtp_from", fielderr.InvalidFormat)
+	}
+	if !mail.ValidName(value.SMTPFromName) {
+		return field("smtp_from_name", fielderr.InvalidFormat)
+	}
 	return nil
 }
 
@@ -332,7 +373,7 @@ func validText(value string, min, max int) bool {
 
 func requestDigest(request SaveRequest) ([32]byte, error) {
 	// The credential enters the digest only as a hash, never in plaintext.
-	var secretDigest, mailDigest string
+	var secretDigest, mailDigest, smtpDigest string
 	if request.SMSAccessKeySecret != "" {
 		sum := sha256.Sum256([]byte(smsSecretDomain + request.SMSAccessKeySecret))
 		secretDigest = hex.EncodeToString(sum[:])
@@ -341,12 +382,21 @@ func requestDigest(request SaveRequest) ([32]byte, error) {
 		sum := sha256.Sum256([]byte(mailSecretDomain + request.MailSecret))
 		mailDigest = hex.EncodeToString(sum[:])
 	}
+	switch {
+	case request.SMTPPassword == nil:
+	case *request.SMTPPassword == "":
+		smtpDigest = "clear"
+	default:
+		sum := sha256.Sum256([]byte(smtpPasswordDomain + *request.SMTPPassword))
+		smtpDigest = hex.EncodeToString(sum[:])
+	}
 	encoded, err := json.Marshal(struct {
 		ExpectedRevision int64    `json:"expected_revision"`
 		Value            Settings `json:"value"`
 		SecretDigest     string   `json:"secret_digest,omitempty"`
 		MailDigest       string   `json:"mail_secret_digest,omitempty"`
-	}{request.ExpectedRevision, request.Value, secretDigest, mailDigest})
+		SMTPDigest       string   `json:"smtp_password_digest,omitempty"`
+	}{request.ExpectedRevision, request.Value, secretDigest, mailDigest, smtpDigest})
 	if err != nil {
 		return [32]byte{}, err
 	}

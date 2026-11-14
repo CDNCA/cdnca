@@ -116,6 +116,13 @@ func (s *Server) writeBuiltInRegistrationError(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// LoginMethodsDisabledHandler is handleLoginMethodsDisabled for a login
+// runtime that is mounted but has no sender yet (control-api rebuilds it when
+// the system settings change).
+func (s *Server) LoginMethodsDisabledHandler() http.Handler {
+	return http.HandlerFunc(s.handleLoginMethodsDisabled)
+}
+
 // handleLoginMethodsDisabled answers GET /v1/auth/login-methods when the
 // account login runtime is not mounted: same shape as
 // accountloginchallengehttp, code login off, so only password sign-in shows;

@@ -260,6 +260,21 @@ paths:
         '409': { $ref: '#/components/responses/Error' }
         '415': { $ref: '#/components/responses/Error' }
         '500': { $ref: '#/components/responses/Error' }
+  /v1/notification-runtime-health:
+    get:
+      summary: Read notification delivery runtime health
+      operationId: getNotificationRuntimeHealth
+      x-summary-zh: "读取通知发送运行时健康状态"
+      description: >-
+        Outbox worker state with each channel's state, the account flow senders and the last
+        settings rebuild. Reasons and errors are fixed codes and never contain a server address,
+        account name or secret. Also served as the notification member of GET /health/detail.
+        Notification state never makes GET /health/ready fail in the auto mode.
+      security: []
+      responses:
+        '200':
+          description: Notification runtime health.
+          content: { application/json: { schema: { $ref: '#/components/schemas/NotificationRuntimeHealth' } } }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -415,6 +430,55 @@ components:
         email_supported: { type: boolean, description: 'Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered.' }
         revision: { type: integer, format: int64, minimum: 1 }
         changed: { type: boolean }
+    NotificationChannelHealth:
+      type: object
+      additionalProperties: false
+      required: [state]
+      properties:
+        state: { type: string, enum: [disabled_by_env, not_configured, ready, degraded, rebuilding] }
+        reason:
+          type: string
+          enum: [config_incomplete, settings_unreadable, channel_switched_off, worker_not_running]
+          description: Set when state is degraded.
+    NotificationRuntimeHealth:
+      type: object
+      additionalProperties: false
+      required: [enabled, state, ready, worker_running, enabled_channels, consecutive_failures]
+      properties:
+        enabled: { type: boolean }
+        state: { type: string, enum: [disabled, built, running, ready, backoff, stopping, stopped, failed] }
+        ready: { type: boolean }
+        worker_running: { type: boolean }
+        enabled_channels: { type: integer, minimum: 0 }
+        consecutive_failures: { type: integer, minimum: 0 }
+        last_error_class: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        mode:
+          type: string
+          enum: [explicit, auto, off]
+          description: 'NOTIFICATION_RUNTIME_ENABLED: true (explicit), unset/auto/false (auto, follows the system settings without a restart) or off.'
+        channels:
+          type: object
+          additionalProperties: false
+          properties:
+            email: { $ref: '#/components/schemas/NotificationChannelHealth' }
+            sms: { $ref: '#/components/schemas/NotificationChannelHealth' }
+        account_senders:
+          type: object
+          description: Auto mode. Senders of the account flows, rebuilt with the outbox worker.
+          additionalProperties: false
+          properties:
+            account_login: { $ref: '#/components/schemas/NotificationAccountSenderState' }
+            account_registration: { $ref: '#/components/schemas/NotificationAccountSenderState' }
+            registration_verification: { $ref: '#/components/schemas/NotificationAccountSenderState' }
+            account_recovery: { $ref: '#/components/schemas/NotificationAccountSenderState' }
+        last_rebuild_at: { type: string, format: date-time, description: Auto mode. Last settings rebuild. }
+        last_rebuild_error:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{0,63}$'
+          description: 'Auto mode. Error code of the last rebuild (settings_unreadable, worker_start_failed, <flow>_unavailable); absent when it succeeded.'
+    NotificationAccountSenderState:
+      type: string
+      enum: [ready, not_configured, degraded]
     DeliveryPolicyEvent:
       type: object
       additionalProperties: false

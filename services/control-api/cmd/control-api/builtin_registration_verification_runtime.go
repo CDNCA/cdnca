@@ -44,6 +44,7 @@ type builtInRegistrationVerification struct {
 	dispatcher     notification.AnonymousDispatcher
 	provider       *accountRegistrationContactProvider
 	channels       map[notification.Channel]bool
+	proofs         accountregistration.ProofAuthority
 	registration   accountRecoveryDispatcherRegistration
 	shutdownPeriod time.Duration
 }
@@ -145,16 +146,35 @@ func openBuiltInRegistrationVerification(
 	if err != nil {
 		return nil, err
 	}
-	service.EnableContactVerification(proofAuthority)
+	// the caller enables contact verification on service with proofs (once:
+	// the auto mode rebuilds this runtime behind an accountMailSlot)
 	channels := map[notification.Channel]bool{}
 	for channel := range templates {
 		channels[channel] = true
 	}
 	owned = false
 	return &builtInRegistrationVerification{
-		handler: handler, dispatcher: dispatcher, provider: provider, channels: channels,
+		handler: handler, dispatcher: dispatcher, provider: provider, channels: channels, proofs: proofAuthority,
 		shutdownPeriod: notificationConfig.ShutdownTimeout,
 	}, nil
+}
+
+// EnableContactVerification lets service accept this runtime's proofs.
+func (verification *builtInRegistrationVerification) EnableContactVerification(service *accountregistration.BuiltInService) {
+	if verification != nil && service != nil {
+		service.EnableContactVerification(verification.proofs)
+	}
+}
+
+// parts is the runtime as an accountMailSlot serves it (the dispatcher
+// includes the registration-only mux of RegisterAlone's case).
+func (verification *builtInRegistrationVerification) parts() *accountMailParts {
+	if verification == nil {
+		return nil
+	}
+	return &accountMailParts{handler: verification.handler, dispatcher: verification.dispatcher,
+		email: verification.channels[notification.ChannelEmail], sms: verification.channels[notification.ChannelSMS],
+		close: verification.Close}
 }
 
 // Handler serves the two challenge routes (nil: not mounted).

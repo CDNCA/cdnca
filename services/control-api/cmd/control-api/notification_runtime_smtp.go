@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cdnca/cdnca/libs/mail"
 	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/notificationruntime"
 	"github.com/cdnca/cdnca/services/control-api/internal/theme"
@@ -108,6 +109,7 @@ func (transport *smtpTLSTransport) Send(
 
 	transport.mu.Lock()
 	from := transport.config.From
+	fromName := transport.config.FromName
 	serverName := transport.config.ServerName
 	transport.mu.Unlock()
 	if err := client.Mail(from); err != nil {
@@ -126,7 +128,7 @@ func (transport *smtpTLSTransport) Send(
 			html = rendered
 		}
 	}
-	payload := buildSMTPMessage(from, serverName, message, html)
+	payload := buildNamedSMTPMessage(from, fromName, serverName, message, html)
 	if _, err := data.Write([]byte(payload)); err != nil {
 		_ = data.Close()
 		return notificationruntime.ProviderResult{}, stableSMTPError(ctx)
@@ -300,6 +302,12 @@ func validSMTPProviderMessage(message notificationruntime.ProviderMessage) bool 
 }
 
 func buildSMTPMessage(from, serverName string, message notificationruntime.ProviderMessage, html []byte) string {
+	return buildNamedSMTPMessage(from, "", serverName, message, html)
+}
+
+// buildNamedSMTPMessage adds the sender display name (system settings
+// smtp_from_name, RFC 2047 encoded) to the From header.
+func buildNamedSMTPMessage(from, fromName, serverName string, message notificationruntime.ProviderMessage, html []byte) string {
 	digest := sha256.Sum256([]byte(message.IdempotencyKey))
 	body := strings.ReplaceAll(strings.ReplaceAll(message.Body, "\r\n", "\n"), "\r", "\n")
 	body = strings.ReplaceAll(body, "\n", "\r\n")
@@ -307,8 +315,8 @@ func buildSMTPMessage(from, serverName string, message notificationruntime.Provi
 		body += "\r\n\r\n" + message.ActionURL
 	}
 	headers := fmt.Sprintf(
-		"From: <%s>\r\nTo: <%s>\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <cdnca-%x@%s>\r\nMIME-Version: 1.0\r\n",
-		from, message.Contact, foldedSMTPSubject(message.Subject), time.Now().UTC().Format(time.RFC1123Z), digest, serverName,
+		"From: %s<%s>\r\nTo: <%s>\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <cdnca-%x@%s>\r\nMIME-Version: 1.0\r\n",
+		smtpDisplayName(fromName), from, message.Contact, foldedSMTPSubject(message.Subject), time.Now().UTC().Format(time.RFC1123Z), digest, serverName,
 	)
 	trailer := fmt.Sprintf("X-CDNCA-Idempotency-Key: %s\r\n", message.IdempotencyKey)
 	if len(html) == 0 {
@@ -358,3 +366,10 @@ func foldedSMTPSubject(subject string) string {
 }
 
 var _ notificationruntime.ProviderTransport = (*smtpTLSTransport)(nil)
+
+func smtpDisplayName(name string) string {
+	if name == "" || !mail.ValidName(name) {
+		return ""
+	}
+	return mime.BEncoding.Encode("UTF-8", name) + " "
+}

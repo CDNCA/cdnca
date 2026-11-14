@@ -2312,7 +2312,7 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				}
 				authoritativeDeploymentRecords[record.RecordKey] = struct{}{}
 				item := workItem{kind: workDeployment, key: record.RecordKey}
-				if scopedCommand && created {
+				if scopedCommand && created && !record.ExecutionDone {
 					if err := c.store.appendStatuses(record.RecordKey, []*agentv1.DeploymentStatus{scopedQueuedStatus(command, c.now())}, false); err != nil {
 						return true, err
 					}

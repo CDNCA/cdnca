@@ -141,6 +141,7 @@ func TestOpenAPIRouteAudit(t *testing.T) {
 	for _, p := range []string{
 		"/v1/account-recovery/requests",
 		"/v1/account-recovery/confirmations",
+		"/v1/notification-runtime-health",
 		"/v1/firewall/policy",
 		"/v1/firewall/policy/recover",
 		"/v1/firewall/hits",

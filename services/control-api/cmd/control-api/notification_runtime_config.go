@@ -22,7 +22,17 @@ const (
 type notificationRuntimeEnvLookup func(string) (string, bool)
 
 type notificationRuntimeConfig struct {
-	Enabled               bool
+	Enabled bool
+	// Auto (NOTIFICATION_RUNTIME_ENABLED unset, auto or false): the runtime
+	// turns itself on at start when the system settings page holds a
+	// complete sender (resolveNotificationRuntime); off forces it off.
+	Auto bool
+	// Requested: true or auto (not off). The system settings test mail is
+	// offered whenever the runtime was not forced off.
+	Requested bool
+	// Unavailable is the operator-readable reason per channel ("email",
+	// "sms") that could not be configured; the runtime runs without it.
+	Unavailable           map[string]string
 	Worker                notification.WorkerConfig
 	RecoveryTemplates     map[notification.Channel]notification.TemplateRef
 	EmailProvider         string
@@ -49,6 +59,7 @@ type smtpTLSConfig struct {
 	Username   string
 	Password   []byte
 	From       string
+	FromName   string
 	CAFile     string
 	StartTLS   bool
 }
@@ -70,15 +81,51 @@ func loadNotificationRuntimeConfigFromEnv(lookup notificationRuntimeEnvLookup) (
 	if lookup == nil {
 		return notificationRuntimeConfig{}, errors.New("notification runtime environment lookup is required")
 	}
-	enabled, err := notificationEnvBool(lookup, "NOTIFICATION_RUNTIME_ENABLED", false)
-	if err != nil {
-		return notificationRuntimeConfig{}, err
-	}
-	if !enabled {
+	// true: on, everything from the environment (as before); off: forced
+	// off; unset, auto or false: auto. false is what install-control.sh has
+	// always written into the pinned control.env, so it cannot mean an
+	// operator decision; an operator stops the runtime with off.
+	mode, _ := lookup("NOTIFICATION_RUNTIME_ENABLED")
+	switch mode {
+	case "off":
 		return notificationRuntimeConfig{}, nil
+	case "true":
+		return loadNotificationRuntimeConfigMode(lookup, false)
+	case "", "auto", "false":
+		return loadNotificationRuntimeConfigMode(notificationRuntimeDefaults(lookup), true)
 	}
+	return notificationRuntimeConfig{}, errors.New("NOTIFICATION_RUNTIME_ENABLED must be true, auto, false (same as auto) or off")
+}
 
-	config := notificationRuntimeConfig{Enabled: true}
+// notificationAutoDefaults are the worker settings of the auto mode when the
+// environment does not set them (the compose.full.yaml values).
+var notificationAutoDefaults = map[string]string{
+	"NOTIFICATION_WORKER_BATCH_SIZE": "16", "NOTIFICATION_WORKER_LEASE_DURATION": "30s",
+	"NOTIFICATION_WORKER_LEASE_SAFETY_MARGIN": "5s", "NOTIFICATION_WORKER_MAX_ATTEMPTS": "5",
+	"NOTIFICATION_WORKER_BASE_DELAY": "1s", "NOTIFICATION_WORKER_MAX_DELAY": "1m",
+	"NOTIFICATION_RUNTIME_IDLE_WAIT": "250ms", "NOTIFICATION_RUNTIME_ERROR_BACKOFF_BASE": "500ms",
+	"NOTIFICATION_RUNTIME_ERROR_BACKOFF_MAX": "5s", "NOTIFICATION_RUNTIME_MAX_CONSECUTIVE_FAILURES": "5",
+	"NOTIFICATION_RUNTIME_SEND_TIMEOUT": "10s", "NOTIFICATION_RUNTIME_STARTUP_TIMEOUT": "20s",
+	"NOTIFICATION_RUNTIME_SHUTDOWN_TIMEOUT": "10s",
+}
+
+func notificationRuntimeDefaults(lookup notificationRuntimeEnvLookup) notificationRuntimeEnvLookup {
+	return func(name string) (string, bool) {
+		if value, exists := lookup(name); exists {
+			return value, true
+		}
+		value, exists := notificationAutoDefaults[name]
+		return value, exists
+	}
+}
+
+// loadNotificationRuntimeConfigMode: explicit (NOTIFICATION_RUNTIME_ENABLED=
+// true) reads the senders from the environment; auto takes them from the
+// system settings page only (mergePersistedNotificationMailSettings) and is
+// enabled by resolveNotificationRuntime.
+func loadNotificationRuntimeConfigMode(lookup notificationRuntimeEnvLookup, auto bool) (notificationRuntimeConfig, error) {
+	var err error
+	config := notificationRuntimeConfig{Enabled: !auto, Auto: auto, Requested: true}
 	failed := true
 	defer func() {
 		if failed {
@@ -132,8 +179,25 @@ func loadNotificationRuntimeConfigFromEnv(lookup notificationRuntimeEnvLookup) (
 	}
 
 	config.RecoveryTemplates, err = loadNotificationRecoveryTemplates(lookup)
+	if auto && errors.Is(err, errNoNotificationRecoveryTemplates) {
+		// the worker verifies one zero-variable template per enabled
+		// channel; the seeded login templates (migration 197) qualify
+		config.RecoveryTemplates, err = map[notification.Channel]notification.TemplateRef{
+			notification.ChannelEmail: accountLoginFallbackTemplates[notification.ChannelEmail],
+			notification.ChannelSMS:   accountLoginFallbackTemplates[notification.ChannelSMS],
+		}, nil
+	}
 	if err != nil {
 		return notificationRuntimeConfig{}, err
+	}
+	if auto {
+		// page-driven senders; only the SMTP sender fallback and CA are read
+		config.EmailProvider = notificationEmailProviderSettings
+		if err := loadNotificationSMTPOptional(lookup, &config); err != nil {
+			return notificationRuntimeConfig{}, err
+		}
+		failed = false
+		return config, nil
 	}
 	if _, enabled := config.RecoveryTemplates[notification.ChannelEmail]; enabled {
 		if err := loadNotificationEmailProvider(lookup, &config); err != nil {
@@ -204,6 +268,8 @@ func newConfiguredSMSTransport(
 	return newHTTPSJSON(config.SMS)
 }
 
+var errNoNotificationRecoveryTemplates = errors.New("at least one account recovery notification template is required")
+
 func loadNotificationRecoveryTemplates(
 	lookup notificationRuntimeEnvLookup,
 ) (map[notification.Channel]notification.TemplateRef, error) {
@@ -236,7 +302,7 @@ func loadNotificationRecoveryTemplates(
 		}
 	}
 	if len(templates) == 0 {
-		return nil, errors.New("at least one account recovery notification template is required")
+		return nil, errNoNotificationRecoveryTemplates
 	}
 	return templates, nil
 }
@@ -245,51 +311,58 @@ func loadNotificationEmailProvider(
 	lookup notificationRuntimeEnvLookup,
 	config *notificationRuntimeConfig,
 ) error {
-	var err error
-	if config.EmailProvider, err = notificationRequiredEnv(lookup, "NOTIFICATION_EMAIL_PROVIDER"); err != nil {
-		return err
+	provider, exists := lookup("NOTIFICATION_EMAIL_PROVIDER")
+	if !exists || provider == "" || provider == notificationEmailProviderSettings {
+		// The sender comes from the system settings page (SMTP, an official
+		// mail service or a mail plugin).
+		config.EmailProvider = notificationEmailProviderSettings
+		return loadNotificationSMTPOptional(lookup, config)
 	}
-	if config.EmailProvider == notificationEmailProviderSettings {
-		// The sender comes from the system settings page (official mail
-		// service or mail plugin); no SMTP environment is read.
-		return nil
-	}
-	if config.EmailProvider != notificationEmailProviderSMTPTLS &&
-		config.EmailProvider != notificationEmailProviderSMTPSTARTTLS {
+	if provider != notificationEmailProviderSMTPTLS && provider != notificationEmailProviderSMTPSTARTTLS {
 		return errors.New("NOTIFICATION_EMAIL_PROVIDER must be smtp_tls, smtp_starttls or settings")
 	}
-	config.SMTP.StartTLS = config.EmailProvider == notificationEmailProviderSMTPSTARTTLS
-	if config.SMTP.Address, err = notificationRequiredEnv(lookup, "NOTIFICATION_SMTP_ADDRESS"); err != nil {
-		return err
+	config.EmailProvider = provider
+	config.SMTP.StartTLS = provider == notificationEmailProviderSMTPSTARTTLS
+	// Every SMTP value may instead come from the system settings page; what
+	// neither side supplies leaves email unavailable with a reason
+	// (resolveNotificationRuntime) instead of failing the start.
+	if address, exists := lookup("NOTIFICATION_SMTP_ADDRESS"); exists {
+		if !validSMTPAddress(address) {
+			return errors.New("NOTIFICATION_SMTP_ADDRESS must be a host:port without credentials")
+		}
+		config.SMTP.Address = address
+		host, _, _ := net.SplitHostPort(address)
+		config.SMTP.ServerName = host
 	}
-	if !validSMTPAddress(config.SMTP.Address) {
-		return errors.New("NOTIFICATION_SMTP_ADDRESS must be a host:port without credentials")
+	if serverName, exists := lookup("NOTIFICATION_SMTP_SERVER_NAME"); exists {
+		if !validSMTPServerName(serverName) {
+			return errors.New("NOTIFICATION_SMTP_SERVER_NAME is invalid")
+		}
+		config.SMTP.ServerName = serverName
 	}
-	if config.SMTP.ServerName, err = notificationRequiredEnv(lookup, "NOTIFICATION_SMTP_SERVER_NAME"); err != nil {
-		return err
+	if username, exists := lookup("NOTIFICATION_SMTP_USERNAME"); exists {
+		if username == "" || len(username) > 256 || strings.ContainsAny(username, ":\r\n\x00") {
+			return errors.New("NOTIFICATION_SMTP_USERNAME is invalid")
+		}
+		config.SMTP.Username = username
 	}
-	if !validSMTPServerName(config.SMTP.ServerName) {
-		return errors.New("NOTIFICATION_SMTP_SERVER_NAME is invalid")
+	if password, exists := lookup("NOTIFICATION_SMTP_PASSWORD"); exists {
+		if password == "" || len(password) > 4096 || strings.ContainsAny(password, "\r\n\x00") {
+			return errors.New("NOTIFICATION_SMTP_PASSWORD is invalid")
+		}
+		config.SMTP.Password = []byte(password)
 	}
-	if config.SMTP.Username, err = notificationRequiredEnv(lookup, "NOTIFICATION_SMTP_USERNAME"); err != nil {
-		return err
-	}
-	if len(config.SMTP.Username) > 256 || strings.ContainsAny(config.SMTP.Username, ":\r\n\x00") {
-		return errors.New("NOTIFICATION_SMTP_USERNAME is invalid")
-	}
-	password, err := notificationRequiredEnv(lookup, "NOTIFICATION_SMTP_PASSWORD")
-	if err != nil {
-		return err
-	}
-	if len(password) > 4096 || strings.ContainsAny(password, "\r\n\x00") {
-		return errors.New("NOTIFICATION_SMTP_PASSWORD is invalid")
-	}
-	config.SMTP.Password = []byte(password)
-	if config.SMTP.From, err = notificationRequiredEnv(lookup, "NOTIFICATION_SMTP_FROM"); err != nil {
-		return err
-	}
-	if !validSMTPMailbox(config.SMTP.From) {
-		return errors.New("NOTIFICATION_SMTP_FROM must be one canonical email address")
+	return loadNotificationSMTPOptional(lookup, config)
+}
+
+// loadNotificationSMTPOptional reads the SMTP settings every mode accepts:
+// the fallback sender and a private CA.
+func loadNotificationSMTPOptional(lookup notificationRuntimeEnvLookup, config *notificationRuntimeConfig) error {
+	if from, exists := lookup("NOTIFICATION_SMTP_FROM"); exists {
+		if !validSMTPMailbox(from) {
+			return errors.New("NOTIFICATION_SMTP_FROM must be one canonical email address")
+		}
+		config.SMTP.From = from
 	}
 	if caFile, exists := lookup("NOTIFICATION_SMTP_CA_FILE"); exists {
 		if caFile == "" || strings.TrimSpace(caFile) != caFile || strings.ContainsRune(caFile, '\x00') {
@@ -305,6 +378,11 @@ func loadNotificationSMSProvider(
 	config *notificationRuntimeConfig,
 ) error {
 	var err error
+	if provider, exists := lookup("NOTIFICATION_SMS_PROVIDER"); !exists || provider == "" {
+		// Like email: a native provider (aliyun/submail) chosen on the system
+		// settings page is adopted by mergePersistedNativeSMS.
+		return nil
+	}
 	if config.SMSProvider, err = notificationRequiredEnv(lookup, "NOTIFICATION_SMS_PROVIDER"); err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package systemmailsettings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,11 +23,15 @@ type TestRequest struct {
 	RequestID  string
 }
 
-// TestTarget is what the process sender gets. Secret is cleared after Send.
+// TestTarget is what the process sender gets. Secret and SMTPPassword are
+// cleared after Send.
 type TestTarget struct {
 	Value  Settings
 	Secret []byte
-	To     string
+	// SMTPPassword is the stored SMTP password (nil: none saved, the
+	// runtime environment password is used).
+	SMTPPassword []byte
+	To           string
 }
 
 // TestSender sends the test mail and returns the provider message id or a
@@ -39,6 +44,9 @@ type TestResult struct {
 	Provider  string `json:"provider"`
 	MessageID string `json:"message_id,omitempty"`
 	Code      string `json:"code,omitempty"`
+	// Missing names what the page still lacks (code config_incomplete),
+	// as save body fields: value.smtp_address, smtp_password, ...
+	Missing []string `json:"missing,omitempty"`
 }
 
 // Test requires system_configuration.manage and audits the attempt (provider,
@@ -56,7 +64,8 @@ func (s *Service) Test(ctx context.Context, actor Actor, request TestRequest, se
 	if official && request.MailSecret != "" {
 		target.Secret = []byte(request.MailSecret)
 	}
-	defer func() { clear(target.Secret) }()
+	smtp := MailProviderKind(request.Value.MailProvider) == MailKindSMTP
+	defer func() { clear(target.Secret); clear(target.SMTPPassword) }()
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := authorize(ctx, tx, actor, "system_configuration.manage"); err != nil {
 			return err
@@ -64,6 +73,20 @@ func (s *Service) Test(ctx context.Context, actor Actor, request TestRequest, se
 		// a test sends through the provider, so even the saved one needs
 		// its module (stored "" never equals an official provider)
 		if err := s.checkMailModule(ctx, tx, request.Value.MailProvider, ""); err != nil {
+			return err
+		}
+		if smtp {
+			var keyID *string
+			var ciphertext []byte
+			err := tx.QueryRow(ctx, `SELECT smtp_password_key_id,smtp_password_ciphertext
+				FROM platform_system_mail_settings WHERE platform_scope_id=$1`, actor.ScopeID).Scan(&keyID, &ciphertext)
+			if err == pgx.ErrNoRows || err == nil && keyID == nil {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			target.SMTPPassword, err = openSMTPPassword(s.cipher, actor.ScopeID.String(), *keyID, ciphertext)
 			return err
 		}
 		if !official || target.Secret != nil {
@@ -92,9 +115,12 @@ func (s *Service) Test(ctx context.Context, actor Actor, request TestRequest, se
 	sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	messageID, sendErr := send(sendCtx, target)
 	cancel()
+	var incomplete *MissingError
 	switch failure := mail.ErrorOf(sendErr); {
 	case sendErr == nil:
 		result.OK, result.MessageID = true, messageID
+	case errors.As(sendErr, &incomplete):
+		result.Code, result.Missing = CodeConfigIncomplete, incomplete.Fields
 	case failure != nil:
 		result.Code = failure.Code
 	default:
@@ -108,7 +134,7 @@ func (s *Service) Test(ctx context.Context, actor Actor, request TestRequest, se
 		return s.auditor.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID,
 			Action: operationTest, ResourceType: "platform_system_mail_settings", ResourceID: actor.ScopeID.String(),
 			RequestID: request.RequestID, Result: outcome, Payload: map[string]any{"mail_provider": request.Value.MailProvider,
-				"to": request.To, "code": result.Code}})
+				"to": request.To, "code": result.Code, "missing": result.Missing}})
 	}); err != nil {
 		return TestResult{}, fmt.Errorf("audit platform system mail test: %w", err)
 	}

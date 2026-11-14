@@ -247,11 +247,18 @@ func (runtime *accountRecoveryRuntime) Close() error {
 }
 
 func withAccountRecoveryRoutes(next http.Handler, runtime *accountRecoveryRuntime) http.Handler {
+	return withLiveAccountRecoveryRoutes(next, func() *accountRecoveryRuntime { return runtime })
+}
+
+// withLiveAccountRecoveryRoutes reads the runtime per request: the auto
+// notification mode opens it once the settings allow (accountRecoverySlot).
+func withLiveAccountRecoveryRoutes(next http.Handler, current func() *accountRecoveryRuntime) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != accountRecoveryRequestPath && request.URL.Path != accountRecoveryConfirmationPath {
 			next.ServeHTTP(writer, request)
 			return
 		}
+		runtime := current()
 		if runtime == nil || runtime.handler == nil {
 			requestID := ""
 			if values := request.Header.Values("X-Request-ID"); len(values) == 1 && validRuntimeRequestID(values[0]) {

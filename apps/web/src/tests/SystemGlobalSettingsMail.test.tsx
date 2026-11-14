@@ -20,7 +20,7 @@ vi.mock('../components/useGrantedModules', async (importOriginal) => ({
 const initial: PlatformSystemMailSettingsDocument = {
   schema: 'cdnca.platform-system-mail-settings/v1', revision: 3,
   value: {
-    smtp_address: 'smtp.example.test', smtp_ssl: true, smtp_port: 465, smtp_user: '', smtp_password_reference: '',
+    smtp_address: 'smtp.example.test', smtp_ssl: true, smtp_port: 465, smtp_user: '', smtp_password_reference: '', smtp_from: '', smtp_from_name: '',
     sms_provider: '', sms_access_key_id: '', sms_access_key_reference: '', sms_signature_name: '', sms_template_map: '',
     mail_provider: '', mail_region: '', mail_access_key_id: '', mail_from: '', mail_from_name: '',
   },

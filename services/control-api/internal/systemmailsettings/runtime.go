@@ -24,6 +24,21 @@ type RuntimeSettings struct {
 	mailKeyID      *string
 	mailCiphertext []byte
 	mailProvider   *string
+
+	smtpKeyID      *string
+	smtpCiphertext []byte
+}
+
+// HasSMTPPassword reports whether the settings page stored an SMTP password.
+func (settings RuntimeSettings) HasSMTPPassword() bool { return settings.smtpKeyID != nil }
+
+// OpenSMTPPassword decrypts the stored SMTP password. The caller must clear
+// the returned bytes.
+func (settings RuntimeSettings) OpenSMTPPassword(cipher SecretCipher) ([]byte, error) {
+	if settings.smtpKeyID == nil {
+		return nil, ErrUnavailable
+	}
+	return openSMTPPassword(cipher, settings.scopeID.String(), *settings.smtpKeyID, settings.smtpCiphertext)
 }
 
 // OpenMailSecret decrypts the official mail service credential of the
@@ -54,7 +69,8 @@ func ReadRuntime(ctx context.Context, pool *pgxpool.Pool) (RuntimeSettings, erro
 	}
 	rows, err := pool.Query(ctx, `SELECT settings.revision,settings.settings,settings.platform_scope_id,
 		       settings.sms_secret_key_id,settings.sms_secret_ciphertext,
-		       settings.mail_secret_key_id,settings.mail_secret_ciphertext,settings.mail_secret_provider
+		       settings.mail_secret_key_id,settings.mail_secret_ciphertext,settings.mail_secret_provider,
+		       settings.smtp_password_key_id,settings.smtp_password_ciphertext
 		FROM platform_system_mail_settings settings
 		JOIN access_scopes scope ON scope.id=settings.platform_scope_id
 		WHERE scope.kind='platform' AND scope.tenant_id IS NULL
@@ -72,7 +88,7 @@ func ReadRuntime(ctx context.Context, pool *pgxpool.Pool) (RuntimeSettings, erro
 		}
 		var raw []byte
 		if err := rows.Scan(&result.Revision, &raw, &result.scopeID, &result.secretKeyID, &result.secretCiphertext,
-			&result.mailKeyID, &result.mailCiphertext, &result.mailProvider); err != nil {
+			&result.mailKeyID, &result.mailCiphertext, &result.mailProvider, &result.smtpKeyID, &result.smtpCiphertext); err != nil {
 			return RuntimeSettings{}, ErrUnavailable
 		}
 		if json.Unmarshal(raw, &result.Value) != nil || !validSettings(result.Value) {

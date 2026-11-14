@@ -45,7 +45,7 @@ paths:
   /v1/admin/system-mail-settings/tests:
     post:
       summary: Send a test mail with the provider on the page
-      description: Sends one test mail through value.mail_provider without saving anything, so a provider can be checked before switching. An official provider uses mail_secret or, only for the same provider, the stored credential; SMTP uses the runtime SMTP password. The attempt is audited without the credential.
+      description: Sends one test mail through value.mail_provider without saving anything, so a provider can be checked before switching. An official provider uses mail_secret or, only for the same provider, the stored credential; SMTP uses the page's SMTP fields with the stored SMTP password (smtp_password_configured), filling gaps from NOTIFICATION_SMTP_* only under smtp_tls/smtp_starttls; what is still missing comes back as code config_incomplete with missing. The attempt is audited without the credential.
       operationId: testPlatformSystemMailSettings
       x-required-permissions: [system_configuration.manage]
       parameters:
@@ -75,11 +75,16 @@ paths:
                   ok: {type: boolean}
                   provider: {type: string}
                   message_id: {type: string}
-                  code: {type: string, description: 'Stable failure code (libs/mail): config_invalid, credential_rejected, sender_rejected, recipient_rejected, provider_rate_limited, provider_unavailable, provider_rejected, provider_response_unknown, tls_required, or a plugin error code.'}
+                  missing:
+                    type: array
+                    items: {type: string}
+                    description: 'With code config_incomplete: the save body fields the SMTP sender still lacks (value.smtp_address, value.smtp_user, smtp_password, value.smtp_from).'
+                    x-description-zh: code 为 config_incomplete 时，SMTP 发信还缺的保存字段（value.smtp_address、value.smtp_user、smtp_password、value.smtp_from）。
+                  code: {type: string, description: 'Stable failure code (libs/mail): config_incomplete (see missing), config_invalid, credential_rejected, sender_rejected, recipient_rejected, provider_rate_limited, provider_unavailable, provider_rejected, provider_response_unknown, tls_required, or a plugin error code.'}
         '400': {description: Validation error}
         '401': {description: Unauthenticated}
         '403': {description: Permission denied, or the chosen official mail service's module (module.mail.<provider>) is not licensed (system_mail_settings_module_not_licensed)}
-        '503': {description: The notification runtime (email) is not enabled}
+        '503': {description: 'The notification runtime is forced off (NOTIFICATION_RUNTIME_ENABLED=off). Unset, auto or false turn it on at start when this page holds a complete sender.'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -102,8 +107,8 @@ components:
             message: {type: string}
             request_id: {type: string}
             details:
-              description: On a 400 system_mail_settings_validation_error that names the refused field of the save body (value.<field>, sms_access_key_secret or mail_secret) and a machine reason.
-              x-description-zh: 能定位字段的 400 system_mail_settings_validation_error 附带 field（保存请求体路径 value.<字段>、sms_access_key_secret、mail_secret）与 reason 机器码。
+              description: On a 400 system_mail_settings_validation_error that names the refused field of the save body (value.<field>, sms_access_key_secret, mail_secret or smtp_password) and a machine reason.
+              x-description-zh: 能定位字段的 400 system_mail_settings_validation_error 附带 field（保存请求体路径 value.<字段>、sms_access_key_secret、mail_secret、smtp_password）与 reason 机器码。
               type: object
               additionalProperties: false
               required: [field, reason]
@@ -128,6 +133,8 @@ components:
         mail_secret_configured: {type: boolean, description: An official mail service credential is stored (never returned).}
         mail_secret_provider: {type: string, enum: [aliyun, sendgrid], description: The provider the stored credential belongs to; it is reused only for that provider.}
         mail_secret_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        smtp_password_configured: {type: boolean, description: An SMTP password entered on the settings page is stored encrypted (never returned).}
+        smtp_password_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
     WriteRequest:
       type: object
       additionalProperties: false
@@ -138,6 +145,12 @@ components:
           maxLength: 512
           writeOnly: true
           description: Official mail service credential (DirectMail AccessKeySecret or SendGrid API key) for value.mail_provider. Omitted keeps the stored one; required when choosing an official provider whose credential is not stored.
+        smtp_password:
+          type: string
+          maxLength: 1024
+          writeOnly: true
+          description: SMTP password in plaintext, stored encrypted under the control-api credential keyring and never returned. Omitted keeps the stored one, an empty string clears it. A stored password cannot coexist with value.smtp_password_reference; sending both is refused (smtp_password invalid), and a reference while a password stays stored is refused (value.smtp_password_reference invalid).
+          x-description-zh: SMTP 明文密码，用 control-api 凭据钥匙串加密保存，从不回显。省略保留原值，空串清除。已存密码与 value.smtp_password_reference 不能同时存在：两者同时填写被拒（smtp_password invalid），保留已存密码时填写引用被拒（value.smtp_password_reference invalid）。
         value:
           allOf:
             - {$ref: '#/components/schemas/Settings'}
@@ -156,7 +169,16 @@ components:
         smtp_ssl: {type: boolean}
         smtp_port: {type: integer, minimum: 1, maximum: 65535}
         smtp_user: {type: string, maxLength: 256}
-        smtp_password_reference: {$ref: '#/components/schemas/SecretReference'}
+        smtp_password_reference:
+          allOf:
+            - {$ref: '#/components/schemas/SecretReference'}
+          description: Advanced. A Vault/KMS reference that must match the runtime NOTIFICATION_SMTP_PASSWORD_REFERENCE; the plaintext password goes in the write-only smtp_password instead.
+        smtp_from:
+          type: string
+          maxLength: 254
+          description: SMTP sender address. Empty falls back to smtp_user when it is an email address, then to NOTIFICATION_SMTP_FROM.
+          x-description-zh: SMTP 发件地址。留空时使用 smtp_user（为邮箱地址时），再回退到 NOTIFICATION_SMTP_FROM。
+        smtp_from_name: {type: string, maxLength: 64, description: SMTP sender display name.}
         sms_provider: {type: string, maxLength: 64}
         sms_access_key_id: {type: string, maxLength: 256}
         sms_access_key_reference: {$ref: '#/components/schemas/SecretReference'}

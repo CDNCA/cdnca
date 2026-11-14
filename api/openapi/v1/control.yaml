@@ -5890,6 +5890,8 @@ paths:
     $ref: '../../control-notifications.openapi.yaml#/paths/~1v1~1account~1notification-messages'
   /v1/account/notification-subscriptions/{event_type}:
     $ref: '../../control-notifications.openapi.yaml#/paths/~1v1~1account~1notification-subscriptions~1{event_type}'
+  /v1/notification-runtime-health:
+    $ref: '../../control-notifications.openapi.yaml#/paths/~1v1~1notification-runtime-health'
   /v1/admin/jobs:
     $ref: '../../control-jobs.openapi.yaml#/paths/~1v1~1admin~1jobs'
   /v1/admin/jobs/kinds:

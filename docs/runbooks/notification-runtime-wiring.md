@@ -4,6 +4,16 @@ The control API notification runtime is disabled by default. Enabling it starts 
 
 This wiring does not use a noop sender. Startup fails closed when any required database, worker, template, resolver, TLS, authentication, or provider dependency is unavailable.
 
+## Switch (`NOTIFICATION_RUNTIME_ENABLED`)
+
+| Value | Behaviour |
+| --- | --- |
+| unset, `auto`, `false` | Auto. At start the runtime turns itself on when the system settings page holds a complete sender: SMTP (address, user, saved password, sender address or an email-address user), an official mail service, a mail plugin, or a native SMS provider (aliyun/submail). Worker settings default to the `compose.full.yaml` values and the seeded `account_login_verification` templates; any variable below still overrides. A sender that is incomplete or does not answer leaves its channel off with a warning log instead of failing the start. Changes of the notification channel switches or of the system mail settings rebuild the outbox worker within 15 seconds (one revision query per 15 seconds), no restart. The same check rebuilds the senders of account login codes, registration (Turnstile and built-in codes) and opens account recovery once it can run: requests already sending finish on the old sender; a sender that cannot be built keeps the previous one with a warning log and is retried on the next settings change or after 5 minutes. Health: `notification` in `GET /health/detail` and `GET /v1/notification-runtime-health` show each channel (`disabled_by_env`, `not_configured`, `ready`, `degraded` with a reason code, `rebuilding`), the account senders and the last rebuild time and error code, never an address or secret. Notification state never fails `/health/ready` in this mode. `false` is what `install-control.sh` wrote into the pinned `control.env` before; new installs write `auto`. |
+| `off` | Forced off, whatever the page holds; the settings page test mail answers 503. |
+| `true` | Explicit, configured as below. SMTP and SMS values the page supplies may be omitted; a channel neither side completes is reported as unavailable in the log and the runtime runs without it. Settings changes apply at the next restart. |
+
+Account registration, login and recovery runtimes that cannot open their sender start degraded with a warning: registration falls back to the built-in flow, `GET /v1/auth/login-methods` offers no code login and the recovery routes answer 503.
+
 ## Required configuration
 
 Set `NOTIFICATION_RUNTIME_ENABLED=true` and provide every variable below:

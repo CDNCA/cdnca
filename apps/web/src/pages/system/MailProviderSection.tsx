@@ -71,6 +71,9 @@ export default function MailProviderSection({ accessToken, canManage, document, 
     try {
       const result = await systemMailSettingsApi.test(accessToken, draft, testTo.trim(), official ? secret || undefined : undefined)
       if (result.ok) message.success(t('mailProvider.testSent', { id: result.message_id ? `（${result.message_id}）` : '' }))
+      else if (result.code === 'config_incomplete') feedback.error(t('mailProvider.testIncomplete', {
+        fields: (result.missing ?? []).map((field) => t(`mailProvider.missingFields.${field.replace(/^value\./, '')}`, { defaultValue: field })).join(t('mailProvider.listSeparator')),
+      }))
       else feedback.error(t('mailProvider.testFailed', { code: result.code ?? '' }))
     } catch (reason) {
       const code = reason instanceof ApiError ? reason.code : 'network_error'

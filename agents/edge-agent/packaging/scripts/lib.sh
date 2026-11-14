@@ -886,6 +886,111 @@ install_release() {
   verify_installed_release "${VERIFIED_VERSION}"
 }
 
+# Same-version re-release: the registry republishes a fixed build under an
+# unchanged version with a higher release_sequence. versions/<version> keeps
+# its name (the helper, rollback.sh and the native runtime address a release by
+# version), so the new build is staged at .rerelease-<version> and swapped in
+# only while the Agent is stopped; the replaced build waits at
+# .superseded-<version> until the transaction commits, and recovery moves it
+# back. Only a signed manifest whose release_sequence is above the installed
+# release's replaces it; check_release_replay already refused one below the
+# accepted sequence, and an equal or lower one is refused here.
+rerelease_paths() {
+  validate_version "$1"
+  rerelease_versions_root=$(root_path /usr/lib/cdnca-edge-agent/versions)
+  RERELEASE_STAGED=${rerelease_versions_root}/.rerelease-$1
+  RERELEASE_SUPERSEDED=${rerelease_versions_root}/.superseded-$1
+}
+
+remove_rerelease_dir() {
+  if [ -e "$1" ] || [ -L "$1" ]; then
+    [ -d "$1" ] && [ ! -L "$1" ] || die "re-release staging path is unsafe"
+    rm -rf -- "$1"
+    durable_sync "$(dirname -- "$1")"
+  fi
+}
+
+# Runs in a subshell so the candidate's VERIFIED_* facts stay untouched.
+installed_release_sequence() {
+  verify_installed_release "$1" >/dev/null
+  printf '%s\n' "${VERIFIED_SEQUENCE}"
+}
+
+stage_rerelease_release() {
+  artifact=$1
+  sbom=$2
+  manifest=$3
+  signature=$4
+  native=${5:-}
+  release_root=$(root_path "/usr/lib/cdnca-edge-agent/versions/${VERIFIED_VERSION}")
+  versions_root=$(dirname -- "${release_root}")
+  rerelease_paths "${VERIFIED_VERSION}"
+  assert_safe_tree "${RERELEASE_STAGED}"
+  assert_safe_tree "${RERELEASE_SUPERSEDED}"
+  installed_sequence=$(installed_release_sequence "${VERIFIED_VERSION}") ||
+    die "installed release ${VERIFIED_VERSION} failed verification"
+  [ "${VERIFIED_SEQUENCE}" -gt "${installed_sequence}" ] ||
+    die_reason "${COMPAT_RELEASE_SEQUENCE_REPLAY#reason_code=}" \
+      "release ${VERIFIED_VERSION} sequence ${VERIFIED_SEQUENCE} is not above the installed sequence ${installed_sequence}"
+  # Present here only after a committed re-release whose cleanup was cut short.
+  remove_rerelease_dir "${RERELEASE_STAGED}"
+  remove_rerelease_dir "${RERELEASE_SUPERSEDED}"
+  install -d -m 0755 "${RERELEASE_STAGED}"
+  install -m 0555 "${artifact}" "${RERELEASE_STAGED}/edge-agent"
+  install -m 0444 "${sbom}" "${RERELEASE_STAGED}/edge-agent.spdx.json"
+  install -m 0444 "${manifest}" "${RERELEASE_STAGED}/manifest"
+  install -m 0444 "${signature}" "${RERELEASE_STAGED}/manifest.sig"
+  if [ -n "${native}" ]; then
+    install -m 0444 "${native}" "${RERELEASE_STAGED}/native.tar.gz"
+    [ "$(sha256_file "${RERELEASE_STAGED}/native.tar.gz")" = "${NATIVE_PACKAGE_SHA256}" ] || die "native package changed during installation"
+  fi
+  durable_sync "${RERELEASE_STAGED}"
+  durable_sync "${versions_root}"
+  (verify_bundle "${RERELEASE_STAGED}/edge-agent" "${RERELEASE_STAGED}/edge-agent.spdx.json" \
+    "${RERELEASE_STAGED}/manifest" "${RERELEASE_STAGED}/manifest.sig" \
+    "$(root_path /etc/cdnca-edge-agent/package-signing.pem)") >/dev/null ||
+    die "staged re-release failed verification"
+}
+
+# The Agent is stopped and the transaction records the current switch intent.
+swap_rerelease_release() {
+  release_root=$(root_path "/usr/lib/cdnca-edge-agent/versions/${VERIFIED_VERSION}")
+  versions_root=$(dirname -- "${release_root}")
+  rerelease_paths "${VERIFIED_VERSION}"
+  [ -d "${RERELEASE_STAGED}" ] && [ ! -L "${RERELEASE_STAGED}" ] || die "staged re-release is unavailable"
+  [ ! -e "${RERELEASE_SUPERSEDED}" ] && [ ! -L "${RERELEASE_SUPERSEDED}" ] || die "superseded release path exists"
+  [ -d "${release_root}" ] && [ ! -L "${release_root}" ] || die "release ${VERIFIED_VERSION} is not installed"
+  mv -T "${release_root}" "${RERELEASE_SUPERSEDED}"
+  durable_sync "${versions_root}"
+  failpoint_sigkill rerelease-mid-swap
+  mv -T "${RERELEASE_STAGED}" "${release_root}"
+  durable_sync "${versions_root}"
+  verify_installed_release "${VERIFIED_VERSION}"
+}
+
+# Rollback of an upgrade transaction: put the superseded build back.
+restore_transaction_rerelease() {
+  [ "${TX_OPERATION}" = upgrade ] || return 0
+  release_root=$(root_path "/usr/lib/cdnca-edge-agent/versions/${TX_NEW_VERSION}")
+  versions_root=$(dirname -- "${release_root}")
+  rerelease_paths "${TX_NEW_VERSION}"
+  if [ -e "${RERELEASE_SUPERSEDED}" ] || [ -L "${RERELEASE_SUPERSEDED}" ]; then
+    [ -d "${RERELEASE_SUPERSEDED}" ] && [ ! -L "${RERELEASE_SUPERSEDED}" ] || die "superseded release path is unsafe"
+    remove_rerelease_dir "${release_root}"
+    mv -T "${RERELEASE_SUPERSEDED}" "${release_root}"
+    durable_sync "${versions_root}"
+  fi
+  remove_rerelease_dir "${RERELEASE_STAGED}"
+}
+
+# A committed transaction: the superseded build is no longer needed.
+cleanup_transaction_rerelease() {
+  [ "${TX_OPERATION}" = upgrade ] || return 0
+  rerelease_paths "${TX_NEW_VERSION}"
+  remove_rerelease_dir "${RERELEASE_SUPERSEDED}"
+  remove_rerelease_dir "${RERELEASE_STAGED}"
+}
+
 process_start_ticks() {
   process_pid=$1
   validate_uint "${process_pid}" "process pid"
@@ -1600,6 +1705,7 @@ rollback_package_transaction() {
     rm -f -- "${pinned_key}"
     [ ! -d "$(dirname -- "${pinned_key}")" ] || durable_sync "$(dirname -- "${pinned_key}")"
   fi
+  restore_transaction_rerelease
   remove_transaction_release
   service_action daemon-reload
   if [ "${TX_SERVICE_STOP_INTENT}" = 1 ] && [ -n "${TX_OLD_TARGET}" ] && \
@@ -1622,7 +1728,9 @@ clear_package_transaction() {
 recover_incomplete_package_transaction() {
   [ -e "${PACKAGE_TRANSACTION}" ] || [ -L "${PACKAGE_TRANSACTION}" ] || return 0
   load_package_transaction "${PACKAGE_TRANSACTION}"
-  if ! package_transaction_committed; then
+  if package_transaction_committed; then
+    cleanup_transaction_rerelease
+  else
     rollback_package_transaction
   fi
   clear_package_transaction

@@ -12,6 +12,7 @@ import {
   type NotificationChannels,
   type NotificationDeliveryAttempt,
   type NotificationDeliveryLog,
+  type NotificationRuntimeHealth,
   type NotificationSubscription,
   type NotificationTemplate,
   type SubscriptionWrite,
@@ -296,6 +297,7 @@ function NotificationSettingsPageContent({ accessToken, principal, scopeID, sess
               channels={adminQuery.data!.channels}
               templates={adminQuery.data!.templates.items}
               ready={adminQuery.data!.health.ready && adminQuery.data!.health.worker_running}
+              health={adminQuery.data!.health}
               canManage={canManage}
               saving={adminMutation.isPending}
               locked={adminPending !== null}
@@ -460,13 +462,14 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
   )
 }
 
-function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates, ready, canManage, saving, locked, onSave, templateSaving, templateError, pendingTemplate, onRetryTemplate, onAbandonTemplate, onCreateTemplate, t }: {
+function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates, ready, health, canManage, saving, locked, onSave, templateSaving, templateError, pendingTemplate, onRetryTemplate, onAbandonTemplate, onCreateTemplate, t }: {
   accessToken: string
   scopeID: string
   sessionEpoch: number
   channels: NotificationChannels
   templates: NotificationTemplate[]
   ready: boolean
+  health: NotificationRuntimeHealth
   canManage: boolean
   saving: boolean
   locked: boolean
@@ -509,6 +512,23 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
           <Checkbox checked={emailEnabled} disabled={!channels.email_supported || !canManage || saving || locked} onChange={(event) => setEmailEnabled(event.target.checked)}>{t('channels.email')}</Checkbox>
           {!channels.email_supported ? <Typography.Text type="secondary">{t('values.unsupported')}</Typography.Text> : null}
           <Tag color={ready ? 'success' : 'default'}>{ready ? t('health.ready') : t('health.notReady')}</Tag>
+          {(['email', 'sms'] as const).map((channel) => {
+            const item = health.channels?.[channel]
+            if (!item) return null
+            const values = { channel: t(`channels.${channel}`), state: t(`health.states.${item.state}`) }
+            return (
+              <Tag key={channel} color={item.state === 'ready' ? 'success' : item.state === 'degraded' ? 'warning' : 'default'}>
+                {item.reason
+                  ? t('health.channelReason', { ...values, reason: t(`health.reasons.${item.reason}`, { defaultValue: item.reason }) })
+                  : t('health.channel', values)}
+              </Tag>
+            )
+          })}
+          {health.last_rebuild_error
+            ? <Typography.Text type="warning">{t('health.lastRebuildError', { code: health.last_rebuild_error })}</Typography.Text>
+            : health.last_rebuild_at
+              ? <Typography.Text type="secondary">{t('health.lastRebuild', { time: new Date(health.last_rebuild_at).toLocaleString() })}</Typography.Text>
+              : null}
           <Button icon={<Save size={14} />} disabled={!canManage || locked || (smsEnabled === channels.sms_enabled && emailEnabled === channels.email_enabled)} loading={saving} onClick={() => onSave({ sms_enabled: smsEnabled, email_enabled: emailEnabled })}>{t('actions.save')}</Button>
           <Button icon={<Plus size={14} />} disabled={!canManage || locked} onClick={() => setTemplateOpen(true)}>{t('actions.newTemplate')}</Button>
           <Button icon={<ListChecks size={14} />} onClick={() => setDeliveryOpen(true)}>{t('deliveries.actions.open')}</Button>

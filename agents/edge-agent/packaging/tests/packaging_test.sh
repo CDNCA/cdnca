@@ -456,6 +456,11 @@ case "\$1" in
     [ -f "${workdir}/service-active" ] || exit 3
     target=\$(readlink "${root}/usr/lib/cdnca-edge-agent/current")
     [ "\${target}" != versions/vbad ] || exit 3
+    # A same-version re-release keeps the directory name; its build is unhealthy by manifest.
+    if [ -f "${workdir}/unhealthy-manifest" ] && \
+      cmp -s "${workdir}/unhealthy-manifest" "${root}/usr/lib/cdnca-edge-agent/current/manifest"; then
+      exit 3
+    fi
     ;;
   *) exit 2 ;;
 esac
@@ -1384,6 +1389,80 @@ assert_absent "${root}/usr/lib/cdnca-edge-agent/versions/vbad"
 assert_package_lock_idle
 assert_no_bundle_staging
 
+# Same-version re-release: v2 rebuilt under a higher release_sequence.
+versions_dir=${root}/usr/lib/cdnca-edge-agent/versions
+assert_no_rerelease_staging() {
+  assert_absent "${versions_dir}/.rerelease-v2"
+  assert_absent "${versions_dir}/.superseded-v2"
+}
+for rerelease_sequence in 10 11 12 13; do
+  make_bundle "${workdir}/v2r${rerelease_sequence}" v2 "${rerelease_sequence}"
+done
+make_bundle "${workdir}/v2r10-other" v2 10
+sed -i 's/^build_time=.*/build_time=2026-07-23T00:00:00Z/' "${workdir}/v2r10-other/manifest"
+resign_bundle "${workdir}/v2r10-other"
+make_bundle "${workdir}/v2r9" v2 9
+# A higher sequence replaces versions/v2 in place; last-upgrade stays on the v1 -> v2 backup.
+printf '%s\n' v2-state >"${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt"
+last_backup_before_rerelease=$(readlink "${root}/var/lib/cdnca-edge-agent-backups/last-upgrade")
+upgrade_bundle "${workdir}/v2r10" >/dev/null
+[ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/v2 ] || fail "re-release changed the current target"
+cmp -s "${workdir}/v2r10/manifest" "${versions_dir}/v2/manifest" || fail "re-release did not install the new manifest"
+grep -Fx 'release_sequence=10' "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest" >/dev/null || fail "re-release did not advance replay state"
+[ "$(readlink "${root}/var/lib/cdnca-edge-agent-backups/last-upgrade")" = "${last_backup_before_rerelease}" ] || fail "re-release moved last-upgrade"
+[ "$(sed -n '1p' "${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt")" = v2-state ] || fail "re-release lost state"
+assert_no_rerelease_staging
+assert_package_lock_idle
+assert_no_transaction_staging
+# Equal (other bytes) and lower sequences are refused before any write or service action.
+accepted_digest=$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")
+service_actions_before=$(wc -l <"${workdir}/service-actions" | tr -d ' ')
+for rejected in v2r10-other:COMPAT_RELEASE_SEQUENCE_CONFLICT v2r9:COMPAT_RELEASE_SEQUENCE_REPLAY; do
+  if upgrade_bundle "${workdir}/${rejected%%:*}" >"${workdir}/rerelease-reject.out" 2>&1; then
+    fail "${rejected%%:*} re-release was accepted"
+  fi
+  grep -F "${rejected#*:}" "${workdir}/rerelease-reject.out" >/dev/null || fail "${rejected%%:*} refused without ${rejected#*:}"
+  cmp -s "${workdir}/v2r10/manifest" "${versions_dir}/v2/manifest" || fail "${rejected%%:*} changed versions/v2"
+  [ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${accepted_digest}" ] || fail "${rejected%%:*} changed replay state"
+  [ "$(wc -l <"${workdir}/service-actions" | tr -d ' ')" = "${service_actions_before}" ] || fail "${rejected%%:*} touched the service"
+  assert_no_rerelease_staging
+  assert_package_lock_idle
+done
+# An unhealthy re-release puts the replaced build back and keeps the accepted sequence.
+cp "${workdir}/v2r11/manifest" "${workdir}/unhealthy-manifest"
+if upgrade_bundle "${workdir}/v2r11" >/dev/null 2>&1; then
+  fail "unhealthy re-release was accepted"
+fi
+rm -f -- "${workdir}/unhealthy-manifest"
+[ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/v2 ] || fail "unhealthy re-release changed current"
+cmp -s "${workdir}/v2r10/manifest" "${versions_dir}/v2/manifest" || fail "unhealthy re-release did not restore the replaced build"
+[ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${accepted_digest}" ] || fail "unhealthy re-release advanced replay state"
+[ "$(sed -n '1p' "${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt")" = v2-state ] || fail "unhealthy re-release lost state"
+[ -f "${workdir}/service-active" ] || fail "unhealthy re-release left the old build stopped"
+assert_no_rerelease_staging
+assert_package_lock_idle
+# SIGKILL between the two renames: the next holder puts the replaced build back.
+if CDNCA_PACKAGE_FAILPOINT=rerelease-mid-swap upgrade_bundle "${workdir}/v2r12" >/dev/null 2>&1; then
+  fail "SIGKILL mid re-release swap returned success"
+fi
+[ -d "${versions_dir}/.superseded-v2" ] || fail "mid-swap SIGKILL fixture did not move the replaced build"
+upgrade_bundle "${workdir}/v2r10" >/dev/null
+cmp -s "${workdir}/v2r10/manifest" "${versions_dir}/v2/manifest" || fail "mid-swap recovery did not restore the replaced build"
+[ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${accepted_digest}" ] || fail "mid-swap recovery advanced replay state"
+assert_no_rerelease_staging
+assert_package_lock_idle
+assert_no_transaction_staging
+# The first-install path still refuses a different manifest for an installed version.
+if install_bundle "${workdir}/v2r13" >"${workdir}/rerelease-install.out" 2>&1; then
+  fail "install accepted a different manifest for an installed version"
+fi
+cmp -s "${workdir}/v2r10/manifest" "${versions_dir}/v2/manifest" || fail "refused install changed versions/v2"
+[ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${accepted_digest}" ] || fail "refused install changed replay state"
+assert_no_rerelease_staging
+assert_package_lock_idle
+printf '%s\n' v2-state >"${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt"
+accepted_digest=$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")
+
 # Restore copy failure and interruption preserve current, accepted sequence, and state.
 for restore_failpoint in state-copy state-restore-interrupt; do
   if CDNCA_PACKAGE_FAILPOINT=${restore_failpoint} \
@@ -1474,7 +1553,8 @@ assert_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest"
 
 # Reinstalling after a default uninstall reuses the retained canonical state.
 retained_state_before_reinstall=$(sha256_file "${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt")
-install_bundle "${workdir}/v2" >/dev/null
+# The retained replay state is the re-release v2r10 (sequence 10) accepted above.
+install_bundle "${workdir}/v2r10" >/dev/null
 [ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/v2 ] || fail "reinstall after uninstall did not select v2"
 [ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt")" = "${retained_state_before_reinstall}" ] || \
   fail "reinstall after uninstall changed retained state"

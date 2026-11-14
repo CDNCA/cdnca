@@ -28,6 +28,8 @@ type accountLoginRuntime struct {
 	handler        http.Handler
 	dispatcher     notification.AnonymousDispatcher
 	provider       *accountRegistrationContactProvider
+	consumer       identity.LoginChallengeConsumer
+	email, sms     bool
 	shutdownPeriod time.Duration
 }
 
@@ -133,10 +135,13 @@ func openAccountLoginRuntime(
 	if err != nil {
 		return nil, err
 	}
-	issuer.SetLoginChallengeConsumer(service)
 	providerOwned = false
-	return &accountLoginRuntime{handler: handler, dispatcher: dispatcher, provider: provider,
-		shutdownPeriod: notificationConfig.ShutdownTimeout}, nil
+	_, email := templates[notification.ChannelEmail]
+	_, sms := templates[notification.ChannelSMS]
+	// the caller hands consumer to issuer.SetLoginChallengeConsumer (once:
+	// the auto mode rebuilds this runtime behind an accountMailSlot)
+	return &accountLoginRuntime{handler: handler, dispatcher: dispatcher, provider: provider, consumer: service,
+		email: email, sms: sms, shutdownPeriod: notificationConfig.ShutdownTimeout}, nil
 }
 
 // loadAccountLoginCaptchaSecrets reads the Tencent/GeeTest secrets that the
@@ -178,6 +183,23 @@ func (runtime *accountLoginRuntime) Dispatcher() notification.AnonymousDispatche
 		return nil
 	}
 	return runtime.dispatcher
+}
+
+// Consumer is the login challenge consumer for identity (nil: not running).
+func (runtime *accountLoginRuntime) Consumer() identity.LoginChallengeConsumer {
+	if runtime == nil {
+		return nil
+	}
+	return runtime.consumer
+}
+
+// parts is the runtime as an accountMailSlot serves it.
+func (runtime *accountLoginRuntime) parts() *accountMailParts {
+	if runtime == nil {
+		return nil
+	}
+	return &accountMailParts{handler: runtime.handler, dispatcher: runtime.dispatcher, consumer: runtime.consumer,
+		email: runtime.email, sms: runtime.sms, close: runtime.Close}
 }
 
 func (runtime *accountLoginRuntime) Close() error {
