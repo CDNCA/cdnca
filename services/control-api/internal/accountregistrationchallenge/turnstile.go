@@ -29,8 +29,12 @@ const (
 )
 
 type TurnstileConfig struct {
-	Endpoint         string
-	Secret           string
+	Endpoint string
+	Secret   string
+	// SecretFunc, instead of Secret, supplies the secret on every Verify (the
+	// one saved on the system settings page). Exactly one
+	// of Secret and SecretFunc is set.
+	SecretFunc       func(context.Context) (string, error)
 	ExpectedHostname string
 	ExpectedAction   string
 	CAFile           string
@@ -42,6 +46,7 @@ type TurnstileConfig struct {
 type TurnstileVerifier struct {
 	endpoint         url.URL
 	secret           string
+	secretFunc       func(context.Context) (string, error)
 	expectedHostname string
 	expectedAction   string
 	client           *http.Client
@@ -70,7 +75,8 @@ func NewTurnstileVerifier(config TurnstileConfig) (*TurnstileVerifier, error) {
 	}
 	endpoint, err := url.Parse(config.Endpoint)
 	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil ||
-		endpoint.RawQuery != "" || endpoint.Fragment != "" || len(config.Secret) < 16 ||
+		endpoint.RawQuery != "" || endpoint.Fragment != "" ||
+		(config.SecretFunc == nil && len(config.Secret) < 16) || (config.SecretFunc != nil && config.Secret != "") ||
 		!validTurnstileMetadata(config.ExpectedHostname) || !validTurnstileMetadata(config.ExpectedAction) ||
 		config.Timeout <= 0 || config.Timeout > maximumTurnstileTimeout ||
 		config.MaxResponseBytes < 1024 || config.MaxResponseBytes > maximumTurnstileMaxBytes ||
@@ -98,7 +104,7 @@ func NewTurnstileVerifier(config TurnstileConfig) (*TurnstileVerifier, error) {
 		},
 	}
 	return &TurnstileVerifier{
-		endpoint: *endpoint, secret: config.Secret, expectedHostname: config.ExpectedHostname,
+		endpoint: *endpoint, secret: config.Secret, secretFunc: config.SecretFunc, expectedHostname: config.ExpectedHostname,
 		expectedAction: config.ExpectedAction, client: config.Client, timeout: config.Timeout,
 		maxResponseBytes: config.MaxResponseBytes,
 	}, nil
@@ -161,8 +167,16 @@ func (verifier *TurnstileVerifier) Verify(ctx context.Context, request HumanVeri
 		request.Source == "" || !metadataPattern.MatchString(request.IdempotencyKey) {
 		return ErrHumanInvalid
 	}
+	secret := verifier.secret
+	if verifier.secretFunc != nil {
+		current, err := verifier.secretFunc(ctx)
+		if err != nil || len(current) < 16 {
+			return ErrHumanUnavailable
+		}
+		secret = current
+	}
 	values := url.Values{
-		"secret": {verifier.secret}, "response": {request.Token}, "remoteip": {request.Source},
+		"secret": {secret}, "response": {request.Token}, "remoteip": {request.Source},
 		"idempotency_key": {request.IdempotencyKey},
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, verifier.timeout)

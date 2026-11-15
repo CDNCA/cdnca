@@ -58,6 +58,10 @@ func TestPostgresLoginSecurityAtomicSession(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `INSERT INTO platform_system_user_settings(platform_scope_id,revision,settings,updated_by_user_id,updated_at) VALUES($1,1,$2,$3,now())`, bootstrap.ScopeID, settingsJSON, bootstrap.UserID); err != nil {
 		t.Fatal(err)
 	}
+	// code login is in effect only with its notification channel on
+	if _, err := pool.Exec(t.Context(), `UPDATE notification_channel_settings SET email_enabled=true,sms_enabled=true WHERE singleton`); err != nil {
+		t.Fatal(err)
+	}
 	contacts := new(capturingLoginContacts)
 	clock := time.Now().UTC()
 	service, err := NewService(pool, Config{DigestKey: []byte(strings.Repeat("d", 32)), Policy: staticLoginPolicy{emailEnabled: true, smsEnabled: true}, Issuer: issuer, Contacts: contacts, Clock: func() time.Time { return clock }, Entropy: strings.NewReader(strings.Repeat("\x00", 4096)), SourceLimit: 1000, SubjectLimit: 1000})

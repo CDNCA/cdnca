@@ -234,9 +234,10 @@ func TestSiteRuntimeV2ActivationStateMachineRecoversAfterExpandFailure(t *testin
 		[32]byte(digest) != fixture.previousArtifactDigest {
 		t.Fatalf("recovered canary runs %s/%x, want the previous config", configID, digest)
 	}
-	// The binding keeps the previous policy and the IPv6 projection of the
-	// phase and recovery rollouts left the scope's source_revision alone.
-	assertBindingActiveAndSource(t, fixture.activationFixture, 1, fixture.sourceRevision)
+	// The binding keeps the previous policy; the scope's source_revision moved
+	// only by the claim's reservation and the recovery republication
+	// (republishRecoveredScopeTx), not by the IPv6 projection of the rollouts.
+	assertBindingActiveAndSource(t, fixture.activationFixture, 1, fixture.sourceRevision+2)
 }
 
 func digestBytes(digest [32]byte) []byte { return digest[:] }

@@ -30,6 +30,37 @@ func ReadLoginSecurityTx(ctx context.Context, tx pgx.Tx, userID, scopeID uuid.UU
 	return result, nil
 }
 
+// ReadEffectiveLoginSecurityTx is the policy a sign-in obeys: the per-user
+// email/SMS second step counts only while that notification channel switch is
+// on (off, the user signs in as usual). The allowlist always holds.
+func ReadEffectiveLoginSecurityTx(ctx context.Context, tx pgx.Tx, userID, scopeID uuid.UUID) (ManagedUserLoginSecurity, error) {
+	result, err := ReadLoginSecurityTx(ctx, tx, userID, scopeID)
+	if err != nil || result.LoginVerification == "none" {
+		return result, err
+	}
+	email, sms, err := systemusersettings.ChannelSwitchesTx(ctx, tx)
+	if err != nil {
+		return ManagedUserLoginSecurity{}, fmt.Errorf("%w: read channel switches", ErrLoginSecurityUnavailable)
+	}
+	if result.LoginVerification == "email" && !email || result.LoginVerification == "sms" && !sms {
+		result.LoginVerification = "none"
+	}
+	return result, nil
+}
+
+// loginChannelOffTx reports whether the notification channel behind a
+// per-user second step is switched off.
+func loginChannelOffTx(ctx context.Context, tx pgx.Tx, method string) (bool, error) {
+	if method != "email" && method != "sms" {
+		return false, nil
+	}
+	email, sms, err := systemusersettings.ChannelSwitchesTx(ctx, tx)
+	if err != nil {
+		return false, ErrLoginSecurityUnavailable
+	}
+	return method == "email" && !email || method == "sms" && !sms, nil
+}
+
 func checkLoginChannelTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, channel, contact string, consumer LoginChallengeConsumer) error {
 	if contact == "" {
 		return ErrLoginSecurityContactRequired
@@ -84,6 +115,10 @@ func (s *Store) getManagedUserLoginSecurity(ctx context.Context, actor Actor, us
 		}
 		var err error
 		result, err = ReadLoginSecurityTx(ctx, tx, userID, scopeID)
+		if err != nil {
+			return err
+		}
+		result.ChannelPending, err = loginChannelOffTx(ctx, tx, result.LoginVerification)
 		return err
 	})
 	return result, stableLoginSecurityError(err)
@@ -116,16 +151,26 @@ func (s *Store) updateManagedUserLoginSecurity(ctx context.Context, actor Actor,
 		if previous.Revision != input.ExpectedRevision {
 			return ErrRevisionConflict
 		}
+		pending := false
 		if input.LoginVerification != "none" {
 			contact := email
 			if input.LoginVerification == "sms" {
 				contact = phone
 			}
-			if err := checkLoginChannelTx(ctx, tx, input.TenantScopeID, input.LoginVerification, contact, consumer); err != nil {
+			// A switched-off channel is not refused: the setting is saved
+			// and takes effect once the channel is turned on.
+			if pending, err = loginChannelOffTx(ctx, tx, input.LoginVerification); err != nil {
+				return err
+			}
+			if pending {
+				if contact == "" {
+					return ErrLoginSecurityContactRequired
+				}
+			} else if err := checkLoginChannelTx(ctx, tx, input.TenantScopeID, input.LoginVerification, contact, consumer); err != nil {
 				return err
 			}
 		}
-		result = ManagedUserLoginSecurity{UserID: input.UserID, TenantScopeID: input.TenantScopeID, Revision: previous.Revision + 1, LoginVerification: input.LoginVerification, LoginAllowlist: input.LoginAllowlist}
+		result = ManagedUserLoginSecurity{UserID: input.UserID, TenantScopeID: input.TenantScopeID, Revision: previous.Revision + 1, LoginVerification: input.LoginVerification, LoginAllowlist: input.LoginAllowlist, ChannelPending: pending}
 		if _, err := tx.Exec(ctx, `INSERT INTO identity_user_login_security(scope_id,user_id,revision,login_verification,login_allowlist,updated_by_user_id,updated_at)
 			VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(scope_id,user_id) DO UPDATE SET revision=EXCLUDED.revision,
 			login_verification=EXCLUDED.login_verification,login_allowlist=EXCLUDED.login_allowlist,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=EXCLUDED.updated_at`,
@@ -137,7 +182,7 @@ func (s *Store) updateManagedUserLoginSecurity(ctx context.Context, actor Actor,
 		if err := s.auditor.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID, Action: loginSecurityOperation,
 			ResourceType: "user", ResourceID: input.UserID.String(), RequestID: input.RequestID, Result: "success", Payload: map[string]any{
 				"tenant_scope_id": input.TenantScopeID.String(), "previous_revision": previous.Revision, "revision": result.Revision,
-				"login_verification": result.LoginVerification, "allowlist_count": len(result.LoginAllowlist), "allowlist_sha256": hex.EncodeToString(allowlistHash[:]),
+				"login_verification": result.LoginVerification, "channel_pending": pending, "allowlist_count": len(result.LoginAllowlist), "allowlist_sha256": hex.EncodeToString(allowlistHash[:]),
 			}}); err != nil {
 			return err
 		}

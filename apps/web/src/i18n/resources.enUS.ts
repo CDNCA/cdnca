@@ -1390,6 +1390,7 @@ export const enUS = {
     notices: {
       created: 'User created', updated: 'User updated', disabled: 'User disabled',
       batchEnabled: 'Selected users enabled', batchDisabled: 'Selected users disabled',
+      loginSecurityChannelPending: 'Sign-in second step saved. Its notification channel is off, so it takes effect once the channel is on; the user signs in as usual until then.',
       deleted: 'User deleted',
       passwordReset: 'Password reset; all existing sessions for the target user were revoked',
       conflictRefreshed: 'The user changed in another operation. The list has been refreshed; try again.',

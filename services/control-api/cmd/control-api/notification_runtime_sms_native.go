@@ -37,6 +37,18 @@ const (
 	submailSMSDefaultEndpoint = "https://api-v4.mysubmail.com/sms/xsend"
 )
 
+// nativeSMSTemplateMapped: whether config sends SMS by a native provider
+// (Aliyun, SUBMAIL), which needs every template mapped to a provider
+// template, and whether templateID is mapped.
+func nativeSMSTemplateMapped(config notificationRuntimeConfig, templateID string) (native, mapped bool) {
+	// resolveNotificationRuntime clears SMSProvider when it cannot send
+	if config.SMSProvider != notificationSMSProviderAliyun && config.SMSProvider != notificationSMSProviderSubmail {
+		return false, false
+	}
+	_, mapped = config.NativeSMS.Templates[templateID]
+	return true, mapped
+}
+
 type nativeSMSTemplate struct {
 	Code      string            `json:"code"`
 	Variables map[string]string `json:"variables"` // our variable -> provider variable

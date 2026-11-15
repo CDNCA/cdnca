@@ -91,8 +91,6 @@ func TestSettingsRejectPlaintextPasswordsAndSecretValues(t *testing.T) {
 		{"captcha secret key", func(value *Settings) { value.CaptchaSecretKeyReference = "secret-key" }},
 		{"captcha app secret", func(value *Settings) { value.CaptchaAppSecretReference = "app-secret" }},
 		{"empty SMS verification body", func(value *Settings) { value.VerificationSMSBody = "" }},
-		{"enterprise secret id", func(value *Settings) { value.EnterpriseSecretIDReference = "secret-id" }},
-		{"enterprise secret key", func(value *Settings) { value.EnterpriseSecretKeyReference = "secret-key" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -115,8 +113,6 @@ func TestSettingsRejectPlaintextPasswordsAndSecretValues(t *testing.T) {
 	value.CaptchaSecretIDReference = "vault://captcha/secret-id"
 	value.CaptchaSecretKeyReference = "kms-envelope://captcha/secret-key"
 	value.CaptchaAppSecretReference = "vault://captcha/app-secret"
-	value.EnterpriseSecretIDReference = "kms-envelope://identity/secret-id"
-	value.EnterpriseSecretKeyReference = "vault://identity/secret-key"
 	if !validSettings(value) {
 		t.Fatal("approved secret references must be accepted")
 	}
@@ -132,7 +128,6 @@ func TestSettingsEnforceDependentFields(t *testing.T) {
 		{"captcha threshold cannot exceed failure limit", func(value *Settings) { value.LoginCaptchaThresholdPerHour = value.LoginFailureLimitPerHour + 1 }},
 		{"tencent anti abuse requires references", func(value *Settings) { value.EmailAntiAbuseMode = "tencent" }},
 		{"geetest anti abuse requires references", func(value *Settings) { value.SMSAntiAbuseMode = "geetest_v4"; value.CaptchaProvider = "geetest_v4" }},
-		{"enterprise verification requires references", func(value *Settings) { value.EnterpriseVerificationEnabled = true }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -152,9 +147,9 @@ func TestSettingsAcceptConfiguredExternalVerification(t *testing.T) {
 	value.CaptchaSecretKeyReference = "vault://captcha/secret-key"
 	value.CaptchaAppID = "captcha-app"
 	value.CaptchaAppSecretReference = "vault://captcha/app-secret"
+	// enterprise verification no longer needs page secrets: the KYC
+	// credentials may come from IDENTITY_VERIFICATION_KYC_*
 	value.EnterpriseVerificationEnabled = true
-	value.EnterpriseSecretIDReference = "vault://enterprise/secret-id"
-	value.EnterpriseSecretKeyReference = "vault://enterprise/secret-key"
 	if !validSettings(value) {
 		t.Fatal("fully configured external verification was rejected")
 	}

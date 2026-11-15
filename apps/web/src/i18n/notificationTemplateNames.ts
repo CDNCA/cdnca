@@ -69,6 +69,7 @@ export const notificationTemplateNames: Record<string, string> = {
   'node.certificate.recovered': '节点证书过期自动恢复',
   'control.db_pool.saturated': '主控数据库连接池满载',
   'control.db_pool.recovered': '主控数据库连接池恢复',
+  'security_activation.recovery_failed': '安全策略灰度回滚失败',
   'node.dnspup.recovered': 'dnspup 拨测节点已恢复',
   'node.dnspup.line_unreachable': 'dnspup 线路拨测失败',
   'node.dnspup.line_recovered': 'dnspup 线路拨测已恢复',
@@ -124,8 +125,8 @@ export const notificationTemplateNames: Record<string, string> = {
 }
 
 export const notificationVariableNames: Record<string, string> = {
-  action: '处置动作', active_level: '当前回源级别', address_family: '地址族', alert_text: '告警内容', amount: '金额', apex: '主域名', at: '发生时间', backup_addresses: '备用 IP',
-  bandwidth: '当前带宽', bandwidth_limit: '带宽上限', banned: '临时封禁次数', blocked: '拦截次数', bps: '每秒比特数', body: '正文', cap: '上限', captcha: '验证码', carrier: '运营商', category: '类别',
+  action: '处置动作', active_level: '当前回源级别', address_family: '地址族', alert_text: '告警内容', amount: '金额', apex: '主域名', at: '发生时间', attempts: '失败次数', backup_addresses: '备用 IP',
+  bandwidth: '当前带宽', bandwidth_limit: '带宽上限', banned: '临时封禁次数', blocked: '拦截次数', bps: '每秒比特数', body: '正文', candidate_id: '候选编号', cap: '上限', captcha: '验证码', carrier: '运营商', category: '类别',
   certificate_name: '证书名称', challenged: '人机验证次数', channel_name: '收款通道', client_ip: '客户端 IP', clients: '来源 IP 数', cname: 'CNAME 记录值',
   code: '错误码', complaint: '工单编号', confirmed_at: '确认时间', cooldown_minutes: '冷却时间（分钟）', count: '数量', currency: '币种', day: '对账日期',
   days_left: '剩余天数', deadline: '截止时间', download: '升级下载地址', domain: '域名', domains: '域名列表', downstream: '下游编号',

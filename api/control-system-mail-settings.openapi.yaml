@@ -39,7 +39,7 @@ paths:
         '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '403': {description: Permission denied, or the chosen official mail service's module (module.mail.<provider>) is not licensed (system_mail_settings_module_not_licensed), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
-        '409': {description: Revision or idempotency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '409': {description: 'Revision or idempotency conflict; or system_mail_settings_email_verification_sender / system_mail_settings_sms_verification_sender: email (phone) verification is in effect (required, with its notification channel on) and the save would leave that channel without a sender.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '500': {description: Unexpected internal failure, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '503': {description: Settings storage or policy is unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /v1/admin/system-mail-settings/tests:
@@ -107,8 +107,8 @@ components:
             message: {type: string}
             request_id: {type: string}
             details:
-              description: On a 400 system_mail_settings_validation_error that names the refused field of the save body (value.<field>, sms_access_key_secret, mail_secret or smtp_password) and a machine reason.
-              x-description-zh: 能定位字段的 400 system_mail_settings_validation_error 附带 field（保存请求体路径 value.<字段>、sms_access_key_secret、mail_secret、smtp_password）与 reason 机器码。
+              description: On a 400 system_mail_settings_validation_error that names the refused field of the save body (value.<field>, sms_access_key_secret, mail_secret, smtp_password or sms_auth_token) and a machine reason.
+              x-description-zh: 能定位字段的 400 system_mail_settings_validation_error 附带 field（保存请求体路径 value.<字段>、sms_access_key_secret、mail_secret、smtp_password、sms_auth_token）与 reason 机器码。
               type: object
               additionalProperties: false
               required: [field, reason]
@@ -135,6 +135,8 @@ components:
         mail_secret_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
         smtp_password_configured: {type: boolean, description: An SMTP password entered on the settings page is stored encrypted (never returned).}
         smtp_password_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        sms_auth_token_configured: {type: boolean, description: An HTTPS SMS gateway token entered on the settings page is stored encrypted (never returned).}
+        sms_auth_token_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
     WriteRequest:
       type: object
       additionalProperties: false
@@ -151,6 +153,12 @@ components:
           writeOnly: true
           description: SMTP password in plaintext, stored encrypted under the control-api credential keyring and never returned. Omitted keeps the stored one, an empty string clears it. A stored password cannot coexist with value.smtp_password_reference; sending both is refused (smtp_password invalid), and a reference while a password stays stored is refused (value.smtp_password_reference invalid).
           x-description-zh: SMTP 明文密码，用 control-api 凭据钥匙串加密保存，从不回显。省略保留原值，空串清除。已存密码与 value.smtp_password_reference 不能同时存在：两者同时填写被拒（smtp_password invalid），保留已存密码时填写引用被拒（value.smtp_password_reference invalid）。
+        sms_auth_token:
+          type: string
+          maxLength: 4096
+          writeOnly: true
+          description: HTTPS SMS gateway token (sms_provider https_json) in plaintext, stored encrypted under the control-api credential keyring and never returned; at runtime it replaces NOTIFICATION_SMS_AUTH_TOKEN. Omitted keeps the stored one, an empty string clears it. Refused for aliyun/submail (they use sms_access_key_secret). A stored token cannot coexist with value.sms_access_key_reference; sending both is refused (sms_auth_token invalid), and a reference while a token stays stored is refused (value.sms_access_key_reference invalid).
+          x-description-zh: HTTPS 短信网关（sms_provider 为 https_json）的明文令牌，用 control-api 凭据钥匙串加密保存，从不回显；运行时替换 NOTIFICATION_SMS_AUTH_TOKEN。省略保留原值，空串清除。阿里云/SUBMAIL 不接受（它们用 sms_access_key_secret）。已存令牌与 value.sms_access_key_reference 不能同时存在：两者同时填写被拒（sms_auth_token invalid），保留已存令牌时填写引用被拒（value.sms_access_key_reference invalid）。
         value:
           allOf:
             - {$ref: '#/components/schemas/Settings'}
@@ -181,7 +189,10 @@ components:
         smtp_from_name: {type: string, maxLength: 64, description: SMTP sender display name.}
         sms_provider: {type: string, maxLength: 64}
         sms_access_key_id: {type: string, maxLength: 256}
-        sms_access_key_reference: {$ref: '#/components/schemas/SecretReference'}
+        sms_access_key_reference:
+          allOf:
+            - {$ref: '#/components/schemas/SecretReference'}
+          description: Advanced. A Vault/KMS reference that must match the runtime NOTIFICATION_SMS_AUTH_TOKEN_REFERENCE; the plaintext gateway token goes in the write-only sms_auth_token instead.
         sms_signature_name: {type: string, maxLength: 256}
         mail_provider:
           type: string

@@ -22,10 +22,21 @@ paths:
       summary: Public sign-up and password-reset configuration
       description: >-
         What every sign-up and password-reset page (console and website themes) shows. email / sms
-        "required" follows the email / phone verification switches; "available" means a code can be
-        sent now (sender configured and the channel switched on). human_check guards sending a code:
+        "required" is the verification in effect: the email / phone verification setting and the matching
+        notification channel switch are both on (either off: sign-up needs no code); "available" means a code
+        can be sent now (sender and template configured, channel switched on). human_check guards sending a code:
         builtin_captcha (POST /v1/auth/login-captchas; human_token = "captcha:<id>:<answer>") or
-        turnstile. ready is false while a required verification cannot be sent.
+        turnstile; the Turnstile flow uses builtin_captcha until both its site key and secret are set.
+        ready is false while a required verification cannot be sent. The Turnstile site key is
+        ACCOUNT_REGISTRATION_TURNSTILE_SITE_KEY when set, otherwise the one saved on the system settings page.
+        Anonymous; a request carrying a platform session with system_configuration.read (or platform.admin)
+        additionally receives reasons, the codes of what keeps sign-up verification from being ready.
+        Any other caller, including a bad token, is answered as a visitor without reasons.
+      x-description-zh: >-
+        匿名可读。携带有 system_configuration.read（或 platform.admin）权限的平台会话时额外返回 reasons，
+        即注册验证未就绪的原因码；其他调用方（含无效令牌）按访客处理，不返回 reasons。Turnstile 站点密钥取环境变量
+        ACCOUNT_REGISTRATION_TURNSTILE_SITE_KEY，未设置时取系统设置页保存的值；站点密钥与 Secret 未填齐时 Turnstile 流程改用内置图形验证码。
+        required 为生效值：要求邮箱（手机）验证与对应通知渠道开关都开才为 true，任一关着注册不需要验证码。
       responses:
         '200':
           description: The configuration.
@@ -55,6 +66,21 @@ paths:
                         properties:
                           enabled: {type: boolean}
                           channels: {type: array, items: {type: string, enum: [email, sms]}}
+                      reasons:
+                        type: array
+                        description: >-
+                          Administrators only (never sent to visitors). registration_disabled; notification_runtime_disabled
+                          (NOTIFICATION_RUNTIME_ENABLED=off); sender_build_failed (the last sender rebuild failed, see /health/detail);
+                          email_sender_unavailable / sms_sender_unavailable (no complete sender on the mail settings page);
+                          email_template_missing / sms_template_missing; sms_template_unmapped (native SMS provider without a
+                          mapping for the verification template); turnstile_not_configured (the Turnstile site key or secret is
+                          missing, so the built-in image CAPTCHA guards sending a code); verification_channel_unavailable
+                          (Turnstile flow with no sendable channel).
+                        items:
+                          type: string
+                          enum: [registration_disabled, notification_runtime_disabled, sender_build_failed, email_sender_unavailable,
+                            sms_sender_unavailable, email_template_missing, sms_template_missing, sms_template_unmapped,
+                            turnstile_not_configured, verification_channel_unavailable]
         '503': {$ref: '#/components/responses/ErrorResponse'}
   /v1/auth/registration-challenges:
     post:

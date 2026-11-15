@@ -111,12 +111,17 @@
       "name": "sms_enabled",
       "type": "boolean",
       "required": true,
-      "description": "Enables the configured SMS provider for this channel or subscription."
+      "description": "Enables the configured SMS provider."
      },
      {
       "name": "email_enabled",
       "type": "boolean",
       "required": true
+     },
+     {
+      "name": "confirm_disable",
+      "type": "boolean",
+      "description": "Set to go ahead when switching a channel off would suspend users' per-user sign-in second step. Without it that request answers 409 notification_channel_disable_confirmation_required with error.details {affected_email_users, affected_sms_users}; the suspended steps resume when the channel is switched on again."
      }
     ]
    },

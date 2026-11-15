@@ -35,11 +35,10 @@ const value: PlatformSystemUserSettings = {
   captcha_secret_id_reference: '',
   captcha_secret_key_reference: '',
   captcha_app_id: '',
-  captcha_app_secret_reference: '',
+  captcha_app_secret_reference: '', captcha_turnstile_site_key: '',
   identity_verification_method: 'none',
   enterprise_verification_enabled: false,
-  enterprise_secret_id_reference: '',
-  enterprise_secret_key_reference: '',
+  identity_policy_saved: false,
   wechat_payment_enabled: false,
   alipay_payment_enabled: false,
   bank_transfer_enabled: false,
@@ -56,7 +55,7 @@ describe('systemUserSettingsApi', () => {
   beforeEach(() => vi.restoreAllMocks())
 
   it('accepts the exact response contract', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, updated_at: '2026-08-14T00:00:00Z', value }))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, captcha_turnstile_secret_configured: false, updated_at: '2026-08-14T00:00:00Z', value }))
     await expect(systemUserSettingsApi.get('token')).resolves.toMatchObject({ revision: 4, value })
   })
 
@@ -72,17 +71,37 @@ describe('systemUserSettingsApi', () => {
     ['phone country code with leading zero', { ...value, default_phone_country_code: '086' }],
     ['empty phone country code', { ...value, default_phone_country_code: '' }],
   ])('rejects %s', async (_name, invalidValue) => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, value: invalidValue }))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, captcha_turnstile_secret_configured: false, value: invalidValue }))
     await expect(systemUserSettingsApi.get('token')).rejects.toMatchObject({ code: 'invalid_response' })
   })
 
   it('sends CAS and idempotency metadata on PUT', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 5, value }))
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 5, captcha_turnstile_secret_configured: false, value }))
     await systemUserSettingsApi.put('token', 4, value)
     const [, init] = fetchMock.mock.calls[0]
     expect(init).toMatchObject({ method: 'PUT', credentials: 'include' })
     expect(init?.headers).toMatchObject({ Authorization: 'Bearer token', 'If-Match': '"4"' })
     expect((init?.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^system-user-settings-/)
     expect(JSON.parse(String(init?.body))).toEqual({ value })
+  })
+
+  // page secrets are sent write-only next to value and
+  // come back only as configured flags and fingerprints.
+  it('sends page secrets write-only: omitted keeps, empty clears', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 5, value }))
+    await systemUserSettingsApi.put('token', 4, value, undefined, undefined, { captcha_secret_key: 'plain-key', captcha_app_secret: '', captcha_secret_id: undefined })
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ value, captcha_secret_key: 'plain-key', captcha_app_secret: '' })
+  })
+
+  it('accepts saved secrets in place of the references they stand for', async () => {
+    const external = { ...value, sms_anti_abuse_mode: 'tencent' as const, captcha_provider: 'tencent' as const, captcha_app_id: '190000001' }
+    const saved = Object.fromEntries(['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret', 'kyc_api_key', 'kyc_callback_hmac_key']
+      .flatMap((name) => [[`${name}_configured`, true], [`${name}_fingerprint`, '0123456789abcdef']]))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, value: external, ...saved }))
+    await expect(systemUserSettingsApi.get('token')).resolves.toMatchObject({ captcha_app_secret_configured: true })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, value: external }))
+    await expect(systemUserSettingsApi.get('token')).rejects.toMatchObject({ code: 'invalid_response' })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, value, captcha_secret_id_fingerprint: 'not-hex' }))
+    await expect(systemUserSettingsApi.get('token')).rejects.toMatchObject({ code: 'invalid_response' })
   })
 })

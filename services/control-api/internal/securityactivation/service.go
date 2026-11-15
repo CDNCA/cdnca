@@ -212,6 +212,9 @@ func (store *Store) startTx(
 	if err := insertCandidate(ctx, tx, candidate, actor, input.IdempotencyKey, digest, input.RequestID); err != nil {
 		return StartResult{}, err
 	}
+	if err := reserveCandidateRevision(ctx, tx, input.TenantScopeID, candidate.CandidateSourceRevision, now); err != nil {
+		return StartResult{}, err
+	}
 	rollout, err := store.createPhaseRollout(ctx, tx, candidate, "canary", canary,
 		candidate.RequiredCapabilities, input.RequestID, input.CorrelationID, input.Traceparent, input.TaskID)
 	if err != nil {
@@ -331,6 +334,9 @@ func (store *Store) Reconcile(
 					return err
 				}
 				if err := releaseCandidateTargets(ctx, tx, candidate, terminalReleaseReason(candidate.Status), now); err != nil {
+					return err
+				}
+				if err := republishRecoveredScopeTx(ctx, tx, candidate, now); err != nil {
 					return err
 				}
 				action = actionRecover
@@ -456,7 +462,7 @@ func (store *Store) Reconcile(
 				defer cancelRecovery()
 				if recoveryErr := store.failPromotion(recoveryContext, actor, result.Candidate.ID,
 					input.RequestID, input.CorrelationID, input.Traceparent, input.TaskID, digest); recoveryErr != nil {
-					return ReconcileResult{}, errors.Join(err, recoveryErr)
+					return ReconcileResult{}, promotionRecoveryError(err, recoveryErr)
 				}
 			}
 			return ReconcileResult{}, err
@@ -464,6 +470,15 @@ func (store *Store) Reconcile(
 		result.Candidate = promoted.Candidate
 	}
 	return result, nil
+}
+
+// promotionRecoveryError reports a promotion that could not be failed: the
+// recovery error, not the promotion refusal. errors.Join kept the refusal
+// (ErrSourceRevisionConflict, ErrConflict, ErrNotHealthy) matchable, so the
+// worker skipped the pass as ordinary contention and the candidate stayed
+// healthy until it expired (recovery refused with P8802).
+func promotionRecoveryError(promoteErr, recoveryErr error) error {
+	return fmt.Errorf("promotion refused (%v); recording the failure: %w", promoteErr, recoveryErr)
 }
 
 func (store *Store) reconcileRevokedCandidate(
@@ -549,6 +564,9 @@ func (store *Store) reconcileRevokedCandidate(
 					return err
 				}
 				if err := releaseCandidateTargets(ctx, tx, candidate, terminalReleaseReason(candidate.Status), now); err != nil {
+					return err
+				}
+				if err := republishRecoveredScopeTx(ctx, tx, candidate, now); err != nil {
 					return err
 				}
 				action = actionRecover
@@ -982,6 +1000,13 @@ func (store *Store) createRecoveryRollouts(ctx context.Context, tx pgx.Tx, candi
 		}
 		group.nodes = append(group.nodes, target.nodeID)
 	}
+	if len(groups) == 0 {
+		return nil
+	}
+	attempt, send, err := store.nextRecoveryAttempt(ctx, tx, candidate, now)
+	if err != nil || !send {
+		return err
+	}
 	candidateArtifacts, err := loadCandidateNodeArtifacts(ctx, tx, candidate)
 	if err != nil {
 		return err
@@ -1027,6 +1052,9 @@ func (store *Store) createRecoveryRollouts(ctx context.Context, tx pgx.Tx, candi
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, candidate.ID, candidate.TenantScopeID,
 			rollout.Rollout.ID, group.configID, group.artifactSHA256[:], candidate.TargetSnapshotSHA256[:],
 			nodes, requestUUID, rollout.Rollout.CreatedAt); err != nil {
+			return err
+		}
+		if err := recordRecoveryAttempt(ctx, tx, candidate.ID, rollout.Rollout.ID, attempt, now); err != nil {
 			return err
 		}
 	}

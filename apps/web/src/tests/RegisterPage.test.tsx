@@ -375,4 +375,79 @@ describe('RegisterPage', () => {
     await waitFor(() => expect(screen.getByTestId('registration-location')).toHaveTextContent('/home'))
     expect(screen.queryByRole('form', { name: '注册账号' })).not.toBeInTheDocument()
   })
+
+  // the server sends reasons only for an administrator's
+  // session; the page shows them with where to fix each, visitors keep the
+  // generic notice.
+  function notReadyRoutes(reasons?: string[]): Record<string, () => Response> {
+    return {
+      '/v1/auth/login-methods': () => json({ data: { registration_enabled: true, registration_mode: 'builtin', email_enabled: false,
+        sms_enabled: false, email_anti_abuse_mode: '', sms_anti_abuse_mode: '', captcha_provider: '', captcha_app_id: '' } }, 200),
+      '/v1/auth/registration-config': () => json({ data: { registration_enabled: true, mode: 'builtin', human_check: 'builtin_captcha',
+        turnstile_site_key: '', terms_version: 'terms-2026-08', email: { required: true, available: false }, sms: { required: false, available: false },
+        email_required: true, phone_required: false, ready: false, recovery: { enabled: false, channels: [] },
+        ...(reasons ? { reasons } : {}) } }, 200),
+    }
+  }
+
+  it('shows visitors only the generic notice when sign-up verification is not ready', async () => {
+    const routes = notReadyRoutes()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      (routes[new URL(String(input), 'http://localhost').pathname] ?? (() => json({}, 404)))())
+    renderWithProviders(<RegisterPage turnstileSiteKey="" />, ['/register'])
+    expect(await screen.findByText('注册验证服务暂未配置，请联系平台管理员。')).toBeInTheDocument()
+    expect(screen.queryByTestId('registration-readiness-reasons')).not.toBeInTheDocument()
+    const configCall = fetchSpy.mock.calls.find((call) => String(call[0]).endsWith('/v1/auth/registration-config'))
+    expect(configCall && headersAt(configCall).get('Authorization')).toBeFalsy()
+  })
+
+  it('shows a signed-in administrator what is missing and where to configure it', async () => {
+    const routes = notReadyRoutes(['email_sender_unavailable'])
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      (routes[new URL(String(input), 'http://localhost').pathname] ?? (() => json({}, 404)))())
+    const admin = principal({ scope_kind: 'platform', tenant_id: null, roles: ['platform_owner'], permissions: ['system_configuration.read'] })
+    act(() => useSessionStore.getState().setSession(authResponse(admin), admin))
+    renderWithProviders(<RegisterPage turnstileSiteKey="" />, ['/register'])
+    const panel = await screen.findByTestId('registration-readiness-reasons')
+    expect(panel).toHaveTextContent('没有可用的邮件发信方')
+    expect(screen.getByRole('link', { name: '前往邮件/短信配置' })).toHaveAttribute('href', '/sys/setting?tab=mail')
+    expect(screen.queryByRole('link', { name: /通知渠道/ })).not.toBeInTheDocument()
+    const configCall = fetchSpy.mock.calls.find((call) => String(call[0]).endsWith('/v1/auth/registration-config'))
+    expect(configCall && headersAt(configCall).get('Authorization')).toBe('Bearer memory-only-access-token')
+  })
+
+  // until its site key and secret are set, the
+  // Turnstile flow guards sending the code with the built-in image CAPTCHA.
+  it('sends the code behind the built-in CAPTCHA while Turnstile is not configured', async () => {
+    const routes: Record<string, () => Response> = {
+      '/v1/auth/login-methods': () => json({ data: { registration_enabled: true, email_enabled: false, sms_enabled: false,
+        email_anti_abuse_mode: '', sms_anti_abuse_mode: '', captcha_provider: '', captcha_app_id: '' } }, 200),
+      '/v1/auth/registration-config': () => json({ data: { registration_enabled: true, mode: 'verified', human_check: 'builtin_captcha',
+        turnstile_site_key: '', terms_version: 'terms-2026-08', email: { required: false, available: true }, sms: { required: false, available: false },
+        email_required: true, phone_required: false, ready: true, recovery: { enabled: false, channels: [] } } }, 200),
+      '/v1/auth/login-captchas': () => json({ id: '33333333-3333-4333-8333-333333333333', image: 'data:image/png;base64,iVBORw0KGgo=',
+        expires_at: '2099-01-01T00:00:00Z' }, 201),
+      '/v1/auth/registration-challenges': () => challengeResponse(),
+    }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      (routes[new URL(String(input), 'http://localhost').pathname] ?? (() => json({}, 404)))())
+    const user = userEvent.setup()
+    renderWithProviders(<RegisterPage turnstileSiteKey="" />, ['/register'])
+    expect(await screen.findByAltText('图形验证码图片')).toBeInTheDocument()
+    await fillRegistration(user)
+    await user.type(screen.getByLabelText('图形验证码'), 'ab2cd')
+    await user.click(screen.getByRole('button', { name: '发送验证码' }))
+    expect(await screen.findByText('验证码已提交发送，请查看所选验证渠道。')).toBeInTheDocument()
+    const challenge = fetchSpy.mock.calls.find((call) => String(call[0]).endsWith('/v1/auth/registration-challenges'))!
+    expect(JSON.parse(String(challenge[1]?.body))).toMatchObject({
+      human_token: 'captcha:33333333-3333-4333-8333-333333333333:ab2cd', verification_channel: 'email' })
+  })
+
+  it('lets a signed-in platform administrator open /register while tenant users are redirected', async () => {
+    const admin = principal({ scope_kind: 'platform', tenant_id: null, roles: ['platform_owner'], permissions: ['system_configuration.read'] })
+    act(() => useSessionStore.getState().setSession(authResponse(admin), admin))
+    renderWithProviders(<><AppRoutes /><LocationProbe /></>, ['/register'])
+    expect(await screen.findByRole('form', { name: '注册账号' })).toBeInTheDocument()
+    expect(screen.getByTestId('registration-location')).toHaveTextContent('/register')
+  })
 })

@@ -130,6 +130,33 @@ func TestManagedUserLoginSecurityHTTP(t *testing.T) {
 	})
 }
 
+// With the notification channel switched off a per-user email
+// second step is saved (not refused), reads back as channel_pending, and the
+// user signs in as usual until the channel is switched on.
+func TestManagedUserLoginSecurityChannelOffSavesPendingAndSkipsStep(t *testing.T) {
+	f := newUserMetadataHTTPFixture(t)
+	user, _ := f.create(t, "security-channel-off", map[string]any{"email": "channel-off@example.com"}, false)
+	path := metadataUserPath(user) + "/login-security?tenant_scope_id=" + user["scope_id"].(string)
+	if _, err := f.pool.Exec(t.Context(), `UPDATE notification_channel_settings SET email_enabled=false,sms_enabled=false WHERE singleton`); err != nil {
+		t.Fatal(err)
+	}
+	saved := f.request(t, "PUT", path, "channel-off-save", map[string]any{"expected_revision": 0, "login_verification": "email", "login_allowlist": []string{}}, 200)
+	if saved["login_verification"] != "email" || saved["channel_pending"] != true {
+		t.Fatalf("saved=%v", saved)
+	}
+	if got := f.request(t, "GET", path, "channel-off-get", nil, 200); got["channel_pending"] != true {
+		t.Fatalf("read back=%v", got)
+	}
+	// no code needed while the channel is off
+	loginWithPassword(t, f.server.Client(), f.server.URL, user["username"].(string), tenantPassword)
+	if _, err := f.pool.Exec(t.Context(), `UPDATE notification_channel_settings SET email_enabled=true WHERE singleton`); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.request(t, "GET", path, "channel-on-get", nil, 200); got["channel_pending"] != nil {
+		t.Fatalf("channel on, still pending: %v", got)
+	}
+}
+
 // The 251->252 upgrade/down round trip was removed with the 1.0.35 baseline
 // (no compatibility with earlier schemas); a single down step from the release
 // head no longer reaches 251. The runtime-grant contract is checked at head.
@@ -195,6 +222,10 @@ func (capture *loginSecurityContactCapture) Enqueue(_ context.Context, _ pgx.Tx,
 func TestPasswordLoginChallengeHTTPAtomicContract(t *testing.T) {
 	f := newUserMetadataHTTPFixture(t)
 	user, _ := f.create(t, "password-otp-http", map[string]any{"email": "http-security@example.com"}, false)
+	// code login is in effect only with its notification channel on
+	if _, err := f.pool.Exec(t.Context(), `UPDATE notification_channel_settings SET email_enabled=true,sms_enabled=true WHERE singleton`); err != nil {
+		t.Fatal(err)
+	}
 	capture := new(loginSecurityContactCapture)
 	settings, err := systemusersettings.NewService(f.pool, audit.New(f.pool), time.Now)
 	if err != nil {

@@ -126,6 +126,8 @@ func (service *Service) Methods(ctx context.Context, scopeID uuid.UUID) (Methods
 	if err != nil {
 		return Methods{}, ErrUnavailable
 	}
+	policy.EmailAntiAbuseMode = service.effectiveMode(ctx, policy.EmailAntiAbuseMode)
+	policy.SMSAntiAbuseMode = service.effectiveMode(ctx, policy.SMSAntiAbuseMode)
 	methods := publicMethods(policy)
 	methods.RegistrationEnabled = methods.RegistrationEnabled && service.registrationMounted
 	return methods, nil
@@ -163,6 +165,7 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 	if !enabled {
 		return CreateResult{}, ErrMethodDisabled
 	}
+	mode = service.effectiveMode(ctx, mode)
 	var captchaReplay *[32]byte
 	if externalHumanMode(mode) {
 		if service.human == nil || normalized.HumanToken == "" {
@@ -243,7 +246,7 @@ func (service *Service) Create(ctx context.Context, input CreateInput) (CreateRe
 		}
 		policyRevision := int64(0)
 		if userID != nil {
-			policy, err := identity.ReadLoginSecurityTx(ctx, tx, *userID, normalized.ScopeID)
+			policy, err := identity.ReadEffectiveLoginSecurityTx(ctx, tx, *userID, normalized.ScopeID)
 			if err != nil {
 				return err
 			}
@@ -444,6 +447,24 @@ func loginMethodPolicy(policy systemusersettings.PublicSettings, channel notific
 		return policy.EmailAntiAbuseMode, policy.EmailCodeLoginEnabled
 	}
 	return policy.SMSAntiAbuseMode, policy.SMSCodeLoginEnabled
+}
+
+// effectiveMode: an external CAPTCHA that is not fully configured (no
+// verifier, or its app ID or a secret missing) falls back to the local
+// CAPTCHA ("native") instead of blocking code login.
+func (service *Service) effectiveMode(ctx context.Context, mode string) string {
+	if !externalHumanMode(mode) {
+		return mode
+	}
+	if service.human == nil {
+		return "native"
+	}
+	if configured, ok := service.human.(interface {
+		Configured(context.Context, string) bool
+	}); ok && !configured.Configured(ctx, mode) {
+		return "native"
+	}
+	return mode
 }
 
 func externalHumanMode(mode string) bool {

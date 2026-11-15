@@ -388,9 +388,14 @@ func (g *Gateway) validateDeploymentCommand(command *agentv1.DeploymentCommand, 
 		return err
 	}
 	siteObjects := deploymentCommandUsesSiteObjects(command)
-	if !siteObjects && deploymentCommandRequiresSiteRuntime(command) {
+	if !siteObjects && deploymentCommandRequiresSiteRuntime(command) &&
+		command.Action != agentv1.DeploymentAction_DEPLOYMENT_ACTION_ROLLBACK {
 		// Site runtime releases reach nodes only as site objects (v2 root +
-		// key envelope); the whole site runtime bundle is no longer sent.
+		// key envelope); the whole site runtime bundle is no longer sent. A
+		// rollback carries no artifacts (the node switches back to the release
+		// it kept) but keeps its version's site runtime capability, which
+		// Control requires on every v2 release (every recovery rollback of a
+		// v2 security activation used to be refused here).
 		return fmt.Errorf("site runtime command must be a site object release")
 	}
 	urlAuth := deploymentCommandUsesURLAuth(command)

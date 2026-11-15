@@ -60,6 +60,33 @@ type accountRegistrationRuntimeConfig struct {
 	AllowPrivateSourceIP bool
 	MaxProxyHops         int
 	Templates            map[notification.Channel]notification.TemplateRef
+	// HumanFallback checks the challenge while TurnstileReady says the
+	// Turnstile site key or secret is missing (the built-in image CAPTCHA;
+	// nil: Turnstile only).
+	HumanFallback  accountregistrationchallenge.HumanVerifier
+	TurnstileReady func(context.Context) (bool, error)
+}
+
+// registrationHumanVerifier is the Turnstile flow's human check: Turnstile
+// once its site key and secret are set, the fallback (built-in image
+// CAPTCHA) before, so an unconfigured Turnstile does not block sign-up.
+type registrationHumanVerifier struct {
+	turnstile, fallback accountregistrationchallenge.HumanVerifier
+	ready               func(context.Context) (bool, error)
+}
+
+func (verifier registrationHumanVerifier) Verify(ctx context.Context, verification accountregistrationchallenge.HumanVerification) error {
+	if verifier.fallback == nil || verifier.ready == nil {
+		return verifier.turnstile.Verify(ctx, verification)
+	}
+	ready, err := verifier.ready(ctx)
+	if err != nil {
+		return accountregistrationchallenge.ErrHumanUnavailable
+	}
+	if ready {
+		return verifier.turnstile.Verify(ctx, verification)
+	}
+	return verifier.fallback.Verify(ctx, verification)
 }
 
 func loadAccountRegistrationRuntimeConfig(
@@ -113,9 +140,16 @@ func loadAccountRegistrationRuntimeConfigFromEnv(
 	if err != nil {
 		return accountRegistrationRuntimeConfig{}, err
 	}
-	config.Turnstile.Secret, err = accountRecoveryRequiredEnv(lookup, "ACCOUNT_REGISTRATION_TURNSTILE_SECRET")
-	if err != nil {
-		return accountRegistrationRuntimeConfig{}, err
+	// the secret may instead be saved on the system
+	// settings page (人机验证); a non-empty environment value wins.
+	if value, exists := lookup("ACCOUNT_REGISTRATION_TURNSTILE_SECRET"); exists && value != "" {
+		config.Turnstile.Secret, err = accountRecoveryRequiredEnv(lookup, "ACCOUNT_REGISTRATION_TURNSTILE_SECRET")
+		if err != nil {
+			return accountRegistrationRuntimeConfig{}, err
+		}
+	} else {
+		// replaced in main by the page-saved secret (useTurnstileSecretFromSettings)
+		config.Turnstile.SecretFunc = turnstileSecretUnset
 	}
 	config.Turnstile.ExpectedHostname, err = accountRecoveryRequiredEnv(lookup, "ACCOUNT_REGISTRATION_TURNSTILE_HOSTNAME")
 	if err != nil {
@@ -142,6 +176,35 @@ func loadAccountRegistrationRuntimeConfigFromEnv(
 	}
 	failed = false
 	return config, nil
+}
+
+// errTurnstileSecretUnset: neither the environment nor the page holds a
+// Turnstile secret.
+var errTurnstileSecretUnset = errors.New("account registration Turnstile secret is not configured")
+
+func turnstileSecretUnset(context.Context) (string, error) { return "", errTurnstileSecretUnset }
+
+// turnstileSecretFromEnv reports whether ACCOUNT_REGISTRATION_TURNSTILE_SECRET
+// supplies the secret (otherwise the system settings page does).
+func (config accountRegistrationRuntimeConfig) turnstileSecretFromEnv() bool {
+	return config.Enabled && config.Turnstile.SecretFunc == nil
+}
+
+// useTurnstileSecretFromSettings reads the page-saved secret on every
+// Turnstile verification when the environment holds none, so a secret saved
+// on the page applies without restarting control-api.
+func (config *accountRegistrationRuntimeConfig) useTurnstileSecretFromSettings(pool *pgxpool.Pool, cipher systemusersettings.SecretCipher) {
+	if config == nil || !config.Enabled || config.Turnstile.SecretFunc == nil {
+		return
+	}
+	config.Turnstile.SecretFunc = func(ctx context.Context) (string, error) {
+		secret, err := systemusersettings.OpenTurnstileSecret(ctx, pool, cipher)
+		if err != nil {
+			return "", err
+		}
+		defer clear(secret)
+		return string(secret), nil
+	}
 }
 
 func (config *accountRegistrationRuntimeConfig) clearSecrets() {
@@ -319,7 +382,8 @@ func openAccountRegistrationRuntime(
 		return nil, err
 	}
 	challengeService, err := accountregistrationchallenge.NewService(
-		pool, turnstile, contactSender, proofAuthority, config.ProofKeys,
+		pool, registrationHumanVerifier{turnstile: turnstile, fallback: config.HumanFallback, ready: config.TurnstileReady},
+		contactSender, proofAuthority, config.ProofKeys,
 		accountregistrationchallenge.Config{
 			DigestKey: config.DigestKey, PublicSettings: publicSettings, TemplateSettings: publicSettings,
 		},

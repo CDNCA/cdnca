@@ -70,8 +70,10 @@ type HTTPSKYCProvider struct {
 
 func NewHTTPSKYCProvider(config HTTPSKYCProviderConfig, client *http.Client, now func() time.Time) (*HTTPSKYCProvider, error) {
 	endpoint, err := validateKYCProviderEndpoint(config.Endpoint)
-	if err != nil || !resolverNamePattern.MatchString(config.Name) || len(config.APIKey) < 16 || len(config.APIKey) > 512 ||
-		!providerKeyIDPattern.MatchString(config.CallbackKeyID) || len(config.CallbackHMACKey) < 32 || len(config.CallbackHMACKey) > 128 ||
+	// Both credentials may be absent (not configured yet, saved later on the
+	// system settings page); a half-set pair or a malformed key is invalid.
+	if err != nil || !resolverNamePattern.MatchString(config.Name) || !validKYCCredentials(config.APIKey, config.CallbackHMACKey) ||
+		!providerKeyIDPattern.MatchString(config.CallbackKeyID) ||
 		config.CallbackMaxAge <= 0 || config.CallbackMaxAge > time.Hour || config.CallbackFutureSkew < 0 || config.CallbackFutureSkew > 5*time.Minute || now == nil {
 		return nil, ErrProviderInvalid
 	}
@@ -92,6 +94,32 @@ func NewHTTPSKYCProvider(config HTTPSKYCProviderConfig, client *http.Client, now
 		futureSkew: config.CallbackFutureSkew, client: &clone, now: now}, nil
 }
 
+// validKYCCredentials: both keys valid, or both absent (not configured).
+func validKYCCredentials(apiKey, callbackHMACKey []byte) bool {
+	if len(apiKey) == 0 && len(callbackHMACKey) == 0 {
+		return true
+	}
+	return len(apiKey) >= 16 && len(apiKey) <= 512 && len(callbackHMACKey) >= 32 && len(callbackHMACKey) <= 128
+}
+
+// SetCredentials replaces the API key and callback HMAC key (the system
+// settings page changed them; both nil clears them); calls already running
+// keep their copies.
+func (provider *HTTPSKYCProvider) SetCredentials(apiKey, callbackHMACKey []byte) error {
+	if provider == nil || !validKYCCredentials(apiKey, callbackHMACKey) {
+		return ErrProviderInvalid
+	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if provider.closed {
+		return ErrProviderUnavailable
+	}
+	clear(provider.apiKey)
+	clear(provider.callbackKey)
+	provider.apiKey, provider.callbackKey = bytes.Clone(apiKey), bytes.Clone(callbackHMACKey)
+	return nil
+}
+
 func (provider *HTTPSKYCProvider) Configured() bool {
 	if provider == nil {
 		return false
@@ -99,7 +127,19 @@ func (provider *HTTPSKYCProvider) Configured() bool {
 	provider.mu.RLock()
 	defer provider.mu.RUnlock()
 	return provider != nil && !provider.closed &&
-		provider.endpoint != nil && len(provider.apiKey) >= 16 && len(provider.callbackKey) >= 32 && provider.client != nil && provider.now != nil
+		provider.endpoint != nil && provider.client != nil && provider.now != nil
+}
+
+// CredentialsReady reports whether the API key and callback HMAC key are set.
+// Without them the provider stays mounted and its calls answer
+// ErrProviderNotConfigured.
+func (provider *HTTPSKYCProvider) CredentialsReady() bool {
+	if provider == nil {
+		return false
+	}
+	provider.mu.RLock()
+	defer provider.mu.RUnlock()
+	return len(provider.apiKey) >= 16 && len(provider.callbackKey) >= 32
 }
 func (provider *HTTPSKYCProvider) Name() string {
 	if provider == nil {
@@ -121,6 +161,9 @@ func (provider *HTTPSKYCProvider) Close() {
 }
 
 func (provider *HTTPSKYCProvider) CreateSession(ctx context.Context, request ProviderSessionCreate) (ProviderSessionCreated, error) {
+	if provider.Configured() && !provider.CredentialsReady() {
+		return ProviderSessionCreated{}, ErrProviderNotConfigured
+	}
 	if !provider.Configured() || ctx == nil || request.LocalSessionID == uuid.Nil || request.TenantScopeID == uuid.Nil ||
 		request.ActorUserID == uuid.Nil || !validKind(request.Kind) || !metadataPattern.MatchString(request.ProviderRequestID) || request.ExpiresAt.IsZero() {
 		return ProviderSessionCreated{}, ErrProviderInvalid
@@ -181,6 +224,9 @@ func (provider *HTTPSKYCProvider) CreateSession(ctx context.Context, request Pro
 }
 
 func (provider *HTTPSKYCProvider) VerifyCallback(ctx context.Context, envelope ProviderCallbackEnvelope) (VerifiedProviderCallback, error) {
+	if provider.Configured() && !provider.CredentialsReady() {
+		return VerifiedProviderCallback{}, ErrProviderNotConfigured
+	}
 	if !provider.Configured() || ctx == nil || envelope.Provider != provider.name || len(envelope.Body) == 0 || len(envelope.Body) > int(maximumProviderResponseBytes) {
 		return VerifiedProviderCallback{}, ErrProviderCallbackAuth
 	}

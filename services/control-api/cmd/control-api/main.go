@@ -39,6 +39,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoverycontext"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountrecoveryhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistration"
+	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationchallenge"
 	"github.com/cdnca/cdnca/services/control-api/internal/accountregistrationproof"
 	"github.com/cdnca/cdnca/services/control-api/internal/acmehttp01"
 	"github.com/cdnca/cdnca/services/control-api/internal/analytics"
@@ -157,6 +158,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/smartsched"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemconfig"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemconfigpublish"
+	"github.com/cdnca/cdnca/services/control-api/internal/systemmailsettings"
 	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/cdnca/cdnca/services/control-api/internal/theme"
 	"github.com/cdnca/cdnca/services/control-api/internal/urlauthpolicy"
@@ -1445,6 +1447,19 @@ func runServer() error {
 	}
 	accountRegistrationMailPlugins = lazyPluginProviderClients{cfg: cfg, pool: pool}
 	accountRegistrationMailLayout = theme.NewEmailLayout(pool)
+	// without ACCOUNT_REGISTRATION_TURNSTILE_SECRET the
+	// Turnstile flow reads the secret saved on the settings page per check
+	accountRegistrationConfig.useTurnstileSecretFromSettings(pool, credentialCipher)
+	// until the Turnstile site key and secret are both set the flow checks
+	// the built-in image CAPTCHA instead (registrationConfig, set below)
+	var registrationConfig *registrationConfigSource
+	accountRegistrationConfig.HumanFallback = accountregistrationchallenge.CaptchaHumanVerifier{Captcha: identityService}
+	accountRegistrationConfig.TurnstileReady = func(ctx context.Context) (bool, error) {
+		if registrationConfig == nil {
+			return false, errors.New("registration config is not ready")
+		}
+		return registrationConfig.TurnstileReady(ctx)
+	}
 	accountRegistrationRuntime, err := openAccountRegistrationRuntime(
 		ctx, accountRegistrationConfig, notificationConfig, pool, slog.Default(),
 	)
@@ -1551,11 +1566,16 @@ func runServer() error {
 			}
 		}
 	}
-	registrationConfig := newRegistrationConfigSource(pool, publicSystemSettings, accountRegistrationConfig,
-		builtInRegistrationService, registrationChannels, accountRecoveryConfig)
+	registrationNotifications := registrationNotificationView{requested: notificationConfig.Requested,
+		smsTemplateMapped: func(templateID string) (bool, bool) { return nativeSMSTemplateMapped(notificationConfig, templateID) }}
+	if notificationAuto != nil {
+		registrationNotifications.smsTemplateMapped = notificationAuto.SMSTemplateMapped
+	}
+	registrationConfig = newRegistrationConfigSource(pool, publicSystemSettings, accountRegistrationConfig, registrationMounted,
+		builtInRegistrationService, registrationChannels, registrationNotifications, accountRecoveryConfig)
 	accountLoginRuntime, err := openAccountLoginRuntime(
 		ctx, accountRecoveryConfig, notificationConfig, pool, identityService, cfg.CookieSecure, cfg.CookieDomain,
-		registrationMounted,
+		registrationMounted, credentialCipher,
 	)
 	loginErr := err
 	if err != nil {
@@ -1572,7 +1592,7 @@ func runServer() error {
 					return nil, nil
 				}
 				runtime, err := openAccountLoginRuntime(ctx, accountRecoveryConfig, next, pool, identityService,
-					cfg.CookieSecure, cfg.CookieDomain, registrationMounted)
+					cfg.CookieSecure, cfg.CookieDomain, registrationMounted, credentialCipher)
 				return runtime.parts(), err
 			}, accountLoginRuntime.parts(),
 			accountMailStartError(notificationConfig.Enabled && len(accountLoginTemplates(notificationConfig)) > 0, loginErr))
@@ -1897,6 +1917,7 @@ func runServer() error {
 		&identityVerificationRuntimeConfig,
 		identityVerificationProductionDependencies{
 			Pool: pool, Identity: identityService, IAM: dashboardIAM, Clock: time.Now,
+			SettingsCipher: credentialCipher,
 		},
 	)
 	if err != nil {
@@ -2294,13 +2315,26 @@ func runServer() error {
 	if err != nil {
 		return runtimeStageError{stage: "initialize system cleanup settings runtime", err: err}
 	}
-	systemUserSettingsHandlerFactory, err := buildSystemUserSettingsHandlerFactory(systemSettingsConfig, pool, identityService)
+	systemUserSettingsHandlerFactory, err := buildSystemUserSettingsHandlerFactory(systemSettingsConfig, pool, identityService, credentialCipher,
+		func(context.Context) (bool, bool) {
+			// the senders of sign-up codes (the channel switches do not apply)
+			if registrationChannels == nil {
+				return false, false
+			}
+			return registrationChannels.Channels()
+		})
 	if err != nil {
 		return runtimeStageError{stage: "initialize system user settings runtime", err: err}
 	}
+	// auto mode: a mail settings save may not take the sender of a
+	// verification in effect away (explicit mode reads the page only at start)
+	var mailVerificationGuard systemmailsettings.SaveGuard
+	if notificationAuto != nil {
+		mailVerificationGuard = notificationAuto.VerificationSenderGuard()
+	}
 	systemMailSettingsHandlerFactory, err := buildSystemMailSettingsHandlerFactory(systemSettingsConfig, pool, identityService, credentialCipher,
 		newSystemMailTestSender(notificationEnvironmentConfig, lazyPluginProviderClients{cfg: cfg, pool: pool}),
-		leaseModuleGate(entitlementguard.NewGuard(pool, time.Now, trust)))
+		leaseModuleGate(entitlementguard.NewGuard(pool, time.Now, trust)), mailVerificationGuard)
 	if err != nil {
 		return runtimeStageError{stage: "initialize system mail settings runtime", err: err}
 	}

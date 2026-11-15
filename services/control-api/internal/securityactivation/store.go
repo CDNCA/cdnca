@@ -20,6 +20,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/edgedeployment"
 	"github.com/cdnca/cdnca/services/control-api/internal/edgepublish"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitybinding"
 	"github.com/cdnca/cdnca/services/control-api/internal/securitypolicy"
 	"github.com/google/uuid"
@@ -42,6 +43,9 @@ type Store struct {
 	publisher   *edgepublish.Service
 	deployments *edgedeployment.Store
 	config      Config
+	// alerts notifies platform administrators of a recovery that gave up
+	// (recovery_attempts.go); nil in stores without a publisher.
+	alerts *notification.Store
 }
 
 func NewStore(pool *pgxpool.Pool, clock func() time.Time) (*Store, error) {
@@ -62,9 +66,13 @@ func NewProductionStore(
 	if pool == nil || clock == nil || bindings == nil || publisher == nil || deployments == nil || config.validate() != nil {
 		return nil, ErrInvalidInput
 	}
+	alerts, err := notification.NewStore(pool)
+	if err != nil {
+		return nil, err
+	}
 	return &Store{
 		pool: pool, clock: clock, auditor: audit.New(pool), bindings: bindings,
-		publisher: publisher, deployments: deployments, config: config,
+		publisher: publisher, deployments: deployments, config: config, alerts: alerts,
 	}, nil
 }
 
@@ -156,6 +164,9 @@ func (store *Store) Claim(ctx context.Context, actor securitypolicy.Actor, input
 			candidate.ExpandNodeIDs, input.IdempotencyKey, digest[:], input.RequestID,
 			actor.ScopeID, actor.UserID, candidate.ExpiresAt, now)
 		if err != nil {
+			return err
+		}
+		if err := reserveCandidateRevision(ctx, tx, input.TenantScopeID, candidate.CandidateSourceRevision, now); err != nil {
 			return err
 		}
 		if err := appendActivationEvent(ctx, tx, candidate, actor, "claimed", digest, "claim", "", StatusClaimed, input.RequestID, now); err != nil {
@@ -373,9 +384,15 @@ func (store *Store) Promote(
 		if command.RowsAffected() != 1 {
 			return ErrConflict
 		}
-		command, err = tx.Exec(ctx, `UPDATE edge_configuration_scopes SET source_revision=$2,updated_at=$3
-			WHERE scope_id=$1 AND source_revision=$4`, candidate.TenantScopeID,
-			candidate.CandidateSourceRevision, now, candidate.CandidateSourceRevision-1)
+		// The claim took the revision (reserveCandidateRevision): any advance
+		// since is a change the candidate's release lacks. One promotion per
+		// revision (two candidates migration 669 left on the same one).
+		command, err = tx.Exec(ctx, `UPDATE edge_configuration_scopes SET updated_at=$3
+			WHERE scope_id=$1 AND source_revision=$2 AND NOT EXISTS (
+			  SELECT 1 FROM security_policy_activation_candidates other
+			  WHERE other.tenant_scope_id=$1 AND other.candidate_source_revision=$2
+			    AND other.candidate_status='promoted')`, candidate.TenantScopeID,
+			candidate.CandidateSourceRevision, now)
 		if err != nil {
 			return err
 		}

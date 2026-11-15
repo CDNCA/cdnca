@@ -17,6 +17,11 @@ var (
 	ErrRevisionConflict    = errors.New("platform system mail settings revision conflict")
 	ErrIdempotencyConflict = errors.New("platform system mail settings idempotency conflict")
 	ErrUnavailable         = errors.New("platform system mail settings unavailable")
+	// ErrEmailVerificationSender / ErrSMSVerificationSender: the save would
+	// leave email / phone verification in effect (required and its
+	// notification channel on) without a sender of that channel.
+	ErrEmailVerificationSender = errors.New("email verification is in effect and would have no sender")
+	ErrSMSVerificationSender   = errors.New("phone verification is in effect and would have no sender")
 	// ErrModuleNotLicensed: the chosen official mail service's module
 	// (mail.ModuleCode) is not granted by the installation licence.
 	ErrModuleNotLicensed = errors.New("official mail service is not included in the licence")
@@ -124,6 +129,9 @@ type Document struct {
 	// The SMTP password entered on the page, likewise write-only.
 	SMTPPasswordConfigured  bool   `json:"smtp_password_configured"`
 	SMTPPasswordFingerprint string `json:"smtp_password_fingerprint,omitempty"`
+	// The HTTPS SMS gateway token entered on the page, likewise write-only.
+	SMSAuthTokenConfigured  bool   `json:"sms_auth_token_configured"`
+	SMSAuthTokenFingerprint string `json:"sms_auth_token_fingerprint,omitempty"`
 	Replayed                bool   `json:"-"`
 }
 
@@ -138,7 +146,11 @@ type SaveRequest struct {
 	// SMTPPassword is the SMTP password, write-only: nil keeps the stored
 	// one, "" clears it, anything else replaces it. It cannot coexist with
 	// Value.SMTPPasswordReference.
-	SMTPPassword   *string
+	SMTPPassword *string
+	// SMSAuthToken is the HTTPS SMS gateway token (provider https_json),
+	// write-only with the same nil/""/value semantics as SMTPPassword. It
+	// cannot coexist with Value.SMSAccessKeyReference.
+	SMSAuthToken   *string
 	IdempotencyKey string
 	RequestID      string
 }

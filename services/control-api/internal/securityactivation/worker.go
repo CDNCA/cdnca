@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,10 @@ import (
 
 const reconcileWorkerBatchSize = 100
 
+// refusalBackoffMax caps the wait between attempts on a candidate the
+// database keeps refusing with the same error.
+const refusalBackoffMax = 5 * time.Minute
+
 type Worker struct {
 	store   *Store
 	running atomic.Bool
@@ -24,6 +29,17 @@ type Worker struct {
 	lastOK  time.Time
 	cursor  uuid.UUID
 	rebind  *rebinder
+	// refused is only touched by the Run goroutine.
+	refused map[uuid.UUID]refusal
+}
+
+// refusal is a candidate's last candidate-local refusal: the same error again
+// doubles delay (from ReconcileInterval up to refusalBackoffMax); the candidate
+// is not reconciled before next.
+type refusal struct {
+	message string
+	delay   time.Duration
+	next    time.Time
 }
 
 type workerItem struct {
@@ -43,7 +59,8 @@ func NewWorker(store *Store) (*Worker, error) {
 	if store == nil || store.pool == nil || store.clock == nil || store.config.validate() != nil {
 		return nil, ErrInvalidInput
 	}
-	return &Worker{store: store, rebind: newRebinder(store, store.clock, store.config.CandidateTTL)}, nil
+	return &Worker{store: store, rebind: newRebinder(store, store.clock, store.config.CandidateTTL),
+		refused: make(map[uuid.UUID]refusal)}, nil
 }
 
 func (worker *Worker) Run(ctx context.Context) error {
@@ -51,6 +68,9 @@ func (worker *Worker) Run(ctx context.Context) error {
 		return ErrUnavailable
 	}
 	defer worker.running.Store(false)
+	if worker.store.publisher != nil {
+		worker.store.republishCollidedScopes(ctx)
+	}
 	if err := worker.reconcile(ctx); err != nil {
 		return err
 	}
@@ -105,6 +125,9 @@ func (worker *Worker) reconcile(ctx context.Context) error {
 		return nil
 	}
 	for _, item := range items {
+		if worker.backingOff(item.input.CandidateID) {
+			continue
+		}
 		item.input.IdempotencyKey = workerItemKey(item)
 		requestID := uuid.NewSHA1(item.input.CandidateID, []byte(item.input.IdempotencyKey)).String()
 		item.input.RequestID = requestID
@@ -119,14 +142,57 @@ func (worker *Worker) reconcile(ctx context.Context) error {
 			cancel()
 		}
 		if err != nil && !ignorableWorkerError(err) {
-			return fmt.Errorf("reconcile security activation %s: %w", item.input.CandidateID, err)
+			if !candidateLocalError(err) {
+				return fmt.Errorf("reconcile security activation %s: %w", item.input.CandidateID, err)
+			}
+			// One candidate whose recovery rollout a database guard refuses (P8802) used to stop the worker
+			// and with it the whole control plane, in a restart loop. A refusal that belongs to this candidate is
+			// logged and the candidate retried later (refuse); the other candidates and the control plane go on.
+			worker.refuse(item.input.CandidateID, err)
+			continue
 		}
+		delete(worker.refused, item.input.CandidateID)
 	}
 	worker.cursor = items[len(items)-1].input.CandidateID
 	if len(items) < reconcileWorkerBatchSize {
 		worker.cursor = uuid.Nil
 	}
 	return nil
+}
+
+// backingOff reports a refused candidate whose retry time has not come.
+func (worker *Worker) backingOff(candidateID uuid.UUID) bool {
+	entry, found := worker.refused[candidateID]
+	return found && worker.store.clock().Before(entry.next)
+}
+
+// refuse logs the refusal and schedules the next attempt: one interval after
+// a new error, twice the last delay (at most refusalBackoffMax) after the same
+// one, so a candidate refused for good logs a few times an hour, not every pass.
+func (worker *Worker) refuse(candidateID uuid.UUID, err error) {
+	message := err.Error()
+	delay := worker.store.config.ReconcileInterval
+	if entry, found := worker.refused[candidateID]; found && entry.message == message {
+		delay = min(2*entry.delay, refusalBackoffMax)
+	}
+	worker.refused[candidateID] = refusal{message: message, delay: delay, next: worker.store.clock().Add(delay)}
+	slog.Error("security activation candidate refused; retrying later", "candidate_id", candidateID,
+		"error", err, "retry_in", delay)
+}
+
+// candidateLocalError reports a database refusal that concerns one candidate (constraint, guard trigger, data
+// error), not the connection or the server: connection (08), resources (53), operator intervention (57) and
+// system (58, XX) errors still stop the worker so runWithDBBackoff and the health check see them.
+func candidateLocalError(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || len(pgErr.Code) < 2 {
+		return false
+	}
+	switch pgErr.Code[:2] {
+	case "08", "53", "57", "58", "XX":
+		return false
+	}
+	return true
 }
 
 // ignorableWorkerError skips the item for this pass; the next pass retries.
@@ -183,7 +249,8 @@ func (store *Store) loadWorkerItems(ctx context.Context, limit int, after uuid.U
 	FROM security_policy_activation_candidates candidate
 	JOIN access_scopes actor_scope ON actor_scope.id=candidate.actor_scope_id
 	WHERE (candidate.candidate_status IN ('claimed','canary','expanding','healthy') OR
-	      (candidate.candidate_status IN ('failed','cancelled','expired') AND candidate.recovered_at IS NULL))
+	      (candidate.candidate_status IN ('failed','cancelled','expired') AND candidate.recovered_at IS NULL AND
+	       NOT EXISTS (SELECT 1 FROM security_activation_recovery_failures_670 failure WHERE failure.candidate_id=candidate.id)))
 	  AND ($2::uuid='00000000-0000-0000-0000-000000000000'::uuid OR candidate.id>$2)
 	ORDER BY candidate.id LIMIT $1`, limit, after)
 	if err != nil {

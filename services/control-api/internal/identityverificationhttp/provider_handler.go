@@ -294,6 +294,10 @@ func providerPublicError(err error) (int, string, string) {
 		return http.StatusNotFound, "identity_verification_provider_not_found", "identity verification provider resource was not found"
 	case errors.Is(err, identityverification.ErrRevisionConflict):
 		return http.StatusConflict, "identity_verification_revision_conflict", "resource revision is stale"
+	case errors.Is(err, ErrProviderNotConfigured):
+		return http.StatusServiceUnavailable, "identity_verification_not_configured", "identity verification is not configured"
+	case errors.Is(err, ErrProviderKindDisabled):
+		return http.StatusForbidden, "identity_verification_kind_disabled", "this kind of identity verification is turned off"
 	case errors.Is(err, ErrProviderConflict):
 		return http.StatusConflict, "identity_verification_provider_conflict", "provider workflow state conflicts"
 	case errors.Is(err, ErrProviderCallbackReplay):

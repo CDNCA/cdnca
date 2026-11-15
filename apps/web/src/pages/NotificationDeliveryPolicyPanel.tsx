@@ -50,6 +50,7 @@ const eventNames: Record<string, string> = {
   'payment.reconcile.mismatch': 'paymentReconcileMismatch', 'payment.plugin.alert': 'paymentPluginAlert',
   'node.security.event': 'nodeSecurityEvent', 'node.security.waf_ban': 'wafAutoBan', 'node.security.list_truncated': 'listTruncated', 'installation_ban.rejected': 'installationBanRejected', 'node.install_trust.failed': 'nodeInstallTrustFailed', 'node.certificate.recovered': 'nodeCertificateRecovered',
   'control.db_pool.saturated': 'controlDBPoolSaturated', 'control.db_pool.recovered': 'controlDBPoolRecovered',
+  'security_activation.recovery_failed': 'securityActivationRecoveryFailed',
   'aggregated_edge.schedule.alert': 'aggregatedEdgeScheduleAlert', 'probe.dnspup.degraded': 'dnspupProbeDegraded',
   'market.limit.warn80': 'marketLimitWarn80',
   'market.limit.warn95': 'marketLimitWarn95',

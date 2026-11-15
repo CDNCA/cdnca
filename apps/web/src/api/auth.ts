@@ -275,6 +275,8 @@ export class ApiError extends Error {
   declare retryAfter?: number
   /** What holds a node whose deletion was refused (node_in_use error.details.reasons). */
   declare nodeInUse?: NodeInUseReason[]
+  /** Switching a notification channel off would suspend per-user sign-in second steps (error.details counts). */
+  declare channelDisable?: { emailUsers: number; smsUsers: number }
   /** D3: the sites still running a policy whose delete was refused (security_policy_in_use error.details.sites). */
   declare inUseSites?: { id: string; domain: string }[]
   /** What still uses a line group whose delete was refused (node_scheduling_reference_conflict error.details). */
@@ -360,6 +362,11 @@ export async function responseApiError(response: Response): Promise<ApiError> {
           ? [{ id, domain }] : []
       })
     }
+  }
+  if (code === 'notification_channel_disable_confirmation_required') {
+    const details = (body?.error?.details ?? {}) as { affected_email_users?: unknown; affected_sms_users?: unknown }
+    const count = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : 0
+    error.channelDisable = { emailUsers: count(details.affected_email_users), smsUsers: count(details.affected_sms_users) }
   }
   if (code === 'node_in_use') {
     const reasons = nodeInUseReasons((body?.error?.details as { reasons?: unknown } | undefined)?.reasons)

@@ -275,8 +275,12 @@ func (UnrequestedRevisionPublisher) EnqueueUnrequestedSiteRevisionTx(
 // are left alone.
 func enqueueUncoveredRevisionTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, enqueue func(pgx.Tx) (bool, error)) (bool, error) {
 	var uncovered bool
+	// A revision a security activation candidate took is covered by its
+	// release (promoted) or its recovery republication (securityactivation).
 	err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM edge_automatic_publication_requests request_row
 		WHERE request_row.target_scope_id=scope.scope_id AND request_row.source_revision>=scope.source_revision)
+		AND NOT EXISTS(SELECT 1 FROM security_policy_activation_candidates candidate
+		WHERE candidate.tenant_scope_id=scope.scope_id AND candidate.candidate_source_revision>=scope.source_revision)
 		FROM edge_configuration_scopes scope WHERE scope.scope_id=$1 FOR UPDATE OF scope`, scopeID).Scan(&uncovered)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && !uncovered {
 		return false, nil

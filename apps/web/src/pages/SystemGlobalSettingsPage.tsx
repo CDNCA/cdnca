@@ -18,7 +18,11 @@ import { auditLogCategories } from '../api/auditLogs'
 import { systemCleanupSettingsApi, type PlatformSystemCleanupDocument, type PlatformSystemCleanupSettings } from '../api/systemCleanupSettings'
 import { mailProviderKind, nativeSMSProviders, systemMailSettingsApi, type PlatformSystemMailSettings, type PlatformSystemMailSettingsDocument } from '../api/systemMailSettings'
 import { systemOtherSettingsApi, validCertificateNoticeDays, type PlatformSystemOtherSettings, type PlatformSystemOtherSettingsDocument } from '../api/systemOtherSettings'
-import { systemUserSettingsApi, type PlatformSystemUserSettings, type PlatformSystemUserSettingsDocument } from '../api/systemUserSettings'
+import { systemUserSettingsApi, type CaptchaSecretName, type PlatformSystemUserSettings, type PlatformSystemUserSettingsDocument, type UserSettingsSecretName, type UserSettingsSecrets } from '../api/systemUserSettings'
+import { accountRegistrationApi, registrationReasons, type AccountRegistrationConfig } from '../api/accountRegistration'
+import { RegistrationReadinessReasons } from '../components/RegistrationReadinessReasons'
+import { NotificationChannelOffNotice } from '../components/NotificationChannelSwitch'
+import { notificationsApi, type NotificationRuntimeHealth } from '../api/notifications'
 import { useSessionStore } from '../auth/session'
 import { systemSettingsChangedEvent } from '../components/useSystemBranding'
 import { localizedText } from '../api/theme'
@@ -337,6 +341,7 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
 }) {
   const { t, i18n } = useTranslation('systemGlobalSettings')
   const { t: adminAccessT } = useTranslation('adminAccess')
+  const { t: registrationT } = useTranslation('accountRegistration')
   const { message } = App.useApp()
   const feedback = useFeedback()
   const accessToken = useSessionStore((state) => state.accessToken)
@@ -354,6 +359,21 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
   const [draft, setDraft] = useState<PlatformSystemUserSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiError | null>(null)
+  // Write-only page secrets (CAPTCHA / enterprise verification); the ref holds
+  // what the current attempt sends: undefined keeps, '' clears.
+  const [secrets, setSecrets] = useState<UserSettingsSecrets>({})
+  const secretsRef = useRef<UserSettingsSecrets>({})
+  const [referencesOpen, setReferencesOpen] = useState(false)
+  // what the sign-up page sees, with the administrator's reasons
+  const [readiness, setReadiness] = useState<AccountRegistrationConfig | null>(null)
+  const loadReadiness = useCallback(async () => {
+    const token = currentBaselineAccess(ownerKey)
+    if ((mode !== 'account' && mode !== 'all') || !token || !canRead) return null
+    const value = await accountRegistrationApi.registrationConfig(undefined, token)
+    if (currentBaselineAccess(ownerKey)) setReadiness(value)
+    return value
+  }, [canRead, mode, ownerKey])
+  useEffect(() => { void loadReadiness() }, [loadReadiness, sessionEpoch])
 
   const load = useCallback(async () => {
     const token = currentBaselineAccess(ownerKey)
@@ -377,8 +397,22 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
     canManage,
     revision: document?.revision,
     scope: `user-${mode}`,
-    submit: (token, attempt) => systemUserSettingsApi.put(token, attempt.revision, attempt.value, attempt.requestId, attempt.idempotencyKey),
-    onSuccess: (next) => { setDocument(next); setDraft(next.value); onShared?.(next); message.success(state.saved) },
+    submit: (token, attempt) => systemUserSettingsApi.put(token, attempt.revision, attempt.value, attempt.requestId, attempt.idempotencyKey, secretsRef.current),
+    onSuccess: (next) => {
+      secretsRef.current = {}; setSecrets({}); setDocument(next); setDraft(next.value); onShared?.(next); message.success(state.saved)
+      // a verification required while its channel cannot
+      // send is saved, with a warning (the sign-up page would say it is not set up)
+      void loadReadiness().then((config) => {
+        if (!config || config.mode === 'closed') return
+        const missing = [
+          next.value.email_verification_required && !config.email.available ? 'email' : null,
+          next.value.phone_verification_required && !config.sms.available ? 'sms' : null,
+        ].filter((channel): channel is 'email' | 'sms' => channel !== null)
+        if (missing.length > 0) {
+          message.warning(registrationT('readiness.saveWarning', { channels: registrationT(`readiness.channels.${missing.length === 2 ? 'both' : missing[0]}`) }), 8)
+        }
+      })
+    },
   })
   // The sibling tab saved a newer revision: adopt it, keeping only the fields edited here.
   useEffect(() => {
@@ -397,10 +431,17 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
   if (!document || !draft) return null
 
   const update = <K extends keyof PlatformSystemUserSettings>(key: K, value: PlatformSystemUserSettings[K]) => setDraft((current) => current ? { ...current, [key]: value } : current)
-  const save = () => {
+  const captchaSecrets = ['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret'] as const
+  const kycSecrets = ['kyc_api_key', 'kyc_callback_hmac_key'] as const
+  const accountSecrets = [...captchaSecrets, 'captcha_turnstile_secret'] as const
+  const shownSecrets: readonly UserSettingsSecretName[] = mode === 'account' ? accountSecrets : mode === 'payment' ? kycSecrets : [...accountSecrets, ...kycSecrets]
+  // clear: the saved secret to clear in this save (the "clear" button).
+  const save = (clear?: UserSettingsSecretName) => {
     if (!draft) return
     if ((mode === 'account' || mode === 'all') && !validUserNotificationTemplates(draft)) { feedback.error(t('errors.notification_template_invalid')); return }
-    write.save(draft)
+    secretsRef.current = Object.fromEntries(shownSecrets.map((name) => [name, name === clear ? '' : secrets[name] || undefined]))
+    // Saving the identity tab makes its identity policy authoritative.
+    write.save(mode === 'account' ? draft : { ...draft, identity_policy_saved: true })
   }
   const writeErrorCode = write.error instanceof ApiError ? write.error.code : 'network_error'
   // Keys shown in this mode; a refusal of a key shown here goes under it (fix-fielderr-be2).
@@ -408,10 +449,17 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
     'password_reset_subject', 'password_reset_body', 'verification_template_channel', 'verification_subject', 'verification_body', 'verification_sms_body',
     'verification_sms_template_id', 'terms_title', 'terms_body', 'email_verification_required', 'phone_verification_required', 'default_phone_country_code',
     'login_failure_limit_per_hour', 'login_captcha_threshold_per_hour', 'email_anti_abuse_mode', 'sms_anti_abuse_mode', 'captcha_provider',
-    'captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference']
-  const paymentKeys = ['identity_verification_method', 'enterprise_secret_id_reference', 'enterprise_secret_key_reference']
-  const { status: fieldStatus, shown: refusedShown } = refusedFieldStatus(write.error,
+    'captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference', 'captcha_turnstile_site_key', ...accountSecrets]
+  const paymentKeys = ['identity_verification_method', ...kycSecrets]
+  const { status: refusedStatus, shown: refusedShown } = refusedFieldStatus(write.error,
     [...(mode === 'payment' ? [] : accountKeys), ...(mode === 'account' ? [] : paymentKeys)], i18n.resolvedLanguage)
+  // turning a verification on without its sender is refused: say what is missing
+  const fieldStatus = (...keys: string[]) => {
+    const status = refusedStatus(...keys)
+    return writeErrorCode === 'system_user_settings_verification_sender_unavailable' && 'help' in status
+      ? { ...status, help: t(`errors.verification_sender_unavailable_${keys.includes('phone_verification_required') ? 'sms' : 'email'}`) }
+      : status
+  }
   const writeErrorKey = writeErrorCode === 'system_user_settings_revision_conflict'
     ? mode === 'account' ? 'errors.system_account_settings_revision_conflict' : mode === 'payment' ? 'errors.system_payment_settings_revision_conflict' : `errors.${writeErrorCode}`
     : `errors.${writeErrorCode}`
@@ -419,6 +467,25 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
   const section = (key: string, children: ReactNode) => <section className="system-settings-config-card" id={`${mode}-${key}`} aria-labelledby={`${mode}-${key}-title`}><h2 id={`${mode}-${key}-title`}>{t(`userSections.${key}`)}</h2>{children}</section>
   const toggle = (key: keyof PlatformSystemUserSettings) => <Switch checked={Boolean(draft[key])} disabled={!canManage} onChange={(value) => update(key, value as never)} aria-label={t(`userFields.${key}`)} />
   const text = (key: keyof PlatformSystemUserSettings, placeholder?: string) => <Input value={String(draft[key])} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`userFields.${key}`)} />
+  const busy = !canManage || write.uncertain || write.saving
+  const secretField = (name: UserSettingsSecretName, hint?: string) => {
+    const configured = Boolean(document[`${name}_configured`])
+    return <Form.Item key={name} label={t(`userFields.${name}`)} {...fieldStatus(name)}
+      extra={<><div>{configured ? t('secretField.set', { fingerprint: document[`${name}_fingerprint`] }) : t('secretField.unset')}</div>{hint ? <div>{hint}</div> : null}</>}>
+      <Space.Compact style={{ width: '100%' }}>
+        <Input.Password value={secrets[name] ?? ''} disabled={!canManage} autoComplete="new-password" placeholder={configured ? t('secretField.keep') : ''}
+          onChange={(event) => setSecrets((current) => ({ ...current, [name]: event.target.value }))} aria-label={t(`userFields.${name}`)} />
+        {configured ? <Popconfirm title={t('secretField.clearConfirm', { name: t(`userFields.${name}`) })} disabled={busy} onConfirm={() => save(name)}>
+          <Button disabled={busy}>{t('secretField.clear')}</Button>
+        </Popconfirm> : null}
+      </Space.Compact>
+    </Form.Item>
+  }
+  // The *_reference fields stay as an advanced option, shown once opened or in use.
+  const referenceFields = (names: readonly CaptchaSecretName[]) => referencesOpen || names.some((name) => draft[`${name}_reference`] !== '')
+    ? <>{names.map((name) => <Form.Item key={`${name}_reference`} label={t(`userFields.${name}_reference`)} {...fieldStatus(`${name}_reference`)}>{text(`${name}_reference`, t('placeholders.secretReference'))}</Form.Item>)}
+      <Form.Item label=" "><Typography.Text type="secondary">{t('secretField.referencesHint')}</Typography.Text></Form.Item></>
+    : <Form.Item label=" "><Button type="link" style={{ padding: 0 }} onClick={() => setReferencesOpen(true)}>{t('smtpPassword.advanced')}</Button></Form.Item>
   const subjectInput = (key: keyof PlatformSystemUserSettings) => <Space.Compact block><Input value={t('labels.subject')} readOnly tabIndex={-1} aria-hidden style={{ width: 52, textAlign: 'center', pointerEvents: 'none' }} /><Input value={String(draft[key])} disabled={!canManage} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`userFields.${key}`)} /></Space.Compact>
   const template = (subject: keyof PlatformSystemUserSettings, body: keyof PlatformSystemUserSettings) => <Space direction="vertical" size={8} style={{ width: '100%' }}>{subjectInput(subject)}<Input.TextArea value={String(draft[body])} disabled={!canManage} rows={4} onChange={(event) => update(body, event.target.value as never)} aria-label={t(`userFields.${body}`)} /></Space>
   const requirement = (key: keyof PlatformSystemUserSettings, verification?: keyof PlatformSystemUserSettings) => <Space wrap><Checkbox checked={Boolean(draft[key])} disabled={!canManage} onChange={(event) => { update(key, event.target.checked as never); if (!event.target.checked && verification) update(verification, false as never) }}>{t('options.required')}</Checkbox>{verification ? <Checkbox checked={Boolean(draft[verification])} disabled={!canManage || !draft[key]} onChange={(event) => update(verification, event.target.checked as never)}>{t('options.verified')}</Checkbox> : null}</Space>
@@ -442,6 +509,7 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
         <Form.Item label={t('userFields.sms_code_login_enabled')}>{toggle('sms_code_login_enabled')}</Form.Item>
       </>)}
       {section('registration', <>
+        {readiness && !readiness.ready && readiness.mode !== 'closed' ? <RegistrationReadinessReasons title={registrationT('readiness.settingsTitle')} reasons={registrationReasons(readiness)} className="system-settings-registration-readiness" /> : null}
         <Form.Item label={t('userFields.registration_enabled')}>{toggle('registration_enabled')}</Form.Item>
         <Form.Item label={t('userFields.registration_success_template')} {...fieldStatus('registration_success_subject', 'registration_success_body')}>{template('registration_success_subject', 'registration_success_body')}</Form.Item>
         <Form.Item label={t('userFields.password_reset_template')} {...fieldStatus('password_reset_subject', 'password_reset_body')}>{template('password_reset_subject', 'password_reset_body')}</Form.Item>
@@ -462,23 +530,31 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
       </>)}
       {section('captcha', <>
         <Form.Item label={t('userFields.captcha_provider')} {...fieldStatus('captcha_provider')}><Radio.Group value={draft.captcha_provider} disabled={!canManage} onChange={(event) => update('captcha_provider', event.target.value)}><Radio value="tencent">{t('options.tencent')}</Radio><Radio value="geetest_v4">{t('options.geetest')}</Radio></Radio.Group></Form.Item>
-        {(['captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference'] as const).map((key) => <Form.Item key={key} label={t(`userFields.${key}`)} {...fieldStatus(key)}>{text(key, key === 'captcha_app_id' ? undefined : t('placeholders.secretReference'))}</Form.Item>)}
+        {secretField('captcha_secret_id')}
+        {secretField('captcha_secret_key')}
+        <Form.Item label={t('userFields.captcha_app_id')} {...fieldStatus('captcha_app_id')}>{text('captcha_app_id')}</Form.Item>
+        {secretField('captcha_app_secret')}
+        {referenceFields(captchaSecrets)}
         <Form.Item label=" "><Typography.Text type="danger">{t('hints.captcha')}</Typography.Text></Form.Item>
+        <Form.Item label={t('turnstile.siteKey')} {...fieldStatus('captcha_turnstile_site_key')} extra={t('turnstile.hint')}>{text('captcha_turnstile_site_key')}</Form.Item>
+        {secretField('captcha_turnstile_secret')}
       </>)}
       </> : null}
       {mode === 'payment' || mode === 'all' ? <>
-      {section('identity', <Form.Item label={t('userFields.identity_verification_method')} {...fieldStatus('identity_verification_method')} extra={t('hints.identityMethod')}><Radio.Group data-testid="system-settings-identity-method" aria-label={t('hints.identityMethodLabel')} value={draft.identity_verification_method} disabled={!canManage} onChange={(event) => update('identity_verification_method', event.target.value)}><Space wrap><Radio value="none">{t('options.identityNone')}</Radio><Radio value="alipay">{t('options.alipayIdentity')}</Radio><Radio value="wechat_face">{t('options.wechatFace')}</Radio><Radio value="phone_three_factor">{t('options.phoneThreeFactor')}</Radio></Space></Radio.Group></Form.Item>)}
+      {section('identity', <>
+        {draft.identity_policy_saved ? null : <Alert type="info" showIcon message={t('hints.identityPolicyUnsaved')} style={{ marginBottom: 16, maxWidth: 760 }} />}
+        <Form.Item label={t('userFields.identity_verification_method')} {...fieldStatus('identity_verification_method')} extra={t('hints.identityMethod')}><Radio.Group data-testid="system-settings-identity-method" aria-label={t('hints.identityMethodLabel')} value={draft.identity_verification_method} disabled={!canManage} onChange={(event) => update('identity_verification_method', event.target.value)}><Space wrap><Radio value="none">{t('options.identityNone')}</Radio><Radio value="alipay">{t('options.alipayIdentity')}</Radio><Radio value="wechat_face">{t('options.wechatFace')}</Radio><Radio value="phone_three_factor">{t('options.phoneThreeFactor')}</Radio></Space></Radio.Group></Form.Item>
+        {secretField('kyc_api_key', t('hints.kycCredentials'))}
+        {secretField('kyc_callback_hmac_key', t('hints.kycCallbackKey'))}
+      </>)}
       {section('enterprise', <>
         <Form.Item label={t('userFields.enterprise_verification_enabled')} extra={t('hints.enterpriseEnabled')}>{toggle('enterprise_verification_enabled')}</Form.Item>
-        <Form.Item label={t('userFields.enterprise_secret_id_reference')} {...fieldStatus('enterprise_secret_id_reference')} extra={t('hints.enterpriseSecrets')}>{text('enterprise_secret_id_reference', t('placeholders.secretReference'))}</Form.Item>
-        <Form.Item label={t('userFields.enterprise_secret_key_reference')} {...fieldStatus('enterprise_secret_key_reference')}>{text('enterprise_secret_key_reference', t('placeholders.secretReference'))}</Form.Item>
-        <Form.Item label=" "><Typography.Link href="https://market.cloud.tencent.com/products/30310" target="_blank" rel="noreferrer">{t('hints.identityProviderHelp')}</Typography.Link></Form.Item>
       </>)}
       </> : null}
-      {mode === 'payment' || mode === 'all' ? <Form.Item label=" "><Space><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" onClick={save}>{t('actions.saveRecharge')}</Button></Space></Form.Item> : null}
-      {mode === 'all' ? <Form.Item label=" "><Space><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" onClick={save}>{t('actions.save')}</Button></Space></Form.Item> : null}
+      {mode === 'payment' || mode === 'all' ? <Form.Item label=" "><Space><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" onClick={() => save()}>{t('actions.saveRecharge')}</Button></Space></Form.Item> : null}
+      {mode === 'all' ? <Form.Item label=" "><Space><Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" onClick={() => save()}>{t('actions.save')}</Button></Space></Form.Item> : null}
     </Form>
-    {mode === 'account' || mode === 'all' ? <><Divider /><Space><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button>{mode === 'all' ? null : <Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" icon={<Save size={14} />} onClick={save}>{t('actions.save')}</Button>}</Space></> : null}
+    {mode === 'account' || mode === 'all' ? <><Divider /><Space><Button icon={<RefreshCw size={14} />} disabled={write.saving || write.uncertain} onClick={refresh}>{t('actions.refresh')}</Button>{mode === 'all' ? null : <Button disabled={!canManage || write.uncertain} loading={write.saving} type="primary" icon={<Save size={14} />} onClick={() => save()}>{t('actions.save')}</Button>}</Space></> : null}
     {write.saved ? <Alert type="success" showIcon message={state.saved} style={{ marginTop: 12 }} /> : null}
   </div>
 }
@@ -574,6 +650,15 @@ function MailPanel() {
   const [draft, setDraft] = useState<PlatformSystemMailSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiError | null>(null)
+  // the restart note applies to the explicit notification
+  // mode only (the auto mode picks saved senders up by itself)
+  const [notificationMode, setNotificationMode] = useState<NotificationRuntimeHealth['mode']>(undefined)
+  useEffect(() => {
+    if (!accessToken) return
+    let active = true
+    void notificationsApi.getRuntimeHealth(accessToken).then((health) => { if (active) setNotificationMode(health.mode) }).catch(() => undefined)
+    return () => { active = false }
+  }, [accessToken])
 
   const load = useCallback(async () => {
     const token = currentBaselineAccess(ownerKey)
@@ -601,6 +686,10 @@ function MailPanel() {
   const [smtpPassword, setSMTPPassword] = useState('')
   const smtpPasswordRef = useRef<string | undefined>(undefined)
   const [smtpReferenceOpen, setSMTPReferenceOpen] = useState(false)
+  // Write-only HTTPS SMS gateway token, likewise.
+  const [smsToken, setSMSToken] = useState('')
+  const smsTokenRef = useRef<string | undefined>(undefined)
+  const [smsReferenceOpen, setSMSReferenceOpen] = useState(false)
 
   const write = useBaselineWrite<PlatformSystemMailSettings, PlatformSystemMailSettingsDocument>({
     ownerKey,
@@ -608,7 +697,8 @@ function MailPanel() {
     revision: document?.revision,
     scope: 'mail',
     submit: (token, attempt) => systemMailSettingsApi.put(token, attempt.revision, attempt.value, attempt.requestId, attempt.idempotencyKey,
-      { smsAccessKeySecret: smsSecretRef.current || undefined, mailSecret: mailSecretRef.current || undefined, smtpPassword: smtpPasswordRef.current }),
+      { smsAccessKeySecret: smsSecretRef.current || undefined, mailSecret: mailSecretRef.current || undefined, smtpPassword: smtpPasswordRef.current,
+        smsAuthToken: smsTokenRef.current }),
     onSuccess: (next, attempt) => {
       setDocument(next)
       smsSecretRef.current = ''
@@ -617,6 +707,8 @@ function MailPanel() {
       setMailSecret('')
       smtpPasswordRef.current = undefined
       setSMTPPassword('')
+      smsTokenRef.current = undefined
+      setSMSToken('')
       setDraft((current) => current ? {
         ...next.value,
         ...Object.fromEntries(Object.entries(current).filter(([key, value]) => value !== attempt.value[key as keyof PlatformSystemMailSettings])),
@@ -636,8 +728,8 @@ function MailPanel() {
   const persistedUnsupportedProvider = !supportedProvider(document.value.sms_provider)
   const nativeProvider = (nativeSMSProviders as readonly string[]).includes(draft.sms_provider)
   const update = <K extends keyof PlatformSystemMailSettings>(key: K, value: PlatformSystemMailSettings[K]) => setDraft((current) => current ? { ...current, [key]: value } : current)
-  const text = (key: keyof PlatformSystemMailSettings, placeholder?: string) => <Input value={String(draft[key])} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`fields.${key === 'smtp_password_reference' ? 'smtpPasswordReference' : key === 'sms_access_key_reference' ? 'accessKeySecret' : key === 'sms_access_key_id' ? 'accessKeyID' : key === 'smtp_address' ? 'smtpAddress' : key === 'smtp_user' ? 'smtpUser' : key === 'smtp_from' ? 'smtpFrom' : key === 'smtp_from_name' ? 'smtpFromName' : 'signatureName'}`)} />
-  const save = (section: 'smtp' | 'sms' | 'provider', clearSMTPPassword = false) => {
+  const text = (key: keyof PlatformSystemMailSettings, placeholder?: string) => <Input value={String(draft[key])} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`fields.${key === 'smtp_password_reference' || key === 'sms_access_key_reference' ? 'smtpPasswordReference' : key === 'sms_access_key_id' ? 'accessKeyID' : key === 'smtp_address' ? 'smtpAddress' : key === 'smtp_user' ? 'smtpUser' : key === 'smtp_from' ? 'smtpFrom' : key === 'smtp_from_name' ? 'smtpFromName' : 'signatureName'}`)} />
+  const save = (section: 'smtp' | 'sms' | 'provider', clearSecret = false) => {
     if (write.saving || write.uncertain || (section === 'sms' ? unsupportedProvider : persistedUnsupportedProvider)) return
     const value = section === 'smtp'
       ? { ...document.value, smtp_address: draft.smtp_address, smtp_ssl: draft.smtp_ssl, smtp_port: draft.smtp_port, smtp_user: draft.smtp_user, smtp_password_reference: draft.smtp_password_reference,
@@ -652,17 +744,19 @@ function MailPanel() {
             sms_template_map: nativeProvider ? draft.sms_template_map : '' }
     smsSecretRef.current = section === 'sms' && nativeProvider ? smsSecret : ''
     mailSecretRef.current = section === 'provider' && mailProviderKind(draft.mail_provider) === 'official' ? mailSecret : ''
-    smtpPasswordRef.current = section !== 'smtp' ? undefined : clearSMTPPassword ? '' : smtpPassword || undefined
+    smtpPasswordRef.current = section !== 'smtp' ? undefined : clearSecret ? '' : smtpPassword || undefined
+    smsTokenRef.current = section !== 'sms' || nativeProvider ? undefined : clearSecret ? '' : smsToken || undefined
     write.save(value, section)
   }
   // A refusal of a field on this tab goes under it (fix-fielderr-be2).
   const { status: fieldStatus, shown: refusedShown } = refusedFieldStatus(write.error, ['smtp_address', 'smtp_port', 'smtp_user', 'smtp_password', 'smtp_password_reference', 'smtp_from', 'smtp_from_name',
-    'sms_provider', 'sms_access_key_id', 'sms_access_key_reference', 'sms_access_key_secret', 'sms_signature_name', 'sms_template_map',
+    'sms_provider', 'sms_access_key_id', 'sms_access_key_reference', 'sms_access_key_secret', 'sms_auth_token', 'sms_signature_name', 'sms_template_map',
     'mail_provider', 'mail_region', 'mail_access_key_id', 'mail_secret', 'mail_from', 'mail_from_name'], i18n.resolvedLanguage)
   return <div data-testid="system-settings-baseline-mail" className="system-settings-baseline-panel">
     <SaveState visible={write.saving} label={t('states.saving')} />
     {write.uncertain ? <OutcomeUnknown type="warning" title={t('uncertainty.title')} detail={t('uncertainty.description')} action={<Space wrap><Button icon={<RefreshCw size={14} />} loading={write.saving} disabled={!canManage} onClick={write.retryExact}>{t('actions.retryExact')}</Button><Button onClick={refresh}>{t('actions.discardAndRefresh')}</Button></Space>} /> : write.error && !refusedShown ? <FeedbackWhen title={t('states.errorMail')} detail={t(`errors.${write.error instanceof ApiError ? write.error.code : 'network_error'}`, { defaultValue: t('states.errorMail') })} onClose={write.reset} /> : null}
     {persistedUnsupportedProvider ? <Alert type="warning" showIcon message={t('smsProviders.repair')} style={{ marginBottom: 16 }} /> : null}
+    <NotificationChannelOffNotice channel="email" refreshKey={document.revision} canManage={canManage} />
     <Form className="system-settings-baseline-form system-settings-baseline-wide-form" labelCol={{ flex: '170px' }} wrapperCol={{ flex: '330px' }} labelAlign="right" colon={false}>
       <MailProviderSection accessToken={accessToken} canManage={canManage} document={document} draft={draft} update={update} fieldStatus={fieldStatus}
         secret={mailSecret} onSecretChange={setMailSecret} saving={write.saving && write.savingScope === 'provider'}
@@ -693,7 +787,9 @@ function MailPanel() {
       </section>
       <section className="system-settings-config-card" aria-labelledby="system-settings-sms-title">
         <h2 id="system-settings-sms-title">{t('sections.sms')}</h2>
-        <Form.Item label={t('fields.smsProvider')} {...fieldStatus('sms_provider')} extra={t('smsProviders.hint')}>
+        <NotificationChannelOffNotice channel="sms" refreshKey={document.revision} canManage={canManage} />
+        <Form.Item label={t('fields.smsProvider')} {...fieldStatus('sms_provider')}
+          extra={`${t('smsProviders.hint')}${notificationMode === 'auto' ? t('smsProviders.hintAuto') : notificationMode === 'explicit' ? t('smsProviders.hintRestart') : ''}`}>
           <Select value={draft.sms_provider} disabled={!canManage} aria-label={t('fields.smsProvider')} onChange={(value) => update('sms_provider', value)} options={[
             { value: '', label: t('smsProviders.inherit') }, { value: 'https_json', label: t('smsProviders.httpsJSON') },
             { value: 'aliyun', label: t('smsProviders.aliyun') }, { value: 'submail', label: t('smsProviders.submail') },
@@ -705,7 +801,21 @@ function MailPanel() {
           ? <Form.Item label={t('fields.accessKeySecret')} {...fieldStatus('sms_access_key_secret', 'sms_access_key_reference')} extra={document.sms_secret_configured ? t('smsProviders.secretSet', { fingerprint: document.sms_secret_fingerprint }) : t('smsProviders.secretRequired')}>
             <Input.Password value={smsSecret} disabled={!canManage} autoComplete="new-password" placeholder={document.sms_secret_configured ? t('smsProviders.secretKeep') : ''} onChange={(event) => setSMSSecret(event.target.value)} aria-label={t('fields.accessKeySecret')} />
           </Form.Item>
-          : <Form.Item label={t('fields.accessKeySecret')} {...fieldStatus('sms_access_key_reference', 'sms_access_key_secret')}>{text('sms_access_key_reference', t('placeholders.secretReference'))}</Form.Item>}
+          : <>
+            <Form.Item label={t('fields.accessKeySecret')} {...fieldStatus('sms_auth_token', 'sms_access_key_secret')}
+              extra={document.sms_auth_token_configured ? t('secretField.set', { fingerprint: document.sms_auth_token_fingerprint }) : t('secretField.unset')}>
+              <Space.Compact style={{ width: '100%' }}>
+                <Input.Password value={smsToken} disabled={!canManage} autoComplete="new-password" placeholder={document.sms_auth_token_configured ? t('secretField.keep') : ''}
+                  onChange={(event) => setSMSToken(event.target.value)} aria-label={t('fields.accessKeySecret')} />
+                {document.sms_auth_token_configured ? <Popconfirm title={t('secretField.clearConfirm', { name: t('fields.accessKeySecret') })} disabled={!canManage || write.uncertain || write.saving || unsupportedProvider} onConfirm={() => save('sms', true)}>
+                  <Button disabled={!canManage || write.uncertain || write.saving || unsupportedProvider}>{t('secretField.clear')}</Button>
+                </Popconfirm> : null}
+              </Space.Compact>
+            </Form.Item>
+            {smsReferenceOpen || draft.sms_access_key_reference !== ''
+              ? <Form.Item label={t('fields.smtpPasswordReference')} {...fieldStatus('sms_access_key_reference')} extra={t('secretField.smsAdvancedHint')}>{text('sms_access_key_reference', t('placeholders.secretReference'))}</Form.Item>
+              : <Form.Item label=" "><Button type="link" style={{ padding: 0 }} onClick={() => setSMSReferenceOpen(true)}>{t('smtpPassword.advanced')}</Button></Form.Item>}
+          </>}
         <Form.Item label={t('fields.signatureName')} {...fieldStatus('sms_signature_name')}>{text('sms_signature_name')}</Form.Item>
         {nativeProvider ? <Form.Item label={t('fields.smsTemplateMap')} {...fieldStatus('sms_template_map')} extra={t('smsProviders.templateMapHint')}>
           <Input.TextArea value={draft.sms_template_map} disabled={!canManage} rows={5} onChange={(event) => update('sms_template_map', event.target.value)} aria-label={t('fields.smsTemplateMap')} />

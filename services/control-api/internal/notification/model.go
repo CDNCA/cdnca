@@ -118,6 +118,9 @@ const (
 	// platform.admin holders.
 	EventTypeControlDBPoolSaturated = "control.db_pool.saturated"
 	EventTypeControlDBPoolRecovered = "control.db_pool.recovered"
+	// A security activation candidate's recovery rollback failed every retry
+	// (migration 670, internal/securityactivation), to platform.admin holders.
+	EventTypeSecurityActivationRecoveryFailed = "security_activation.recovery_failed"
 )
 
 // MarketEventTypes are the node market notices (ADR 0012 §8, ML-10,
@@ -210,6 +213,7 @@ func PlatformEventType(eventType string) bool {
 		eventType == EventTypeNodeDNSPupLineUnreachable || eventType == EventTypeNodeDNSPupLineRecovered ||
 		eventType == EventTypeProbeDNSPupBalanceLow || eventType == EventTypeProbeDNSPupBalanceExhausted ||
 		eventType == EventTypeControlDBPoolSaturated || eventType == EventTypeControlDBPoolRecovered ||
+		eventType == EventTypeSecurityActivationRecoveryFailed ||
 		eventType == "ticket.staff.created" || eventType == "ticket.staff.replied" ||
 		eventType == "ticket.staff.overdue" ||
 		slices.Contains(MarketEventTypes, eventType)

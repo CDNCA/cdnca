@@ -434,6 +434,22 @@ func (s *Store) UpdateChannels(ctx context.Context, actor Actor, request UpdateC
 		if result.SMSEnabled == request.SMSEnabled && result.EmailEnabled == request.EmailEnabled {
 			return completeNotificationWriteReceipt(ctx, tx, receiptID, digest, result, s.now())
 		}
+		// Per-user sign-in second steps ride on these switches: switching one off
+		// suspends them, so an unconfirmed request is refused with the head count.
+		var affectedEmail, affectedSMS int64
+		if result.EmailEnabled && !request.EmailEnabled {
+			if err := tx.QueryRow(ctx, `SELECT count(*) FROM identity_user_login_security WHERE login_verification='email'`).Scan(&affectedEmail); err != nil {
+				return err
+			}
+		}
+		if result.SMSEnabled && !request.SMSEnabled {
+			if err := tx.QueryRow(ctx, `SELECT count(*) FROM identity_user_login_security WHERE login_verification='sms'`).Scan(&affectedSMS); err != nil {
+				return err
+			}
+		}
+		if !request.ConfirmDisable && affectedEmail+affectedSMS > 0 {
+			return &ChannelDisableConfirmationError{EmailUsers: affectedEmail, SMSUsers: affectedSMS}
+		}
 		now := storeTime(s.now())
 		if _, err := tx.Exec(ctx, `UPDATE notification_channel_settings SET
 			sms_enabled=$1,email_enabled=$2,revision=revision+1,updated_at=$3 WHERE singleton`,
@@ -449,6 +465,7 @@ func (s *Store) UpdateChannels(ctx context.Context, actor Actor, request UpdateC
 			ResourceType: "notification_channel_settings", ResourceID: "global", RequestID: request.RequestID,
 			Result: "success", Payload: map[string]any{
 				"revision": result.Revision, "sms_enabled": result.SMSEnabled, "email_enabled": result.EmailEnabled,
+				"suspended_email_second_step_users": affectedEmail, "suspended_sms_second_step_users": affectedSMS,
 			},
 		})
 	})

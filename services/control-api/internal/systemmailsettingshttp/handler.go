@@ -132,12 +132,14 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request, requestID string, 
 		MailSecret string `json:"mail_secret,omitempty"`
 		// Write-only SMTP password: omitted keeps it, "" clears it.
 		SMTPPassword *string `json:"smtp_password,omitempty"`
+		// Write-only HTTPS SMS gateway token: omitted keeps it, "" clears it.
+		SMSAuthToken *string `json:"sms_auth_token,omitempty"`
 	}
 	if err := decodeStrict(http.MaxBytesReader(w, r.Body, 128<<10), &body); err != nil {
 		h.error(w, requestID, http.StatusBadRequest, "system_mail_settings_validation_error", "发信配置字段无效")
 		return
 	}
-	value, err := h.service.Save(r.Context(), actor, systemmailsettings.SaveRequest{ExpectedRevision: expected, Value: body.Value, SMSAccessKeySecret: body.SMSAccessKeySecret, MailSecret: body.MailSecret, SMTPPassword: body.SMTPPassword, IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID})
+	value, err := h.service.Save(r.Context(), actor, systemmailsettings.SaveRequest{ExpectedRevision: expected, Value: body.Value, SMSAccessKeySecret: body.SMSAccessKeySecret, MailSecret: body.MailSecret, SMTPPassword: body.SMTPPassword, SMSAuthToken: body.SMSAuthToken, IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID})
 	h.writeResult(w, requestID, value, err)
 }
 
@@ -170,6 +172,10 @@ func (h *Handler) writeResult(w http.ResponseWriter, requestID string, value sys
 	if err != nil {
 		status, code, message := http.StatusInternalServerError, "system_mail_settings_unavailable", "发信配置服务暂时不可用"
 		switch {
+		case errors.Is(err, systemmailsettings.ErrEmailVerificationSender):
+			status, code, message = http.StatusConflict, "system_mail_settings_email_verification_sender", "邮箱验证已生效（要求邮箱验证且邮件通知渠道开启），保存后将没有可用的邮件发信方；请先补全发信配置，或先关闭邮箱验证或邮件通知渠道"
+		case errors.Is(err, systemmailsettings.ErrSMSVerificationSender):
+			status, code, message = http.StatusConflict, "system_mail_settings_sms_verification_sender", "手机验证已生效（要求手机验证且短信通知渠道开启），保存后将没有可用的短信服务；请先补全短信配置，或先关闭手机验证或短信通知渠道"
 		case errors.Is(err, systemmailsettings.ErrInvalidInput):
 			status, code, message = http.StatusBadRequest, "system_mail_settings_validation_error", "发信配置字段无效"
 		case errors.Is(err, systemmailsettings.ErrModuleNotLicensed):

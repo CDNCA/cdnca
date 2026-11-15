@@ -25,6 +25,9 @@ type ManagedUserLoginSecurity struct {
 	Revision          int64     `json:"revision"`
 	LoginVerification string    `json:"login_verification"`
 	LoginAllowlist    []string  `json:"login_allowlist"`
+	// ChannelPending: the second step is saved but its notification channel
+	// is off, so sign-in skips it until the channel is turned on.
+	ChannelPending bool `json:"channel_pending,omitempty"`
 }
 
 type UpdateManagedUserLoginSecurityInput struct {
@@ -153,7 +156,7 @@ func (s *Service) PreparePasswordLoginChallenge(ctx context.Context, input Login
 	reservation.settle(ctx, errPasswordAccepted)
 	var result PasswordLoginChallengeSubject
 	err = pgx.BeginFunc(ctx, s.store.pool, func(tx pgx.Tx) error {
-		policy, err := ReadLoginSecurityTx(ctx, tx, login.UserID, login.ScopeID)
+		policy, err := ReadEffectiveLoginSecurityTx(ctx, tx, login.UserID, login.ScopeID)
 		if err != nil {
 			return err
 		}

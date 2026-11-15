@@ -95,7 +95,7 @@ func (s *Store) createBridgeSession(ctx context.Context, input SessionInput, con
 		if userID != input.UserID || scopeID != input.ScopeID {
 			return ErrInvalidCredentials
 		}
-		policy, err := ReadLoginSecurityTx(ctx, tx, input.UserID, input.ScopeID)
+		policy, err := ReadEffectiveLoginSecurityTx(ctx, tx, input.UserID, input.ScopeID)
 		if err != nil {
 			return err
 		}

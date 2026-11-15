@@ -22,6 +22,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/cdnca/cdnca/services/control-api/internal/identityverification"
 	"github.com/cdnca/cdnca/services/control-api/internal/identityverificationhttp"
+	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -122,6 +123,9 @@ type identityVerificationProductionDependencies struct {
 	Clock          identityverification.Clock
 	PrivateObjects identityverificationhttp.PrivateObjectStore
 	KYCProvider    identityverificationhttp.KYCProvider
+	// SettingsCipher opens the KYC credentials saved on the system settings
+	// page (nil: only the environment credentials are used).
+	SettingsCipher systemusersettings.SecretCipher
 
 	NewEvidenceSource func(context.Context, identityVerificationEvidenceSourceParameters) (identityVerificationEvidenceSource, error)
 	NewRuntime        func(identityverificationhttp.ProductionRuntimeConfig, identityverificationhttp.ProductionRuntimeDependencies) (identityVerificationWorkerRuntime, error)
@@ -309,9 +313,10 @@ func loadIdentityVerificationProviderEnvironment(environment []string) (identity
 	if !configured {
 		return identityVerificationProviderEnvironment{}, nil
 	}
+	// The KYC API key and callback HMAC key may instead be saved on the system
+	// settings page (mergeIdentityVerificationPageCredentials requires them).
 	required := []string{identityVerificationKYCProviderNameEnv, identityVerificationKYCEndpointEnv,
-		identityVerificationKYCAPIKeyEnv, identityVerificationKYCCallbackKeyIDEnv,
-		identityVerificationKYCCallbackHMACEnv, identityVerificationObjectEndpointEnv,
+		identityVerificationKYCCallbackKeyIDEnv, identityVerificationObjectEndpointEnv,
 		identityVerificationObjectRegionEnv, identityVerificationObjectBucketEnv,
 		identityVerificationObjectAccessKeyEnv, identityVerificationObjectSecretKeyEnv,
 		identityVerificationObjectKMSKeyEnv}
@@ -320,11 +325,12 @@ func loadIdentityVerificationProviderEnvironment(environment []string) (identity
 			return identityVerificationProviderEnvironment{}, errors.New(name + " is required for provider workflow")
 		}
 	}
-	decoded, err := base64.StdEncoding.Strict().DecodeString(values[identityVerificationKYCCallbackHMACEnv])
-	if err != nil || len(decoded) < 32 || len(decoded) > 128 ||
-		base64.StdEncoding.EncodeToString(decoded) != values[identityVerificationKYCCallbackHMACEnv] {
-		clear(decoded)
-		return identityVerificationProviderEnvironment{}, errors.New(identityVerificationKYCCallbackHMACEnv + " must encode 32 to 128 bytes using canonical padded base64")
+	var decoded []byte
+	if values[identityVerificationKYCCallbackHMACEnv] != "" {
+		var err error
+		if decoded, err = decodeIdentityVerificationCallbackHMAC(values[identityVerificationKYCCallbackHMACEnv]); err != nil {
+			return identityVerificationProviderEnvironment{}, errors.New(identityVerificationKYCCallbackHMACEnv + " must encode 32 to 128 bytes using canonical padded base64")
+		}
 	}
 	result := identityVerificationProviderEnvironment{Enabled: true,
 		ProviderName:     values[identityVerificationKYCProviderNameEnv],
@@ -338,7 +344,7 @@ func loadIdentityVerificationProviderEnvironment(environment []string) (identity
 		ObjectSecretKey:    []byte(values[identityVerificationObjectSecretKeyEnv]),
 		ObjectSessionToken: []byte(values[identityVerificationObjectSessionTokenEnv]),
 		ObjectKMSKeyID:     values[identityVerificationObjectKMSKeyEnv]}
-	if len(result.ProviderAPIKey) < 16 || len(result.ProviderAPIKey) > 512 ||
+	if len(result.ProviderAPIKey) != 0 && (len(result.ProviderAPIKey) < 16 || len(result.ProviderAPIKey) > 512) ||
 		len(result.ObjectAccessKey) < 3 || len(result.ObjectAccessKey) > 256 ||
 		len(result.ObjectSecretKey) < 8 || len(result.ObjectSecretKey) > 512 ||
 		len(result.ObjectSessionToken) > 4096 {
@@ -346,6 +352,153 @@ func loadIdentityVerificationProviderEnvironment(environment []string) (identity
 		return identityVerificationProviderEnvironment{}, errors.New("identity verification provider credentials are invalid")
 	}
 	return result, nil
+}
+
+func decodeIdentityVerificationCallbackHMAC(encoded string) ([]byte, error) {
+	decoded, err := base64.StdEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(decoded) < 32 || len(decoded) > 128 || base64.StdEncoding.EncodeToString(decoded) != encoded {
+		clear(decoded)
+		return nil, errors.New("callback HMAC key must encode 32 to 128 bytes using canonical padded base64")
+	}
+	return decoded, nil
+}
+
+// mergeIdentityVerificationPageCredentials puts the KYC API key and callback
+// HMAC key saved on the system settings page in place of the environment
+// ones (page first, IDENTITY_VERIFICATION_KYC_* otherwise). It clears the
+// page copies.
+func mergeIdentityVerificationPageCredentials(environment *identityVerificationProviderEnvironment,
+	page systemusersettings.IdentityVerificationRuntime,
+) error {
+	defer clear(page.KYCAPIKey)
+	defer clear(page.KYCCallbackHMAC)
+	if environment == nil || !environment.Enabled {
+		return nil
+	}
+	if len(page.KYCAPIKey) != 0 {
+		clear(environment.ProviderAPIKey)
+		environment.ProviderAPIKey = bytes.Clone(page.KYCAPIKey)
+	}
+	if len(page.KYCCallbackHMAC) != 0 {
+		decoded, err := decodeIdentityVerificationCallbackHMAC(string(page.KYCCallbackHMAC))
+		if err != nil {
+			return errors.New("the KYC callback signing key saved on the system settings page is invalid")
+		}
+		clear(environment.CallbackHMACKey)
+		environment.CallbackHMACKey = decoded
+	}
+	// Either key still missing is not an error: the provider stays mounted
+	// and answers "not configured" until both are saved (see effectiveKYCCredentials).
+	if len(environment.ProviderAPIKey) != 0 && (len(environment.ProviderAPIKey) < 16 || len(environment.ProviderAPIKey) > 512) {
+		return errors.New("identity verification provider credentials are invalid")
+	}
+	return nil
+}
+
+// effectiveKYCCredentials is the API key and callback HMAC key the provider
+// works with: both, or neither (the provider then answers "not configured").
+func effectiveKYCCredentials(environment identityVerificationProviderEnvironment) (apiKey, callbackHMAC []byte) {
+	if len(environment.ProviderAPIKey) == 0 || len(environment.CallbackHMACKey) == 0 {
+		return nil, nil
+	}
+	return environment.ProviderAPIKey, environment.CallbackHMACKey
+}
+
+// kycPageCredentialProvider makes the KYC credentials saved on the system
+// settings page apply without restarting control-api: before each provider
+// call it reads the settings revision (one row) and, only when it changed,
+// decrypts the page credentials again (page first, the
+// IDENTITY_VERIFICATION_KYC_* values of the start otherwise).
+type kycPageCredentialProvider struct {
+	*identityverificationhttp.HTTPSKYCProvider
+	revisionOf func(context.Context) (int64, error)
+	page       func(context.Context) (systemusersettings.IdentityVerificationRuntime, error)
+	// the environment credentials (the fallback)
+	envAPIKey, envCallbackHMAC []byte
+
+	mu       sync.Mutex
+	revision int64
+}
+
+func newKYCPageCredentialProvider(provider *identityverificationhttp.HTTPSKYCProvider, pool *pgxpool.Pool,
+	settings *systemusersettings.Service, environment identityVerificationProviderEnvironment, revision int64) *kycPageCredentialProvider {
+	return &kycPageCredentialProvider{HTTPSKYCProvider: provider,
+		revisionOf: func(ctx context.Context) (int64, error) { return kycSettingsRevision(ctx, pool) },
+		page:       settings.IdentityVerificationRuntime,
+		envAPIKey:  bytes.Clone(environment.ProviderAPIKey), envCallbackHMAC: bytes.Clone(environment.CallbackHMACKey), revision: revision}
+}
+
+// kycSettingsRevision is the platform user settings revision (0: never saved).
+func kycSettingsRevision(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	var revision int64
+	err := pool.QueryRow(ctx, `SELECT coalesce(max(revision),0) FROM platform_system_user_settings`).Scan(&revision)
+	return revision, err
+}
+
+func (provider *kycPageCredentialProvider) refresh(ctx context.Context) error {
+	revision, err := provider.revisionOf(ctx)
+	if err != nil {
+		return identityverificationhttp.ErrProviderUnavailable
+	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if revision == provider.revision {
+		return nil
+	}
+	page, err := provider.page(ctx)
+	if err != nil {
+		return identityverificationhttp.ErrProviderUnavailable
+	}
+	environment := identityVerificationProviderEnvironment{Enabled: true,
+		ProviderAPIKey: bytes.Clone(provider.envAPIKey), CallbackHMACKey: bytes.Clone(provider.envCallbackHMAC)}
+	defer environment.clear()
+	if err := mergeIdentityVerificationPageCredentials(&environment, page); err != nil {
+		// a malformed saved credential
+		return identityverificationhttp.ErrProviderUnavailable
+	}
+	// Both missing (e.g. the page credential was cleared and the environment
+	// has none) clears the provider's keys: calls answer "not configured".
+	apiKey, callbackHMAC := effectiveKYCCredentials(environment)
+	if err := provider.HTTPSKYCProvider.SetCredentials(apiKey, callbackHMAC); err != nil {
+		return err
+	}
+	provider.revision = revision
+	return nil
+}
+
+// EnsureCredentials picks up credentials saved on the page since the last
+// call and refuses with "not configured" while the provider has none. The
+// provider workflow calls it before it writes a session.
+func (provider *kycPageCredentialProvider) EnsureCredentials(ctx context.Context) error {
+	if err := provider.refresh(ctx); err != nil {
+		return err
+	}
+	if !provider.HTTPSKYCProvider.CredentialsReady() {
+		return identityverificationhttp.ErrProviderNotConfigured
+	}
+	return nil
+}
+
+func (provider *kycPageCredentialProvider) CreateSession(ctx context.Context,
+	request identityverificationhttp.ProviderSessionCreate) (identityverificationhttp.ProviderSessionCreated, error) {
+	if err := provider.refresh(ctx); err != nil {
+		return identityverificationhttp.ProviderSessionCreated{}, err
+	}
+	return provider.HTTPSKYCProvider.CreateSession(ctx, request)
+}
+
+func (provider *kycPageCredentialProvider) VerifyCallback(ctx context.Context,
+	envelope identityverificationhttp.ProviderCallbackEnvelope) (identityverificationhttp.VerifiedProviderCallback, error) {
+	if err := provider.refresh(ctx); err != nil {
+		return identityverificationhttp.VerifiedProviderCallback{}, err
+	}
+	return provider.HTTPSKYCProvider.VerifyCallback(ctx, envelope)
+}
+
+func (provider *kycPageCredentialProvider) Close() {
+	provider.HTTPSKYCProvider.Close()
+	clear(provider.envAPIKey)
+	clear(provider.envCallbackHMAC)
 }
 
 func identityVerificationBase64DecodedLength(encoded string) int {
@@ -456,6 +609,35 @@ func openIdentityVerificationProductionRuntime(
 		return nil, err
 	}
 	defer providerEnvironment.clear()
+	// The system settings page: the KYC credentials saved there come first,
+	// and its identity policy gates each new provider session.
+	settings, err := systemusersettings.NewService(dependencies.Pool, audit.New(dependencies.Pool), time.Now)
+	if err != nil {
+		source.Close()
+		return nil, err
+	}
+	if dependencies.SettingsCipher != nil {
+		settings.WithSecretCipher(dependencies.SettingsCipher)
+	}
+	// the environment credentials, kept as the fallback of a later page change
+	envCredentials := identityVerificationProviderEnvironment{ProviderAPIKey: bytes.Clone(providerEnvironment.ProviderAPIKey),
+		CallbackHMACKey: bytes.Clone(providerEnvironment.CallbackHMACKey)}
+	defer envCredentials.clear()
+	var settingsRevision int64
+	if providerEnvironment.Enabled {
+		settingsRevision, err = kycSettingsRevision(ctx, dependencies.Pool)
+		var page systemusersettings.IdentityVerificationRuntime
+		if err == nil {
+			page, err = settings.IdentityVerificationRuntime(ctx)
+		}
+		if err == nil {
+			err = mergeIdentityVerificationPageCredentials(&providerEnvironment, page)
+		}
+		if err != nil {
+			source.Close()
+			return nil, err
+		}
+	}
 	privateObjects, kycProvider := dependencies.PrivateObjects, dependencies.KYCProvider
 	providerConfig := identityverificationhttp.ProviderWorkflowConfig{}
 	var issuerRuntime *identityVerificationIssuerRuntime
@@ -480,11 +662,13 @@ func openIdentityVerificationProductionRuntime(
 			}
 		}
 		if nilRuntimeDependency(kycProvider) {
+			// no keys yet (page or environment): mounted, answering "not configured"
+			startAPIKey, startCallbackHMAC := effectiveKYCCredentials(providerEnvironment)
 			kycProvider, err = identityverificationhttp.NewHTTPSKYCProvider(
 				identityverificationhttp.HTTPSKYCProviderConfig{
 					Name: providerEnvironment.ProviderName, Endpoint: providerEnvironment.ProviderEndpoint,
-					APIKey: providerEnvironment.ProviderAPIKey, CallbackKeyID: providerEnvironment.CallbackKeyID,
-					CallbackHMACKey: providerEnvironment.CallbackHMACKey,
+					APIKey: startAPIKey, CallbackKeyID: providerEnvironment.CallbackKeyID,
+					CallbackHMACKey: startCallbackHMAC,
 					CallbackMaxAge:  5 * time.Minute, CallbackFutureSkew: 30 * time.Second,
 					RequestTimeout: 15 * time.Second,
 				}, http.DefaultClient, dependencies.Clock)
@@ -492,6 +676,8 @@ func openIdentityVerificationProductionRuntime(
 				source.Close()
 				return nil, errors.New("initialize identity verification KYC provider")
 			}
+			kycProvider = newKYCPageCredentialProvider(kycProvider.(*identityverificationhttp.HTTPSKYCProvider),
+				dependencies.Pool, settings, envCredentials, settingsRevision)
 		}
 		tokenHash := sha256.New()
 		_, _ = tokenHash.Write([]byte("cdnca.identity-verification.provider-token-key.v1\x00"))
@@ -503,6 +689,10 @@ func openIdentityVerificationProductionRuntime(
 			UploadTTL: 15 * time.Minute, RetentionPeriod: config.RetentionPeriod,
 			CallbackMaxAge: 5 * time.Minute, CallbackFutureSkew: 30 * time.Second,
 			EraseLeaseDuration: time.Minute, EraseRetryDelay: 5 * time.Minute,
+			KindEnabled: func(ctx context.Context, kind string) (bool, error) {
+				policy, err := settings.IdentityPolicy(ctx)
+				return policy.KindEnabled(kind), err
+			},
 		}
 		defer clear(tokenKey)
 	}

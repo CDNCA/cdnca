@@ -43,9 +43,10 @@ func rollbackAvailability(facts rollbackFacts) RollbackAvailability {
 	return result
 }
 
-// Promotion order is candidate_source_revision: Promote CASes the scope's
-// source_revision from candidate_source_revision-1 to it, so promoted
-// candidates of a scope have distinct, increasing values. promoted_at can
+// Promotion order is candidate_source_revision: the claim advances the
+// scope's source_revision to it and Promote requires the scope still there
+// and no other promotion at it, so promoted candidates of a scope have
+// distinct, increasing values. promoted_at can
 // tie (same clock reading), and the id tie-break then picks at random.
 func loadRollbackFacts(ctx context.Context, tx pgx.Tx, scopeID, bindingID uuid.UUID) (rollbackFacts, error) {
 	var facts rollbackFacts

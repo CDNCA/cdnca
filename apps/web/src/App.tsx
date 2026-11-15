@@ -196,7 +196,11 @@ function PublicOnlyRoute() {
   const location = useLocation()
   const passwordChanged = (location.state as { passwordChanged?: boolean } | null)?.passwordChanged
   const returnTo = safeLoginReturnTo(location.state)
-  return principal && !passwordChanged
+  // a platform administrator may open the sign-up page
+  // signed in, to see why sign-up verification is not ready
+  const registrationPreview = location.pathname === '/register' && principal?.scope_kind === 'platform' &&
+    (principal.permissions.includes('system_configuration.read') || principal.permissions.includes('platform.admin'))
+  return principal && !passwordChanged && !registrationPreview
     ? <Navigate to={loginDestination(returnTo, homeForPrincipal(principal))} replace />
     : <Outlet />
 }

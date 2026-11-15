@@ -37,6 +37,61 @@
        "name": "value",
        "type": "Settings",
        "required": true
+      },
+      {
+       "name": "captcha_secret_id_configured",
+       "type": "boolean",
+       "description": "The CAPTCHA SecretId entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "captcha_secret_id_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "captcha_secret_key_configured",
+       "type": "boolean",
+       "description": "The CAPTCHA SecretKey entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "captcha_secret_key_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "captcha_app_secret_configured",
+       "type": "boolean",
+       "description": "The CAPTCHA AppSecretKey entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "captcha_app_secret_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "captcha_turnstile_secret_configured",
+       "type": "boolean",
+       "description": "Whether a Turnstile secret is saved on this page. The secret itself is never returned."
+      },
+      {
+       "name": "captcha_turnstile_secret_fingerprint",
+       "type": "string",
+       "description": "Short fingerprint of the saved Turnstile secret"
+      },
+      {
+       "name": "kyc_api_key_configured",
+       "type": "boolean",
+       "description": "The KYC provider API key entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_api_key_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_callback_hmac_key_configured",
+       "type": "boolean",
+       "description": "The KYC provider callback signing key entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_callback_hmac_key_fingerprint",
+       "type": "string"
       }
      ]
     },
@@ -100,6 +155,42 @@
       "name": "value",
       "type": "Settings",
       "required": true
+     },
+     {
+      "name": "captcha_secret_id",
+      "type": "string",
+      "description": "A secret in plaintext (no line breaks, no surrounding spaces), stored encrypted under the control-api credential keyring and never returned; the document shows only <name>_configured and <name>_fingerprint. Omitted keeps the stored one, an empty string clears it. For the CAPTCHA secrets a stored secret cannot coexist with its value.<name>_reference; sending both is refused (<name> invalid), and a reference while the secret stays stored is refused (value.<name>_reference invalid). The CAPTCHA verifier uses the stored secret before the reference.",
+      "description_zh": "明文密钥（不含换行、首尾无空格），用 control-api 凭据钥匙串加密保存，从不回显；文档只返回 <名称>_configured 与 <名称>_fingerprint。省略保留原值，空串清除。人机验证密钥的已存值与对应的 value.<名称>_reference 不能同时存在：两者同时填写被拒（<名称> invalid），保留已存密钥时填写引用被拒（value.<名称>_reference invalid）。人机验证优先使用已存密钥，其次才用引用。"
+     },
+     {
+      "name": "captcha_secret_key",
+      "type": "string",
+      "description": "A secret in plaintext (no line breaks, no surrounding spaces), stored encrypted under the control-api credential keyring and never returned; the document shows only <name>_configured and <name>_fingerprint. Omitted keeps the stored one, an empty string clears it. For the CAPTCHA secrets a stored secret cannot coexist with its value.<name>_reference; sending both is refused (<name> invalid), and a reference while the secret stays stored is refused (value.<name>_reference invalid). The CAPTCHA verifier uses the stored secret before the reference.",
+      "description_zh": "明文密钥（不含换行、首尾无空格），用 control-api 凭据钥匙串加密保存，从不回显；文档只返回 <名称>_configured 与 <名称>_fingerprint。省略保留原值，空串清除。人机验证密钥的已存值与对应的 value.<名称>_reference 不能同时存在：两者同时填写被拒（<名称> invalid），保留已存密钥时填写引用被拒（value.<名称>_reference invalid）。人机验证优先使用已存密钥，其次才用引用。"
+     },
+     {
+      "name": "captcha_app_secret",
+      "type": "string",
+      "description": "A secret in plaintext (no line breaks, no surrounding spaces), stored encrypted under the control-api credential keyring and never returned; the document shows only <name>_configured and <name>_fingerprint. Omitted keeps the stored one, an empty string clears it. For the CAPTCHA secrets a stored secret cannot coexist with its value.<name>_reference; sending both is refused (<name> invalid), and a reference while the secret stays stored is refused (value.<name>_reference invalid). The CAPTCHA verifier uses the stored secret before the reference.",
+      "description_zh": "明文密钥（不含换行、首尾无空格），用 control-api 凭据钥匙串加密保存，从不回显；文档只返回 <名称>_configured 与 <名称>_fingerprint。省略保留原值，空串清除。人机验证密钥的已存值与对应的 value.<名称>_reference 不能同时存在：两者同时填写被拒（<名称> invalid），保留已存密钥时填写引用被拒（value.<名称>_reference invalid）。人机验证优先使用已存密钥，其次才用引用。"
+     },
+     {
+      "name": "captcha_turnstile_secret",
+      "type": "object",
+      "description": "Cloudflare Turnstile secret of the registration flow, 16 to 1024 characters without whitespace. A non-empty ACCOUNT_REGISTRATION_TURNSTILE_SECRET wins over it.",
+      "description_zh": "注册流程的 Cloudflare Turnstile Secret，16–1024 个字符、不含空白；环境变量 ACCOUNT_REGISTRATION_TURNSTILE_SECRET 非空时优先。"
+     },
+     {
+      "name": "kyc_api_key",
+      "type": "object",
+      "description": "API key of the KYC provider shared by personal and enterprise verification; replaces IDENTITY_VERIFICATION_KYC_API_KEY, which stays the fallback when this is not saved; a change applies to the next KYC request without restarting the control plane.",
+      "description_zh": "个人实名与企业认证共用的实名认证服务（KYC）API Key；替换 IDENTITY_VERIFICATION_KYC_API_KEY，未保存时沿用该环境变量；修改后下一次实名认证请求即生效，无需重启控制面。"
+     },
+     {
+      "name": "kyc_callback_hmac_key",
+      "type": "object",
+      "description": "Callback signing key of the KYC provider, canonical padded base64 of 32-128 bytes; replaces IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64, which stays the fallback; a change applies without restarting the control plane.",
+      "description_zh": "实名认证服务回调验签密钥，32–128 字节的标准带填充 Base64；替换 IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64，未保存时沿用该环境变量；修改后无需重启控制面即生效。"
      }
     ]
    },
@@ -126,12 +217,67 @@
        "name": "value",
        "type": "Settings",
        "required": true
+      },
+      {
+       "name": "captcha_secret_id_configured",
+       "type": "boolean",
+       "description": "The CAPTCHA SecretId entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "captcha_secret_id_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "captcha_secret_key_configured",
+       "type": "boolean",
+       "description": "The CAPTCHA SecretKey entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "captcha_secret_key_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "captcha_app_secret_configured",
+       "type": "boolean",
+       "description": "The CAPTCHA AppSecretKey entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "captcha_app_secret_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "captcha_turnstile_secret_configured",
+       "type": "boolean",
+       "description": "Whether a Turnstile secret is saved on this page. The secret itself is never returned."
+      },
+      {
+       "name": "captcha_turnstile_secret_fingerprint",
+       "type": "string",
+       "description": "Short fingerprint of the saved Turnstile secret"
+      },
+      {
+       "name": "kyc_api_key_configured",
+       "type": "boolean",
+       "description": "The KYC provider API key entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_api_key_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_callback_hmac_key_configured",
+       "type": "boolean",
+       "description": "The KYC provider callback signing key entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_callback_hmac_key_fingerprint",
+       "type": "string"
       }
      ]
     },
     {
      "status": "400",
-     "description": "Validation error"
+     "description": "Validation error. system_user_settings_verification_sender_unavailable (details.field value.email_verification_required or value.phone_verification_required) refuses turning a verification on while its notification channel is on and no sender of that channel is configured; a verification already on is kept."
     },
     {
      "status": "401",

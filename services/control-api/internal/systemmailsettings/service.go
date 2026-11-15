@@ -30,6 +30,18 @@ type Service struct {
 	now     Clock
 	cipher  SecretCipher
 	modules ModuleGate
+	guard   SaveGuard
+}
+
+// SaveGuard runs in the save transaction after the new settings are written
+// (an error refuses the save).
+type SaveGuard func(context.Context, pgx.Tx) error
+
+// WithSaveGuard sets the check that keeps email / phone verification from
+// losing its sender.
+func (s *Service) WithSaveGuard(guard SaveGuard) *Service {
+	s.guard = guard
+	return s
 }
 
 const smsSecretDomain = "cdnca-system-mail-sms-secret/v1\x00"
@@ -83,11 +95,11 @@ func (s *Service) Get(ctx context.Context, actor Actor) (Document, error) {
 		var revision int64
 		var raw []byte
 		var updatedAt time.Time
-		var fingerprint, mailProvider, mailFingerprint, smtpFingerprint *string
+		var fingerprint, mailProvider, mailFingerprint, smtpFingerprint, smsTokenFingerprint *string
 		err := tx.QueryRow(ctx, `SELECT revision,settings,updated_at,sms_secret_fingerprint,mail_secret_provider,mail_secret_fingerprint,
-			       smtp_password_fingerprint
+			       smtp_password_fingerprint,sms_auth_token_fingerprint
 			FROM platform_system_mail_settings WHERE platform_scope_id=$1`, actor.ScopeID).
-			Scan(&revision, &raw, &updatedAt, &fingerprint, &mailProvider, &mailFingerprint, &smtpFingerprint)
+			Scan(&revision, &raw, &updatedAt, &fingerprint, &mailProvider, &mailFingerprint, &smtpFingerprint, &smsTokenFingerprint)
 		if err == pgx.ErrNoRows {
 			result = Document{Schema: schema, Value: DefaultSettings()}
 			return nil
@@ -105,6 +117,7 @@ func (s *Service) Get(ctx context.Context, actor Actor) (Document, error) {
 		}
 		result.setMailSecret(mailProvider, mailFingerprint)
 		result.setSMTPPassword(smtpFingerprint)
+		result.setSMSAuthToken(smsTokenFingerprint)
 		return nil
 	})
 	if err != nil {
@@ -130,8 +143,12 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 	if err := smtpPasswordFieldError(request.Value, request.SMTPPassword, false); err != nil {
 		return Document{}, err
 	}
+	if err := smsAuthTokenFieldError(request.Value, request.SMSAuthToken, false); err != nil {
+		return Document{}, err
+	}
 	newSMTPPassword := request.SMTPPassword != nil && *request.SMTPPassword != ""
-	if (request.SMSAccessKeySecret != "" || request.MailSecret != "" || newSMTPPassword) && s.cipher == nil {
+	newSMSAuthToken := request.SMSAuthToken != nil && *request.SMSAuthToken != ""
+	if (request.SMSAccessKeySecret != "" || request.MailSecret != "" || newSMTPPassword || newSMSAuthToken) && s.cipher == nil {
 		return Document{}, ErrInvalidInput
 	}
 	digest, err := requestDigest(request)
@@ -176,12 +193,16 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		var mailCiphertext []byte
 		var smtpKeyID, smtpFingerprint *string
 		var smtpCiphertext []byte
+		var smsTokenKeyID, smsTokenFingerprint *string
+		var smsTokenCiphertext []byte
 		err = tx.QueryRow(ctx, `SELECT revision,settings,sms_secret_key_id,sms_secret_ciphertext,sms_secret_fingerprint,
 			       mail_secret_key_id,mail_secret_ciphertext,mail_secret_fingerprint,mail_secret_provider,
-			       smtp_password_key_id,smtp_password_ciphertext,smtp_password_fingerprint
+			       smtp_password_key_id,smtp_password_ciphertext,smtp_password_fingerprint,
+			       sms_auth_token_key_id,sms_auth_token_ciphertext,sms_auth_token_fingerprint
 			FROM platform_system_mail_settings
 			WHERE platform_scope_id=$1 FOR UPDATE`, actor.ScopeID).Scan(&currentRevision, &currentRaw, &keyID, &ciphertext, &fingerprint,
-			&mailKeyID, &mailCiphertext, &mailFingerprint, &mailProvider, &smtpKeyID, &smtpCiphertext, &smtpFingerprint)
+			&mailKeyID, &mailCiphertext, &mailFingerprint, &mailProvider, &smtpKeyID, &smtpCiphertext, &smtpFingerprint,
+			&smsTokenKeyID, &smsTokenCiphertext, &smsTokenFingerprint)
 		exists := err == nil
 		if err != nil && err != pgx.ErrNoRows {
 			return err
@@ -249,28 +270,50 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		case request.SMTPPassword != nil && smtpKeyID != nil:
 			smtpKeyID, smtpCiphertext, smtpFingerprint, smtpPassword = nil, nil, nil, "cleared"
 		}
+		if err := smsAuthTokenFieldError(request.Value, request.SMSAuthToken, smsTokenKeyID != nil); err != nil {
+			return err
+		}
+		smsAuthToken := "unchanged"
+		switch {
+		case newSMSAuthToken:
+			sealedKey, sealed, sealErr := sealSMSAuthToken(s.cipher, actor.ScopeID.String(), *request.SMSAuthToken)
+			if sealErr != nil {
+				return sealErr
+			}
+			value := smsAuthTokenFingerprint(*request.SMSAuthToken)
+			smsTokenKeyID, smsTokenCiphertext, smsTokenFingerprint, smsAuthToken = &sealedKey, sealed, &value, "replaced"
+		case request.SMSAuthToken != nil && smsTokenKeyID != nil:
+			smsTokenKeyID, smsTokenCiphertext, smsTokenFingerprint, smsAuthToken = nil, nil, nil, "cleared"
+		}
 		nextRevision := currentRevision + 1
 		if exists {
 			_, err = tx.Exec(ctx, `UPDATE platform_system_mail_settings
 				SET revision=$2,settings=$3,updated_by_user_id=$4,updated_at=$5,
 				    sms_secret_key_id=$6,sms_secret_ciphertext=$7,sms_secret_fingerprint=$8,
 				    mail_secret_key_id=$9,mail_secret_ciphertext=$10,mail_secret_fingerprint=$11,mail_secret_provider=$12,
-				    smtp_password_key_id=$13,smtp_password_ciphertext=$14,smtp_password_fingerprint=$15
+				    smtp_password_key_id=$13,smtp_password_ciphertext=$14,smtp_password_fingerprint=$15,
+				    sms_auth_token_key_id=$16,sms_auth_token_ciphertext=$17,sms_auth_token_fingerprint=$18
 				WHERE platform_scope_id=$1`, actor.ScopeID, nextRevision, string(encoded), actor.UserID, now,
 				keyID, ciphertext, fingerprint, mailKeyID, mailCiphertext, mailFingerprint, mailProvider,
-				smtpKeyID, smtpCiphertext, smtpFingerprint)
+				smtpKeyID, smtpCiphertext, smtpFingerprint, smsTokenKeyID, smsTokenCiphertext, smsTokenFingerprint)
 		} else {
 			_, err = tx.Exec(ctx, `INSERT INTO platform_system_mail_settings
 				(platform_scope_id,revision,settings,updated_by_user_id,updated_at,
 				 sms_secret_key_id,sms_secret_ciphertext,sms_secret_fingerprint,
 				 mail_secret_key_id,mail_secret_ciphertext,mail_secret_fingerprint,mail_secret_provider,
-				 smtp_password_key_id,smtp_password_ciphertext,smtp_password_fingerprint)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, actor.ScopeID, nextRevision, string(encoded), actor.UserID, now,
+				 smtp_password_key_id,smtp_password_ciphertext,smtp_password_fingerprint,
+				 sms_auth_token_key_id,sms_auth_token_ciphertext,sms_auth_token_fingerprint)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`, actor.ScopeID, nextRevision, string(encoded), actor.UserID, now,
 				keyID, ciphertext, fingerprint, mailKeyID, mailCiphertext, mailFingerprint, mailProvider,
-				smtpKeyID, smtpCiphertext, smtpFingerprint)
+				smtpKeyID, smtpCiphertext, smtpFingerprint, smsTokenKeyID, smsTokenCiphertext, smsTokenFingerprint)
 		}
 		if err != nil {
 			return err
+		}
+		if s.guard != nil {
+			if err := s.guard(ctx, tx); err != nil {
+				return err
+			}
 		}
 		result = Document{Schema: schema, Revision: nextRevision, UpdatedAt: now, Value: request.Value}
 		if fingerprint != nil {
@@ -278,6 +321,7 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		}
 		result.setMailSecret(mailProvider, mailFingerprint)
 		result.setSMTPPassword(smtpFingerprint)
+		result.setSMSAuthToken(smsTokenFingerprint)
 		mailSecret := "unchanged"
 		if !keepMail {
 			mailSecret = "replaced"
@@ -285,7 +329,8 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 		if err := s.auditor.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID,
 			Action: operationUpdate, ResourceType: "platform_system_mail_settings", ResourceID: actor.ScopeID.String(),
 			RequestID: request.RequestID, Result: "success", Payload: map[string]any{"revision": nextRevision,
-				"mail_provider": request.Value.MailProvider, "mail_secret": mailSecret, "smtp_password": smtpPassword}}); err != nil {
+				"mail_provider": request.Value.MailProvider, "mail_secret": mailSecret, "smtp_password": smtpPassword,
+				"sms_auth_token": smsAuthToken}}); err != nil {
 			return err
 		}
 		response, err := json.Marshal(result)
@@ -373,7 +418,7 @@ func validText(value string, min, max int) bool {
 
 func requestDigest(request SaveRequest) ([32]byte, error) {
 	// The credential enters the digest only as a hash, never in plaintext.
-	var secretDigest, mailDigest, smtpDigest string
+	var secretDigest, mailDigest, smtpDigest, smsTokenDigest string
 	if request.SMSAccessKeySecret != "" {
 		sum := sha256.Sum256([]byte(smsSecretDomain + request.SMSAccessKeySecret))
 		secretDigest = hex.EncodeToString(sum[:])
@@ -390,13 +435,22 @@ func requestDigest(request SaveRequest) ([32]byte, error) {
 		sum := sha256.Sum256([]byte(smtpPasswordDomain + *request.SMTPPassword))
 		smtpDigest = hex.EncodeToString(sum[:])
 	}
+	switch {
+	case request.SMSAuthToken == nil:
+	case *request.SMSAuthToken == "":
+		smsTokenDigest = "clear"
+	default:
+		sum := sha256.Sum256([]byte(smsAuthTokenDomain + *request.SMSAuthToken))
+		smsTokenDigest = hex.EncodeToString(sum[:])
+	}
 	encoded, err := json.Marshal(struct {
 		ExpectedRevision int64    `json:"expected_revision"`
 		Value            Settings `json:"value"`
 		SecretDigest     string   `json:"secret_digest,omitempty"`
 		MailDigest       string   `json:"mail_secret_digest,omitempty"`
 		SMTPDigest       string   `json:"smtp_password_digest,omitempty"`
-	}{request.ExpectedRevision, request.Value, secretDigest, mailDigest, smtpDigest})
+		SMSTokenDigest   string   `json:"sms_auth_token_digest,omitempty"`
+	}{request.ExpectedRevision, request.Value, secretDigest, mailDigest, smtpDigest, smsTokenDigest})
 	if err != nil {
 		return [32]byte{}, err
 	}

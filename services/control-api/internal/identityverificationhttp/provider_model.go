@@ -33,12 +33,16 @@ const (
 var (
 	ErrProviderInvalid             = errors.New("identity verification provider input is invalid")
 	ErrProviderUnavailable         = errors.New("identity verification provider is unavailable")
+	ErrProviderNotConfigured       = errors.New("identity verification is not configured")
 	ErrProviderConflict            = errors.New("identity verification provider state conflicts")
 	ErrProviderCallbackAuth        = errors.New("identity verification provider callback authentication failed")
 	ErrProviderCallbackReplay      = errors.New("identity verification provider callback replay conflicts")
 	ErrProviderObjectUnavailable   = errors.New("identity verification private object store is unavailable")
 	ErrProviderObjectMismatch      = errors.New("identity verification private object facts mismatch")
 	ErrProviderMaterialsIncomplete = errors.New("identity verification provider materials are incomplete")
+	// ErrProviderKindDisabled: the system settings page turned this kind
+	// (personal or enterprise verification) off.
+	ErrProviderKindDisabled = errors.New("identity verification kind is disabled")
 )
 
 type StartProviderSessionRequest struct {
@@ -200,4 +204,7 @@ type ProviderWorkflowConfig struct {
 	CallbackFutureSkew time.Duration
 	EraseLeaseDuration time.Duration
 	EraseRetryDelay    time.Duration
+	// KindEnabled gates StartSession per kind (system settings page); nil
+	// allows every kind.
+	KindEnabled func(ctx context.Context, kind string) (bool, error)
 }

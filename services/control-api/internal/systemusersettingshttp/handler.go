@@ -107,12 +107,30 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request, requestID string, 
 	r.Body = http.MaxBytesReader(w, r.Body, h.maxRequestBytes)
 	var body struct {
 		Value systemusersettings.Settings `json:"value"`
+		// The write-only page secrets: omitted keeps, "" clears.
+		CaptchaSecretID        *string `json:"captcha_secret_id,omitempty"`
+		CaptchaSecretKey       *string `json:"captcha_secret_key,omitempty"`
+		CaptchaAppSecret       *string `json:"captcha_app_secret,omitempty"`
+		CaptchaTurnstileSecret *string `json:"captcha_turnstile_secret,omitempty"`
+		KYCAPIKey              *string `json:"kyc_api_key,omitempty"`
+		KYCCallbackHMACKey     *string `json:"kyc_callback_hmac_key,omitempty"`
 	}
 	if err := decodeStrict(r.Body, &body); err != nil {
 		h.error(w, requestID, http.StatusBadRequest, "system_user_settings_validation_error", "用户相关配置字段无效")
 		return
 	}
-	value, err := h.service.Save(r.Context(), actor, systemusersettings.SaveRequest{ExpectedRevision: expected, Value: body.Value, IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID})
+	secrets := map[string]*string{}
+	for name, secret := range map[string]*string{
+		systemusersettings.SecretCaptchaSecretID: body.CaptchaSecretID, systemusersettings.SecretCaptchaSecretKey: body.CaptchaSecretKey,
+		systemusersettings.SecretCaptchaAppSecret: body.CaptchaAppSecret, systemusersettings.SecretCaptchaTurnstileSecret: body.CaptchaTurnstileSecret,
+		systemusersettings.SecretKYCAPIKey:          body.KYCAPIKey,
+		systemusersettings.SecretKYCCallbackHMACKey: body.KYCCallbackHMACKey,
+	} {
+		if secret != nil {
+			secrets[name] = secret
+		}
+	}
+	value, err := h.service.Save(r.Context(), actor, systemusersettings.SaveRequest{ExpectedRevision: expected, Value: body.Value, Secrets: secrets, IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID})
 	h.writeResult(w, requestID, value, err)
 }
 
@@ -120,6 +138,8 @@ func (h *Handler) writeResult(w http.ResponseWriter, requestID string, value sys
 	if err != nil {
 		status, code, message := http.StatusInternalServerError, "system_user_settings_unavailable", "用户相关配置服务暂时不可用"
 		switch {
+		case errors.Is(err, systemusersettings.ErrVerificationSenderUnavailable):
+			status, code, message = http.StatusBadRequest, "system_user_settings_verification_sender_unavailable", "要求验证的渠道没有可用的发信方，请先配置邮件或短信发送"
 		case errors.Is(err, systemusersettings.ErrInvalidInput):
 			status, code, message = http.StatusBadRequest, "system_user_settings_validation_error", "用户相关配置字段无效"
 		case errors.Is(err, systemusersettings.ErrPermissionDenied):

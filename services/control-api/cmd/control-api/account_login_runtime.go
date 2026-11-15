@@ -42,6 +42,8 @@ func openAccountLoginRuntime(
 	cookieSecure bool,
 	cookieDomain string,
 	registrationMounted bool,
+	// opens the CAPTCHA secrets saved on the settings page
+	cipher systemusersettings.SecretCipher,
 ) (*accountLoginRuntime, error) {
 	if !config.Enabled {
 		return nil, nil
@@ -80,6 +82,9 @@ func openAccountLoginRuntime(
 	settings, err := systemusersettings.NewService(pool, audit.New(pool), time.Now)
 	if err != nil {
 		return nil, err
+	}
+	if cipher != nil {
+		settings.WithSecretCipher(cipher)
 	}
 	contacts, err := accountloginchallenge.NewNotificationContactSender(
 		notificationStore, config.LoginDispatchKeys, templates,
@@ -145,9 +150,9 @@ func openAccountLoginRuntime(
 }
 
 // loadAccountLoginCaptchaSecrets reads the Tencent/GeeTest secrets that the
-// system settings page references (vault:// or kms-envelope://). The settings
-// store only references; ACCOUNT_LOGIN_CAPTCHA_SECRETS_JSON maps each reference
-// to its secret. When it is absent, external CAPTCHA modes fail closed.
+// system settings page references (vault:// or kms-envelope://) when they were
+// not saved on the page itself; ACCOUNT_LOGIN_CAPTCHA_SECRETS_JSON maps each
+// reference to its secret. A secret neither saved nor mapped fails closed.
 func loadAccountLoginCaptchaSecrets(lookup accountRecoveryEnvLookup) (accountloginchallenge.StaticSecretResolver, error) {
 	raw, exists := lookup("ACCOUNT_LOGIN_CAPTCHA_SECRETS_JSON")
 	if !exists || raw == "" {

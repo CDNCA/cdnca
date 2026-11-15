@@ -146,6 +146,7 @@ const typeTranslationKeys: Record<string, string> = {
   'node.certificate.recovered': 'nodeCertificateRecovered',
   'control.db_pool.saturated': 'controlDBPoolSaturated',
   'control.db_pool.recovered': 'controlDBPoolRecovered',
+  'security_activation.recovery_failed': 'securityActivationRecoveryFailed',
   'aggregated_edge.schedule.alert': 'aggregatedEdgeScheduleAlert',
   'aggregated_edge.tenant.switch': 'aggregatedEdgeTenantSwitch',
   'probe.dnspup.degraded': 'dnspupProbeDegraded',

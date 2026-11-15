@@ -882,6 +882,11 @@
        "type": "array<string>",
        "required": true,
        "description": "IPv4/IPv6 addresses or CIDR prefixes (for example 203.0.113.0/24). Ports, zones and empty entries are rejected. The service unmaps IPv4-mapped IPv6, masks prefixes to their network, collapses full-length prefixes to the address, deduplicates and sorts. Empty clears the restriction."
+      },
+      {
+       "name": "channel_pending",
+       "type": "boolean",
+       "description": "Present only when the saved email or SMS second step has its notification channel switched off; it takes effect once the channel is on"
       }
      ]
     },
@@ -1008,6 +1013,11 @@
        "type": "array<string>",
        "required": true,
        "description": "IPv4/IPv6 addresses or CIDR prefixes (for example 203.0.113.0/24). Ports, zones and empty entries are rejected. The service unmaps IPv4-mapped IPv6, masks prefixes to their network, collapses full-length prefixes to the address, deduplicates and sorts. Empty clears the restriction."
+      },
+      {
+       "name": "channel_pending",
+       "type": "boolean",
+       "description": "Present only when the saved email or SMS second step has its notification channel switched off; it takes effect once the channel is on"
       }
      ]
     },

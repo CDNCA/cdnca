@@ -18,7 +18,7 @@ import (
 // the credential keyring) replaces the environment password; otherwise the
 // environment password is used and a persisted reference must match the
 // reference configured for the runtime secret provider before startup can
-// proceed.
+// proceed. The HTTPS SMS gateway token works the same way.
 func mergePersistedNotificationMailSettings(
 	config *notificationRuntimeConfig,
 	settings systemmailsettings.RuntimeSettings,
@@ -95,7 +95,19 @@ func mergePersistedNotificationMailSettings(
 		if value.SMSProvider != config.SMSProvider {
 			return errors.New("persisted SMS provider is not configured for the runtime")
 		}
-		if value.SMSAccessKeyReference != "" && value.SMSAccessKeyReference != config.SMSAuthTokenReference {
+		switch {
+		case settings.HasSMSAuthToken():
+			// the gateway token saved on the page replaces NOTIFICATION_SMS_AUTH_TOKEN
+			if len(ciphers) != 1 || ciphers[0] == nil {
+				return errors.New("persisted SMS gateway token requires the credential keyring")
+			}
+			token, err := settings.OpenSMSAuthToken(ciphers[0])
+			if err != nil {
+				return errors.New("persisted SMS gateway token cannot be opened")
+			}
+			// not cleared: the previous slice may be shared with a base config
+			config.SMS.AuthToken = token
+		case value.SMSAccessKeyReference != "" && value.SMSAccessKeyReference != config.SMSAuthTokenReference:
 			return errors.New("persisted SMS access key reference is not configured for the runtime")
 		}
 		if value.SMSAccessKeyID == "" || strings.ContainsAny(value.SMSAccessKeyID, "\r\n\x00") || len(value.SMSAccessKeyID) > 256 {

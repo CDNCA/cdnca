@@ -373,8 +373,12 @@ func (s *Store) Claim(ctx context.Context, workerID string, leaseDuration time.D
 // leaves it superseded (manual scopes publish by hand).
 func continueSupersededTx(ctx context.Context, tx pgx.Tx, request Request, currentRevision int64, now time.Time) error {
 	var covered bool
+	// A revision a security activation candidate took is covered by its
+	// release or its recovery republication (securityactivation, migration 669):
+	// publishing it again would give the candidate's nodes a second root.
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM edge_automatic_publication_requests
-		WHERE target_scope_id=$1 AND source_revision>=$2)`, request.TargetScopeID, currentRevision).Scan(&covered); err != nil {
+		WHERE target_scope_id=$1 AND source_revision>=$2) OR EXISTS(SELECT 1 FROM security_policy_activation_candidates
+		WHERE tenant_scope_id=$1 AND candidate_source_revision>=$2)`, request.TargetScopeID, currentRevision).Scan(&covered); err != nil {
 		return err
 	}
 	if covered {

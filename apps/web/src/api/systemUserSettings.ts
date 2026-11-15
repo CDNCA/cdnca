@@ -41,10 +41,12 @@ export interface PlatformSystemUserSettings {
   captcha_secret_key_reference: string
   captcha_app_id: string
   captcha_app_secret_reference: string
+  /** Cloudflare Turnstile site key of sign-up (public). */
+  captcha_turnstile_site_key: string
   identity_verification_method: IdentityVerificationMethod
   enterprise_verification_enabled: boolean
-  enterprise_secret_id_reference: string
-  enterprise_secret_key_reference: string
+  /** The two fields above were chosen on the page; until then both kinds follow whether the KYC provider is configured. */
+  identity_policy_saved: boolean
   wechat_payment_enabled: boolean
   alipay_payment_enabled: boolean
   bank_transfer_enabled: boolean
@@ -54,11 +56,31 @@ export interface PlatformSystemUserSettings {
   default_phone_country_code: string
 }
 
+/** Write-only secrets typed on the page: the CAPTCHA ones pair with `<name>_reference`; the KYC ones fall back to IDENTITY_VERIFICATION_KYC_*. */
+export const userSettingsSecretNames = ['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret', 'captcha_turnstile_secret', 'kyc_api_key', 'kyc_callback_hmac_key'] as const
+export type UserSettingsSecretName = typeof userSettingsSecretNames[number]
+export type CaptchaSecretName = 'captcha_secret_id' | 'captcha_secret_key' | 'captcha_app_secret'
+/** A secret to send: undefined keeps the stored one, '' clears it. */
+export type UserSettingsSecrets = Partial<Record<UserSettingsSecretName, string>>
+
 export interface PlatformSystemUserSettingsDocument {
   schema: 'cdnca.platform-system-user-settings/v1'
   revision: number
   updated_at?: string
   value: PlatformSystemUserSettings
+  // The page secrets are never returned, only whether each is set and a fingerprint.
+  captcha_secret_id_configured?: boolean
+  captcha_secret_id_fingerprint?: string
+  captcha_secret_key_configured?: boolean
+  captcha_secret_key_fingerprint?: string
+  captcha_app_secret_configured?: boolean
+  captcha_app_secret_fingerprint?: string
+  captcha_turnstile_secret_configured?: boolean
+  captcha_turnstile_secret_fingerprint?: string
+  kyc_api_key_configured?: boolean
+  kyc_api_key_fingerprint?: string
+  kyc_callback_hmac_key_configured?: boolean
+  kyc_callback_hmac_key_fingerprint?: string
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -69,7 +91,7 @@ const settingKeys = [
   'email_required', 'email_verification_required', 'phone_required', 'phone_verification_required', 'qq_required',
   'login_failure_limit_per_hour', 'login_captcha_threshold_per_hour', 'session_region_check', 'email_anti_abuse_mode', 'sms_anti_abuse_mode',
   'captcha_provider', 'captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference',
-  'identity_verification_method', 'enterprise_verification_enabled', 'enterprise_secret_id_reference', 'enterprise_secret_key_reference',
+  'captcha_turnstile_site_key', 'identity_verification_method', 'enterprise_verification_enabled', 'identity_policy_saved',
   'wechat_payment_enabled', 'alipay_payment_enabled', 'bank_transfer_enabled', 'default_recharge_method', 'recharge_restriction',
   'default_phone_country_code',
 ] as const
@@ -105,12 +127,13 @@ function externalAntiAbuse(value: AntiAbuseMode) {
   return value === 'tencent' || value === 'geetest_v4'
 }
 
-function isSettings(value: unknown): value is PlatformSystemUserSettings {
+function isSettings(value: unknown, saved: readonly UserSettingsSecretName[] = []): value is PlatformSystemUserSettings {
   if (!isRecord(value) || !hasExactKeys(value, settingKeys)) return false
   const booleanKeys = [
     'email_code_login_enabled', 'sms_code_login_enabled', 'registration_enabled', 'username_required', 'email_required',
     'email_verification_required', 'phone_required', 'phone_verification_required', 'qq_required', 'enterprise_verification_enabled',
     'wechat_payment_enabled', 'alipay_payment_enabled', 'bank_transfer_enabled', 'session_region_check',
+    'identity_policy_saved',
   ] as const
   if (!booleanKeys.every((key) => typeof value[key] === 'boolean')) return false
   if (!Number.isSafeInteger(value.session_ttl_seconds) || Number(value.session_ttl_seconds) < 300 || Number(value.session_ttl_seconds) > 31536000 ||
@@ -122,8 +145,8 @@ function isSettings(value: unknown): value is PlatformSystemUserSettings {
     !validText(value.verification_subject, 1, 256) || !validTemplate(value.verification_body) ||
     !validText(value.verification_sms_body, 1, 1024) || !validText(value.verification_sms_template_id, 0, 256) ||
     !validText(value.terms_title, 1, 256) || !validText(value.terms_body, 1, 65536) || !validText(value.captcha_app_id, 0, 256) ||
-    !validReference(value.captcha_secret_id_reference) || !validReference(value.captcha_secret_key_reference) || !validReference(value.captcha_app_secret_reference) ||
-    !validReference(value.enterprise_secret_id_reference) || !validReference(value.enterprise_secret_key_reference)) return false
+    typeof value.captcha_turnstile_site_key !== 'string' || !/^([A-Za-z0-9_-]{1,256})?$/.test(value.captcha_turnstile_site_key) ||
+    !validReference(value.captcha_secret_id_reference) || !validReference(value.captcha_secret_key_reference) || !validReference(value.captcha_app_secret_reference)) return false
   if (!member(value.verification_template_channel, ['email', 'sms']) || !member(value.email_anti_abuse_mode, ['none', 'native', 'tencent', 'geetest_v4']) ||
     !member(value.sms_anti_abuse_mode, ['none', 'native', 'tencent', 'geetest_v4']) || !member(value.captcha_provider, ['tencent', 'geetest_v4']) ||
     !member(value.identity_verification_method, ['none', 'alipay', 'wechat_face', 'phone_three_factor']) ||
@@ -132,23 +155,31 @@ function isSettings(value: unknown): value is PlatformSystemUserSettings {
     typeof value.default_phone_country_code !== 'string' || !/^[1-9][0-9]{0,3}$/.test(value.default_phone_country_code)) return false
   const candidate = value as unknown as PlatformSystemUserSettings
   if (candidate.email_verification_required && !candidate.email_required || candidate.phone_verification_required && !candidate.phone_required) return false
-  const externalCaptchaConfigured = candidate.captcha_secret_id_reference !== '' && candidate.captcha_secret_key_reference !== '' && candidate.captcha_app_id !== '' && candidate.captcha_app_secret_reference !== ''
+  const set = (name: CaptchaSecretName) => candidate[`${name}_reference`] !== '' || saved.includes(name)
+  const externalCaptchaConfigured = set('captcha_secret_id') && set('captcha_secret_key') && candidate.captcha_app_id !== '' && set('captcha_app_secret')
   return (!externalAntiAbuse(candidate.email_anti_abuse_mode) || candidate.email_anti_abuse_mode === candidate.captcha_provider && externalCaptchaConfigured) &&
     (!externalAntiAbuse(candidate.sms_anti_abuse_mode) || candidate.sms_anti_abuse_mode === candidate.captcha_provider && externalCaptchaConfigured) &&
-    (!candidate.enterprise_verification_enabled || candidate.enterprise_secret_id_reference !== '' && candidate.enterprise_secret_key_reference !== '') &&
     (candidate.default_recharge_method !== 'wechat' || candidate.wechat_payment_enabled) &&
     (candidate.default_recharge_method !== 'alipay' || candidate.alipay_payment_enabled) &&
     (candidate.default_recharge_method !== 'bank_transfer' || candidate.bank_transfer_enabled)
 }
 
+const secretDocumentKeys = userSettingsSecretNames.flatMap((name) => [`${name}_configured`, `${name}_fingerprint`])
+
 function isDocument(value: unknown): value is PlatformSystemUserSettingsDocument {
-  if (!isRecord(value) || Object.keys(value).some((key) => !['schema', 'revision', 'updated_at', 'value'].includes(key)) ||
+  if (!isRecord(value) || Object.keys(value).some((key) => !['schema', 'revision', 'updated_at', 'value', ...secretDocumentKeys].includes(key)) ||
     !['schema', 'revision', 'value'].every((key) => Object.hasOwn(value, key))) return false
+  for (const name of userSettingsSecretNames) {
+    const configured = value[`${name}_configured`], fingerprint = value[`${name}_fingerprint`]
+    if (configured !== undefined && typeof configured !== 'boolean') return false
+    if (fingerprint !== undefined && !(typeof fingerprint === 'string' && /^[0-9a-f]{16}$/.test(fingerprint))) return false
+  }
+  const saved = userSettingsSecretNames.filter((name) => value[`${name}_configured`] === true)
   return value.schema === 'cdnca.platform-system-user-settings/v1' && Number.isSafeInteger(value.revision) && Number(value.revision) >= 0 &&
-    isSettings(value.value) && (!Object.hasOwn(value, 'updated_at') || typeof value.updated_at === 'string' && Number.isFinite(Date.parse(value.updated_at)))
+    isSettings(value.value, saved) && (!Object.hasOwn(value, 'updated_at') || typeof value.updated_at === 'string' && Number.isFinite(Date.parse(value.updated_at)))
 }
 
-async function request(accessToken: string, method: 'GET' | 'PUT', revision?: number, value?: PlatformSystemUserSettings, requestId?: string, idempotencyKey?: string) {
+async function request(accessToken: string, method: 'GET' | 'PUT', revision?: number, value?: PlatformSystemUserSettings, requestId?: string, idempotencyKey?: string, secrets: UserSettingsSecrets = {}) {
   const requestID = requestId ?? `system-user-settings-${crypto.randomUUID()}`
   const writeIdempotencyKey = idempotencyKey ?? requestID
   let response: Response
@@ -161,7 +192,8 @@ async function request(accessToken: string, method: 'GET' | 'PUT', revision?: nu
         'X-Request-ID': requestID,
         ...(method === 'PUT' ? { 'Content-Type': 'application/json', 'If-Match': `"${revision}"`, 'Idempotency-Key': writeIdempotencyKey } : {}),
       },
-      ...(method === 'PUT' ? { body: JSON.stringify({ value }) } : {}),
+      ...(method === 'PUT' ? { body: JSON.stringify({ value,
+        ...Object.fromEntries(userSettingsSecretNames.filter((name) => secrets[name] !== undefined).map((name) => [name, secrets[name]])) }) } : {}),
     })
   } catch {
     throw networkApiError()
@@ -175,5 +207,5 @@ async function request(accessToken: string, method: 'GET' | 'PUT', revision?: nu
 
 export const systemUserSettingsApi = {
   get(accessToken: string) { return request(accessToken, 'GET') },
-  put(accessToken: string, revision: number, value: PlatformSystemUserSettings, requestId?: string, idempotencyKey?: string) { return request(accessToken, 'PUT', revision, value, requestId, idempotencyKey) },
+  put(accessToken: string, revision: number, value: PlatformSystemUserSettings, requestId?: string, idempotencyKey?: string, secrets?: UserSettingsSecrets) { return request(accessToken, 'PUT', revision, value, requestId, idempotencyKey, secrets) },
 }

@@ -1470,6 +1470,7 @@ export const zhCN = {
     notices: {
       created: '用户创建成功', updated: '用户更新成功', disabled: '用户已禁用',
       batchEnabled: '用户已批量启用', batchDisabled: '用户已批量禁用',
+      loginSecurityChannelPending: '登录二次验证已保存。对应的通知渠道目前关闭，渠道开启后才生效，期间该用户照常登录。',
       deleted: '用户已删除',
       passwordReset: '密码已重置，目标用户的现有会话已撤销',
       conflictRefreshed: '用户信息已发生变化，列表已刷新，请重新操作',

@@ -35,7 +35,7 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/WriteRequest'}}}
       responses:
         '200': {description: Saved policy, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
-        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '400': {description: 'Validation error. system_user_settings_verification_sender_unavailable (details.field value.email_verification_required or value.phone_verification_required) refuses turning a verification on while its notification channel is on and no sender of that channel is configured; a verification already on is kept.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '401': {description: Unauthenticated, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '403': {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
         '409': {description: Revision or idempotency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -63,8 +63,8 @@ components:
             message: {type: string}
             request_id: {type: string}
             details:
-              description: On a 400 system_user_settings_validation_error that names the refused field of the save body (value.<field>) and a machine reason.
-              x-description-zh: 能定位字段的 400 system_user_settings_validation_error 附带 field（保存请求体路径 value.<字段>）与 reason 机器码。
+              description: On a 400 system_user_settings_validation_error that names the refused field of the save body (value.<field>, or a write-only secret such as captcha_secret_key) and a machine reason.
+              x-description-zh: 能定位字段的 400 system_user_settings_validation_error 附带 field（保存请求体路径 value.<字段>，或只写密钥字段如 captcha_secret_key）与 reason 机器码。
               type: object
               additionalProperties: false
               required: [field, reason]
@@ -81,20 +81,60 @@ components:
         revision: {type: integer, minimum: 0, maximum: 9223372036854775806}
         updated_at: {type: string, format: date-time}
         value: {$ref: '#/components/schemas/Settings'}
+        captcha_secret_id_configured: {type: boolean, description: The CAPTCHA SecretId entered on the settings page is stored encrypted (never returned).}
+        captcha_secret_id_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        captcha_secret_key_configured: {type: boolean, description: The CAPTCHA SecretKey entered on the settings page is stored encrypted (never returned).}
+        captcha_secret_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        captcha_app_secret_configured: {type: boolean, description: The CAPTCHA AppSecretKey entered on the settings page is stored encrypted (never returned).}
+        captcha_app_secret_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        captcha_turnstile_secret_configured: {type: boolean, description: Whether a Turnstile secret is saved on this page. The secret itself is never returned.}
+        captcha_turnstile_secret_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$', description: Short fingerprint of the saved Turnstile secret, to tell secrets apart.}
+        kyc_api_key_configured: {type: boolean, description: The KYC provider API key entered on the settings page is stored encrypted (never returned).}
+        kyc_api_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        kyc_callback_hmac_key_configured: {type: boolean, description: The KYC provider callback signing key entered on the settings page is stored encrypted (never returned).}
+        kyc_callback_hmac_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
     WriteRequest:
       type: object
       additionalProperties: false
       required: [value]
-      properties: {value: {$ref: '#/components/schemas/Settings'}}
+      properties:
+        value: {$ref: '#/components/schemas/Settings'}
+        captcha_secret_id: {$ref: '#/components/schemas/WriteOnlySecret'}
+        captcha_secret_key: {$ref: '#/components/schemas/WriteOnlySecret'}
+        captcha_app_secret: {$ref: '#/components/schemas/WriteOnlySecret'}
+        captcha_turnstile_secret:
+          allOf:
+            - {$ref: '#/components/schemas/WriteOnlySecret'}
+          minLength: 16
+          description: Cloudflare Turnstile secret of the registration flow, 16 to 1024 characters without whitespace. A non-empty ACCOUNT_REGISTRATION_TURNSTILE_SECRET wins over it.
+          x-description-zh: 注册流程的 Cloudflare Turnstile Secret，16–1024 个字符、不含空白；环境变量 ACCOUNT_REGISTRATION_TURNSTILE_SECRET 非空时优先。
+        kyc_api_key:
+          allOf:
+            - {$ref: '#/components/schemas/WriteOnlySecret'}
+          minLength: 16
+          maxLength: 512
+          description: API key of the KYC provider shared by personal and enterprise verification; replaces IDENTITY_VERIFICATION_KYC_API_KEY, which stays the fallback when this is not saved; a change applies to the next KYC request without restarting the control plane.
+          x-description-zh: 个人实名与企业认证共用的实名认证服务（KYC）API Key；替换 IDENTITY_VERIFICATION_KYC_API_KEY，未保存时沿用该环境变量；修改后下一次实名认证请求即生效，无需重启控制面。
+        kyc_callback_hmac_key:
+          allOf:
+            - {$ref: '#/components/schemas/WriteOnlySecret'}
+          description: Callback signing key of the KYC provider, canonical padded base64 of 32-128 bytes; replaces IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64, which stays the fallback; a change applies without restarting the control plane.
+          x-description-zh: 实名认证服务回调验签密钥，32–128 字节的标准带填充 Base64；替换 IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64，未保存时沿用该环境变量；修改后无需重启控制面即生效。
+    WriteOnlySecret:
+      type: string
+      maxLength: 1024
+      writeOnly: true
+      description: A secret in plaintext (no line breaks, no surrounding spaces), stored encrypted under the control-api credential keyring and never returned; the document shows only <name>_configured and <name>_fingerprint. Omitted keeps the stored one, an empty string clears it. For the CAPTCHA secrets a stored secret cannot coexist with its value.<name>_reference; sending both is refused (<name> invalid), and a reference while the secret stays stored is refused (value.<name>_reference invalid). The CAPTCHA verifier uses the stored secret before the reference.
+      x-description-zh: 明文密钥（不含换行、首尾无空格），用 control-api 凭据钥匙串加密保存，从不回显；文档只返回 <名称>_configured 与 <名称>_fingerprint。省略保留原值，空串清除。人机验证密钥的已存值与对应的 value.<名称>_reference 不能同时存在：两者同时填写被拒（<名称> invalid），保留已存密钥时填写引用被拒（value.<名称>_reference invalid）。人机验证优先使用已存密钥，其次才用引用。
     SecretReference:
       type: string
       maxLength: 1024
       pattern: '^(|vault://.+|kms-envelope://.+)$'
-      description: Empty or an opaque Vault/KMS envelope reference. Plaintext secrets are rejected and never returned.
+      description: Advanced. Empty or an opaque Vault/KMS envelope reference resolved by the runtime (ACCOUNT_LOGIN_CAPTCHA_SECRETS_JSON for CAPTCHA). Plaintext secrets go in the matching write-only field of the save body instead.
     Settings:
       type: object
       additionalProperties: false
-      required: [session_ttl_seconds, user_login_domains, admin_login_domains, email_code_login_enabled, sms_code_login_enabled, registration_enabled, registration_success_subject, registration_success_body, password_reset_subject, password_reset_body, verification_template_channel, verification_subject, verification_body, verification_sms_body, verification_sms_template_id, terms_title, terms_body, username_required, email_required, email_verification_required, phone_required, phone_verification_required, qq_required, login_failure_limit_per_hour, login_captcha_threshold_per_hour, session_region_check, email_anti_abuse_mode, sms_anti_abuse_mode, captcha_provider, captcha_secret_id_reference, captcha_secret_key_reference, captcha_app_id, captcha_app_secret_reference, identity_verification_method, enterprise_verification_enabled, enterprise_secret_id_reference, enterprise_secret_key_reference, wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, usdt_payment_enabled, default_recharge_method, recharge_restriction, default_phone_country_code]
+      required: [session_ttl_seconds, user_login_domains, admin_login_domains, email_code_login_enabled, sms_code_login_enabled, registration_enabled, registration_success_subject, registration_success_body, password_reset_subject, password_reset_body, verification_template_channel, verification_subject, verification_body, verification_sms_body, verification_sms_template_id, terms_title, terms_body, username_required, email_required, email_verification_required, phone_required, phone_verification_required, qq_required, login_failure_limit_per_hour, login_captcha_threshold_per_hour, session_region_check, email_anti_abuse_mode, sms_anti_abuse_mode, captcha_provider, captcha_secret_id_reference, captcha_secret_key_reference, captcha_app_id, captcha_app_secret_reference, identity_verification_method, enterprise_verification_enabled, identity_policy_saved, wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, usdt_payment_enabled, default_recharge_method, recharge_restriction, default_phone_country_code]
       properties:
         session_ttl_seconds: {type: integer, minimum: 300, maximum: 31536000, default: 86400}
         user_login_domains: {type: string, maxLength: 4096}
@@ -115,9 +155,9 @@ components:
         terms_body: {type: string, minLength: 1, maxLength: 65536}
         username_required: {type: boolean}
         email_required: {type: boolean}
-        email_verification_required: {type: boolean, description: Requires email_required=true.}
+        email_verification_required: {type: boolean, description: 'Requires email_required=true. In effect only while the email notification channel is on too (then an email sender is needed to turn it on); otherwise sign-up and sign-in need no email code.'}
         phone_required: {type: boolean}
-        phone_verification_required: {type: boolean, description: Requires phone_required=true.}
+        phone_verification_required: {type: boolean, description: 'Requires phone_required=true. In effect only while the SMS notification channel is on too (then an SMS sender is needed to turn it on); otherwise sign-up and sign-in need no SMS code.'}
         qq_required: {type: boolean}
         login_failure_limit_per_hour: {type: integer, minimum: 1, maximum: 1000, default: 30}
         login_captcha_threshold_per_hour: {type: integer, minimum: 1, maximum: 1000, default: 3, description: Must not exceed login_failure_limit_per_hour.}
@@ -129,10 +169,16 @@ components:
         captcha_secret_key_reference: {$ref: '#/components/schemas/SecretReference'}
         captcha_app_id: {type: string, maxLength: 256}
         captcha_app_secret_reference: {$ref: '#/components/schemas/SecretReference'}
-        identity_verification_method: {type: string, enum: [none, alipay, wechat_face, phone_three_factor]}
-        enterprise_verification_enabled: {type: boolean}
-        enterprise_secret_id_reference: {$ref: '#/components/schemas/SecretReference'}
-        enterprise_secret_key_reference: {$ref: '#/components/schemas/SecretReference'}
+        captcha_turnstile_site_key: {type: string, pattern: '^([A-Za-z0-9_-]{1,256})?$', default: '', description: Cloudflare Turnstile site key of the registration flow (public). A non-empty ACCOUNT_REGISTRATION_TURNSTILE_SITE_KEY wins over it.}
+        identity_verification_method:
+          type: string
+          enum: [none, alipay, wechat_face, phone_three_factor]
+          description: Personal verification is offered unless none; applies once identity_policy_saved is true.
+        enterprise_verification_enabled: {type: boolean, description: Enterprise verification is offered; applies once identity_policy_saved is true.}
+        identity_policy_saved:
+          type: boolean
+          description: True once the identity tab was saved. Until then a new KYC session of any kind may start whenever the KYC provider is configured (the behaviour before these settings applied); afterwards identity_verification_method and enterprise_verification_enabled decide, and a turned-off kind is refused with identity_verification_kind_disabled.
+          x-description-zh: 认证页保存过即为 true。此前只要实名认证服务已配置，任何类型都可发起；此后由 identity_verification_method 与 enterprise_verification_enabled 决定，关闭的类型以 identity_verification_kind_disabled 拒绝。
         wechat_payment_enabled: {type: boolean}
         alipay_payment_enabled: {type: boolean}
         bank_transfer_enabled: {type: boolean}

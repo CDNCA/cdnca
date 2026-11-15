@@ -29,7 +29,8 @@ const (
 	captchaRequestTimeout         = 5 * time.Second
 )
 
-// CaptchaSettingsReader returns the platform CAPTCHA provider and secret references.
+// CaptchaSettingsReader returns the platform CAPTCHA provider, the secrets
+// saved on the settings page and the secret references.
 type CaptchaSettingsReader interface {
 	CaptchaRuntime(context.Context) (systemusersettings.CaptchaRuntime, error)
 }
@@ -133,6 +134,29 @@ func (verifier *ExternalCaptchaVerifier) Verify(ctx context.Context, mode, token
 	}
 }
 
+// Configured reports whether mode's provider has everything a check needs
+// (app ID and secrets); the login falls back to the local CAPTCHA otherwise.
+func (verifier *ExternalCaptchaVerifier) Configured(ctx context.Context, mode string) bool {
+	if verifier == nil || ctx == nil {
+		return false
+	}
+	runtime, err := verifier.settings.CaptchaRuntime(ctx)
+	if err != nil || runtime.Provider != mode {
+		return false
+	}
+	_, appOK := verifier.secret(runtime.AppSecret, runtime.AppSecretReference)
+	switch mode {
+	case "tencent":
+		appID, err := strconv.ParseUint(runtime.AppID, 10, 63)
+		_, idOK := verifier.secret(runtime.SecretID, runtime.SecretIDReference)
+		_, keyOK := verifier.secret(runtime.SecretKey, runtime.SecretKeyReference)
+		return err == nil && appID != 0 && idOK && keyOK && appOK
+	case "geetest_v4":
+		return boundedCaptchaValue(runtime.AppID, 128) && appOK
+	}
+	return false
+}
+
 func (verifier *ExternalCaptchaVerifier) verifyTencent(ctx context.Context, runtime systemusersettings.CaptchaRuntime, token, source string) error {
 	var proof struct {
 		Ticket  string `json:"ticket"`
@@ -143,9 +167,9 @@ func (verifier *ExternalCaptchaVerifier) verifyTencent(ctx context.Context, runt
 		!boundedCaptchaValue(proof.Ticket, 2048) || !boundedCaptchaValue(proof.Randstr, 512) {
 		return ErrHumanInvalid
 	}
-	secretID, idOK := verifier.secrets.ResolveSecret(runtime.SecretIDReference)
-	secretKey, keyOK := verifier.secrets.ResolveSecret(runtime.SecretKeyReference)
-	appSecret, appOK := verifier.secrets.ResolveSecret(runtime.AppSecretReference)
+	secretID, idOK := verifier.secret(runtime.SecretID, runtime.SecretIDReference)
+	secretKey, keyOK := verifier.secret(runtime.SecretKey, runtime.SecretKeyReference)
+	appSecret, appOK := verifier.secret(runtime.AppSecret, runtime.AppSecretReference)
 	if !idOK || !keyOK || !appOK {
 		return ErrHumanInvalid
 	}
@@ -197,7 +221,7 @@ func (verifier *ExternalCaptchaVerifier) verifyGeetest(ctx context.Context, runt
 		!boundedCaptchaValue(proof.PassToken, 512) || !boundedCaptchaValue(proof.GenTime, 32) {
 		return ErrHumanInvalid
 	}
-	captchaKey, ok := verifier.secrets.ResolveSecret(runtime.AppSecretReference)
+	captchaKey, ok := verifier.secret(runtime.AppSecret, runtime.AppSecretReference)
 	if !ok {
 		return ErrHumanInvalid
 	}
@@ -219,6 +243,14 @@ func (verifier *ExternalCaptchaVerifier) verifyGeetest(ctx context.Context, runt
 		return ErrHumanInvalid
 	}
 	return nil
+}
+
+// secret is the value saved on the settings page, else the referenced one.
+func (verifier *ExternalCaptchaVerifier) secret(saved, reference string) (string, bool) {
+	if saved != "" {
+		return saved, true
+	}
+	return verifier.secrets.ResolveSecret(reference)
 }
 
 func (verifier *ExternalCaptchaVerifier) doJSON(request *http.Request, target any) bool {

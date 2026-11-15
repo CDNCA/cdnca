@@ -19,6 +19,10 @@ var (
 	ErrRevisionConflict    = errors.New("platform system user settings revision conflict")
 	ErrIdempotencyConflict = errors.New("platform system user settings idempotency conflict")
 	ErrUnavailable         = errors.New("platform system user settings unavailable")
+	// ErrVerificationSenderUnavailable: a save turns on email / phone
+	// verification while no sender of that channel is configured (sign-up
+	// would then refuse everyone). Located at value.<field>_verification_required.
+	ErrVerificationSenderUnavailable = errors.New("platform system user settings verification sender unavailable")
 )
 
 const schema = "cdnca.platform-system-user-settings/v1"
@@ -63,23 +67,30 @@ type Settings struct {
 	LoginCaptchaThresholdPerHour int    `json:"login_captcha_threshold_per_hour"`
 	// SessionRegionCheck requires re-entering the password when a session's
 	// requests move to another country/province (IP intelligence library).
-	SessionRegionCheck            bool   `json:"session_region_check"`
-	EmailAntiAbuseMode            string `json:"email_anti_abuse_mode"`
-	SMSAntiAbuseMode              string `json:"sms_anti_abuse_mode"`
-	CaptchaProvider               string `json:"captcha_provider"`
-	CaptchaSecretIDReference      string `json:"captcha_secret_id_reference"`
-	CaptchaSecretKeyReference     string `json:"captcha_secret_key_reference"`
-	CaptchaAppID                  string `json:"captcha_app_id"`
-	CaptchaAppSecretReference     string `json:"captcha_app_secret_reference"`
+	SessionRegionCheck        bool   `json:"session_region_check"`
+	EmailAntiAbuseMode        string `json:"email_anti_abuse_mode"`
+	SMSAntiAbuseMode          string `json:"sms_anti_abuse_mode"`
+	CaptchaProvider           string `json:"captcha_provider"`
+	CaptchaSecretIDReference  string `json:"captcha_secret_id_reference"`
+	CaptchaSecretKeyReference string `json:"captcha_secret_key_reference"`
+	CaptchaAppID              string `json:"captcha_app_id"`
+	CaptchaAppSecretReference string `json:"captcha_app_secret_reference"`
+	// CaptchaTurnstileSiteKey is the Cloudflare Turnstile site key of the
+	// registration flow (public: it is embedded in the browser widget).
+	// ACCOUNT_REGISTRATION_TURNSTILE_SITE_KEY, when set, wins over it.
+	CaptchaTurnstileSiteKey       string `json:"captcha_turnstile_site_key"`
 	IdentityVerificationMethod    string `json:"identity_verification_method"`
 	EnterpriseVerificationEnabled bool   `json:"enterprise_verification_enabled"`
-	EnterpriseSecretIDReference   string `json:"enterprise_secret_id_reference"`
-	EnterpriseSecretKeyReference  string `json:"enterprise_secret_key_reference"`
-	WeChatPaymentEnabled          bool   `json:"wechat_payment_enabled"`
-	AlipayPaymentEnabled          bool   `json:"alipay_payment_enabled"`
-	BankTransferEnabled           bool   `json:"bank_transfer_enabled"`
-	DefaultRechargeMethod         string `json:"default_recharge_method"`
-	RechargeRestriction           string `json:"recharge_restriction"`
+	// IdentityPolicySaved marks identity_verification_method and
+	// enterprise_verification_enabled as chosen on the page. Until then the
+	// runtime keeps the earlier behaviour: personal and enterprise
+	// verification are on whenever the KYC provider is configured.
+	IdentityPolicySaved   bool   `json:"identity_policy_saved"`
+	WeChatPaymentEnabled  bool   `json:"wechat_payment_enabled"`
+	AlipayPaymentEnabled  bool   `json:"alipay_payment_enabled"`
+	BankTransferEnabled   bool   `json:"bank_transfer_enabled"`
+	DefaultRechargeMethod string `json:"default_recharge_method"`
+	RechargeRestriction   string `json:"recharge_restriction"`
 	// DefaultPhoneCountryCode completes phone numbers entered without a
 	// country/region calling code (FX38); 1-4 digits, default 86.
 	DefaultPhoneCountryCode string `json:"default_phone_country_code"`
@@ -101,6 +112,8 @@ type PublicSettings struct {
 	// The CAPTCHA provider and app ID are embedded in the browser widget, so they are public.
 	CaptchaProvider string
 	CaptchaAppID    string
+	// CaptchaTurnstileSiteKey is the Turnstile site key saved on the page.
+	CaptchaTurnstileSiteKey string
 	// DefaultPhoneCountryCode completes bare phone numbers (FX38).
 	DefaultPhoneCountryCode string
 	// Password sign-in throttle (identity.loginThrottle): failures per hour
@@ -111,14 +124,51 @@ type PublicSettings struct {
 	SessionRegionCheck           bool
 }
 
-// CaptchaRuntime is the server-side view of the external CAPTCHA settings. It
-// holds only secret references; the runtime resolves them to secret material.
+// CaptchaRuntime is the server-side view of the external CAPTCHA settings.
+// SecretID/SecretKey/AppSecret are the values saved on the settings page
+// (decrypted; empty when not saved); otherwise the runtime resolves the
+// matching reference to secret material.
 type CaptchaRuntime struct {
 	Provider           string
 	SecretIDReference  string
 	SecretKeyReference string
 	AppID              string
 	AppSecretReference string
+	SecretID           string
+	SecretKey          string
+	AppSecret          string
+}
+
+// SecretCipher is the control-api credential keyring
+// (dnsacme.AESGCMCredentialCipher satisfies it).
+// IdentityVerificationRuntime is what the KYC runtime reads from the page:
+// whether personal / enterprise verification is offered and the KYC provider
+// credentials saved there (nil when not saved; the caller clears them).
+type IdentityVerificationRuntime struct {
+	// PolicySaved is false until the page saved the identity policy; the
+	// runtime then treats both kinds as on (the earlier behaviour).
+	PolicySaved       bool
+	PersonalEnabled   bool
+	EnterpriseEnabled bool
+	KYCAPIKey         []byte
+	KYCCallbackHMAC   []byte
+}
+
+// KindEnabled reports whether a verification kind (personal_initial,
+// personal_reverification or enterprise) may start.
+func (runtime IdentityVerificationRuntime) KindEnabled(kind string) bool {
+	if !runtime.PolicySaved {
+		return true
+	}
+	if kind == "enterprise" {
+		return runtime.EnterpriseEnabled
+	}
+	return runtime.PersonalEnabled
+}
+
+type SecretCipher interface {
+	Encrypt([]byte) (keyID string, ciphertext []byte, err error)
+	Decrypt(keyID string, ciphertext []byte) ([]byte, error)
 }
 
 type PublicSettingsReader interface {
@@ -146,14 +196,32 @@ type Document struct {
 	Revision  int64     `json:"revision"`
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	Value     Settings  `json:"value"`
-	Replayed  bool      `json:"-"`
+	// The CAPTCHA, Turnstile and KYC provider secrets entered on the page
+	// are write-only: only whether each is set and a fingerprint are returned.
+	CaptchaSecretIDConfigured         bool   `json:"captcha_secret_id_configured"`
+	CaptchaSecretIDFingerprint        string `json:"captcha_secret_id_fingerprint,omitempty"`
+	CaptchaSecretKeyConfigured        bool   `json:"captcha_secret_key_configured"`
+	CaptchaSecretKeyFingerprint       string `json:"captcha_secret_key_fingerprint,omitempty"`
+	CaptchaAppSecretConfigured        bool   `json:"captcha_app_secret_configured"`
+	CaptchaAppSecretFingerprint       string `json:"captcha_app_secret_fingerprint,omitempty"`
+	CaptchaTurnstileSecretConfigured  bool   `json:"captcha_turnstile_secret_configured"`
+	CaptchaTurnstileSecretFingerprint string `json:"captcha_turnstile_secret_fingerprint,omitempty"`
+	KYCAPIKeyConfigured               bool   `json:"kyc_api_key_configured"`
+	KYCAPIKeyFingerprint              string `json:"kyc_api_key_fingerprint,omitempty"`
+	KYCCallbackHMACKeyConfigured      bool   `json:"kyc_callback_hmac_key_configured"`
+	KYCCallbackHMACKeyFingerprint     string `json:"kyc_callback_hmac_key_fingerprint,omitempty"`
+	Replayed                          bool   `json:"-"`
 }
 
 type SaveRequest struct {
 	ExpectedRevision int64
 	Value            Settings
-	IdempotencyKey   string
-	RequestID        string
+	// Secrets are the write-only page secrets by name (SecretCaptchaSecretID
+	// ...): absent/nil keeps the stored one, "" clears it, anything else
+	// replaces it. A secret cannot coexist with its *_reference field.
+	Secrets        map[string]*string
+	IdempotencyKey string
+	RequestID      string
 }
 
 func DefaultSettings() Settings {

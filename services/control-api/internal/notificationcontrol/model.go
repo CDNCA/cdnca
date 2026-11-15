@@ -73,6 +73,8 @@ var supportedEventTypes = [...]string{
 	// 633: control-api database pool saturated / recovered (internal/poolmon).
 	"control.db_pool.saturated",
 	"control.db_pool.recovered",
+	// 670: security activation recovery rollback gave up (internal/securityactivation).
+	"security_activation.recovery_failed",
 	// 302_tickets (internal/tickets).
 	"ticket.created",
 	"ticket.replied",
@@ -121,7 +123,21 @@ var (
 	ErrVersionConflict         = errors.New("notification_control_version_conflict")
 	ErrTemplateVersionConflict = errors.New("notification_control_template_version_conflict")
 	ErrChannelUnsupported      = errors.New("notification_control_channel_unsupported")
+	// ErrChannelDisableConfirmation: switching a channel off would suspend users'
+	// per-user sign-in second step; retry with ConfirmDisable to go ahead.
+	ErrChannelDisableConfirmation = errors.New("notification_control_channel_disable_confirmation_required")
 )
+
+// ChannelDisableConfirmationError carries the numbers behind
+// ErrChannelDisableConfirmation (only the channels being switched off count).
+type ChannelDisableConfirmationError struct{ EmailUsers, SMSUsers int64 }
+
+func (e *ChannelDisableConfirmationError) Error() string {
+	return ErrChannelDisableConfirmation.Error()
+}
+func (e *ChannelDisableConfirmationError) Is(target error) bool {
+	return target == ErrChannelDisableConfirmation
+}
 
 type Clock func() time.Time
 
@@ -149,6 +165,7 @@ type UpdateChannelsRequest struct {
 	ExpectedRevision int64
 	SMSEnabled       bool
 	EmailEnabled     bool
+	ConfirmDisable   bool
 	RequestID        string
 }
 

@@ -2,6 +2,36 @@ import i18n from './index'
 
 const zhCN = {
   title: '注册账号',
+  channelSwitch: {
+    offTitle: { email: '邮件发信已配置，但邮件通知渠道未开启', sms: '短信服务已配置，但短信通知渠道未开启' },
+    offText: '渠道开启后，系统通知以及注册、登录验证码才会通过该渠道发送。',
+    enable: { email: '立即开启邮件通知渠道', sms: '立即开启短信通知渠道' },
+    enabled: { email: '邮件通知渠道已开启', sms: '短信通知渠道已开启' },
+    forbidden: '没有修改通知渠道的权限，请联系有系统配置管理权限的管理员。',
+    conflict: '通知渠道刚被修改过，请刷新后重试。',
+    unsupported: '发信配置尚未生效，请稍后再试。',
+    failed: '开启通知渠道失败，请稍后重试。',
+  },
+  readiness: {
+    title: '注册验证未就绪（仅管理员可见）',
+    settingsTitle: '注册验证未就绪：访客在注册页会看到「注册验证服务暂未配置」',
+    ready: '注册验证已就绪',
+    saveWarning: '已保存。{{channels}}验证已开启，但对应通道当前发不出验证码，注册页会提示「注册验证服务暂未配置」。',
+    channels: { email: '邮箱', sms: '手机', both: '邮箱和手机' },
+    links: { mail: '前往邮件/短信配置', account: '前往账号与安全' },
+    reasons: {
+      registration_disabled: '未开放注册。',
+      notification_runtime_disabled: '通知运行时被环境变量 NOTIFICATION_RUNTIME_ENABLED=off 关闭，邮件和短信都发不出；改为 auto 并重启主控后生效。',
+      sender_build_failed: '按最新配置重建发信方失败（例如 SMTP 连不上或密码错误），请检查发信配置，详情见系统健康状态。',
+      email_sender_unavailable: '没有可用的邮件发信方：请在「邮件/短信」页填写完整的 SMTP、官方邮件服务或邮件插件。',
+      sms_sender_unavailable: '没有可用的短信服务：请在「邮件/短信」页配置短信服务商和密钥。',
+      email_template_missing: '邮件验证码模板不存在：请在「账号与安全 → 用户注册」保存一次验证码模板。',
+      sms_template_missing: '短信验证码模板不存在：请在「账号与安全 → 用户注册」保存一次验证码模板。',
+      sms_template_unmapped: '短信服务商模板映射里没有注册验证码模板：请在「邮件/短信」页的模板映射中为注册验证码模板填写服务商模板。',
+      turnstile_not_configured: 'Turnstile 站点密钥或 Secret 未填写，注册暂用内置图形验证码；在「账号与安全 → 验证码配置」填齐后改用 Turnstile。',
+      verification_channel_unavailable: '当前没有可发验证码的通道，Turnstile 注册至少需要邮件或短信之一可用。',
+    },
+  },
   page: {
     lead: '创建账号后即可在控制台接入网站，配置加速与安全防护。',
     haveAccount: '已有账号？',
@@ -101,6 +131,36 @@ const zhCN = {
 
 const enUS: typeof zhCN = {
   title: 'Create account',
+  channelSwitch: {
+    offTitle: { email: 'Email sending is set up, but the email notification channel is off', sms: 'SMS is set up, but the SMS notification channel is off' },
+    offText: 'Once the channel is on, system notices and sign-up and sign-in codes are sent through it.',
+    enable: { email: 'Turn on the email notification channel', sms: 'Turn on the SMS notification channel' },
+    enabled: { email: 'The email notification channel is on', sms: 'The SMS notification channel is on' },
+    forbidden: 'You cannot change notification channels; ask an administrator who can manage the system configuration.',
+    conflict: 'The notification channels were just changed; refresh and try again.',
+    unsupported: 'The sender settings are not in effect yet; try again shortly.',
+    failed: 'Turning the notification channel on failed; try again later.',
+  },
+  readiness: {
+    title: 'Sign-up verification is not ready (only administrators see this)',
+    settingsTitle: 'Sign-up verification is not ready: visitors see "Sign-up verification is not set up yet" on the sign-up page',
+    ready: 'Sign-up verification is ready',
+    saveWarning: 'Saved. {{channels}} verification is on, but that channel cannot send codes right now, so the sign-up page says verification is not set up yet.',
+    channels: { email: 'Email', sms: 'Phone', both: 'Email and phone' },
+    links: { mail: 'Open mail and SMS settings', account: 'Open account and security' },
+    reasons: {
+      registration_disabled: 'Registration is not open.',
+      notification_runtime_disabled: 'NOTIFICATION_RUNTIME_ENABLED=off turns the notification runtime off, so no email or SMS can be sent; set it to auto and restart control-api.',
+      sender_build_failed: 'Rebuilding the sender with the latest settings failed (for example the SMTP server is unreachable or the password is wrong); check the mail settings and the system health details.',
+      email_sender_unavailable: 'No email sender is available: complete the SMTP server, official mail service or mail plugin on the Mail and SMS tab.',
+      sms_sender_unavailable: 'No SMS service is available: set the SMS provider and its key on the Mail and SMS tab.',
+      email_template_missing: 'The email verification template does not exist: save the verification template once under Account and security → Registration.',
+      sms_template_missing: 'The SMS verification template does not exist: save the verification template once under Account and security → Registration.',
+      sms_template_unmapped: 'The SMS provider template map has no entry for the sign-up verification template: add the provider template on the Mail and SMS tab.',
+      turnstile_not_configured: 'The Turnstile site key or secret is empty, so sign-up uses the built-in image CAPTCHA; fill both in under Account and security → CAPTCHA configuration to switch to Turnstile.',
+      verification_channel_unavailable: 'No channel can send a code; Turnstile sign-up needs email or SMS to work.',
+    },
+  },
   page: {
     lead: 'Create an account to add sites, set up acceleration and security in the console.',
     haveAccount: 'Already have an account?',

@@ -8,6 +8,7 @@ import {
   AccountRegistrationApiError,
   accountRegistrationApi,
   registrationChannels,
+  registrationReasons,
   type AccountRegistrationConfig,
   type AccountRegistrationChallengeRequest,
   type AccountRegistrationChallengeResult,
@@ -20,6 +21,8 @@ import {
   type AccountRegistrationVerificationChannel,
 } from '../api/accountRegistration'
 import { ApiError } from '../api/auth'
+import { useSessionStore } from '../auth/session'
+import { RegistrationReadinessReasons } from '../components/RegistrationReadinessReasons'
 import { checkPassword, passwordPolicyLocale, passwordPolicyMessage } from '@cdnca/ui/password-policy'
 import { PasswordStrengthPopover } from '@cdnca/ui'
 import '../i18n/accountRegistration'
@@ -159,16 +162,26 @@ export function RegisterPage({
 
   // only the required and sendable channels are offered.
   const [config, setConfig] = useState<AccountRegistrationConfig | null | undefined>(undefined)
+  // a signed-in administrator also gets the reasons the
+  // verification is not ready (the server decides; visitors get none).
+  const accessToken = useSessionStore((state) => state.accessToken)
   // Read after the mode is known; a page given its mode (embedding, tests)
   // keeps the previous behaviour.
   useEffect(() => {
     if (registrationMode || mode === null || mode === 'closed') return
     const controller = new AbortController()
-    void accountRegistrationApi.registrationConfig(controller.signal).then((value) => {
+    void accountRegistrationApi.registrationConfig(controller.signal, accessToken).then((value) => {
       if (!controller.signal.aborted) setConfig(value)
     })
     return () => controller.abort()
-  }, [registrationMode, mode])
+  }, [registrationMode, mode, accessToken])
+  const readinessReasons = registrationReasons(config)
+  // the site key saved on the settings page (or the server environment) wins
+  // over the one built into the console
+  const siteKey = config?.turnstile_site_key || turnstileSiteKey
+  // the Turnstile flow checks the built-in image CAPTCHA
+  // until its site key and secret are both set
+  const captchaChallenge = mode === 'verified' && config?.human_check === 'builtin_captcha'
   const channels = registrationChannels(config ?? null)
   const requiredCount = config ? (config.email.required ? 1 : 0) + (config.sms.required ? 1 : 0) : 0
   // This page proves one channel (Turnstile) or none (built-in CAPTCHA); the
@@ -194,6 +207,9 @@ export function RegisterPage({
   const resetHuman = () => {
     setHumanToken('')
     setTurnstileResetKey((value) => value + 1)
+    // an answered image CAPTCHA is spent too
+    setCaptcha(null)
+    setCaptchaReset((value) => value + 1)
   }
 
   const startOver = () => {
@@ -334,8 +350,8 @@ export function RegisterPage({
       void runBuiltIn()
       return
     }
-    if (!humanToken) {
-      setTurnstileUnavailable(true)
+    if (captchaChallenge ? !captcha : !humanToken) {
+      if (!captchaChallenge) setTurnstileUnavailable(true)
       return
     }
     const registration: AccountRegistrationRequest = {
@@ -353,7 +369,7 @@ export function RegisterPage({
       email: registration.email,
       phone: registration.phone,
       verification_channel: registration.verification_channel,
-      human_token: humanToken,
+      human_token: captchaChallenge && captcha ? `captcha:${captcha.id}:${captcha.answer}` : humanToken,
     }
     const attempt: FrozenAttempt<'challenge', AccountRegistrationChallengeRequest> = {
       kind: 'challenge',
@@ -512,6 +528,9 @@ export function RegisterPage({
               <Alert className="register-alert" type="warning" showIcon message={t('errors.turnstileUnavailable')} />
             ) : null}
 
+            {readinessReasons.length > 0 ? (
+              <RegistrationReadinessReasons className="register-alert register-enter" reasons={readinessReasons} />
+            ) : null}
             {mode !== 'closed' && (verifyNotReady || verifyOnSite) ? (
               <div className="register-state register-enter" role="status">
                 <p className="register-state-text">{t(verifyNotReady ? 'page.verifyNotReady' : 'page.verifyOnSite')}</p>
@@ -643,16 +662,16 @@ export function RegisterPage({
 
                 <fieldset className="register-fieldset">
                   <legend className="register-legend">{t('page.sectionVerify')}</legend>
-                  {mode === 'builtin' ? <Form.Item label={t('fields.captcha')} required>
+                  {mode === 'builtin' || captchaChallenge ? <Form.Item label={t('fields.captcha')} required>
                     <LoginCaptchaField resetKey={captchaReset} disabled={pending} onChange={setCaptcha} />
                   </Form.Item> : null}
-                  {mode === 'verified' ? <Form.Item>
+                  {mode === 'verified' && !captchaChallenge ? <Form.Item>
                     <TurnstileWidget
                       adapter={turnstileAdapter}
                       label={t('states.humanRequired')}
                       language={locale}
                       resetKey={turnstileResetKey}
-                      siteKey={turnstileSiteKey}
+                      siteKey={siteKey}
                       onToken={(token) => {
                         setHumanToken(token)
                         setHumanWasSolved(true)
@@ -685,8 +704,8 @@ export function RegisterPage({
                     htmlType="submit"
                     block
                     loading={stage === 'challenge-pending'}
-                    disabled={mode === null || retrySeconds > 0 || (mode === 'verified' && humanWasSolved && !humanToken) ||
-                      (mode === 'builtin' && !captcha)}
+                    disabled={mode === null || retrySeconds > 0 || (mode === 'verified' && !captchaChallenge && humanWasSolved && !humanToken) ||
+                      ((mode === 'builtin' || captchaChallenge) && !captcha)}
                   >
                     {t(mode === 'builtin' ? 'actions.register' : 'actions.sendCode')}
                   </Button>

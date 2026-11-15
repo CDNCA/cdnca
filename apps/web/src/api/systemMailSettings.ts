@@ -57,6 +57,9 @@ export interface PlatformSystemMailSettingsDocument {
   // The SMTP password typed on the page, likewise write-only.
   smtp_password_configured?: boolean
   smtp_password_fingerprint?: string
+  // The HTTPS SMS gateway token typed on the page, likewise write-only.
+  sms_auth_token_configured?: boolean
+  sms_auth_token_fingerprint?: string
 }
 
 export interface MailTestResult {
@@ -74,6 +77,8 @@ export interface MailSettingsSecrets {
   mailSecret?: string
   // undefined keeps the stored SMTP password, '' clears it.
   smtpPassword?: string
+  // undefined keeps the stored HTTPS SMS gateway token, '' clears it.
+  smsAuthToken?: string
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -97,6 +102,8 @@ function isDocument(value: unknown): value is PlatformSystemMailSettingsDocument
   if (Object.hasOwn(value, 'mail_secret_fingerprint') && !(typeof value.mail_secret_fingerprint === 'string' && /^[0-9a-f]{16}$/.test(value.mail_secret_fingerprint))) return false
   if (Object.hasOwn(value, 'smtp_password_configured') && typeof value.smtp_password_configured !== 'boolean') return false
   if (Object.hasOwn(value, 'smtp_password_fingerprint') && !(typeof value.smtp_password_fingerprint === 'string' && /^[0-9a-f]{16}$/.test(value.smtp_password_fingerprint))) return false
+  if (Object.hasOwn(value, 'sms_auth_token_configured') && typeof value.sms_auth_token_configured !== 'boolean') return false
+  if (Object.hasOwn(value, 'sms_auth_token_fingerprint') && !(typeof value.sms_auth_token_fingerprint === 'string' && /^[0-9a-f]{16}$/.test(value.sms_auth_token_fingerprint))) return false
   return !Object.hasOwn(value, 'updated_at') || typeof value.updated_at === 'string' && Number.isFinite(Date.parse(value.updated_at))
 }
 
@@ -116,7 +123,8 @@ async function request(accessToken: string, method: 'GET' | 'PUT', revision?: nu
       ...(method === 'PUT' ? { body: JSON.stringify({ value,
         ...(secrets.smsAccessKeySecret ? { sms_access_key_secret: secrets.smsAccessKeySecret } : {}),
         ...(secrets.mailSecret ? { mail_secret: secrets.mailSecret } : {}),
-        ...(secrets.smtpPassword !== undefined ? { smtp_password: secrets.smtpPassword } : {}) }) } : {}),
+        ...(secrets.smtpPassword !== undefined ? { smtp_password: secrets.smtpPassword } : {}),
+        ...(secrets.smsAuthToken !== undefined ? { sms_auth_token: secrets.smsAuthToken } : {}) }) } : {}),
     })
   } catch { throw networkApiError() }
   if (!response.ok) throw await responseApiError(response)

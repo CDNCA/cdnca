@@ -119,7 +119,7 @@ func (h *Handler) updateChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	value, err := h.service.UpdateChannels(r.Context(), actor, notificationcontrol.UpdateChannelsRequest{
-		ExpectedRevision: revision, SMSEnabled: input.sms, EmailEnabled: input.email, RequestID: requestID(r),
+		ExpectedRevision: revision, SMSEnabled: input.sms, EmailEnabled: input.email, ConfirmDisable: input.confirmDisable, RequestID: requestID(r),
 	})
 	h.writeValue(w, r, value, err, value.Revision)
 }
@@ -375,12 +375,13 @@ func (h *Handler) writeValue(w http.ResponseWriter, r *http.Request, value any, 
 	writeJSON(w, http.StatusOK, value)
 }
 
-type switchInput struct{ sms, email bool }
+type switchInput struct{ sms, email, confirmDisable bool }
 
 func decodeSwitches(w http.ResponseWriter, r *http.Request) (switchInput, bool) {
 	var body struct {
-		SMSEnabled   *bool `json:"sms_enabled"`
-		EmailEnabled *bool `json:"email_enabled"`
+		SMSEnabled     *bool `json:"sms_enabled"`
+		EmailEnabled   *bool `json:"email_enabled"`
+		ConfirmDisable bool  `json:"confirm_disable"`
 	}
 	if !decodeObject(w, r, &body) {
 		return switchInput{}, false
@@ -389,7 +390,7 @@ func decodeSwitches(w http.ResponseWriter, r *http.Request) (switchInput, bool) 
 		writeFieldError(w, r, field, fielderr.Required)
 		return switchInput{}, false
 	}
-	return switchInput{sms: *body.SMSEnabled, email: *body.EmailEnabled}, true
+	return switchInput{sms: *body.SMSEnabled, email: *body.EmailEnabled, confirmDisable: body.ConfirmDisable}, true
 }
 
 // requiredField is a body field and whether the request left it out.
@@ -549,6 +550,13 @@ func writeDomainError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, r, http.StatusConflict, "version_conflict")
 	case errors.Is(err, notificationcontrol.ErrTemplateVersionConflict):
 		writeError(w, r, http.StatusConflict, "template_version_conflict")
+	case errors.Is(err, notificationcontrol.ErrChannelDisableConfirmation):
+		var need *notificationcontrol.ChannelDisableConfirmationError
+		errors.As(err, &need)
+		writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{
+			"code": "notification_channel_disable_confirmation_required", "message": "notification_channel_disable_confirmation_required", "request_id": requestID(r),
+			"details": map[string]int64{"affected_email_users": need.EmailUsers, "affected_sms_users": need.SMSUsers},
+		}})
 	case errors.Is(err, notificationcontrol.ErrChannelUnsupported):
 		writeError(w, r, http.StatusConflict, "notification_channel_unsupported")
 	default:

@@ -284,17 +284,43 @@ async function registerBuiltIn(
   return parseRegistrationResult(await response.json().catch(() => null))
 }
 
+/** Why sign-up verification is not ready (administrators only). */
+export const accountRegistrationReasons = [
+  'registration_disabled', 'notification_runtime_disabled', 'sender_build_failed', 'email_sender_unavailable',
+  'sms_sender_unavailable', 'email_template_missing',
+  'sms_template_missing', 'sms_template_unmapped', 'turnstile_not_configured',
+  'verification_channel_unavailable',
+] as const
+export type AccountRegistrationReason = typeof accountRegistrationReasons[number]
+
 /** GET /v1/auth/registration-config (null: unreadable). */
 export interface AccountRegistrationConfig {
   mode: AccountRegistrationMode
   ready: boolean
   email: { required: boolean, available: boolean }
   sms: { required: boolean, available: boolean }
+  /** Turnstile site key (environment, else the one saved on the settings page). */
+  turnstile_site_key?: string
+  /** What guards sending a code; the Turnstile flow uses the built-in image CAPTCHA until Turnstile is configured. */
+  human_check?: 'builtin_captcha' | 'turnstile'
+  /** Only sent for a platform administrator's session. */
+  reasons?: AccountRegistrationReason[]
 }
 
-async function registrationConfig(signal?: AbortSignal): Promise<AccountRegistrationConfig | null> {
+/** The known reason codes of config (unknown future codes are dropped). */
+export function registrationReasons(config: AccountRegistrationConfig | null | undefined): AccountRegistrationReason[] {
+  const reasons = config?.reasons
+  if (!Array.isArray(reasons)) return []
+  return reasons.filter((reason): reason is AccountRegistrationReason => (accountRegistrationReasons as readonly string[]).includes(reason))
+}
+
+/** accessToken: an administrator's session also receives the reasons. */
+async function registrationConfig(signal?: AbortSignal, accessToken?: string | null): Promise<AccountRegistrationConfig | null> {
   try {
-    const response = await fetch(`${apiRoot}/v1/auth/registration-config`, { method: 'GET', credentials: 'omit', cache: 'no-store', signal })
+    const response = await fetch(`${apiRoot}/v1/auth/registration-config`, {
+      method: 'GET', credentials: 'omit', cache: 'no-store', signal,
+      ...(accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : {}),
+    })
     if (!response.ok) return null
     const body = await response.json().catch(() => null) as { data?: AccountRegistrationConfig } | null
     return body?.data && typeof body.data === 'object' ? body.data : null

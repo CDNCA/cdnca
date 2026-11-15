@@ -9455,6 +9455,7 @@ components:
         revision: {type: integer, format: int64, minimum: 0}
         login_verification: {type: string, enum: [none, sms, email]}
         login_allowlist: {$ref: '#/components/schemas/LoginAllowlist'}
+        channel_pending: {type: boolean, const: true, description: Present only when the saved email or SMS second step has its notification channel switched off; it takes effect once the channel is on, and the user signs in as usual until then.}
     UpdateManagedUserLoginSecurity:
       type: object
       additionalProperties: false

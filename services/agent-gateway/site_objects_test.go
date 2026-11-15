@@ -260,3 +260,25 @@ func TestFetchSiteObjectsRejectsInvalidRequestsAndChunks(t *testing.T) {
 		})
 	}
 }
+
+// A rollback of a site runtime v2 version carries no artifacts but keeps the
+// version's site runtime capability (Control requires it on every v2
+// release); every such rollback used to be refused as "must be a site
+// object release" and the security activation recovery never ran.
+func TestSiteRuntimeRollbackCommandIsAccepted(t *testing.T) {
+	gateway := newCommandGateway(t, defaultFakeControl(), &fakeCommandBus{}, nil)
+	command := validSiteObjectCommand(t)
+	command.Action = agentv1.DeploymentAction_DEPLOYMENT_ACTION_ROLLBACK
+	command.Artifacts = nil
+	command.PreviousConfigVersionId = proto.String(uuid.NewString())
+	if err := gateway.validateDeploymentCommand(command, testArtifactRecipientKeyID, true); err != nil {
+		t.Fatalf("site runtime rollback rejected: %v", err)
+	}
+	apply := validSiteObjectCommand(t)
+	apply.Artifacts = apply.Artifacts[1:]
+	apply.Artifacts[0].MediaType = "application/vnd.cdnca.edge-site-runtime-bundle+json;version=2"
+	if err := gateway.validateDeploymentCommand(apply, testArtifactRecipientKeyID, true); err == nil ||
+		!strings.Contains(err.Error(), "must be a site object release") {
+		t.Fatalf("site runtime apply without site objects: err=%v", err)
+	}
+}

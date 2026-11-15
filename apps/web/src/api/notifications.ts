@@ -1,3 +1,6 @@
+import { Modal } from 'antd'
+import i18next from '../i18n'
+import '../i18n/channelDisableConfirm'
 import { ApiError, networkApiError, responseApiError } from './auth'
 
 export interface NotificationChannels {
@@ -427,11 +430,39 @@ function getChannels(accessToken: string) {
   return request(accessToken, '/v1/admin/notifications/channels', 200, isNotificationChannels)
 }
 
-function putChannels(accessToken: string, value: SwitchWrite, revision: number, requestKey: string) {
-  return request(accessToken, '/v1/admin/notifications/channels', 200, (response): response is NotificationChannels =>
-    isNotificationChannels(response) && sameSwitchResponse(response, value, revision), {
-	    method: 'PUT', headers: { 'If-Match': `"${revision}"`, 'X-Request-ID': requestKey }, body: JSON.stringify(value),
+// Switching a channel off suspends users' per-user second step; the server asks
+// for a confirmation first and the retry carries confirm_disable.
+function confirmChannelDisable(error: ApiError): Promise<boolean> {
+  const t = i18next.getFixedT(null, 'channelDisableConfirm')
+  const { emailUsers, smsUsers } = error.channelDisable ?? { emailUsers: 0, smsUsers: 0 }
+  return new Promise((resolve) => {
+    Modal.confirm({
+      title: t('title'),
+      content: [
+        emailUsers > 0 ? t('email', { count: emailUsers }) : '',
+        smsUsers > 0 ? t('sms', { count: smsUsers }) : '',
+        t('tail'),
+      ].filter(Boolean).join(' '),
+      okText: t('ok'), cancelText: t('cancel'), okButtonProps: { danger: true },
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
+    })
   })
+}
+
+async function putChannels(accessToken: string, value: SwitchWrite, revision: number, requestKey: string, confirmDisable = false): Promise<NotificationChannels> {
+  try {
+    return await request(accessToken, '/v1/admin/notifications/channels', 200, (response): response is NotificationChannels =>
+      isNotificationChannels(response) && sameSwitchResponse(response, value, revision), {
+        method: 'PUT', headers: { 'If-Match': `"${revision}"`, 'X-Request-ID': requestKey },
+        body: JSON.stringify(confirmDisable ? { ...value, confirm_disable: true } : value),
+      })
+  } catch (error) {
+    if (confirmDisable || !(error instanceof ApiError) || error.code !== 'notification_channel_disable_confirmation_required') throw error
+    // Declined: nothing changed, hand back the current switches.
+    if (!await confirmChannelDisable(error)) return getChannels(accessToken)
+    return putChannels(accessToken, value, revision, requestKey, true)
+  }
 }
 
 function getDeliveryPolicy(accessToken: string) {

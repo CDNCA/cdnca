@@ -304,6 +304,9 @@ paths:
         Requires a live tenant session and identity_verification.self.manage.
         The durable local intent is committed before the HTTPS provider call;
         an unknown provider outcome is retried with the exact provider request identity.
+        Once the platform saved its identity policy (system user settings identity_policy_saved),
+        a personal kind with identity_verification_method none or the enterprise kind with
+        enterprise_verification_enabled false is refused with 403 identity_verification_kind_disabled.
       security: [{bearerAuth: []}]
       x-required-permissions: [identity_verification.self.manage]
       parameters:

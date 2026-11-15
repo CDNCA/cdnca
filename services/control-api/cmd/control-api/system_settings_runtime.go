@@ -95,7 +95,8 @@ func buildSystemCleanupSettingsHandlerFactory(config systemSettingsRuntimeConfig
 	}, nil
 }
 
-func buildSystemUserSettingsHandlerFactory(config systemSettingsRuntimeConfig, pool *pgxpool.Pool, identityService *identity.Service) (httpapi.MountedHandlerFactory, error) {
+func buildSystemUserSettingsHandlerFactory(config systemSettingsRuntimeConfig, pool *pgxpool.Pool, identityService *identity.Service, cipher systemusersettings.SecretCipher,
+	senders func(context.Context) (email, sms bool)) (httpapi.MountedHandlerFactory, error) {
 	if !config.Enabled {
 		return nil, nil
 	}
@@ -107,13 +108,18 @@ func buildSystemUserSettingsHandlerFactory(config systemSettingsRuntimeConfig, p
 		if err != nil {
 			return nil, err
 		}
+		if cipher != nil {
+			service.WithSecretCipher(cipher)
+		}
+		service.WithVerificationSenders(senders)
 		return systemusersettingshttp.New(service, func(request *http.Request, rawSession string) (identity.AuthenticatedSession, error) {
 			return identityService.AuthenticateSession(context.WithoutCancel(request.Context()), rawSession)
 		})
 	}, nil
 }
 
-func buildSystemMailSettingsHandlerFactory(config systemSettingsRuntimeConfig, pool *pgxpool.Pool, identityService *identity.Service, cipher systemmailsettings.SecretCipher, sendTest systemmailsettings.TestSender, modules systemmailsettings.ModuleGate) (httpapi.MountedHandlerFactory, error) {
+func buildSystemMailSettingsHandlerFactory(config systemSettingsRuntimeConfig, pool *pgxpool.Pool, identityService *identity.Service, cipher systemmailsettings.SecretCipher, sendTest systemmailsettings.TestSender, modules systemmailsettings.ModuleGate,
+	guard systemmailsettings.SaveGuard) (httpapi.MountedHandlerFactory, error) {
 	if !config.Enabled {
 		return nil, nil
 	}
@@ -129,6 +135,7 @@ func buildSystemMailSettingsHandlerFactory(config systemSettingsRuntimeConfig, p
 			service.WithSecretCipher(cipher)
 		}
 		service.WithModuleGate(modules)
+		service.WithSaveGuard(guard)
 		handler, err := systemmailsettingshttp.New(service, func(request *http.Request, rawSession string) (identity.AuthenticatedSession, error) {
 			return identityService.AuthenticateSession(context.WithoutCancel(request.Context()), rawSession)
 		})

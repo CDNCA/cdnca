@@ -617,6 +617,12 @@ func publicationExistsForSourceRevision(ctx context.Context, tx pgx.Tx, scopeID 
 		SELECT EXISTS (
 			SELECT 1 FROM edge_config_publications
 			WHERE configuration_scope_id=$1 AND source_revision=$2 AND contract_version=1
+		) OR EXISTS (
+			-- A security activation candidate's release took this revision
+			-- (securityactivation reserveCandidateRevision): its nodes refuse
+			-- another root for it.
+			SELECT 1 FROM security_policy_activation_candidates candidate
+			WHERE candidate.tenant_scope_id=$1 AND candidate.candidate_source_revision=$2
 		)`, scopeID, revision).Scan(&exists); err != nil {
 		return false, fmt.Errorf("%w: read source publication", ErrPersistence)
 	}

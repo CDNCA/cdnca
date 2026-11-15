@@ -19,6 +19,8 @@ export interface ManagedUserLoginSecurity {
   revision: number
   login_verification: 'none' | 'sms' | 'email'
   login_allowlist: string[]
+  /** Saved, but its notification channel is off: it takes effect once the channel is on. */
+  channel_pending?: true
 }
 
 export interface UpdateUserLoginSecurityRequest {
@@ -484,7 +486,8 @@ function validLoginSecurityFields(value: Record<string, unknown>): boolean {
 
 function parseLoginSecurity(value: unknown, status: number, userID: string, scopeID: string): ManagedUserLoginSecurity {
   if (status !== 200 || !record(value) ||
-    !exactKeys(value, ['user_id', 'tenant_scope_id', 'revision', 'login_verification', 'login_allowlist']) ||
+    !exactKeys(value, 'channel_pending' in value ? ['user_id', 'tenant_scope_id', 'revision', 'login_verification', 'login_allowlist', 'channel_pending'] : ['user_id', 'tenant_scope_id', 'revision', 'login_verification', 'login_allowlist']) ||
+    ('channel_pending' in value && value.channel_pending !== true) ||
     value.user_id !== userID || value.tenant_scope_id !== scopeID ||
     !Number.isSafeInteger(value.revision) || Number(value.revision) < 0 || !validLoginSecurityFields(value)) {
     throw invalidResponse()

@@ -26,7 +26,6 @@ func TestSettingsFieldError(t *testing.T) {
 		"captcha limit":    {func(v *Settings) { v.LoginCaptchaThresholdPerHour = v.LoginFailureLimitPerHour + 1 }, "value.login_captcha_threshold_per_hour", fielderr.OutOfRange},
 		"reference":        {func(v *Settings) { v.CaptchaSecretKeyReference = "plain-secret" }, "value.captcha_secret_key_reference", fielderr.InvalidFormat},
 		"anti abuse":       {func(v *Settings) { v.EmailAntiAbuseMode = "tencent" }, "value.email_anti_abuse_mode", fielderr.Invalid},
-		"enterprise":       {func(v *Settings) { v.EnterpriseVerificationEnabled = true }, "value.enterprise_secret_id_reference", fielderr.Required},
 		"recharge method":  {func(v *Settings) { v.DefaultRechargeMethod = "wechat"; v.WeChatPaymentEnabled = false }, "value.default_recharge_method", fielderr.Invalid},
 		"country code":     {func(v *Settings) { v.DefaultPhoneCountryCode = "" }, "value.default_phone_country_code", fielderr.Required},
 		"country invalid":  {func(v *Settings) { v.DefaultPhoneCountryCode = "0x" }, "value.default_phone_country_code", fielderr.Invalid},

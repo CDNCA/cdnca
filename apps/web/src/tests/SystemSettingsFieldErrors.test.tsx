@@ -30,7 +30,7 @@ async function expectUnderField(panel: HTMLElement, label: string, text: string)
 }
 
 const userDocument: PlatformSystemUserSettingsDocument = {
-  schema: 'cdnca.platform-system-user-settings/v1', revision: 7,
+  schema: 'cdnca.platform-system-user-settings/v1', revision: 7, captcha_turnstile_secret_configured: false,
   value: {
     session_ttl_seconds: 86400, user_login_domains: '', admin_login_domains: '', email_code_login_enabled: true, sms_code_login_enabled: false,
     registration_enabled: false, registration_success_subject: '用户注册成功', registration_success_body: '<p>{{username}}</p>', password_reset_subject: '密码已重置',
@@ -38,8 +38,8 @@ const userDocument: PlatformSystemUserSettingsDocument = {
     verification_sms_body: '您的验证码为${captcha}，在5分钟内有效。', verification_sms_template_id: '', terms_title: '用户协议', terms_body: '协议内容',
     username_required: false, email_required: false, email_verification_required: false, phone_required: false, phone_verification_required: false, qq_required: false,
     login_failure_limit_per_hour: 30, login_captcha_threshold_per_hour: 3, session_region_check: true, email_anti_abuse_mode: 'none', sms_anti_abuse_mode: 'native',
-    captcha_provider: 'tencent', captcha_secret_id_reference: '', captcha_secret_key_reference: '', captcha_app_id: '', captcha_app_secret_reference: '',
-    identity_verification_method: 'alipay', enterprise_verification_enabled: false, enterprise_secret_id_reference: '', enterprise_secret_key_reference: '',
+    captcha_provider: 'tencent', captcha_secret_id_reference: '', captcha_secret_key_reference: '', captcha_app_id: '', captcha_app_secret_reference: '', captcha_turnstile_site_key: '',
+    identity_verification_method: 'alipay', enterprise_verification_enabled: false, identity_policy_saved: false,
     wechat_payment_enabled: false, alipay_payment_enabled: false, bank_transfer_enabled: false, default_recharge_method: 'none', recharge_restriction: 'none',
     default_phone_country_code: '86',
   },

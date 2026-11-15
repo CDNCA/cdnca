@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"slices"
+	"strings"
 )
 
 // GET /v1/auth/registration-config tells every sign-up
@@ -44,6 +46,10 @@ type RegistrationConfig struct {
 	// but cannot complete until the operator configures the sender).
 	Ready    bool           `json:"ready"`
 	Recovery RecoveryConfig `json:"recovery"`
+	// Reasons say what keeps sign-up verification from
+	// being ready. Only a platform administrator's session (system
+	// configuration read) receives them; visitors never see the field.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 // RegistrationConfigSource computes the projection per request.
@@ -51,8 +57,15 @@ type RegistrationConfigSource interface {
 	RegistrationConfig(context.Context) (RegistrationConfig, error)
 }
 
+// RegistrationDiagnostics is implemented by a source that can explain a
+// sign-up that is not ready (reason codes for administrators).
+type RegistrationDiagnostics interface {
+	RegistrationReasons(context.Context) ([]string, error)
+}
+
 func (s *Server) handleRegistrationConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Vary", "Authorization")
 	config := RegistrationConfig{Mode: "closed", HumanCheck: "builtin_captcha", Recovery: RecoveryConfig{Channels: []string{}}}
 	if s.registrationConfig != nil {
 		value, err := s.registrationConfig.RegistrationConfig(r.Context())
@@ -64,8 +77,29 @@ func (s *Server) handleRegistrationConfig(w http.ResponseWriter, r *http.Request
 		if config.Recovery.Channels == nil {
 			config.Recovery.Channels = []string{}
 		}
+		config.Reasons = nil
+		if diagnostics, ok := s.registrationConfig.(RegistrationDiagnostics); ok && s.registrationConfigAdministrator(r) {
+			// a failed diagnosis only leaves the reasons out
+			if reasons, err := diagnostics.RegistrationReasons(r.Context()); err == nil {
+				config.Reasons = reasons
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": config})
+}
+
+// registrationConfigAdministrator: the request carries a valid platform
+// session allowed to read the system configuration. Anything else (no or a
+// bad token, a tenant user) is a visitor; the endpoint never answers 401.
+func (s *Server) registrationConfigAdministrator(r *http.Request) bool {
+	if s.identity == nil || strings.TrimSpace(r.Header.Get("Authorization")) == "" {
+		return false
+	}
+	principal, err := s.authenticatedSessionPrincipal(r)
+	if err != nil || principal.ScopeKind != "platform" || principal.TenantID != nil {
+		return false
+	}
+	return slices.Contains(principal.Permissions, "system_configuration.read") || slices.Contains(principal.Permissions, "platform.admin")
 }
 
 type builtInRegistrationSourceKey struct{}

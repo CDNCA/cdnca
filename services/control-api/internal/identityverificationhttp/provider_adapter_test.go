@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -62,6 +63,38 @@ func TestIAM10HTTPSProviderVerifiesSignatureTimestampAndNonce(t *testing.T) {
 	headers.Set("X-KYC-Signature", base64.StdEncoding.EncodeToString(make([]byte, sha256.Size)))
 	if _, err := provider.VerifyCallback(t.Context(), ProviderCallbackEnvelope{Provider: "trusted-kyc", Header: headers, Body: body}); err == nil {
 		t.Fatal("invalid callback signature was accepted")
+	}
+}
+
+// Without credentials the provider is still mounted; its calls answer "not
+// configured" and saving the keys later makes it work without a restart.
+func TestHTTPSProviderWithoutCredentialsAnswersNotConfigured(t *testing.T) {
+	now := time.Date(2026, 8, 8, 11, 0, 0, 0, time.UTC)
+	provider, err := NewHTTPSKYCProvider(HTTPSKYCProviderConfig{
+		Name: "trusted-kyc", Endpoint: "https://kyc.example.test", CallbackKeyID: "callback-key-1",
+		CallbackMaxAge: 5 * time.Minute, CallbackFutureSkew: 30 * time.Second,
+	}, http.DefaultClient, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer provider.Close()
+	if !provider.Configured() || provider.CredentialsReady() {
+		t.Fatalf("configured=%v ready=%v", provider.Configured(), provider.CredentialsReady())
+	}
+	if _, err := provider.CreateSession(t.Context(), ProviderSessionCreate{}); !errors.Is(err, ErrProviderNotConfigured) {
+		t.Fatalf("CreateSession err=%v", err)
+	}
+	if _, err := provider.VerifyCallback(t.Context(), ProviderCallbackEnvelope{}); !errors.Is(err, ErrProviderNotConfigured) {
+		t.Fatalf("VerifyCallback err=%v", err)
+	}
+	if provider.SetCredentials([]byte("short"), nil) == nil {
+		t.Fatal("half-set credentials accepted")
+	}
+	if err := provider.SetCredentials([]byte("outbound-api-key"), []byte("0123456789abcdef0123456789abcdef")); err != nil || !provider.CredentialsReady() {
+		t.Fatalf("set err=%v ready=%v", err, provider.CredentialsReady())
+	}
+	if err := provider.SetCredentials(nil, nil); err != nil || provider.CredentialsReady() {
+		t.Fatalf("clear err=%v ready=%v", err, provider.CredentialsReady())
 	}
 }
 

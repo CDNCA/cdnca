@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,6 +28,9 @@ type RuntimeSettings struct {
 
 	smtpKeyID      *string
 	smtpCiphertext []byte
+
+	smsTokenKeyID      *string
+	smsTokenCiphertext []byte
 }
 
 // HasSMTPPassword reports whether the settings page stored an SMTP password.
@@ -64,13 +68,31 @@ func (settings RuntimeSettings) OpenSMSSecret(cipher SecretCipher) ([]byte, erro
 // requiring an HTTP actor. The runtime must fail closed when more than one
 // platform row exists or when the persisted JSON is invalid.
 func ReadRuntime(ctx context.Context, pool *pgxpool.Pool) (RuntimeSettings, error) {
-	if ctx == nil || pool == nil {
+	if pool == nil {
 		return RuntimeSettings{}, ErrUnavailable
 	}
-	rows, err := pool.Query(ctx, `SELECT settings.revision,settings.settings,settings.platform_scope_id,
+	return readRuntime(ctx, pool)
+}
+
+// ReadRuntimeTx is ReadRuntime inside tx (sees a save not yet committed).
+func ReadRuntimeTx(ctx context.Context, tx pgx.Tx) (RuntimeSettings, error) {
+	if tx == nil {
+		return RuntimeSettings{}, ErrUnavailable
+	}
+	return readRuntime(ctx, tx)
+}
+
+func readRuntime(ctx context.Context, db interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}) (RuntimeSettings, error) {
+	if ctx == nil {
+		return RuntimeSettings{}, ErrUnavailable
+	}
+	rows, err := db.Query(ctx, `SELECT settings.revision,settings.settings,settings.platform_scope_id,
 		       settings.sms_secret_key_id,settings.sms_secret_ciphertext,
 		       settings.mail_secret_key_id,settings.mail_secret_ciphertext,settings.mail_secret_provider,
-		       settings.smtp_password_key_id,settings.smtp_password_ciphertext
+		       settings.smtp_password_key_id,settings.smtp_password_ciphertext,
+		       settings.sms_auth_token_key_id,settings.sms_auth_token_ciphertext
 		FROM platform_system_mail_settings settings
 		JOIN access_scopes scope ON scope.id=settings.platform_scope_id
 		WHERE scope.kind='platform' AND scope.tenant_id IS NULL
@@ -88,7 +110,8 @@ func ReadRuntime(ctx context.Context, pool *pgxpool.Pool) (RuntimeSettings, erro
 		}
 		var raw []byte
 		if err := rows.Scan(&result.Revision, &raw, &result.scopeID, &result.secretKeyID, &result.secretCiphertext,
-			&result.mailKeyID, &result.mailCiphertext, &result.mailProvider, &result.smtpKeyID, &result.smtpCiphertext); err != nil {
+			&result.mailKeyID, &result.mailCiphertext, &result.mailProvider, &result.smtpKeyID, &result.smtpCiphertext,
+			&result.smsTokenKeyID, &result.smsTokenCiphertext); err != nil {
 			return RuntimeSettings{}, ErrUnavailable
 		}
 		if json.Unmarshal(raw, &result.Value) != nil || !validSettings(result.Value) {

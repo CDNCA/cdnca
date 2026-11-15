@@ -118,6 +118,13 @@ func (g *Gateway) invalidCommandStatuses(command *agentv1.DeploymentCommand, rea
 			causation := command.Event.EventId
 			event.CausationId = &causation
 		}
+		// Control binds a status to its command by trace and task too
+		// (edgestatus verifyCommandBinding); without them the failure was
+		// refused as a binding conflict and its reason lost.
+		if command.Event != nil {
+			event.Traceparent = command.Event.Traceparent
+			event.TaskId = command.Event.TaskId
+		}
 		result := &agentv1.DeploymentStatus{
 			Event: event, DeploymentId: command.DeploymentId, Attempt: command.Attempt,
 			ConfigVersionId: command.ConfigVersionId, State: state, TransitionSequence: sequence,

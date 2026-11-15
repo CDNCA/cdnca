@@ -52,6 +52,7 @@ type ProviderWorkflow struct {
 	callbackFutureSkew time.Duration
 	eraseLease         time.Duration
 	eraseRetry         time.Duration
+	kindEnabled        func(context.Context, string) (bool, error)
 }
 
 type providerSessionRecord struct {
@@ -153,7 +154,7 @@ func NewProviderWorkflow(pool *pgxpool.Pool, auditor identityverification.AuditA
 		encryptionKeyID: config.EncryptionKeyID, sessionTTL: config.SessionTTL,
 		uploadTTL: config.UploadTTL, retentionPeriod: config.RetentionPeriod,
 		callbackMaxAge: config.CallbackMaxAge, callbackFutureSkew: config.CallbackFutureSkew,
-		eraseLease: config.EraseLeaseDuration, eraseRetry: config.EraseRetryDelay}, nil
+		eraseLease: config.EraseLeaseDuration, eraseRetry: config.EraseRetryDelay, kindEnabled: config.KindEnabled}, nil
 }
 
 func (workflow *ProviderWorkflow) Configured() bool {
@@ -196,6 +197,26 @@ func (workflow *ProviderWorkflow) StartSession(ctx context.Context, actor identi
 	if !workflow.Configured() || ctx == nil || validateStartProviderSession(actor, request) != nil ||
 		request.Provider != workflow.provider.Name() {
 		return ProviderSessionView{}, ErrProviderInvalid
+	}
+	if workflow.kindEnabled != nil {
+		enabled, err := workflow.kindEnabled(ctx, request.Kind)
+		if err != nil {
+			return ProviderSessionView{}, ErrProviderUnavailable
+		}
+		if !enabled {
+			return ProviderSessionView{}, ErrProviderKindDisabled
+		}
+	}
+	// No provider credentials yet: refuse before a session row is written.
+	switch ready := workflow.provider.(type) {
+	case interface{ EnsureCredentials(context.Context) error }:
+		if err := ready.EnsureCredentials(ctx); err != nil {
+			return ProviderSessionView{}, err
+		}
+	case interface{ CredentialsReady() bool }:
+		if !ready.CredentialsReady() {
+			return ProviderSessionView{}, ErrProviderNotConfigured
+		}
 	}
 	digest := providerSessionRequestDigest(request)
 	now := workflow.now().UTC().Truncate(time.Microsecond)
@@ -501,6 +522,9 @@ func (workflow *ProviderWorkflow) ApplyCallback(ctx context.Context, envelope Pr
 		return ProviderCallbackResult{}, ErrProviderCallbackAuth
 	}
 	verified, err := workflow.provider.VerifyCallback(ctx, envelope)
+	if errors.Is(err, ErrProviderNotConfigured) {
+		return ProviderCallbackResult{}, err
+	}
 	if err != nil {
 		return ProviderCallbackResult{}, ErrProviderCallbackAuth
 	}

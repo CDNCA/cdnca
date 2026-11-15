@@ -102,6 +102,30 @@ func TestInvalidDurableCommandIsTerminatedAndReportedFailed(t *testing.T) {
 	}
 }
 
+// Control binds a status to its command by trace and task as well (edgestatus
+// verifyCommandBinding): the gateway's failure report carries both, or it is
+// refused as a binding conflict and the rejection reason is lost.
+func TestInvalidCommandStatusesEchoCommandTraceAndTask(t *testing.T) {
+	gateway := newCommandGateway(t, defaultFakeControl(), &fakeCommandBus{}, nil)
+	command := validRollbackDeploymentCommand()
+	command.Event.Traceparent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+	task := "security-activation-reconcile"
+	command.Event.TaskId = &task
+	statuses := gateway.invalidCommandStatuses(command, "rejected", false)
+	if len(statuses) != 2 {
+		t.Fatalf("statuses = %d, want 2", len(statuses))
+	}
+	for _, status := range statuses {
+		if status.Event.Traceparent != command.Event.Traceparent || status.Event.GetTaskId() != task ||
+			status.Event.GetCausationId() != command.Event.EventId || status.Event.RequestId != command.Event.RequestId {
+			t.Fatalf("status event %v does not echo command event %v", status.Event, command.Event)
+		}
+		if err := gateway.validateDeploymentStatus(status, false, false); err != nil {
+			t.Fatalf("gateway refuses its own failure report: %v", err)
+		}
+	}
+}
+
 // When the failure cannot be recorded the message is not terminated: it is
 // negatively acknowledged and the session ends, so nothing is lost silently.
 func TestInvalidDurableCommandStatusPublishFailureKeepsMessage(t *testing.T) {

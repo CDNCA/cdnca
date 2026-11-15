@@ -75,6 +75,13 @@ func newNotificationAutoRuntime(base notificationRuntimeConfig, startup notifica
 		dispatchers: map[*notificationAutoRegistration]notification.AnonymousDispatcher{}}
 }
 
+// SMSTemplateMapped is nativeSMSTemplateMapped for the current settings.
+func (auto *notificationAutoRuntime) SMSTemplateMapped(templateID string) (native, mapped bool) {
+	auto.mu.Lock()
+	defer auto.mu.Unlock()
+	return nativeSMSTemplateMapped(auto.config, templateID)
+}
+
 // Transports is the live notificationcontrol.ChannelTransports source.
 func (auto *notificationAutoRuntime) Transports() notificationcontrol.ChannelTransports {
 	auto.mu.Lock()

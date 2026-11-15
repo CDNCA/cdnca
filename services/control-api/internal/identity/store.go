@@ -293,7 +293,7 @@ func (s *Store) CreateSession(ctx context.Context, input SessionInput) (Principa
 				passwordUpgrade = login.upgradedHash
 			}
 		}
-		policy, err := ReadLoginSecurityTx(ctx, tx, input.UserID, input.ScopeID)
+		policy, err := ReadEffectiveLoginSecurityTx(ctx, tx, input.UserID, input.ScopeID)
 		if err != nil {
 			return err
 		}

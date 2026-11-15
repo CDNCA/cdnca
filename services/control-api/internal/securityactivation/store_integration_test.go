@@ -315,6 +315,8 @@ func TestProductionRecoveryRetryUsesLatestApplyGeneration(t *testing.T) {
 	if err := markProductionRecoveryFailed(t, fixture, started.Candidate.ID, loadedNode); err != nil {
 		t.Fatal(err)
 	}
+	// 670: the retry waits out the first attempt's backoff (failure recorded at now+2s).
+	fixture.now = fixture.now.Add(recoveryRetryDelay(1) + 3*time.Second)
 	retried, err := store.Reconcile(t.Context(), fixture.actor,
 		productionReconcileInput(started.Candidate, "recovery-retry-second-rollout"))
 	if err != nil || retried.Action != string(actionWait) || retried.Candidate.RecoveredAt != nil {
@@ -533,7 +535,8 @@ func markProductionRecoveryReverted(t *testing.T, fixture activationFixture, can
 			FROM security_policy_activation_recovery_pending_095 pending
 			JOIN node_deployments deployment ON deployment.id=pending.deployment_id
 			 AND deployment.attempt=pending.deployment_attempt
-			WHERE pending.candidate_id=$1 AND pending.node_id=$2 AND pending.action='rollback'`,
+			WHERE pending.candidate_id=$1 AND pending.node_id=$2 AND pending.action='rollback'
+			ORDER BY pending.generation DESC LIMIT 1`,
 			candidateID, nodeID).Scan(&deploymentID, &outboxID); err != nil {
 			return err
 		}
@@ -873,7 +876,8 @@ func TestPromotionRejectsTargetThatNoLongerRunsCandidate(t *testing.T) {
 		created.Candidate.PromotionCAS()); !errors.Is(err, ErrNotHealthy) {
 		t.Fatalf("stale target promotion error = %v, want ErrNotHealthy", err)
 	}
-	assertBindingActiveAndSource(t, fixture, 1, fixture.sourceRevision)
+	// The claim took the candidate's revision (reserveCandidateRevision).
+	assertBindingActiveAndSource(t, fixture, 1, fixture.sourceRevision+1)
 }
 
 func TestPromotionWaitsForConcurrentTargetIdentityUpdate(t *testing.T) {
@@ -916,7 +920,8 @@ func TestPromotionWaitsForConcurrentTargetIdentityUpdate(t *testing.T) {
 	if promoteErr := <-result; !errors.Is(promoteErr, ErrNotHealthy) {
 		t.Fatalf("promotion after target identity update = %v, want ErrNotHealthy", promoteErr)
 	}
-	assertBindingActiveAndSource(t, fixture, 1, fixture.sourceRevision)
+	// The claim took the candidate's revision (reserveCandidateRevision).
+	assertBindingActiveAndSource(t, fixture, 1, fixture.sourceRevision+1)
 }
 
 func TestWorkerCancelsAndRecoversCandidateAfterPermissionRevocation(t *testing.T) {
@@ -993,7 +998,8 @@ func TestWorkerCancelsAndRecoversCandidateAfterPermissionRevocation(t *testing.T
 		WHERE binding.id=$1`, fixture.bindingID).Scan(&activeVersion, &sourceRevision); err != nil {
 		t.Fatal(err)
 	}
-	if activeVersion != 1 || sourceRevision != fixture.sourceRevision {
+	// The claim took the candidate's revision and the recovery republished once (revision.go): +2.
+	if activeVersion != 1 || sourceRevision != fixture.sourceRevision+2 {
 		t.Fatalf("revoked candidate changed active/source = %d/%d", activeVersion, sourceRevision)
 	}
 	var systemAudits int

@@ -1090,6 +1090,7 @@ function UserListContent({
       const disabled = attempt.intent.kind === 'update' && attempt.intent.input.status === 'disabled'
       const batchStatus = attempt.intent.kind === 'batch' ? attempt.intent.status : null
       const operation = attempt.intent.kind
+      const channelPending = attempt.savedLoginSecurity?.channel_pending === true
       clearWriteAttempt()
       setWriteError(null)
       setPartialSaved(false)
@@ -1110,6 +1111,7 @@ function UserListContent({
             ? t('notices.disabled')
             : t('notices.updated'),
       )
+      if (channelPending) messageApi.info(t('notices.loginSecurityChannelPending'))
     },
     onError: async (error, key) => {
       const attempt = writeAttemptRef.current
