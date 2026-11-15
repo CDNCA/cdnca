@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../api/auth'
+import { notificationsApi } from '../api/notifications'
 import { pluginProvidersApi, type PluginProvider } from '../api/pluginProviders'
 import { systemMailSettingsApi, type PlatformSystemMailSettingsDocument } from '../api/systemMailSettings'
 import { useSessionStore } from '../auth/session'
@@ -216,6 +217,18 @@ describe('SystemGlobalSettingsPage mail section saves', () => {
     expect(screen.getByText('已设置（指纹 fedcba9876543210），留空保存即保留原密钥')).toBeInTheDocument()
     expect(screen.getByLabelText('API Key')).toHaveValue('')
     expect(smtp).toHaveValue('smtp.draft.test')
+  })
+
+  it.each([
+    ['auto', '保存后约 15 秒内自动生效，无需重启。', '需重启发信服务'],
+    ['explicit', '保存后需重启发信服务生效。', '自动生效'],
+  ] as const)('tells how a saved mail sender takes effect in the %s notification mode', async (mode, shown, absent) => {
+    plugins = []
+    vi.spyOn(notificationsApi, 'getRuntimeHealth').mockResolvedValue({ enabled: true, state: 'ready', ready: true, worker_running: true, enabled_channels: 1, mode })
+    renderMail()
+    const field = (await screen.findByRole('combobox', { name: '发信方式' })).closest('.ant-form-item') as HTMLElement
+    await waitFor(() => expect(field).toHaveTextContent(shown))
+    expect(field).not.toHaveTextContent(absent)
   })
 
   it('lists only usable mail plugins and tests the unsaved sender', async () => {

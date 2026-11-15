@@ -16,8 +16,9 @@ const zhCN = {
   badges: { unread: '新回复', sla: '超时' },
   create: {
     open: '提交工单', title: '提交工单', category: '分类', subject: '标题', body: '问题描述', priority: '紧急程度',
-    site: '关联站点 ID（可选）', order: '关联订单 ID（可选）', submit: '提交', cancel: '取消', created: '工单 #{{no}} 已提交',
-    badID: '请填写完整的 ID（形如 0190a1b2-…，小写）', relatedNotFound: '找不到该 ID，或它不属于当前账户',
+    site: '关联站点（可选）', order: '关联订单 ID（可选）', submit: '提交', cancel: '取消', created: '工单 #{{no}} 已提交',
+    sitePlaceholder: '搜索域名或站点编号', siteOption: '{{domain}}（{{id}}）', noOptions: '没有可选项',
+    badID: '请填写完整的 ID（形如 0190a1b2-…，小写）', relatedNotFound: '找不到该站点或订单，或它不属于当前账户',
     // p1-tickets：结果未知时只能用同一个幂等键查询/重试，不会重复创建。
     unknown: '提交结果未知（网络中断或服务暂时不可用），工单可能已经提交。点“查询结果/重试”会重放同一次提交，不会重复创建；改了内容再提交则算新工单。',
     checkResult: '查询结果/重试',
@@ -132,9 +133,10 @@ const enUS: Messages = {
   badges: { unread: 'New reply', sla: 'Overdue' },
   create: {
     open: 'New ticket', title: 'New ticket', category: 'Category', subject: 'Subject', body: 'Description', priority: 'Urgency',
-    site: 'Related site ID (optional)', order: 'Related order ID (optional)', submit: 'Submit', cancel: 'Cancel',
+    site: 'Related site (optional)', order: 'Related order ID (optional)', submit: 'Submit', cancel: 'Cancel',
     created: 'Ticket #{{no}} submitted',
-    badID: 'Enter the full lowercase ID (like 0190a1b2-…)', relatedNotFound: 'This ID was not found or is not in this account',
+    sitePlaceholder: 'Search by domain or site number', siteOption: '{{domain}} ({{id}})', noOptions: 'Nothing to choose',
+    badID: 'Enter the full lowercase ID (like 0190a1b2-…)', relatedNotFound: 'This site or order was not found or is not in this account',
     unknown: 'The result is unknown (network error or service unavailable); the ticket may already be filed. "Check result / retry" replays the same submission and never files it twice; changing the content files a new ticket.',
     checkResult: 'Check result / retry',
   },

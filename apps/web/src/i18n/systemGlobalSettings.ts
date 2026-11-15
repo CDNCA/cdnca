@@ -52,7 +52,7 @@ const zh = {
   mailProvider: {
     title: '发信服务商', field: '发信方式', smtp: '内置 SMTP（默认）', aliyun: '阿里云邮件推送', sendgrid: 'SendGrid',
     plugin: '插件：{{id}}', unavailablePlugin: '插件：{{id}}（当前不可用）', unlicensed: '{{name}}（授权未包含，无法发信）',
-    hint: '同一时刻只有一个发信方式生效；切换前可先发送测试邮件，保存后重启发信服务生效。切到服务商或插件后 SMTP 设置仍保留，切回即可用。服务商或插件不可用时不会自动改用 SMTP，发送失败会记录在通知历史里。',
+    hint: '同一时刻只有一个发信方式生效；切换前可先发送测试邮件。切到服务商或插件后 SMTP 设置仍保留，切回即可用。服务商或插件不可用时不会自动改用 SMTP，发送失败会记录在通知历史里。',
     region: '地域', accessKeyID: 'AccessKey ID', secretAliyun: 'AccessKey Secret', secretSendGrid: 'API Key', from: '发信地址', fromName: '发信人名称',
     fromHint: '必须是在服务商处已验证的发信地址', secretSet: '已设置（指纹 {{fingerprint}}），留空保存即保留原密钥',
     secretOther: '已保存的密钥属于 {{provider}}，切换到该服务商需重新填写', secretRequired: '首次启用必须填写；密钥加密保存，不会回显',
@@ -203,7 +203,7 @@ const en = {
   mailProvider: {
     title: 'Mail sender', field: 'Send with', smtp: 'Built-in SMTP (default)', aliyun: 'Alibaba Cloud DirectMail', sendgrid: 'SendGrid',
     plugin: 'Plugin: {{id}}', unavailablePlugin: 'Plugin: {{id}} (not usable)', unlicensed: '{{name}} (not licensed, cannot send)',
-    hint: 'Exactly one sender is active. Send a test email before switching; restart the delivery service after saving. SMTP settings are kept when a service or plugin is chosen, so switching back works at once. A failing service or plugin never falls back to SMTP; failed sends are recorded in the notification history.',
+    hint: 'Exactly one sender is active. Send a test email before switching. SMTP settings are kept when a service or plugin is chosen, so switching back works at once. A failing service or plugin never falls back to SMTP; failed sends are recorded in the notification history.',
     region: 'Region', accessKeyID: 'AccessKey ID', secretAliyun: 'AccessKey Secret', secretSendGrid: 'API key', from: 'Sender address', fromName: 'Sender name',
     fromHint: 'Must be a sender address verified with the provider', secretSet: 'Set (fingerprint {{fingerprint}}); leave empty to keep it',
     secretOther: 'The saved secret belongs to {{provider}}; enter one for this provider', secretRequired: 'Required the first time; stored encrypted and never shown again',

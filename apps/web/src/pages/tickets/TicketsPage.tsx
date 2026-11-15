@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/auth'
+import { sitesApi } from '../../api/sites'
 import {
   maxTicketAttachments, ticketCategories, ticketPriorities, ticketsApi, ticketsManagePermission, ticketsReadPermission,
   ticketStatuses, validateAttachment, type CreateTicketInput, type Ticket, type TicketAttachment, type TicketCategory,
@@ -170,7 +171,16 @@ function CreateDrawer({ open, onClose, onCreated, createKey, initialSiteID }: {
       setError(errorText(err))
     },
   })
+  // The related site is picked from the account's own sites, searched on the
+  // server by domain or number. An unreadable list leaves it empty.
   const relatedIDRule = { pattern: relatedIDPattern, message: t('create.badID'), transform: (value?: string) => value?.trim() }
+  const [siteSearch, setSiteSearch] = useState('')
+  const sites = useQuery({
+    queryKey: ['ticket-create-sites', token, siteSearch],
+    queryFn: async () => (await sitesApi.list(token, { page: 1, limit: 100, ...(siteSearch ? { site: siteSearch } : {}) })).items,
+    enabled: Boolean(token), staleTime: 30_000,
+  })
+  const siteOptions = (sites.data ?? []).map((site) => ({ value: site.id, label: t('create.siteOption', { domain: site.domain, id: site.display_id }) }))
   return (
     <Drawer open={open} onClose={onClose} width="min(640px, 100vw)" title={t('create.title')} destroyOnHidden>
       {error ? <Alert type="error" showIcon style={{ marginBottom: 12 }} message={error} /> : null}
@@ -205,7 +215,11 @@ function CreateDrawer({ open, onClose, onCreated, createKey, initialSiteID }: {
           <Input.TextArea rows={8} maxLength={20000} />
         </Form.Item>
         <Space wrap>
-          <Form.Item name="site_id" label={t('create.site')} rules={[relatedIDRule]}><Input style={{ width: 300 }} /></Form.Item>
+          <Form.Item name="site_id" label={t('create.site')}>
+            <Select<string> style={{ width: 300 }} allowClear showSearch filterOption={false} onSearch={setSiteSearch}
+              placeholder={t('create.sitePlaceholder')} loading={sites.isFetching} options={siteOptions}
+              notFoundContent={sites.isFetching ? null : t('create.noOptions')} />
+          </Form.Item>
           <Form.Item name="order_id" label={t('create.order')} rules={[relatedIDRule]}><Input style={{ width: 300 }} /></Form.Item>
         </Space>
         <Form.Item><AttachmentPicker mode="user" value={attachments}

@@ -146,7 +146,9 @@ async function call<T>(token: string, path: string, init: RequestInit = {}): Pro
   let body: unknown
   try { body = text ? JSON.parse(text) : undefined } catch { throw new ApiError('Invalid response', 502, 'response_invalid') }
   if (!response.ok) {
-    const raw = (body as { code?: unknown } | undefined)?.code
+    // Ticket handlers answer {code}; the shared gates (423 installation_locked) answer {error: {code}}.
+    const envelope = body as { code?: unknown; error?: { code?: unknown } } | undefined
+    const raw = envelope?.code ?? envelope?.error?.code
     const code = typeof raw === 'string' && codePattern.test(raw) ? raw : 'request_failed'
     throw new ApiError('Ticket request failed', response.status, code)
   }

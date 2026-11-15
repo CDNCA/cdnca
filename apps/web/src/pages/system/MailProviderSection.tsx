@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { NotificationRuntimeHealth } from '../../api/notifications'
 import { Alert, App, Button, Form, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +25,8 @@ interface Props {
   saving: boolean
   disabled: boolean
   onSave: () => void
+  /** auto: a saved sender is picked up without a restart; explicit: restart needed. */
+  notificationMode?: NotificationRuntimeHealth['mode']
   /** Form.Item props marking a server-refused field (fix-fielderr-be2). */
   fieldStatus?: (...keys: string[]) => { validateStatus?: 'error'; help?: string }
 }
@@ -34,7 +37,7 @@ interface Props {
 // service is offered only while the lease grants its module.mail.<provider>
 // (the server refuses it otherwise); a saved one without it stays listed,
 // marked unlicensed, so the page never silently shows another sender.
-export default function MailProviderSection({ accessToken, canManage, document, draft, update, secret, onSecretChange, saving, disabled, onSave, fieldStatus = () => ({}) }: Props) {
+export default function MailProviderSection({ accessToken, canManage, document, draft, update, secret, onSecretChange, saving, disabled, onSave, notificationMode, fieldStatus = () => ({}) }: Props) {
   const { t } = useTranslation('systemGlobalSettings')
   const { message } = App.useApp()
   const feedback = useFeedback()
@@ -85,7 +88,7 @@ export default function MailProviderSection({ accessToken, canManage, document, 
 
   return <section className="system-settings-config-card" aria-labelledby="system-settings-mail-provider-title">
     <h2 id="system-settings-mail-provider-title">{t('mailProvider.title')}</h2>
-    <Form.Item label={t('mailProvider.field')} extra={t('mailProvider.hint')} {...fieldStatus('mail_provider')}>
+    <Form.Item label={t('mailProvider.field')} extra={`${t('mailProvider.hint')}${notificationMode === 'auto' ? t('smsProviders.hintAuto') : notificationMode === 'explicit' ? t('smsProviders.hintRestart') : ''}`} {...fieldStatus('mail_provider')}>
       <Select value={kind === 'smtp' ? '' : draft.mail_provider} disabled={!canManage} aria-label={t('mailProvider.field')} options={options}
         loading={plugins.isLoading} onChange={(value: string) => update('mail_provider', value)} />
     </Form.Item>

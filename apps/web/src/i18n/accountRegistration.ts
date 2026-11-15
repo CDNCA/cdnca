@@ -17,6 +17,11 @@ const zhCN = {
     settingsTitle: '注册验证未就绪：访客在注册页会看到「注册验证服务暂未配置」',
     ready: '注册验证已就绪',
     saveWarning: '已保存。{{channels}}验证已开启，但对应通道当前发不出验证码，注册页会提示「注册验证服务暂未配置」。',
+    saveNotInEffect: {
+      email: '已保存。邮箱验证要等邮件通知渠道打开后才生效，目前用户照常注册，不需要验证码。',
+      sms: '已保存。手机验证要等短信通知渠道打开后才生效，目前用户照常注册，不需要验证码。',
+      both: '已保存。邮箱和手机验证要等邮件、短信通知渠道打开后才生效，目前用户照常注册，不需要验证码。',
+    },
     channels: { email: '邮箱', sms: '手机', both: '邮箱和手机' },
     links: { mail: '前往邮件/短信配置', account: '前往账号与安全' },
     reasons: {
@@ -146,6 +151,11 @@ const enUS: typeof zhCN = {
     settingsTitle: 'Sign-up verification is not ready: visitors see "Sign-up verification is not set up yet" on the sign-up page',
     ready: 'Sign-up verification is ready',
     saveWarning: 'Saved. {{channels}} verification is on, but that channel cannot send codes right now, so the sign-up page says verification is not set up yet.',
+    saveNotInEffect: {
+      email: 'Saved. Email verification takes effect once the email notification channel is on; until then users sign up without a code.',
+      sms: 'Saved. Phone verification takes effect once the SMS notification channel is on; until then users sign up without a code.',
+      both: 'Saved. Email and phone verification take effect once the email and SMS notification channels are on; until then users sign up without a code.',
+    },
     channels: { email: 'Email', sms: 'Phone', both: 'Email and phone' },
     links: { mail: 'Open mail and SMS settings', account: 'Open account and security' },
     reasons: {

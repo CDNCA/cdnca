@@ -400,17 +400,17 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
     submit: (token, attempt) => systemUserSettingsApi.put(token, attempt.revision, attempt.value, attempt.requestId, attempt.idempotencyKey, secretsRef.current),
     onSuccess: (next) => {
       secretsRef.current = {}; setSecrets({}); setDocument(next); setDraft(next.value); onShared?.(next); message.success(state.saved)
-      // a verification required while its channel cannot
-      // send is saved, with a warning (the sign-up page would say it is not set up)
+      // A verification is in effect only while its setting and its notification
+      // channel switch are both on (config.*.required is the effective value).
+      // Ticked but not in effect: sign-up goes on without a code. In effect but
+      // not sendable: the sign-up page says it is not set up.
       void loadReadiness().then((config) => {
         if (!config || config.mode === 'closed') return
-        const missing = [
-          next.value.email_verification_required && !config.email.available ? 'email' : null,
-          next.value.phone_verification_required && !config.sms.available ? 'sms' : null,
-        ].filter((channel): channel is 'email' | 'sms' => channel !== null)
-        if (missing.length > 0) {
-          message.warning(registrationT('readiness.saveWarning', { channels: registrationT(`readiness.channels.${missing.length === 2 ? 'both' : missing[0]}`) }), 8)
-        }
+        const pick = (email: boolean, sms: boolean) => email && sms ? 'both' : email ? 'email' : sms ? 'sms' : null
+        const pending = pick(next.value.email_verification_required && !config.email.required, next.value.phone_verification_required && !config.sms.required)
+        if (pending) message.info(registrationT(`readiness.saveNotInEffect.${pending}`), 8)
+        const missing = pick(config.email.required && !config.email.available, config.sms.required && !config.sms.available)
+        if (missing) message.warning(registrationT('readiness.saveWarning', { channels: registrationT(`readiness.channels.${missing}`) }), 8)
       })
     },
   })
@@ -758,7 +758,7 @@ function MailPanel() {
     {persistedUnsupportedProvider ? <Alert type="warning" showIcon message={t('smsProviders.repair')} style={{ marginBottom: 16 }} /> : null}
     <NotificationChannelOffNotice channel="email" refreshKey={document.revision} canManage={canManage} />
     <Form className="system-settings-baseline-form system-settings-baseline-wide-form" labelCol={{ flex: '170px' }} wrapperCol={{ flex: '330px' }} labelAlign="right" colon={false}>
-      <MailProviderSection accessToken={accessToken} canManage={canManage} document={document} draft={draft} update={update} fieldStatus={fieldStatus}
+      <MailProviderSection accessToken={accessToken} canManage={canManage} document={document} draft={draft} update={update} fieldStatus={fieldStatus} notificationMode={notificationMode}
         secret={mailSecret} onSecretChange={setMailSecret} saving={write.saving && write.savingScope === 'provider'}
         disabled={write.uncertain || write.saving || persistedUnsupportedProvider} onSave={() => save('provider')} />
       <section className="system-settings-config-card" aria-labelledby="system-settings-smtp-title">

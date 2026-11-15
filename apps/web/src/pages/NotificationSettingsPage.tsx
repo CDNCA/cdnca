@@ -502,15 +502,25 @@ function AdminSettings({ accessToken, scopeID, sessionEpoch, channels, templates
   } })
   useEffect(() => setEmailEnabled(channels.email_enabled), [channels.email_enabled])
   useEffect(() => setSMSEnabled(channels.sms_enabled), [channels.sms_enabled])
+  // Why a channel cannot be switched on: no sender configured (fixed on the
+  // sender settings tab), or the runtime is off by environment; otherwise unsupported.
+  const unsupportedNote = (channel: 'email' | 'sms') => {
+    const item = health.channels?.[channel]
+    if (item?.state === 'not_configured' || item?.reason === 'config_incomplete') {
+      return <Typography.Text type="secondary" data-testid={`notification-channel-unconfigured-${channel}`}>{t('values.senderNotConfigured')} <Link to="/sys/setting?tab=mail">{t('values.openSenderSettings')}</Link></Typography.Text>
+    }
+    if (item?.state === 'disabled_by_env') return <Typography.Text type="secondary">{t('health.states.disabled_by_env')}</Typography.Text>
+    return <Typography.Text type="secondary">{t('values.unsupported')}</Typography.Text>
+  }
   return (
     <>
       <section className="notification-settings-channels-card" aria-label={t('sections.channels')}>
         <Typography.Title level={5}>{t('sections.channels')}</Typography.Title>
         <Space wrap>
           <Checkbox checked={smsEnabled} disabled={!channels.sms_supported || !canManage || saving || locked} onChange={(event) => setSMSEnabled(event.target.checked)}>{t('channels.sms')}</Checkbox>
-          {!channels.sms_supported ? <Typography.Text type="secondary">{t('values.unsupported')}</Typography.Text> : null}
+          {!channels.sms_supported ? unsupportedNote('sms') : null}
           <Checkbox checked={emailEnabled} disabled={!channels.email_supported || !canManage || saving || locked} onChange={(event) => setEmailEnabled(event.target.checked)}>{t('channels.email')}</Checkbox>
-          {!channels.email_supported ? <Typography.Text type="secondary">{t('values.unsupported')}</Typography.Text> : null}
+          {!channels.email_supported ? unsupportedNote('email') : null}
           <Tag color={ready ? 'success' : 'default'}>{ready ? t('health.ready') : t('health.notReady')}</Tag>
           {(['email', 'sms'] as const).map((channel) => {
             const item = health.channels?.[channel]

@@ -272,3 +272,7 @@ a.st-event:focus-visible { outline-offset: -2px; }
   @keyframes st-tip-fade { from { opacity: 0; } to { opacity: 1; } }
   .st-nav:active, .st-card-close:active { transform: none; }
 }
+.st-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
+.st-page-btn { padding: 6px 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font: inherit; cursor: pointer; }
+.st-page-btn:hover:not(:disabled) { border-color: var(--muted); }
+.st-page-btn:disabled { opacity: 0.45; cursor: default; }

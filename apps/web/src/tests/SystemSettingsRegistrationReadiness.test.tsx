@@ -77,6 +77,23 @@ describe('registration readiness on the account settings tab', () => {
     expect(await screen.findByText(/邮箱验证已开启，但对应通道当前发不出验证码/)).toBeInTheDocument()
   })
 
+  it('saves a required email verification whose channel switch is off, and says it is not in effect yet', async () => {
+    // 要求验证开 且 通知渠道开 才生效；渠道关着时用户照常注册，不发码
+    authenticate()
+    vi.spyOn(systemUserSettingsApi, 'get').mockResolvedValue(userDocument)
+    vi.spyOn(accountRegistrationApi, 'registrationConfig').mockResolvedValue({
+      mode: 'builtin', ready: true, email: { required: false, available: false }, sms: { required: false, available: false }, reasons: [],
+    })
+    const put = vi.spyOn(systemUserSettingsApi, 'put').mockResolvedValue({ ...userDocument, revision: 8 })
+    const user = userEvent.setup()
+    renderWithProviders(<SystemGlobalSettingsPage initialTab="account" />)
+    const panel = await screen.findByTestId('system-settings-baseline-account')
+    await user.click(within(panel).getByRole('button', { name: /保\s*存/ }))
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('已保存。邮箱验证要等邮件通知渠道打开后才生效，目前用户照常注册，不需要验证码。')).toBeInTheDocument()
+    expect(screen.queryByText(/对应通道当前发不出验证码/)).not.toBeInTheDocument()
+  })
+
   it('sends the Turnstile secret write-only and keeps it when left empty', async () => {
     authenticate()
     vi.spyOn(systemUserSettingsApi, 'get').mockResolvedValue(userDocument)

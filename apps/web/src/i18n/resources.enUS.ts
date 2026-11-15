@@ -1716,7 +1716,7 @@ export const enUS = {
       unsupported: 'This notification channel is unsupported', versionConflict: 'The notification revision changed. Refresh and retry.',
       templateVersionConflict: 'This template version already exists with different content. Use a new version.', validation: 'The template fields are invalid. Check them and retry.', rateLimited: 'Too many requests. Try again later.', writeFailed: 'Notification settings save failed',
     },
-    values: { unsupported: 'Unsupported', emptyTemplates: 'No notification templates', unknownRequest: 'unknown' },
+    values: { unsupported: 'Unsupported', senderNotConfigured: 'Sender not configured', openSenderSettings: 'Open sender settings', emptyTemplates: 'No notification templates', unknownRequest: 'unknown' },
     deliveries: {
       title: 'Notification delivery logs', empty: 'No delivery records', page: 'Page {{page}}',
       actions: { open: 'View delivery logs', attempts: 'View delivery attempts', retry: 'Retry', previous: 'Previous page', next: 'Next page' },

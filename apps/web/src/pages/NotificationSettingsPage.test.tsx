@@ -242,6 +242,39 @@ describe('NotificationSettingsPage', () => {
     expect(screen.getByText('暂无通知模板')).toBeInTheDocument()
   })
 
+  it('says a channel without a sender is not configured and links to the sender settings', async () => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    vi.spyOn(notificationsApi, 'getChannels').mockResolvedValue({
+      revision: 1, sms_enabled: false, email_enabled: false,
+      sms_supported: false, email_supported: false, changed: false,
+    })
+    vi.spyOn(notificationsApi, 'listTemplates').mockResolvedValue({ items: [] })
+    vi.spyOn(notificationsApi, 'getRuntimeHealth').mockResolvedValue({
+      enabled: true, state: 'ready', ready: false, worker_running: true, enabled_channels: 0, mode: 'auto',
+      channels: { email: { state: 'degraded', reason: 'config_incomplete' }, sms: { state: 'not_configured' } },
+    })
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    expect(await screen.findByTestId('notification-channel-unconfigured-email')).toHaveTextContent('发信未配置')
+    expect(screen.getByTestId('notification-channel-unconfigured-sms')).toHaveTextContent('发信未配置')
+    const links = screen.getAllByRole('link', { name: '前往发信配置' })
+    expect(links).toHaveLength(2)
+    expect(links[0]).toHaveAttribute('href', '/sys/setting?tab=mail')
+    expect(screen.queryByText('暂不支持')).not.toBeInTheDocument()
+  })
+
+  it('keeps "unsupported" for a channel the runtime reports nothing about', async () => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    vi.spyOn(notificationsApi, 'getChannels').mockResolvedValue({
+      revision: 1, sms_enabled: false, email_enabled: false,
+      sms_supported: false, email_supported: true, changed: false,
+    })
+    vi.spyOn(notificationsApi, 'listTemplates').mockResolvedValue({ items: [] })
+    vi.spyOn(notificationsApi, 'getRuntimeHealth').mockResolvedValue(runtimeHealth)
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    expect(await screen.findByText('暂不支持')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '前往发信配置' })).not.toBeInTheDocument()
+  })
+
   it('fails closed before network calls without read permission', () => {
     authenticate([])
     const channels = vi.spyOn(notificationsApi, 'getChannels')

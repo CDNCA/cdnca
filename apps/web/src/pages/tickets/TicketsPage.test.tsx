@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { validateAttachment } from '../../api/tickets'
+import { sitesApi, type SiteListResponse } from '../../api/sites'
+import { ticketsApi, validateAttachment } from '../../api/tickets'
 import { useSessionStore } from '../../auth/session'
 import { changeLocale } from '../../i18n'
 import { ticketsMessages } from '../../i18n/tickets'
@@ -29,6 +30,17 @@ const detail = {
   ],
 }
 
+// 关联站点从本账户自己的站点里选（可搜索，可留空）；关联订单仍填 ID。
+const ownSiteID = '44444444-4444-4444-8444-444444444444'
+const ownOrderID = '55555555-5555-4555-8555-555555555555'
+function ownLists() {
+  const sites = vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [{ id: ownSiteID, display_id: 'S1001', domain: 'www.example.com' }],
+    total: 1, page: 1, limit: 100 } as unknown as SiteListResponse)
+  return { sites }
+}
+const selected = (drawer: HTMLElement, label: string) =>
+  within(drawer).getByRole('combobox', { name: label }).closest('.ant-select')!.querySelector('.ant-select-selection-item')
+
 function signIn(overrides: Parameters<typeof principal>[0]) {
   const user = principal(overrides)
   useSessionStore.getState().setSession({ ...authResponse(user), access_token: 'ticket-token' }, user)
@@ -40,6 +52,12 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('TicketsPage', () => {
+  // 共享网关（只读锁定 423 等）回 {error:{code}}，工单接口要读出这个错误码，而不是笼统的 request_failed。
+  it('reads the error code of a shared gate envelope', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 'installation_locked', message: 'read-only' } }, 423)))
+    await expect(ticketsApi.summary('ticket-token', 'user')).rejects.toMatchObject({ status: 423, code: 'installation_locked' })
+  })
+
   it('keeps every locale structurally complete', () => {
     const keys = (tree: object, prefix = ''): string[] => Object.entries(tree).flatMap(([k, v]) =>
       typeof v === 'string' ? [`${prefix}${k}`] : keys(v as object, `${prefix}${k}.`))
@@ -92,7 +110,8 @@ describe('TicketsPage', () => {
   // 第七节“普通用户求助”：从网站失败处进入（?new=1&site_id=）直接打开新建并预填关联网站。
   it('opens a new ticket with the site prefilled when arriving from a site failure', async () => {
     signIn({})
-    const siteID = '44444444-4444-4444-8444-444444444444'
+    const siteID = ownSiteID
+    ownLists()
     vi.stubGlobal('fetch', vi.fn<Fetch>(async (path) => {
       if (path.startsWith('/v1/tickets?')) return json({ items: [], total: 0, limit: 20, offset: 0 })
       if (path === '/v1/tickets/summary') return json({ unread: 0 })
@@ -100,11 +119,12 @@ describe('TicketsPage', () => {
     }))
     renderWithProviders(<TicketsPage mode="user" />, [`/account/tickets?new=1&site_id=${siteID}`])
     const drawer = await screen.findByRole('dialog')
-    expect(within(drawer).getByLabelText('关联站点 ID（可选）')).toHaveValue(siteID)
+    await waitFor(() => expect(selected(drawer, '关联站点（可选）')).toHaveTextContent('www.example.com（S1001）'))
   })
 
   it('ignores a malformed prefilled site ID', async () => {
     signIn({})
+    ownLists()
     vi.stubGlobal('fetch', vi.fn<Fetch>(async (path) => {
       if (path.startsWith('/v1/tickets?')) return json({ items: [], total: 0, limit: 20, offset: 0 })
       if (path === '/v1/tickets/summary') return json({ unread: 0 })
@@ -112,12 +132,12 @@ describe('TicketsPage', () => {
     }))
     renderWithProviders(<TicketsPage mode="user" />, ['/account/tickets?new=1&site_id=<x>'])
     const drawer = await screen.findByRole('dialog')
-    expect(within(drawer).getByLabelText('关联站点 ID（可选）')).toHaveValue('')
+    expect(selected(drawer, '关联站点（可选）')).toBeNull()
   })
 
   it('points ticket ID errors at the related field instead of a generic message (W6)', async () => {
     signIn({})
-    const siteID = '44444444-4444-4444-8444-444444444444'
+    ownLists()
     const fetchMock = vi.fn<Fetch>(async (path, init) => {
       if (path.startsWith('/v1/tickets?') && !init?.method) return json({ items: [], total: 0, limit: 20, offset: 0 })
       if (path === '/v1/tickets/summary') return json({ unread: 0 })
@@ -130,15 +150,47 @@ describe('TicketsPage', () => {
     const drawer = await screen.findByRole('dialog')
     fireEvent.change(within(drawer).getByLabelText('标题'), { target: { value: '站点异常' } })
     fireEvent.change(within(drawer).getByLabelText('问题描述'), { target: { value: '打不开' } })
-    fireEvent.change(within(drawer).getByLabelText('关联站点 ID（可选）'), { target: { value: 'site-123' } })
+    fireEvent.mouseDown(within(drawer).getByRole('combobox', { name: '关联站点（可选）' }))
+    fireEvent.click(await screen.findByTitle('www.example.com（S1001）'))
+    fireEvent.change(within(drawer).getByLabelText('关联订单 ID（可选）'), { target: { value: 'order-123' } })
     fireEvent.click(within(drawer).getByRole('button', { name: '提交' }))
     expect(await within(drawer).findByText('请填写完整的 ID（形如 0190a1b2-…，小写）')).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([path, i]) => path === '/v1/tickets' && i?.method === 'POST')).toBe(false)
 
-    fireEvent.change(within(drawer).getByLabelText('关联站点 ID（可选）'), { target: { value: siteID } })
+    fireEvent.change(within(drawer).getByLabelText('关联订单 ID（可选）'), { target: { value: ownOrderID } })
     fireEvent.click(within(drawer).getByRole('button', { name: '提交' }))
     await waitFor(() => expect(fetchMock.mock.calls.some(([path, i]) => path === '/v1/tickets' && i?.method === 'POST')).toBe(true))
-    expect(await within(drawer).findByText('找不到该 ID，或它不属于当前账户')).toBeInTheDocument()
+    expect(await within(drawer).findAllByText('找不到该站点或订单，或它不属于当前账户')).toHaveLength(2)
+  })
+
+  it('picks the related site from a searchable list of the account own sites', async () => {
+    signIn({})
+    const { sites } = ownLists()
+    const fetchMock = vi.fn<Fetch>(async (path, init) => {
+      if (path.startsWith('/v1/tickets?') && !init?.method) return json({ items: [], total: 0, limit: 20, offset: 0 })
+      if (path === '/v1/tickets/summary') return json({ unread: 0 })
+      if (path === '/v1/tickets' && init?.method === 'POST') return json({ ...detail, ticket: { ...detail.ticket, ticket_no: 10003 } }, 201)
+      return json({ code: 'ticket_not_found' }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<TicketsPage mode="user" />)
+    fireEvent.click(await screen.findByRole('button', { name: '提交工单' }))
+    const drawer = await screen.findByRole('dialog')
+    expect(within(drawer).queryByText(/关联站点 ID/)).toBeNull()
+    fireEvent.change(within(drawer).getByLabelText('标题'), { target: { value: '套餐没生效' } })
+    fireEvent.change(within(drawer).getByLabelText('问题描述'), { target: { value: '买了套餐，站点还是旧额度' } })
+    // 站点按域名/编号在服务端搜索
+    const siteBox = within(drawer).getByRole('combobox', { name: '关联站点（可选）' })
+    fireEvent.mouseDown(siteBox)
+    fireEvent.change(siteBox, { target: { value: 'example' } })
+    await waitFor(() => expect(sites).toHaveBeenLastCalledWith('ticket-token', { page: 1, limit: 100, site: 'example' }))
+    fireEvent.click(await screen.findByTitle('www.example.com（S1001）'))
+    fireEvent.change(within(drawer).getByLabelText('关联订单 ID（可选）'), { target: { value: ownOrderID } })
+    fireEvent.click(within(drawer).getByRole('button', { name: '提交' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path, i]) => path === '/v1/tickets' && i?.method === 'POST')).toBe(true))
+    const [, init] = fetchMock.mock.calls.find(([path, i]) => path === '/v1/tickets' && i?.method === 'POST')!
+    expect(JSON.parse(init!.body as string)).toEqual({ category: 'technical', priority: 'normal', subject: '套餐没生效',
+      body: '买了套餐，站点还是旧额度', site_id: ownSiteID, order_id: ownOrderID })
   })
 
   it('renders the timeline as plain text and replies', async () => {

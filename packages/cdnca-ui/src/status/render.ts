@@ -246,6 +246,40 @@ function maintenanceLine(view: View, lang: Lang): HTMLElement {
   return el('p', { class: 'st-muted st-maint' }, ...parts)
 }
 
+/** 历史事件每页条数：只显示最近 5 条，其余翻页查看。 */
+export const RECENT_PAGE_SIZE = 5
+// 当前页跨定时刷新保留（renderView 每次整页重画）；超出页数时回到最后一页。
+let recentPage = 0
+
+function recentSection(items: Incident[], names: Map<string, string>, lang: Lang): HTMLElement {
+  const m = messages(lang)
+  const head = el('h2', {}, m.recent, ' ', el('span', { class: 'st-muted st-range' }, m.recentRange))
+  if (!items.length) return el('section', {}, head, el('p', { class: 'st-muted' }, m.noRecent))
+  const pages = Math.ceil(items.length / RECENT_PAGE_SIZE)
+  recentPage = Math.min(recentPage, pages - 1)
+  const list = el('div', { class: 'st-recent-list' })
+  const section = el('section', {}, head, list)
+  if (pages === 1) {
+    list.replaceChildren(...items.map((item) => incident(item, names, lang, false)))
+    return section
+  }
+  const prev = el('button', { type: 'button', class: 'st-page-btn' }, m.recentPrev) as HTMLButtonElement
+  const next = el('button', { type: 'button', class: 'st-page-btn' }, m.recentNext) as HTMLButtonElement
+  const label = el('span', { class: 'st-muted st-page-label', 'aria-live': 'polite' })
+  const show = () => {
+    const start = recentPage * RECENT_PAGE_SIZE
+    list.replaceChildren(...items.slice(start, start + RECENT_PAGE_SIZE).map((item) => incident(item, names, lang, false)))
+    label.textContent = fill(m.recentPage, { page: String(recentPage + 1), pages: String(pages) })
+    prev.disabled = recentPage === 0
+    next.disabled = recentPage >= pages - 1
+  }
+  prev.addEventListener('click', () => { if (recentPage > 0) { recentPage -= 1; show() } })
+  next.addEventListener('click', () => { if (recentPage < pages - 1) { recentPage += 1; show() } })
+  show()
+  section.append(el('nav', { class: 'st-pager', 'aria-label': m.recent }, prev, label, next))
+  return section
+}
+
 /**
  * 整页内容。view 为 null 表示一次数据都没取到：只显示说明，不显示任何状态。
  * 有旧数据但这次失败：照常画旧数据，横幅下加一句「稍后自动重试」。
@@ -278,8 +312,7 @@ export function renderView(root: HTMLElement, view: View | null, lang: Lang, opt
     el('div', { class: 'st-panel-head' }, el('h2', {}, m.components), range ? el('span', { class: 'st-muted st-range' }, range) : null),
     groups.length ? el('ul', { class: 'st-components' }, ...groups.map((group) => groupCard(group, lang, opts))) : el('p', { class: 'st-muted st-empty' }, m.noComponents),
     el('p', { class: 'st-muted st-legend' }, m.legend)))
-  sections.push(el('section', {}, el('h2', {}, m.recent, ' ', el('span', { class: 'st-muted st-range' }, m.recentRange)),
-    ...(view.recent.length ? view.recent.map((item) => incident(item, names, lang, false)) : [el('p', { class: 'st-muted' }, m.noRecent)])))
+  sections.push(recentSection(view.recent, names, lang))
   root.replaceChildren(...sections.filter((node): node is Node => node instanceof Node))
   const snap = opts.restore ?? before
   if (snap) restoreCard(snap, opts.restore ? 'card' : before?.focused ? 'card' : 'none')

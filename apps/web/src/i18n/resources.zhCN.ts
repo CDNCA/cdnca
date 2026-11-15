@@ -1794,7 +1794,7 @@ export const zhCN = {
       unsupported: '该通知渠道暂不支持', versionConflict: '通知设置版本已变化，请刷新后重试',
       templateVersionConflict: '该模板版本已存在且内容不同，请使用新版本号', validation: '模板字段校验失败，请检查后重试', rateLimited: '请求过于频繁，请稍后重试', writeFailed: '通知设置保存失败',
     },
-    values: { unsupported: '暂不支持', emptyTemplates: '暂无通知模板', unknownRequest: '未知' },
+    values: { unsupported: '暂不支持', senderNotConfigured: '发信未配置', openSenderSettings: '前往发信配置', emptyTemplates: '暂无通知模板', unknownRequest: '未知' },
     deliveries: {
       title: '通知发送日志', empty: '暂无发送记录', page: '第 {{page}} 页',
       actions: { open: '查看发送日志', attempts: '查看投递尝试', retry: '重试', previous: '上一页', next: '下一页' },
