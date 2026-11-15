@@ -119,20 +119,24 @@ type ArtifactManifestV2 struct {
 }
 
 type UpgradeGrant struct {
-	Schema                     string `json:"schema"`
-	Audience                   string `json:"audience"`
-	Purpose                    string `json:"purpose"`
-	GrantID                    string `json:"grant_id"`
-	Nonce                      string `json:"nonce"`
-	CustomerID                 string `json:"customer_id"`
-	InstallationID             string `json:"installation_id"`
-	LicenseID                  string `json:"license_id"`
-	Channel                    string `json:"channel"`
-	ChannelRevision            uint64 `json:"channel_revision"`
-	Component                  string `json:"component"`
-	Operation                  string `json:"operation"`
-	CurrentVersion             string `json:"current_version"`
-	Version                    string `json:"version"`
+	Schema          string `json:"schema"`
+	Audience        string `json:"audience"`
+	Purpose         string `json:"purpose"`
+	GrantID         string `json:"grant_id"`
+	Nonce           string `json:"nonce"`
+	CustomerID      string `json:"customer_id"`
+	InstallationID  string `json:"installation_id"`
+	LicenseID       string `json:"license_id"`
+	Channel         string `json:"channel"`
+	ChannelRevision uint64 `json:"channel_revision"`
+	Component       string `json:"component"`
+	Operation       string `json:"operation"`
+	CurrentVersion  string `json:"current_version"`
+	Version         string `json:"version"`
+	// CurrentReleaseSequence marks a same-version re-release
+	// grant (operation reinstall): the installed release_sequence that the
+	// target artifact's release_sequence exceeds.
+	CurrentReleaseSequence     uint64 `json:"current_release_sequence,omitempty"`
 	ProtocolVersion            int    `json:"protocol_version"`
 	ArtifactID                 string `json:"artifact_id"`
 	ArtifactProtocolMin        int    `json:"artifact_protocol_min"`
@@ -162,24 +166,27 @@ type UpgradePlanArtifact struct {
 }
 
 type UpgradePlanArtifactBundle struct {
-	Schema                  string              `json:"schema"`
-	Audience                string              `json:"audience"`
-	Purpose                 string              `json:"purpose"`
-	BundleID                string              `json:"bundle_id"`
-	PlanID                  string              `json:"plan_id"`
-	InitialPlanRevision     uint64              `json:"initial_plan_revision"`
-	ParentGrantID           string              `json:"parent_grant_id"`
-	ParentGrantSHA256       string              `json:"parent_grant_sha256"`
-	ParentGrantIssuedAt     int64               `json:"parent_grant_issued_at"`
-	ParentGrantExpiresAt    int64               `json:"parent_grant_expires_at"`
-	CustomerID              string              `json:"customer_id"`
-	InstallationID          string              `json:"installation_id"`
-	LicenseID               string              `json:"license_id"`
-	Channel                 string              `json:"channel"`
-	ChannelRevision         uint64              `json:"channel_revision"`
-	Component               string              `json:"component"`
-	CurrentVersion          string              `json:"current_version"`
-	Version                 string              `json:"version"`
+	Schema               string `json:"schema"`
+	Audience             string `json:"audience"`
+	Purpose              string `json:"purpose"`
+	BundleID             string `json:"bundle_id"`
+	PlanID               string `json:"plan_id"`
+	InitialPlanRevision  uint64 `json:"initial_plan_revision"`
+	ParentGrantID        string `json:"parent_grant_id"`
+	ParentGrantSHA256    string `json:"parent_grant_sha256"`
+	ParentGrantIssuedAt  int64  `json:"parent_grant_issued_at"`
+	ParentGrantExpiresAt int64  `json:"parent_grant_expires_at"`
+	CustomerID           string `json:"customer_id"`
+	InstallationID       string `json:"installation_id"`
+	LicenseID            string `json:"license_id"`
+	Channel              string `json:"channel"`
+	ChannelRevision      uint64 `json:"channel_revision"`
+	Component            string `json:"component"`
+	CurrentVersion       string `json:"current_version"`
+	Version              string `json:"version"`
+	// CurrentReleaseSequence: a same-version re-release bundle;
+	// forward and rollback are the one registered build of the version.
+	CurrentReleaseSequence  uint64              `json:"current_release_sequence,omitempty"`
 	ProtocolVersion         int                 `json:"protocol_version"`
 	Forward                 UpgradePlanArtifact `json:"forward"`
 	Rollback                UpgradePlanArtifact `json:"rollback"`
@@ -225,6 +232,7 @@ type UpgradeCommandGrant struct {
 	ChannelRevision            uint64                         `json:"channel_revision"`
 	ExecutionSequence          uint64                         `json:"execution_sequence,omitempty"`
 	ReleaseSequence            uint64                         `json:"release_sequence,omitempty"`
+	CurrentReleaseSequence     uint64                         `json:"current_release_sequence,omitempty"`
 	Component                  string                         `json:"component"`
 	Operation                  string                         `json:"operation"`
 	CurrentVersion             string                         `json:"current_version"`
@@ -333,8 +341,17 @@ func (bundle UpgradePlanArtifactBundle) Validate() error {
 		bundle.Forward.validate() != nil || bundle.Rollback.validate() != nil {
 		return ErrInvalidUpgradePlanArtifactBundle
 	}
-	if (!v2 && (bundle.Forward.Manifest.Schema != ArtifactManifestV2Schema ||
-		bundle.Rollback.Manifest.Schema != ArtifactManifestV2Schema)) ||
+	if bundle.CurrentVersion == bundle.Version {
+		// Same-version re-release: the registry keeps one build per version,
+		// so there is no older rollback build to name.
+		if !v2 || bundle.CurrentReleaseSequence == 0 || bundle.Forward != bundle.Rollback ||
+			bundle.Forward.Manifest.Schema != ArtifactManifestV3Schema ||
+			bundle.Forward.Manifest.ReleaseSequence <= bundle.CurrentReleaseSequence {
+			return ErrInvalidUpgradePlanArtifactBundle
+		}
+	} else if bundle.CurrentReleaseSequence != 0 ||
+		(!v2 && (bundle.Forward.Manifest.Schema != ArtifactManifestV2Schema ||
+			bundle.Rollback.Manifest.Schema != ArtifactManifestV2Schema)) ||
 		(v2 && (bundle.Forward.Manifest.Schema != ArtifactManifestV3Schema ||
 			bundle.Rollback.Manifest.Schema != ArtifactManifestV3Schema ||
 			bundle.Forward.Manifest.ReleaseSequence <= bundle.Rollback.Manifest.ReleaseSequence)) {
@@ -396,8 +413,8 @@ func (grant UpgradeCommandGrant) Validate() error {
 		!validCanonicalUUID(grant.NodeID) || !upgradeGrantCodePattern.MatchString(grant.Channel) ||
 		grant.ChannelRevision == 0 || !upgradeGrantCodePattern.MatchString(grant.Component) ||
 		!validCanonicalSemver(grant.CurrentVersion) || !validCanonicalSemver(grant.Version) ||
-		grant.Operation != upgradeOperation(grant.CurrentVersion, grant.Version) ||
-		(grant.Operation != UpgradeOperation && grant.Operation != RollbackOperation) ||
+		!validUpgradeDirection(grant.Operation, grant.CurrentVersion, grant.Version,
+			grant.Schema == UpgradeCommandGrantV3Schema, grant.CurrentReleaseSequence, grant.ReleaseSequence) ||
 		grant.ProtocolVersion < 1 || !validCanonicalUUID(grant.ArtifactID) ||
 		grant.ArtifactProtocolMin < 1 || grant.ArtifactProtocolMax < grant.ArtifactProtocolMin ||
 		grant.ProtocolVersion < grant.ArtifactProtocolMin || grant.ProtocolVersion > grant.ArtifactProtocolMax ||
@@ -453,6 +470,7 @@ func (grant UpgradeCommandGrant) Validate() error {
 		IssuedAt: grant.IssuedAt, NotBefore: grant.NotBefore, ExpiresAt: grant.ExpiresAt}
 	if v3 {
 		execution.ReleaseSequence = grant.ReleaseSequence
+		execution.CurrentReleaseSequence = grant.CurrentReleaseSequence
 	}
 	if execution.Validate() != nil {
 		return ErrInvalidUpgradeCommandGrant
@@ -470,6 +488,7 @@ func (grant UpgradeGrant) Validate() error {
 		!upgradeGrantCodePattern.MatchString(grant.Channel) || !upgradeGrantCodePattern.MatchString(grant.Component) ||
 		grant.ChannelRevision == 0 || !validCanonicalSemver(grant.CurrentVersion) || !validCanonicalSemver(grant.Version) ||
 		grant.Operation != upgradeOperation(grant.CurrentVersion, grant.Version) || grant.ProtocolVersion < 1 ||
+		grant.CurrentReleaseSequence != 0 && grant.Operation != ReinstallOperation ||
 		grant.ArtifactProtocolMin < 1 || grant.ArtifactProtocolMax < grant.ArtifactProtocolMin ||
 		grant.ProtocolVersion < grant.ArtifactProtocolMin || grant.ProtocolVersion > grant.ArtifactProtocolMax ||
 		grant.DigestAlgorithm != "sha256" || digestErr != nil || len(digest) != 32 ||
@@ -963,6 +982,21 @@ func artifactManifestV2FromCommandGrant(grant UpgradeCommandGrant) ArtifactManif
 		ArtifactSizeBytes: grant.ArtifactSizeBytes, ReleaseSequence: grant.ReleaseSequence,
 		DigestAlgorithm: grant.DigestAlgorithm,
 		SHA256Digest:    grant.SHA256Digest, DownloadURL: grant.DownloadURL}
+}
+
+// validUpgradeDirection: the operation follows the version direction. A
+// same-version "upgrade" is a re-release: v3 only, with the
+// installed current_release_sequence and a release_sequence above it;
+// current_release_sequence is set for nothing else. A same-version rollback
+// does not exist (the registry keeps one build per version).
+func validUpgradeDirection(operation, currentVersion, targetVersion string, v3 bool,
+	currentReleaseSequence, releaseSequence uint64) bool {
+	if currentVersion == targetVersion {
+		return operation == UpgradeOperation && v3 && currentReleaseSequence > 0 && releaseSequence > currentReleaseSequence
+	}
+	operationForVersions := upgradeOperation(currentVersion, targetVersion)
+	return currentReleaseSequence == 0 && operation == operationForVersions &&
+		(operation == UpgradeOperation || operation == RollbackOperation)
 }
 
 func upgradeOperation(currentVersion, targetVersion string) string {

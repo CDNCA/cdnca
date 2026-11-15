@@ -3,7 +3,7 @@ info:
   title: cdnca Attack Escalation API
   version: 1.0.0
   description: >-
-    攻击自动升级 (module.escalate, official free plugin, migration 460). A site under attack
+    攻击自动升级 (module.escalate, official free plugin). A site under attack
     (auto defense reports attack or protect_origin) whose total over all its nodes stays above the
     next level's QPS or bit-per-second threshold for sustain_seconds moves level by level:
     A (the package's line group) -> B (a high defense line group) -> C (an unlimited line group, or
@@ -365,7 +365,7 @@ paths:
       x-summary-zh: "撤销授予；代理商使用该线路组的套餐会被下架并清空 B/C"
       summary: Revoke a grant; the reseller's packages using the line group are withdrawn and their B/C cleared
       description: >-
-        ADR 0018 §6, user decision 10-24 Q5. In one transaction: the grant (and anything passed on) is revoked,
+        ADR 0018 §6. In one transaction: the grant (and anything passed on) is revoked,
         every published package of the reseller that uses the line group is withdrawn, and B/C pointing at it are
         cleared (audited in the reseller's scope as package.escalate_policy.grant_revoked). Sold subscriptions keep
         their snapshot until they expire.

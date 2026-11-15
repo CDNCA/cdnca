@@ -122,27 +122,31 @@ type Client struct {
 	// known_capabilities, so advertising it cannot cost the session facts
 	// on a Gateway that does not know it.
 	gatewayKnowsL4Live atomic.Bool
-	liveCapabilities   []*liveCapability // change at run time (XDP_FILTER, ACME_HTTP01_OVERLAY)
-	acmeHTTP01Poll     time.Duration     // ACME_HTTP01_OVERLAY readiness re-check interval
-	extraChecks        func() []*agentv1.CheckResult
-	nodeInventory      func(context.Context) *agentv1.ReportNodeNetworkInventoryV1Request
-	portTransition     *PortTransitionRuntime
-	trust              *TrustStore
-	store              *durableStore
-	overlayStore       *overlayDurableStore
-	cacheStore         *cacheControlDurableStore
-	cacheCancels       *cacheCancelRegistry
-	activeIdentity     activeConfigIdentityState
-	journalLease       *journalLease
-	closeOnce          sync.Once
-	closeErr           error
-	lifecycleMu        sync.Mutex
-	running            bool
-	closed             bool
-	runCancel          context.CancelFunc
-	runDone            chan struct{}
-	now                func() time.Time
-	jitter             func(time.Duration) time.Duration
+	// Installed release_sequence and whether a Gateway listed
+	// SAME_VERSION_UPGRADE (same_version_upgrade.go).
+	installedReleaseSequence uint64
+	gatewayKnowsSameVersion  atomic.Bool
+	liveCapabilities         []*liveCapability // change at run time (XDP_FILTER, ACME_HTTP01_OVERLAY)
+	acmeHTTP01Poll           time.Duration     // ACME_HTTP01_OVERLAY readiness re-check interval
+	extraChecks              func() []*agentv1.CheckResult
+	nodeInventory            func(context.Context) *agentv1.ReportNodeNetworkInventoryV1Request
+	portTransition           *PortTransitionRuntime
+	trust                    *TrustStore
+	store                    *durableStore
+	overlayStore             *overlayDurableStore
+	cacheStore               *cacheControlDurableStore
+	cacheCancels             *cacheCancelRegistry
+	activeIdentity           activeConfigIdentityState
+	journalLease             *journalLease
+	closeOnce                sync.Once
+	closeErr                 error
+	lifecycleMu              sync.Mutex
+	running                  bool
+	closed                   bool
+	runCancel                context.CancelFunc
+	runDone                  chan struct{}
+	now                      func() time.Time
+	jitter                   func(time.Duration) time.Duration
 
 	// siteObjects is the object store of site_runtime 9 deployments.
 	siteObjects       *objectstore.Store
@@ -1618,6 +1622,9 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 		c.gatewayKnowsL4Live.Store(true)
 		return true, errCapabilitiesLearned
 	}
+	if c.learnSameVersionUpgrade(gatewayHello) {
+		return true, errCapabilitiesLearned
+	}
 	if c.nodeInventory != nil {
 		done := make(chan struct{})
 		observed := gatewayHello.GetObservedPeerIp()
@@ -3009,6 +3016,7 @@ func (c *Client) buildAgentHello(recordDeclared bool) (*agentv1.AgentHello, erro
 			Name: agentv1.CapabilityName_CAPABILITY_NAME_MULTI_TENANT_RUNTIME, ApiVersion: multiTenantRuntimeAPIVersion,
 		})
 	}
+	c.declareSameVersionUpgrade(capabilities)
 	ipIntelDeclared := false
 	for _, capability := range c.dynamicCapabilities() {
 		if !hasCapability(capabilities, capability.Name) {

@@ -833,7 +833,8 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		if err != nil {
 			return nil, err
 		}
-		clientOptions = append(clientOptions, gatewayclient.WithUpgradeRuntime(upgradeRuntime))
+		clientOptions = append(clientOptions, gatewayclient.WithUpgradeRuntime(upgradeRuntime),
+			gatewayclient.WithInstalledReleaseSequence(installedReleaseSequence(installedReleaseManifestPath)))
 	}
 	if dynamicManager != nil {
 		clientOptions = append(clientOptions, gatewayclient.WithDynamicRouting(dynamicManager))

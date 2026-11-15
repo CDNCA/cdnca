@@ -10,7 +10,7 @@ info:
     needs the module.autodefense lease feature; starting protection, switching a module to auto and resuming automatic
     items need module.autodefense.auto. A refusal is 403 entitlement_feature_denied with error.capability.feature
     naming the missing feature. Locking an item (a person raising or lowering it) needs module.autodefense only and the
-    item stays manual until a person resumes it (user decision Q3). Every write appends a security.autodefense.* audit
+    item stays manual until a person resumes it. Every write appends a security.autodefense.* audit
     event; item_manual and item_auto record the operator and time.
 paths:
   /v1/security/autodefense/sites:
@@ -190,7 +190,7 @@ paths:
   /v1/security/autodefense/sites/{site_id}/circuit/resume:
     post:
       operationId: resumeAutoDefenseSiteCircuit
-      summary: "Resume automatic protection: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      summary: "Resume automatic protection: close the site circuit the nodes reported open (a second break within 24 hours needs a person)"
       x-summary-zh: "恢复自动防护：关闭节点上报的网站熔断（24 小时内第二次熔断需人工处理）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -205,7 +205,7 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/circuit/resume:
     post:
       operationId: adminResumeAutoDefenseSiteCircuit
-      summary: "Resume automatic protection: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      summary: "Resume automatic protection: close the site circuit the nodes reported open (a second break within 24 hours needs a person)"
       x-summary-zh: "恢复自动防护：关闭节点上报的网站熔断（24 小时内第二次熔断需人工处理）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -425,7 +425,7 @@ paths:
     put:
       operationId: lockAutoDefenseSiteItem
       x-summary-zh: "人工设置该项：改为人工，恢复自动前一直按此值运行"
-      summary: "A person sets the item: it becomes manual and runs on this value until resumed (Q3)"
+      summary: "A person sets the item: it becomes manual and runs on this value until resumed"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -440,7 +440,7 @@ paths:
     put:
       operationId: adminLockAutoDefenseSiteItem
       x-summary-zh: "人工设置该项：改为人工，恢复自动前一直按此值运行"
-      summary: "A person sets the item: it becomes manual and runs on this value until resumed (Q3)"
+      summary: "A person sets the item: it becomes manual and runs on this value until resumed"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -1734,7 +1734,7 @@ components:
         state: {type: string, enum: [closed, open]}
         reason: {type: string, enum: [agent_fault, baseline_stale, false_positive_limit, whole_site_mitigated, delivery_failure]}
         since: {$ref: '#/components/schemas/Timestamp'}
-        manual_resume: {type: boolean, description: A second break within 24 hours needs an administrator to resume (Q6).}
+        manual_resume: {type: boolean, description: A second break within 24 hours needs an administrator to resume.}
     OverlayState:
       type: string
       enum: [active, frozen, inactive]
@@ -2112,7 +2112,7 @@ components:
               state: {type: string, enum: [pending, applied, failed]}
               error_code: {type: string, enum: [gate_write_failed, kernel_unban_failed]}
               reported_at: {$ref: '#/components/schemas/Timestamp'}
-              delivery: {type: string, enum: [sending, received], description: "Only while state is pending (fix-nrecovery2): sending = the node has not confirmed the snapshot carrying the release, the control plane publishes it again every 3 minutes; received = the node holds it and answers by itself."}
+              delivery: {type: string, enum: [sending, received], description: "Only while state is pending: sending = the node has not confirmed the snapshot carrying the release, the control plane publishes it again every 3 minutes; received = the node holds it and answers by itself."}
               resends: {type: integer, minimum: 1, description: Automatic resends of that snapshot so far (sending only; omitted when none).}
               next_resend_at: {$ref: '#/components/schemas/Timestamp', description: Next automatic resend (sending only; omitted before the first publication).}
               last_seen_at: {$ref: '#/components/schemas/Timestamp', description: "The node's last heartbeat (pending only)."}

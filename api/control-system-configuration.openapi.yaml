@@ -6,7 +6,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   description: >-
-    Platform-scoped canonical system-configuration v2 revisions backed by migrations 035 and 219,
+    Platform-scoped canonical system-configuration v2 revisions,
     with immutable bindings to signed tenant Edge publications and rollouts.
 servers:
   - url: /

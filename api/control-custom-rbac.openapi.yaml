@@ -6,7 +6,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   description: >-
-    Independently mountable IAM-12 tenant custom RBAC HTTP contract over migration 042.
+    Independently mountable tenant custom RBAC HTTP contract.
     Every operation accepts only an authenticated customer-control tenant session. Actor,
     tenant scope, and authentication session are derived from trusted authentication facts;
     platform and operator identities are rejected. Reads revalidate the live session and

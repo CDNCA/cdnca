@@ -47,6 +47,10 @@ type ParentGrantRequest struct {
 	ProtocolVersion int
 	// RequestedArtifactID is the version the customer chose ("" = pin or channel latest).
 	RequestedArtifactID string
+	// CurrentReleaseSequence (0 = not sent) is the installed release_sequence;
+	// the license only uses it when the target is the same version. Proof v3, exclusive
+	// with RequestedArtifactID.
+	CurrentReleaseSequence uint64
 }
 
 type ParentGrantResult struct {
@@ -311,7 +315,8 @@ func (client *LicenseClient) IssueParentGrant(ctx context.Context, input ParentG
 	}
 	if client == nil || !writeMetadataPattern.MatchString(input.IdempotencyKey) ||
 		!codePattern.MatchString(input.Component) || !validCanonicalVersion(input.CurrentVersion) ||
-		input.ProtocolVersion <= 0 || (input.RequestedArtifactID != "" && !validCanonicalPlanUUID(input.RequestedArtifactID)) {
+		input.ProtocolVersion <= 0 || (input.RequestedArtifactID != "" && !validCanonicalPlanUUID(input.RequestedArtifactID)) ||
+		(input.RequestedArtifactID != "" && input.CurrentReleaseSequence != 0) {
 		return ParentGrantResult{}, ErrInvalidInput
 	}
 	requestID := input.RequestID
@@ -326,15 +331,20 @@ func (client *LicenseClient) IssueParentGrant(ctx context.Context, input ParentG
 		fields[0] = "cdnca-upgrade-grant-request-proof/v2"
 		fields = append(fields, input.RequestedArtifactID)
 	}
+	if input.CurrentReleaseSequence != 0 {
+		fields[0] = "cdnca-upgrade-grant-request-proof/v3"
+		fields = append(fields, strconv.FormatUint(input.CurrentReleaseSequence, 10))
+	}
 	proof := ed25519.Sign(client.privateKey, upgradeLengthPrefixedDigest(fields...))
 	body := struct {
-		Component           string `json:"component"`
-		CurrentVersion      string `json:"current_version"`
-		ProtocolVersion     int    `json:"protocol_version"`
-		Proof               string `json:"proof"`
-		RequestedArtifactID string `json:"requested_artifact_id,omitempty"`
+		Component              string `json:"component"`
+		CurrentVersion         string `json:"current_version"`
+		ProtocolVersion        int    `json:"protocol_version"`
+		Proof                  string `json:"proof"`
+		RequestedArtifactID    string `json:"requested_artifact_id,omitempty"`
+		CurrentReleaseSequence uint64 `json:"current_release_sequence,omitempty"`
 	}{input.Component, input.CurrentVersion, input.ProtocolVersion,
-		base64.RawURLEncoding.EncodeToString(proof), input.RequestedArtifactID}
+		base64.RawURLEncoding.EncodeToString(proof), input.RequestedArtifactID, input.CurrentReleaseSequence}
 	encoded, _ := json.Marshal(body)
 	path := "/activation/v1/installations/" + client.installationID.String() + "/upgrade-grants:issue"
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, client.baseURL+path, bytes.NewReader(encoded))

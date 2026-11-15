@@ -19,7 +19,10 @@ type RolloutTargetCohort struct {
 	Architecture    string
 	CurrentVersion  string
 	ProtocolVersion uint32
-	Targets         []PlanTarget
+	// CurrentReleaseSequence is the highest installed release_sequence
+	// when every node declares SAME_VERSION_UPGRADE with one; 0 otherwise.
+	CurrentReleaseSequence uint64
+	Targets                []PlanTarget
 }
 
 type rolloutNodeCapabilityFact struct {
@@ -119,6 +122,7 @@ func rolloutCohortFromFacts(facts []rolloutNodeCapabilityFact) (RolloutTargetCoh
 		return RolloutTargetCohort{}, ErrCohortIncompatible
 	}
 	cohort := RolloutTargetCohort{Targets: make([]PlanTarget, 0, len(facts))}
+	allRerelease := true
 	for index, fact := range facts {
 		if !validCanonicalPlanUUID(fact.NodeID) || !validCanonicalVersion(fact.PresenceVersion) ||
 			fact.ProtocolVersion == 0 || len(fact.CapabilitySHA256) != sha256.Size {
@@ -154,8 +158,25 @@ func rolloutCohortFromFacts(facts []rolloutNodeCapabilityFact) (RolloutTargetCoh
 		}
 		cohort.Targets = append(cohort.Targets, PlanTarget{NodeID: fact.NodeID,
 			AgentVersion: fact.PresenceVersion, ProtocolVersion: fact.ProtocolVersion})
+		sequence := installedReleaseSequence(&capabilities)
+		allRerelease = allRerelease && sequence != 0
+		cohort.CurrentReleaseSequence = max(cohort.CurrentReleaseSequence, sequence)
+	}
+	if !allRerelease {
+		cohort.CurrentReleaseSequence = 0
 	}
 	return cohort, nil
+}
+
+// installedReleaseSequence is the node's installed release_sequence when it
+// declares SAME_VERSION_UPGRADE v1; 0 when it cannot re-release.
+func installedReleaseSequence(capabilities *agentv1.AgentCapabilities) uint64 {
+	for _, feature := range capabilities.GetFeatures() {
+		if feature.GetName() == agentv1.CapabilityName_CAPABILITY_NAME_SAME_VERSION_UPGRADE && feature.GetApiVersion() == 1 {
+			return capabilities.GetInstalledReleaseSequence()
+		}
+	}
+	return 0
 }
 
 func hasUpgradeCapability(features []*agentv1.Capability) bool {

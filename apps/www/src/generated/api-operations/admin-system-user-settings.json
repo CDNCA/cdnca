@@ -92,6 +92,33 @@
       {
        "name": "kyc_callback_hmac_key_fingerprint",
        "type": "string"
+      },
+      {
+       "name": "kyc_object_access_key_id_configured",
+       "type": "boolean",
+       "description": "The KYC private object store access key ID entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_object_access_key_id_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_object_secret_access_key_configured",
+       "type": "boolean",
+       "description": "The KYC private object store secret access key entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_object_secret_access_key_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_object_session_token_configured",
+       "type": "boolean",
+       "description": "The KYC private object store session token entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_object_session_token_fingerprint",
+       "type": "string"
       }
      ]
     },
@@ -191,6 +218,24 @@
       "type": "object",
       "description": "Callback signing key of the KYC provider, canonical padded base64 of 32-128 bytes; replaces IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64, which stays the fallback; a change applies without restarting the control plane.",
       "description_zh": "实名认证服务回调验签密钥，32–128 字节的标准带填充 Base64；替换 IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64，未保存时沿用该环境变量；修改后无需重启控制面即生效。"
+     },
+     {
+      "name": "kyc_object_access_key_id",
+      "type": "object",
+      "description": "Access key ID of the KYC private object store (identity documents and liveness material); replaces IDENTITY_VERIFICATION_OBJECT_ACCESS_KEY_ID, which stays the fallback; a change applies without restarting the control plane.",
+      "description_zh": "实名材料私有对象存储的 Access Key ID；替换 IDENTITY_VERIFICATION_OBJECT_ACCESS_KEY_ID，未保存时沿用该环境变量；修改后无需重启控制面即生效。"
+     },
+     {
+      "name": "kyc_object_secret_access_key",
+      "type": "object",
+      "description": "Secret access key of the KYC private object store; replaces IDENTITY_VERIFICATION_OBJECT_SECRET_ACCESS_KEY, which stays the fallback.",
+      "description_zh": "实名材料私有对象存储的 Secret Access Key；替换 IDENTITY_VERIFICATION_OBJECT_SECRET_ACCESS_KEY，未保存时沿用该环境变量。"
+     },
+     {
+      "name": "kyc_object_session_token",
+      "type": "string",
+      "description": "Optional session token of temporary object store credentials, otherwise like WriteOnlySecret; replaces IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN, which stays the fallback.",
+      "description_zh": "选填，对象存储临时凭据的 Session Token，其余同 WriteOnlySecret；替换 IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN，未保存时沿用该环境变量。"
      }
     ]
    },
@@ -271,6 +316,33 @@
       },
       {
        "name": "kyc_callback_hmac_key_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_object_access_key_id_configured",
+       "type": "boolean",
+       "description": "The KYC private object store access key ID entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_object_access_key_id_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_object_secret_access_key_configured",
+       "type": "boolean",
+       "description": "The KYC private object store secret access key entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_object_secret_access_key_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_object_session_token_configured",
+       "type": "boolean",
+       "description": "The KYC private object store session token entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_object_session_token_fingerprint",
        "type": "string"
       }
      ]

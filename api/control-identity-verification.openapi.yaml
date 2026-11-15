@@ -6,7 +6,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   description: >-
-    Independently mountable IAM-10/11 HTTP contract over migration 037 and the
+    Independently mountable HTTP contract over the
     identityverification core service. Actor, tenant scope, applicant, and
     reviewer are derived only from the authenticated request. Draft creation
     accepts only an opaque evidence_token issued to a trusted server-side
@@ -14,7 +14,7 @@ info:
     document number, person name, organization name, subject fingerprint,
     ciphertext envelope, full hash, key identifier, or object reference.
 
-    Migration 169 adds durable KYC provider sessions and a private object store
+    The contract also covers durable KYC provider sessions and a private object store
     upload workflow. Presigned PUTs are bound to exact tenant/user/session,
     object digest, size, content type, object version, and encryption_key_id.
     Provider callback signature, timestamp, nonce, event, and session bindings
@@ -162,7 +162,7 @@ paths:
       summary: Expire an owned submitted or reviewing case after its deadline
       description: >-
         This is the narrow applicant-only operation authorized by the current
-        core and migration 037. It is not a reviewer, administrator, or
+        core. It is not a reviewer, administrator, or
         scheduler endpoint and cannot substitute another actor.
       security: [{bearerAuth: []}]
       x-required-permissions: [identity_verification.self.manage]
@@ -307,6 +307,9 @@ paths:
         Once the platform saved its identity policy (system user settings identity_policy_saved),
         a personal kind with identity_verification_method none or the enterprise kind with
         enterprise_verification_enabled false is refused with 403 identity_verification_kind_disabled.
+        The KYC service and its private object store come from the system user settings
+        (kyc_* fields and secrets, each falling back to IDENTITY_VERIFICATION_*) and apply without a restart;
+        until all required values are set this route, uploads and callbacks answer 503 identity_verification_not_configured.
       security: [{bearerAuth: []}]
       x-required-permissions: [identity_verification.self.manage]
       parameters:
@@ -521,7 +524,7 @@ components:
       required: false
       description: "Platform administrator sessions only (platform administrators may review on a tenant's behalf): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
       x-description-zh: >-
-        Platform administrator sessions only (user 10-27: 平台管理员也能代审): the tenant scope
+        Platform administrator sessions only (平台管理员也能代审): the tenant scope
         whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant
         session. The administrator must hold platform.admin and the tenant must be active; the
         administrator acts and is audited as themself (payload actor_scope_kind=platform).

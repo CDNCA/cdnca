@@ -174,6 +174,20 @@ describe('controlUpgradesApi', () => {
     })
   })
 
+  it('accepts a same-version re-release only at an equal version with release sequences', async () => {
+    const data = maintenanceStatus()
+    data.nodes[0] = { ...data.nodes[0], current_release_sequence: 7,
+      candidate: { state: 'available', reason: 'rerelease_available', version: '2.0.0', expires_at: '2026-09-29T01:05:00Z', release_sequence: 9 } }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ data })))
+    await expect(controlUpgradesApi.maintenanceStatus('access-token', [ids.nodeA])).resolves.toEqual(data)
+    vi.restoreAllMocks()
+    const wrong = maintenanceStatus()
+    wrong.nodes[0] = { ...wrong.nodes[0], current_release_sequence: 0,
+      candidate: { state: 'available', reason: 'rerelease_available', version: '2.1.0', expires_at: '2026-09-29T01:05:00Z', release_sequence: 9 } }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ data: wrong })))
+    await expect(controlUpgradesApi.maintenanceStatus('access-token', [ids.nodeA])).rejects.toBeInstanceOf(ApiError)
+  })
+
   it('reads the control status without a node list permission or query', async () => {
     const data = { ...maintenanceStatus(), nodes: [] }
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data }))
@@ -298,6 +312,30 @@ describe('controlUpgradesApi', () => {
         headers: { Authorization: 'Bearer access-token' },
       },
     )
+  })
+
+  it('accepts schema 3 plans and same-version re-release sequences only when consistent', async () => {
+    const rerelease = {
+      schema_version: 3 as const, current_version: '1.5.0', target_version: '1.5.0',
+      rollback_artifact_id: '', rollback_artifact_sha256: '', rollback_artifact_size_bytes: 0,
+      current_release_sequence: 41, release_sequence: 44,
+    }
+    const good = { data: [summary({ schema_version: 3 }), summary(rerelease)], page: 1, page_size: 20, total: 2 }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(good))
+    await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).resolves.toEqual(good)
+    const detailResponse = { data: detail(rerelease) }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(detailResponse))
+    await expect(controlUpgradesApi.detail('access-token', ids.plan)).resolves.toEqual(detailResponse)
+    for (const bad of [
+      { ...rerelease, schema_version: 2 as const },
+      { ...rerelease, release_sequence: 41 },
+      { ...rerelease, release_sequence: undefined },
+      { ...rerelease, target_version: '1.6.0' },
+      { ...rerelease, rollback_artifact_id: ids.rollbackArtifact, rollback_artifact_sha256: `${'B'.repeat(42)}E`, rollback_artifact_size_bytes: 900 },
+    ]) {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: [summary(bad)], page: 1, page_size: 20, total: 1 }))
+      await expect(controlUpgradesApi.list('access-token', { page: 1, pageSize: 20 })).rejects.toThrow()
+    }
   })
 
   it('gets an exact rollout detail without write metadata', async () => {

@@ -148,6 +148,10 @@ type RolloutSummary struct {
 	Blockers                  []RolloutBlocker `json:"blockers"`
 	CreatedAt                 time.Time        `json:"created_at"`
 	UpdatedAt                 time.Time        `json:"updated_at"`
+	// ReleaseSequence/CurrentReleaseSequence are set only for a same-version
+	// re-release plan, so the console can show "1.0.35 (sequence a→b)".
+	ReleaseSequence        uint64 `json:"release_sequence,omitempty"`
+	CurrentReleaseSequence uint64 `json:"current_release_sequence,omitempty"`
 }
 
 type RolloutBatch struct {

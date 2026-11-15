@@ -6,15 +6,14 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   description: >-
-    Independently mountable BILL-04 HTTP contract over migrations 032, 051, and
-    066.
+    Independently mountable traffic-package HTTP contract.
     Tenant reads derive both tenant scope and owner user from the authenticated
     principal. Platform grant reads require an explicit target tenant. Traffic
     purchase remains unavailable until the existing package-commerce purchase
     service can be wired without changing its payment-critical path. Metering
     commands require a separate trusted-workload authenticator which resolves a
-    durable migration-066 binding and cannot use an ordinary session.
-    Product lifecycle uses append-only signed facts from migration 110. Enable and
+    durable workload binding and cannot use an ordinary session.
+    Product lifecycle uses append-only signed facts. Enable and
     disable are transactional, idempotent platform commands; tenant current-product
     reads exclude disabled products while immutable revision history remains visible.
     The control-api runtime mounts Bearer session routes on the public listener.
@@ -238,7 +237,7 @@ paths:
       summary: List grants purchased by the authenticated tenant user
       description: >-
         Both tenant and owner user are derived from the current principal. A grant
-        is visible to a tenant session only when migration 051 links it to that
+        is visible to a tenant session only when it is linked to that
         user's traffic-package commerce order. tenant_id is rejected.
       security: [{bearerAuth: []}]
       x-required-permissions: [traffic_packages.read]
@@ -292,7 +291,7 @@ paths:
       x-summary-zh: "按计量类别列出当前用户的流量包余额"
       summary: List current-user balances grouped by metering bucket
       description: >-
-        All quantities are integer bytes. Only migration-051 grants purchased by
+        All quantities are integer bytes. Only grants purchased by
         the current user participate in the aggregation.
       security: [{bearerAuth: []}]
       x-required-permissions: [traffic_packages.read]
@@ -480,7 +479,7 @@ paths:
       summary: Advance due grants in one metering bucket to expired
       description: >-
         Atomically transitions active and exhausted grants whose expires_at is
-        at or before due_before, up to batch_limit. Migration 066 stores the
+        at or before due_before, up to batch_limit. The control plane stores the
         caller-generated Idempotency-Key, exact binding, canonical request digest,
         frozen bucket/due_before/batch_limit, and bounded receipt. Same-key same-
         payload replay returns the original receipt; changed input returns 409.
@@ -725,7 +724,7 @@ components:
       description: >-
         Opaque HMAC-signed cursor bound to endpoint, principal scope, target
         tenant, owner user, UTC-microsecond snapshot_at, and the applicable
-        migration-066 catalog/usage snapshot_version or grant-state watermark.
+        catalog/usage snapshot_version or grant-state watermark.
       schema: {type: string, minLength: 1, maxLength: 4096}
     UsageOperation:
       name: operation
@@ -937,7 +936,7 @@ components:
         id: {$ref: '#/components/schemas/CanonicalUUID'}
         owner_user_id:
           allOf: [{$ref: '#/components/schemas/CanonicalUUID'}]
-          description: Present only when migration 051 identifies a commerce-order owner.
+          description: Present only when the grant has a commerce-order owner.
         product_snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
         product_name: {type: string, minLength: 1, maxLength: 128, description: Product snapshot name at grant time.}
         allowed_package_names:

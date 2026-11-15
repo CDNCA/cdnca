@@ -37,8 +37,8 @@ func TestAgentCapabilityLimitIsShared128(t *testing.T) {
 	if err := ensureDeploymentStatusAckReceiptCapability(capabilities); err != nil {
 		t.Fatalf("ack receipt capability not added beyond 64: %v", err)
 	}
-	if len(capabilities.Features) != 81 {
-		t.Fatalf("capabilities=%d, want 81", len(capabilities.Features))
+	if len(capabilities.Features) != 82 {
+		t.Fatalf("capabilities=%d, want 82", len(capabilities.Features))
 	}
 	config.Capabilities.Features = features(agentv1.MaxCapabilities + 1)
 	if err := config.validate(); err == nil {

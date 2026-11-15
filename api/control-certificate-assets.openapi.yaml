@@ -149,7 +149,7 @@ paths:
       x-summary-zh: "开启或关闭 ACME 证书的自动续期"
       summary: Turn automatic renewal of an ACME certificate on or off
       description: >-
-        Renewal intent lives on the certificate asset (migration 540); the issuing order's auto_renew
+        Renewal intent lives on the certificate asset; the issuing order's auto_renew
         stays an immutable snapshot. Uploaded certificates return 409 certificate_asset_auto_renew_unsupported.
         Audited as certificate.auto_renew.update.
       x-required-permissions: [certificates.manage]
@@ -182,7 +182,7 @@ paths:
       x-summary-zh: "停用或重新启用证书"
       summary: Disable or re-enable a certificate
       description: >-
-        A disabled certificate cannot be bound to a site and is not auto-renewed (migration 552).
+        A disabled certificate cannot be bound to a site and is not auto-renewed.
         A certificate still bound to a site returns 409 certificate_asset_referenced; binding a disabled one
         returns 409 certificate_asset_disabled. Audited as certificate.asset.disable / certificate.asset.enable.
       x-required-permissions: [certificates.manage]
@@ -646,7 +646,7 @@ components:
         remark: {type: string, maxLength: 256, x-maxUtf8Bytes: 256, description: Set at upload or from the issuing order; empty when none.}
         source: {type: string, enum: [uploaded, acme]}
         auto_renew: {type: boolean, description: Whether this certificate renews automatically; always false for uploaded certificates.}
-        disabled: {type: boolean, description: 'Disabled certificates cannot be bound and are not auto-renewed (migration 552).'}
+        disabled: {type: boolean, description: 'Disabled certificates cannot be bound and are not auto-renewed.'}
         revision: {$ref: '#/components/schemas/PositiveRevision'}
         created_by: {$ref: '#/components/schemas/CanonicalUUID'}
         created_by_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}

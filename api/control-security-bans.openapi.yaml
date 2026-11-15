@@ -5,7 +5,7 @@ info:
   description: >-
     The security ban list (封禁名单): manual bans and the nodes' automatic WAF / CC / auto defence
     bans per site; a release lifts a ban on every node serving the site. Tenants use /v1/security-bans (their own
-    sites), the platform /v1/admin/security-bans (every site). Since migration 635 a site served by market
+    sites), the platform /v1/admin/security-bans (every site). A site served by market
     subscription nodes sends its list to each market leaf (libs/marketproto/bansync); an active ban of such a site,
     or of a site with no node at all, carries its delivery, and a leaf shows the subscriber's bans of its market
     sites as source market.

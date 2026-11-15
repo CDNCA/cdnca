@@ -6,8 +6,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   description: >-
-    Production-mounted BILL-02/03/11/12 HTTP contract over migration 051,
-    migration 059, and packagecommerce.Service. Tenant commands and reads always derive tenant
+    Production-mounted HTTP contract over packagecommerce.Service. Tenant commands and reads always derive tenant
     and owner scope from the current authenticated principal. Platform reads,
     refunds, and voids require an explicit target tenant and existing
     billing.adjustments.manage permission. Provider callbacks are accepted only
@@ -180,8 +179,8 @@ paths:
       description: >-
         Uses a fixed-time effective entitlement projection. Future scheduled
         entitlements do not hide the currently effective revision. The first page
-        freezes an exact UTC microsecond business-time snapshot, migration 059's
-        entitlement committed-fact high-water mark, and migration 062's immutable
+        freezes an exact UTC microsecond business-time snapshot, the
+        entitlement committed-fact high-water mark, and the immutable
         subscription-state high-water mark. Each subsequent page reuses all three
         values from the endpoint-, tenant-, and owner-bound signed cursor, so later
         entitlement backfills, renewals, or cancellations cannot create mixed facts.
@@ -394,7 +393,7 @@ paths:
       x-summary-zh: "代理商把客户的订阅升级为自己的另一个套餐"
       summary: A reseller upgrades its customer's subscription to another of its packages
       description: >-
-        ADR 0019 §5 / Q2 a (bb03). Only between the reseller's own packages, immediately. The customer pays
+        ADR 0019 §5 / Q2 a. Only between the reseller's own packages, immediately. The customer pays
         nothing; the reseller's prepaid balance moves by the wholesale difference prorated over the remaining
         part of the current cycle (old price rounded down, new price rounded up, as proration-utc-v1). An
         upgrade charges it (422 reseller_prepaid_insufficient when short: nothing is written); a downgrade
@@ -441,7 +440,7 @@ paths:
       x-summary-zh: "代理商把客户的订阅降级为自己的另一个套餐"
       summary: A reseller downgrades its customer's subscription to another of its packages
       description: >-
-        ADR 0019 §5 / Q2 a (bb03). Only between the reseller's own packages, immediately. The customer pays
+        ADR 0019 §5 / Q2 a. Only between the reseller's own packages, immediately. The customer pays
         nothing; the reseller's prepaid balance moves by the wholesale difference prorated over the remaining
         part of the current cycle (old price rounded down, new price rounded up, as proration-utc-v1). An
         upgrade charges it (422 reseller_prepaid_insufficient when short: nothing is written); a downgrade
@@ -488,7 +487,7 @@ paths:
       x-summary-zh: "代理商取消客户的订阅"
       summary: A reseller cancels its customer's subscription
       description: >-
-        ADR 0019 §5 (bb03). Same behavior as the platform's cancel (the sites stop, no refund or ledger entry).
+        ADR 0019 §5. Same behavior as the platform's cancel (the sites stop, no refund or ledger entry).
         The customer must be under the caller's active reseller scope.
       security: [{bearerAuth: []}]
       x-required-permissions: [reseller.customers.manage]
@@ -518,7 +517,7 @@ paths:
       x-summary-zh: "以客户所属代理商身份暂停一个套餐订阅"
       summary: Suspend one package subscription as the customer's reseller
       description: >-
-        ADR 0019 §5 (bb03, migration 551). Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
+        ADR 0019 §5. Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
       security: [{bearerAuth: []}]
       x-required-permissions: [reseller.customers.manage]
       parameters:
@@ -545,7 +544,7 @@ paths:
       x-summary-zh: "以客户所属代理商身份恢复一个套餐订阅"
       summary: Unsuspend one package subscription as the customer's reseller
       description: >-
-        ADR 0019 §5 (bb03, migration 551). Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
+        ADR 0019 §5. Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
       security: [{bearerAuth: []}]
       x-required-permissions: [reseller.customers.manage]
       parameters:
@@ -756,8 +755,8 @@ paths:
       summary: List effective sold subscriptions for one explicit tenant
       description: >-
         Uses the fixed-time effective entitlement projection. The first page
-        freezes an exact UTC microsecond business-time snapshot, migration 059's
-        entitlement committed-fact high-water mark, and migration 062's immutable
+        freezes an exact UTC microsecond business-time snapshot, the
+        entitlement committed-fact high-water mark, and the immutable
         subscription-state high-water mark. Each subsequent page reuses all three
         values from the endpoint- and tenant-bound signed cursor, so later
         entitlement backfills, renewals, or cancellations cannot create mixed facts.
@@ -1108,7 +1107,7 @@ paths:
       x-summary-zh: "以管理员身份暂停一个套餐订阅"
       summary: Suspend one package subscription as an administrator
       description: >-
-        ADR 0019 §5 (bb03, migration 551). Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
+        ADR 0019 §5. Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
       security: [{bearerAuth: []}]
       x-required-permissions: [package_subscriptions.manage]
       parameters:
@@ -1134,7 +1133,7 @@ paths:
       x-summary-zh: "以管理员身份恢复一个套餐订阅"
       summary: Unsuspend one package subscription as an administrator
       description: >-
-        ADR 0019 §5 (bb03, migration 551). Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
+        ADR 0019 §5. Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
       security: [{bearerAuth: []}]
       x-required-permissions: [package_subscriptions.manage]
       parameters:
@@ -1228,7 +1227,7 @@ components:
       required: false
       x-cdnca-single-value: true
       description: >-
-        BILL-13: only products in this visible package group (an ID from the
+        Only products in this visible package group (an ID from the
         first page's groups). Bound to the signed cursor; a cursor minted for
         another group, or for no group, is refused with 400.
       schema: {$ref: '#/components/schemas/CanonicalUUID'}
@@ -1805,7 +1804,7 @@ components:
         eligibility: {$ref: '#/components/schemas/CatalogEligibility'}
         groups:
           description: >-
-            BILL-13: first page only. Visible package groups holding at least
+            First page only. Visible package groups holding at least
             one product purchasable at the same catalog snapshot, in the admin
             group order; independent of the group_id filter.
           type: array

@@ -1271,3 +1271,35 @@ describe('ControlUpgradesPage', () => {
     expect(await screen.findByText('暂无节点')).toBeInTheDocument()
   })
 })
+
+describe('ControlUpgradesPage same-version re-release', () => {
+  it('offers a re-release with the release sequences and explains nodes that need one manual upgrade', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1), inventoryNode(2), inventoryNode(3)]
+    const expires = new Date(Date.now() + 60000).toISOString()
+    const statuses = [
+      nodeUpgrade(nodes[0].id, { current_version: '2.0.0', current_release_sequence: 7,
+        candidate: { state: 'available', reason: 'rerelease_available', version: '2.0.0', expires_at: expires, release_sequence: 9 } }),
+      nodeUpgrade(nodes[1].id, { current_version: '2.0.0', current_release_sequence: 9, reason: 'same_version', eligible: false,
+        candidate: { state: 'up_to_date', reason: 'same_version', version: '2.0.0', expires_at: expires, release_sequence: 9 } }),
+      nodeUpgrade(nodes[2].id, { current_version: '2.0.0', reason: 'same_version', eligible: false,
+        candidate: { state: 'up_to_date', reason: 'same_version', version: '2.0.0', expires_at: expires } }),
+    ]
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.has('node_id') ? statuses : [] }) }))
+      return Promise.resolve(json(listResponse()))
+    })
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const rerelease = (await screen.findByText(nodes[0].name)).closest('tr')!
+    expect(await within(rerelease).findByText('可升级（同版本重出 7→9）')).toBeInTheDocument()
+    await waitFor(() => expect(within(rerelease).getByRole('button', { name: '升级' })).toBeEnabled())
+    const capable = screen.getByText(nodes[1].name).closest('tr')!
+    expect(within(capable).getByText('不需要升级')).toBeInTheDocument()
+    expect(capable).not.toHaveTextContent('手工升级到最新构建一次')
+    const older = screen.getByText(nodes[2].name).closest('tr')!
+    expect(within(older).getByText('不需要升级')).toBeInTheDocument()
+    expect(older).toHaveTextContent('该节点手工升级到最新构建一次后，即可在这里更新同版本的新构建。')
+  })
+})

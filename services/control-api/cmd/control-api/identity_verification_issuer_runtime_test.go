@@ -60,3 +60,20 @@ func TestIdentityVerificationIssuerIdentitiesRejectAmbiguity(t *testing.T) {
 		t.Fatalf("valid identities = %#v, %v", identities, err)
 	}
 }
+
+// The production runtime clears the provider environment's secret bytes when it
+// returns; the issuer's KMS credentials must not read those zeroed bytes later.
+func TestIdentityVerificationIssuerCredentialsSurviveProviderEnvironmentClear(t *testing.T) {
+	environment := identityVerificationProviderEnvironment{
+		ObjectAccessKey: []byte("AKIAEXAMPLE"), ObjectSecretKey: []byte("secret-value"),
+		ObjectSessionToken: []byte("session-token"),
+	}
+	provider := identityVerificationIssuerCredentials(environment)
+	environment.clear()
+	credentials, err := provider.Retrieve(t.Context())
+	if err != nil || credentials.AccessKeyID != "AKIAEXAMPLE" || credentials.SecretAccessKey != "secret-value" ||
+		credentials.SessionToken != "session-token" || credentials.Source != "identity-verification-issuer" {
+		t.Fatalf("credentials after clear = %q/%q/%q (%s), %v", credentials.AccessKeyID,
+			credentials.SecretAccessKey, credentials.SessionToken, credentials.Source, err)
+	}
+}

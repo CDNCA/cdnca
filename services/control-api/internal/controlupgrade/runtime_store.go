@@ -255,6 +255,9 @@ func rolloutSummary(plan RolloutPlan, installationID string, createdAt, updatedA
 		RollbackArtifactSHA256:    plan.RollbackSHA256Digest,
 		RollbackArtifactSizeBytes: plan.RollbackArtifactSizeBytes, ActiveBatch: plan.ActiveBatch,
 		TotalNodes: len(plan.NodeStates), CreatedAt: createdAt.UTC(), UpdatedAt: updatedAt.UTC()}
+	if plan.CurrentReleaseSequence != 0 {
+		summary.ReleaseSequence, summary.CurrentReleaseSequence = plan.ReleaseSequence, plan.CurrentReleaseSequence
+	}
 	for _, state := range plan.NodeStates {
 		switch state {
 		case NodePending:

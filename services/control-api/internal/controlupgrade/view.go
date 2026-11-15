@@ -35,6 +35,8 @@ func (detail RolloutDetail) MarshalJSON() ([]byte, error) {
 		Events                    []RolloutEvent   `json:"events"`
 		CreatedAt                 any              `json:"created_at"`
 		UpdatedAt                 any              `json:"updated_at"`
+		ReleaseSequence           uint64           `json:"release_sequence,omitempty"`
+		CurrentReleaseSequence    uint64           `json:"current_release_sequence,omitempty"`
 	}{summary.ID, summary.SchemaVersion, summary.InstallationID, summary.Component,
 		summary.CurrentVersion, summary.TargetVersion, summary.State, summary.Completion,
 		summary.Revision, summary.AutomaticRollback, summary.ParentGrantID, summary.ArtifactID,
@@ -42,5 +44,5 @@ func (detail RolloutDetail) MarshalJSON() ([]byte, error) {
 		summary.RollbackArtifactSHA256, summary.RollbackArtifactSizeBytes, summary.ActiveBatch,
 		summary.TotalNodes, summary.PendingNodes, summary.DispatchedNodes, summary.HealthyNodes,
 		summary.FailedNodes, summary.RolledBackNodes, summary.Blockers, detail.Batches, detail.Nodes,
-		detail.Events, summary.CreatedAt, summary.UpdatedAt})
+		detail.Events, summary.CreatedAt, summary.UpdatedAt, summary.ReleaseSequence, summary.CurrentReleaseSequence})
 }

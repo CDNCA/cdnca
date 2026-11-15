@@ -4924,7 +4924,7 @@ paths:
       operationId: getPortalPurchaseIdentityPolicy
       summary: 客户购买授权必须实名 switch
       description: |
-        Global, default off (migration 111, stored with the portal licensing
+        Global, default off (stored with the portal licensing
         settings and sharing their revision). On: portal purchases and renewals
         (POST /portal/v1/orders, including 0-fen free licenses) need an approved
         verification of the customer. Mounted even when face verification is not wired.
@@ -5102,7 +5102,8 @@ paths:
       summary: Issue a short-lived signed upgrade grant using installation proof
       description: |
         Idempotency-Key is also the signed proof request ID. The proof binds installation,
-        component, current version and protocol version (v2 also binds requested_artifact_id).
+        component, current version and protocol version (v2 also binds requested_artifact_id,
+        v3 binds current_release_sequence for a same-version re-release).
         Without requested_artifact_id the service selects the operator pin or the channel target.
         A semver downgrade is granted only when the schema gate allows it; otherwise 409
         upgrade_target_blocked with a reason.
@@ -8111,7 +8112,7 @@ components:
         max_version:
           type: string
           pattern: '^v?[0-9]+\.[0-9]+\.[0-9]+$'
-          description: Ignored. The max version follows the release channel (license migration 115).
+          description: Ignored. The max version follows the release channel.
         lease_ttl_seconds: {type: integer, minimum: 300, maximum: 2678400}
         grace_seconds: {type: integer, minimum: 0, maximum: 2592000}
         billing_ref: {type: string, minLength: 1, maxLength: 128}
@@ -8521,7 +8522,7 @@ components:
       additionalProperties: false
       required: [channel, min]
       description: >-
-        max follows the release channel (license migration 115): in responses and signed leases it is the
+        max follows the release channel: in responses and signed leases it is the
         channel's highest published release-form version across components (never below min; min when the
         channel is disabled or has none). In requests it is optional and ignored.
       properties:
@@ -9206,6 +9207,16 @@ components:
           description: |
             Optional version chosen by the customer (1.0.35+). Must be selectable in upgrade-options:list.
             When present the proof domain is cdnca-upgrade-grant-request-proof/v2 and also binds this ID.
+        current_release_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: |
+            Optional installed release_sequence for a same-version re-release. When present
+            the proof domain is cdnca-upgrade-grant-request-proof/v3 and binds this value instead of
+            requested_artifact_id (the two are exclusive). It only applies when the resolved target is
+            the same version: that build must have a higher release_sequence, otherwise 409
+            upgrade_target_blocked same_version. A version change issues the plain grant without it.
     UpgradeTargetBlocked:
       type: object
       additionalProperties: false
@@ -9360,6 +9371,7 @@ components:
         component: {$ref: '#/components/schemas/ReleaseComponent'}
         current_version: {type: string, minLength: 5, maxLength: 128}
         version: {type: string, minLength: 5, maxLength: 128}
+        current_release_sequence: {type: integer, format: int64, minimum: 1, description: 'Same-version re-release only: forward and rollback are the one registered build of the version.'}
         protocol_version: {type: integer, minimum: 1}
         forward: {$ref: '#/components/schemas/UpgradePlanArtifact'}
         rollback: {$ref: '#/components/schemas/UpgradePlanArtifact'}
@@ -9446,6 +9458,7 @@ components:
         operation: {type: string, enum: [upgrade, rollback, reinstall], description: Derived by the service from current and selected target versions; never supplied by the client.}
         current_version: {type: string}
         version: {type: string}
+        current_release_sequence: {type: integer, format: int64, minimum: 1, description: 'Same-version re-release only (operation reinstall): the installed release_sequence the target exceeds.'}
         protocol_version: {type: integer, minimum: 1}
         artifact_id: {type: string, format: uuid}
         artifact_protocol_min: {type: integer, minimum: 1}

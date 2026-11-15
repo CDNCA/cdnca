@@ -124,6 +124,9 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// PACKAGING_TOOLSET_REPORT marks the heartbeat packaging toolset report,
 	// node status only.
 	agentv1.CapabilityName_CAPABILITY_NAME_PACKAGING_TOOLSET_REPORT: true,
+	// SAME_VERSION_UPGRADE gates console same-version re-release upgrades
+	// (controlupgrade cohort), a node upgrade command feature.
+	agentv1.CapabilityName_CAPABILITY_NAME_SAME_VERSION_UPGRADE: true,
 }
 
 // Name maps a document capability name to its Agent capability.

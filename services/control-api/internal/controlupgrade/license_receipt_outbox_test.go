@@ -252,7 +252,7 @@ func TestLicenseReceiptAtomicEnqueueHooksRemainInsideOwningTransactions(t *testi
 		t.Fatal(err)
 	}
 	create := string(createSource)
-	if !strings.Contains(create, "SET state='consumed',plan_id=$2,updated_at=date_trunc('second',clock_timestamp())") ||
+	if !strings.Contains(create, "SET state='consumed',plan_id=$2,updated_at=GREATEST(date_trunc('second',clock_timestamp()),") ||
 		!strings.Contains(create, "insertInitialParentGrantReceiptsTx(ctx, tx") {
 		t.Fatal("create transaction does not atomically consume the intent and enqueue fetched/verified receipts")
 	}

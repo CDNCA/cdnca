@@ -240,7 +240,7 @@ func (s *Store) FinalizeCreateRollout(ctx context.Context, actor Actor, identity
 		}
 		if err := s.auditor.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID,
 			Action: "control_upgrade_rollout.create", ResourceType: "control_upgrade_rollout", ResourceID: plan.ID,
-			RequestID: request.RequestID, Result: "success",
+			RequestID: request.RequestID, Result: "success", OccurredAt: createdAt,
 			Payload: map[string]any{"revision": plan.Revision, "state": plan.State}}); err != nil {
 			return err
 		}
@@ -265,8 +265,12 @@ func (s *Store) FinalizeCreateRollout(ctx context.Context, actor Actor, identity
 			return err
 		}
 		var receiptObservedAt time.Time
+		// Receipts need a whole-second observed_at, but the intent trigger forbids
+		// moving updated_at backwards: when Acquire stamped (microseconds) the same
+		// second, round up to the next second instead of truncating.
 		if err := tx.QueryRow(ctx, `UPDATE control_upgrade_grant_intents_096
-				SET state='consumed',plan_id=$2,updated_at=date_trunc('second',clock_timestamp())
+				SET state='consumed',plan_id=$2,updated_at=GREATEST(date_trunc('second',clock_timestamp()),
+					date_trunc('second',updated_at+interval '999999 microseconds'))
 				WHERE id=$1 RETURNING updated_at`, intent.ID, plan.ID).Scan(&receiptObservedAt); err != nil {
 			return err
 		}

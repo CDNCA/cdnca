@@ -50,6 +50,15 @@ func (PackagingRunner) Rollback(ctx context.Context, journalBoundVersion string)
 	return runPackagingCommand(ctx, command)
 }
 
+func (PackagingRunner) RestorePreviousBuild(ctx context.Context, version string) error {
+	command, err := rollbackCommand(version)
+	if err != nil {
+		return err
+	}
+	command.args = append(command.args, "--restore-previous-build")
+	return runPackagingCommand(ctx, command)
+}
+
 func upgradeCommand(staged StagedBundle) (packagingCommand, error) {
 	if err := validateUpgradeHandoffPaths(staged); err != nil {
 		return packagingCommand{}, err

@@ -92,29 +92,31 @@ type Signature struct {
 }
 
 type Plan struct {
-	Domain                  string         `json:"domain,omitempty"`
-	SchemaVersion           int            `json:"schema_version"`
-	PlanID                  string         `json:"plan_id"`
-	Revision                uint64         `json:"revision"`
-	BatchID                 string         `json:"batch_id,omitempty"`
-	ArtifactBundleID        string         `json:"artifact_bundle_id,omitempty"`
-	ArtifactBundleSHA256    string         `json:"artifact_bundle_sha256,omitempty"`
-	CommandIssuanceNotAfter int64          `json:"command_issuance_not_after,omitempty"`
-	ExecutionSequence       uint64         `json:"execution_sequence,omitempty"`
-	ReleaseSequence         uint64         `json:"release_sequence"`
-	IssuedAt                time.Time      `json:"issued_at"`
-	ExpiresAt               time.Time      `json:"expires_at"`
-	Action                  Action         `json:"action"`
-	CurrentVersion          string         `json:"current_version"`
-	TargetVersion           string         `json:"target_version"`
-	Platform                string         `json:"platform"`
-	Architecture            string         `json:"architecture"`
-	Artifact                Artifact       `json:"artifact"`
-	Compatibility           Compatibility  `json:"compatibility"`
-	Health                  HealthPolicy   `json:"health"`
-	Rollout                 RolloutPolicy  `json:"rollout"`
-	Rollback                RollbackPolicy `json:"rollback"`
-	Signature               Signature      `json:"signature"`
+	Domain                  string `json:"domain,omitempty"`
+	SchemaVersion           int    `json:"schema_version"`
+	PlanID                  string `json:"plan_id"`
+	Revision                uint64 `json:"revision"`
+	BatchID                 string `json:"batch_id,omitempty"`
+	ArtifactBundleID        string `json:"artifact_bundle_id,omitempty"`
+	ArtifactBundleSHA256    string `json:"artifact_bundle_sha256,omitempty"`
+	CommandIssuanceNotAfter int64  `json:"command_issuance_not_after,omitempty"`
+	ExecutionSequence       uint64 `json:"execution_sequence,omitempty"`
+	ReleaseSequence         uint64 `json:"release_sequence"`
+	// CurrentReleaseSequence: a same-version re-release only.
+	CurrentReleaseSequence uint64         `json:"current_release_sequence,omitempty"`
+	IssuedAt               time.Time      `json:"issued_at"`
+	ExpiresAt              time.Time      `json:"expires_at"`
+	Action                 Action         `json:"action"`
+	CurrentVersion         string         `json:"current_version"`
+	TargetVersion          string         `json:"target_version"`
+	Platform               string         `json:"platform"`
+	Architecture           string         `json:"architecture"`
+	Artifact               Artifact       `json:"artifact"`
+	Compatibility          Compatibility  `json:"compatibility"`
+	Health                 HealthPolicy   `json:"health"`
+	Rollout                RolloutPolicy  `json:"rollout"`
+	Rollback               RollbackPolicy `json:"rollback"`
+	Signature              Signature      `json:"signature"`
 }
 
 type Result struct {

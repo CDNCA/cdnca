@@ -18,7 +18,7 @@ import { auditLogCategories } from '../api/auditLogs'
 import { systemCleanupSettingsApi, type PlatformSystemCleanupDocument, type PlatformSystemCleanupSettings } from '../api/systemCleanupSettings'
 import { mailProviderKind, nativeSMSProviders, systemMailSettingsApi, type PlatformSystemMailSettings, type PlatformSystemMailSettingsDocument } from '../api/systemMailSettings'
 import { systemOtherSettingsApi, validCertificateNoticeDays, type PlatformSystemOtherSettings, type PlatformSystemOtherSettingsDocument } from '../api/systemOtherSettings'
-import { systemUserSettingsApi, type CaptchaSecretName, type PlatformSystemUserSettings, type PlatformSystemUserSettingsDocument, type UserSettingsSecretName, type UserSettingsSecrets } from '../api/systemUserSettings'
+import { kycProviderKeys, systemUserSettingsApi, type CaptchaSecretName, type PlatformSystemUserSettings, type PlatformSystemUserSettingsDocument, type UserSettingsSecretName, type UserSettingsSecrets } from '../api/systemUserSettings'
 import { accountRegistrationApi, registrationReasons, type AccountRegistrationConfig } from '../api/accountRegistration'
 import { RegistrationReadinessReasons } from '../components/RegistrationReadinessReasons'
 import { NotificationChannelOffNotice } from '../components/NotificationChannelSwitch'
@@ -432,7 +432,7 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
 
   const update = <K extends keyof PlatformSystemUserSettings>(key: K, value: PlatformSystemUserSettings[K]) => setDraft((current) => current ? { ...current, [key]: value } : current)
   const captchaSecrets = ['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret'] as const
-  const kycSecrets = ['kyc_api_key', 'kyc_callback_hmac_key'] as const
+  const kycSecrets = ['kyc_api_key', 'kyc_callback_hmac_key', 'kyc_object_access_key_id', 'kyc_object_secret_access_key', 'kyc_object_session_token'] as const
   const accountSecrets = [...captchaSecrets, 'captcha_turnstile_secret'] as const
   const shownSecrets: readonly UserSettingsSecretName[] = mode === 'account' ? accountSecrets : mode === 'payment' ? kycSecrets : [...accountSecrets, ...kycSecrets]
   // clear: the saved secret to clear in this save (the "clear" button).
@@ -450,7 +450,7 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
     'verification_sms_template_id', 'terms_title', 'terms_body', 'email_verification_required', 'phone_verification_required', 'default_phone_country_code',
     'login_failure_limit_per_hour', 'login_captcha_threshold_per_hour', 'email_anti_abuse_mode', 'sms_anti_abuse_mode', 'captcha_provider',
     'captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference', 'captcha_turnstile_site_key', ...accountSecrets]
-  const paymentKeys = ['identity_verification_method', ...kycSecrets]
+  const paymentKeys = ['identity_verification_method', ...kycProviderKeys, ...kycSecrets]
   const { status: refusedStatus, shown: refusedShown } = refusedFieldStatus(write.error,
     [...(mode === 'payment' ? [] : accountKeys), ...(mode === 'account' ? [] : paymentKeys)], i18n.resolvedLanguage)
   // turning a verification on without its sender is refused: say what is missing
@@ -486,6 +486,15 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
     ? <>{names.map((name) => <Form.Item key={`${name}_reference`} label={t(`userFields.${name}_reference`)} {...fieldStatus(`${name}_reference`)}>{text(`${name}_reference`, t('placeholders.secretReference'))}</Form.Item>)}
       <Form.Item label=" "><Typography.Text type="secondary">{t('secretField.referencesHint')}</Typography.Text></Form.Item></>
     : <Form.Item label=" "><Button type="link" style={{ padding: 0 }} onClick={() => setReferencesOpen(true)}>{t('smtpPassword.advanced')}</Button></Form.Item>
+  // The KYC service and its object store; an empty field falls back to the runtime environment.
+  const kycText = (key: typeof kycProviderKeys[number], placeholder?: string) => <Form.Item key={key} label={t(`userFields.${key}`)} {...fieldStatus(key)} extra={t(`kycEnv.${key}`)}>
+    <Input value={draft[key]} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value.trim())} aria-label={t(`userFields.${key}`)}
+      // the server takes an origin: drop a trailing slash
+      onBlur={key === 'kyc_endpoint' || key === 'kyc_object_endpoint' ? (event) => update(key, event.target.value.trim().replace(/\/+$/, '')) : undefined} />
+  </Form.Item>
+  const kycComplete = (['kyc_provider_name', 'kyc_endpoint', 'kyc_callback_key_id', 'kyc_object_endpoint', 'kyc_object_region', 'kyc_object_bucket', 'kyc_object_kms_key_id'] as const)
+    .every((key) => draft[key] !== '') &&
+    (['kyc_api_key', 'kyc_callback_hmac_key', 'kyc_object_access_key_id', 'kyc_object_secret_access_key'] as const).every((name) => document[`${name}_configured`] || Boolean(secrets[name]))
   const subjectInput = (key: keyof PlatformSystemUserSettings) => <Space.Compact block><Input value={t('labels.subject')} readOnly tabIndex={-1} aria-hidden style={{ width: 52, textAlign: 'center', pointerEvents: 'none' }} /><Input value={String(draft[key])} disabled={!canManage} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`userFields.${key}`)} /></Space.Compact>
   const template = (subject: keyof PlatformSystemUserSettings, body: keyof PlatformSystemUserSettings) => <Space direction="vertical" size={8} style={{ width: '100%' }}>{subjectInput(subject)}<Input.TextArea value={String(draft[body])} disabled={!canManage} rows={4} onChange={(event) => update(body, event.target.value as never)} aria-label={t(`userFields.${body}`)} /></Space>
   const requirement = (key: keyof PlatformSystemUserSettings, verification?: keyof PlatformSystemUserSettings) => <Space wrap><Checkbox checked={Boolean(draft[key])} disabled={!canManage} onChange={(event) => { update(key, event.target.checked as never); if (!event.target.checked && verification) update(verification, false as never) }}>{t('options.required')}</Checkbox>{verification ? <Checkbox checked={Boolean(draft[verification])} disabled={!canManage || !draft[key]} onChange={(event) => update(verification, event.target.checked as never)}>{t('options.verified')}</Checkbox> : null}</Space>
@@ -544,8 +553,21 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
       {section('identity', <>
         {draft.identity_policy_saved ? null : <Alert type="info" showIcon message={t('hints.identityPolicyUnsaved')} style={{ marginBottom: 16, maxWidth: 760 }} />}
         <Form.Item label={t('userFields.identity_verification_method')} {...fieldStatus('identity_verification_method')} extra={t('hints.identityMethod')}><Radio.Group data-testid="system-settings-identity-method" aria-label={t('hints.identityMethodLabel')} value={draft.identity_verification_method} disabled={!canManage} onChange={(event) => update('identity_verification_method', event.target.value)}><Space wrap><Radio value="none">{t('options.identityNone')}</Radio><Radio value="alipay">{t('options.alipayIdentity')}</Radio><Radio value="wechat_face">{t('options.wechatFace')}</Radio><Radio value="phone_three_factor">{t('options.phoneThreeFactor')}</Radio></Space></Radio.Group></Form.Item>
+        <Form.Item label={t('kycGroups.service')}>{kycComplete ? <Tag color="success">{t('kycGroups.complete')}</Tag> : <Typography.Text type="secondary">{t('kycGroups.fallback')}</Typography.Text>}</Form.Item>
+        {kycText('kyc_provider_name', 'trusted-kyc')}
+        {kycText('kyc_endpoint', 'https://kyc.example.com')}
         {secretField('kyc_api_key', t('hints.kycCredentials'))}
+        {kycText('kyc_callback_key_id')}
         {secretField('kyc_callback_hmac_key', t('hints.kycCallbackKey'))}
+        <Form.Item label=" "><Typography.Text strong>{t('kycGroups.objects')}</Typography.Text><div><Typography.Text type="secondary">{t('kycGroups.objectsHint')}</Typography.Text></div></Form.Item>
+        {kycText('kyc_object_endpoint', 'https://s3.example.com')}
+        {kycText('kyc_object_region', 'us-east-1')}
+        {kycText('kyc_object_bucket')}
+        {kycText('kyc_object_prefix')}
+        {secretField('kyc_object_access_key_id', t('kycEnv.kyc_object_access_key_id'))}
+        {secretField('kyc_object_secret_access_key', t('kycEnv.kyc_object_secret_access_key'))}
+        {secretField('kyc_object_session_token', t('kycEnv.kyc_object_session_token'))}
+        {kycText('kyc_object_kms_key_id')}
       </>)}
       {section('enterprise', <>
         <Form.Item label={t('userFields.enterprise_verification_enabled')} extra={t('hints.enterpriseEnabled')}>{toggle('enterprise_verification_enabled')}</Form.Item>

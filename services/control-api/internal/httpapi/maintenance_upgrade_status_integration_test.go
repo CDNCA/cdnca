@@ -233,6 +233,6 @@ func TestMaintenanceUpgradeStatusHTTPReadOnlyScopeAndConfirmedInventory(t *testi
 
 type maintenanceHTTPReader func(context.Context, string, string, int) (controlupgrade.MaintenanceCandidate, error)
 
-func (read maintenanceHTTPReader) ReadCandidate(ctx context.Context, component, version string, protocol int) (controlupgrade.MaintenanceCandidate, error) {
+func (read maintenanceHTTPReader) ReadCandidate(ctx context.Context, component, version string, protocol int, _ uint64) (controlupgrade.MaintenanceCandidate, error) {
 	return read(ctx, component, version, protocol)
 }

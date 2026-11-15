@@ -33,6 +33,9 @@ type UpgradeCandidateRequest struct {
 	Component       string `json:"component"`
 	CurrentVersion  string `json:"current_version"`
 	ProtocolVersion int    `json:"protocol_version"`
+	// CurrentReleaseSequence (optional): the installed
+	// release_sequence; a same-version build above it is a re-release.
+	CurrentReleaseSequence uint64 `json:"current_release_sequence,omitempty"`
 }
 
 type UpgradeCandidateAuthority struct {
@@ -71,8 +74,12 @@ type UpgradeCandidateSnapshot struct {
 	Reason          string                     `json:"reason"`
 	Authority       *UpgradeCandidateAuthority `json:"authority,omitempty"`
 	Candidate       *UpgradeCandidateArtifact  `json:"candidate,omitempty"`
-	IssuedAt        int64                      `json:"issued_at"`
-	ExpiresAt       int64                      `json:"expires_at"`
+	// CurrentReleaseSequence echoes the request; ReleaseSequence is the
+	// candidate's registry release_sequence (both only when requested).
+	CurrentReleaseSequence uint64 `json:"current_release_sequence,omitempty"`
+	ReleaseSequence        uint64 `json:"release_sequence,omitempty"`
+	IssuedAt               int64  `json:"issued_at"`
+	ExpiresAt              int64  `json:"expires_at"`
 }
 
 type SignedUpgradeCandidate struct {
@@ -90,6 +97,8 @@ type UpgradeCandidateVerifyOptions struct {
 	ExpectedComponent       string
 	ExpectedCurrentVersion  string
 	ExpectedProtocolVersion int
+	// ExpectedCurrentReleaseSequence is the request's current_release_sequence (0: not sent).
+	ExpectedCurrentReleaseSequence uint64
 }
 
 func CanonicalUpgradeCandidateRequest(request UpgradeCandidateRequest) ([]byte, error) {
@@ -134,8 +143,11 @@ func (snapshot UpgradeCandidateSnapshot) Validate() error {
 		Component: snapshot.Component, CurrentVersion: snapshot.CurrentVersion, ProtocolVersion: snapshot.ProtocolVersion}); err != nil {
 		return err
 	}
+	if snapshot.CurrentReleaseSequence == 0 && snapshot.ReleaseSequence != 0 {
+		return ErrInvalidUpgradeCandidate
+	}
 	if snapshot.Status == "unavailable" {
-		if snapshot.Authority != nil || snapshot.Candidate != nil {
+		if snapshot.Authority != nil || snapshot.Candidate != nil || snapshot.ReleaseSequence != 0 {
 			return ErrInvalidUpgradeCandidate
 		}
 		switch snapshot.Reason {
@@ -166,10 +178,16 @@ func (snapshot UpgradeCandidateSnapshot) Validate() error {
 		snapshot.ProtocolVersion > artifact.Manifest.ProtocolMax {
 		return ErrInvalidUpgradeCandidate
 	}
+	if snapshot.CurrentReleaseSequence != 0 && snapshot.ReleaseSequence == 0 {
+		return ErrInvalidUpgradeCandidate
+	}
 	status, reason := "available", "upgrade_available"
 	switch upgradeOperation(snapshot.CurrentVersion, artifact.Manifest.Version) {
 	case ReinstallOperation:
 		status, reason = "up_to_date", "same_version"
+		if snapshot.CurrentReleaseSequence != 0 && snapshot.ReleaseSequence > snapshot.CurrentReleaseSequence {
+			status, reason = "available", "rerelease_available"
+		}
 	case RollbackOperation:
 		status, reason = "rollback_required", "target_is_older"
 	}
@@ -272,7 +290,8 @@ func (ring *KeyRing) VerifyUpgradeCandidate(signed SignedUpgradeCandidate, optio
 	}
 	if snapshot.InstallationID != options.ExpectedInstallationID || snapshot.RequestID != options.ExpectedRequestID ||
 		snapshot.RequestSHA256 != options.ExpectedRequestSHA256 || snapshot.Component != options.ExpectedComponent ||
-		snapshot.CurrentVersion != options.ExpectedCurrentVersion || snapshot.ProtocolVersion != options.ExpectedProtocolVersion {
+		snapshot.CurrentVersion != options.ExpectedCurrentVersion || snapshot.ProtocolVersion != options.ExpectedProtocolVersion ||
+		snapshot.CurrentReleaseSequence != options.ExpectedCurrentReleaseSequence {
 		return ErrUpgradeCandidateMismatch
 	}
 	if artifact := snapshot.Candidate; artifact != nil {

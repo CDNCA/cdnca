@@ -38,7 +38,7 @@ const value: PlatformSystemUserSettings = {
   captcha_app_secret_reference: '', captcha_turnstile_site_key: '',
   identity_verification_method: 'none',
   enterprise_verification_enabled: false,
-  identity_policy_saved: false,
+  identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '',
   wechat_payment_enabled: false,
   alipay_payment_enabled: false,
   bank_transfer_enabled: false,
@@ -91,6 +91,18 @@ describe('systemUserSettingsApi', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 5, value }))
     await systemUserSettingsApi.put('token', 4, value, undefined, undefined, { captcha_secret_key: 'plain-key', captcha_app_secret: '', captcha_secret_id: undefined })
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ value, captcha_secret_key: 'plain-key', captcha_app_secret: '' })
+  })
+
+  it('reads the KYC provider fields and sends the object store keys write-only', async () => {
+    const kyc = { ...value, kyc_endpoint: 'https://kyc.example.com', kyc_object_bucket: 'kyc-bucket' }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 5, value: kyc,
+      kyc_object_secret_access_key_configured: true, kyc_object_secret_access_key_fingerprint: '0123456789abcdef' }))
+    await expect(systemUserSettingsApi.put('token', 4, kyc, undefined, undefined, { kyc_object_access_key_id: 'AKIAEXAMPLE', kyc_object_session_token: '' }))
+      .resolves.toMatchObject({ kyc_object_secret_access_key_configured: true, value: { kyc_endpoint: 'https://kyc.example.com' } })
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ value: kyc, kyc_object_access_key_id: 'AKIAEXAMPLE', kyc_object_session_token: '' })
+    const missing = Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'kyc_object_kms_key_id'))
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, value: missing }))
+    await expect(systemUserSettingsApi.get('token')).rejects.toMatchObject({ code: 'invalid_response' })
   })
 
   it('accepts saved secrets in place of the references they stand for', async () => {

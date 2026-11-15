@@ -24,7 +24,7 @@ const userDocument = {
   value: {
     session_ttl_seconds: 86400, user_login_domains: '', admin_login_domains: '', email_code_login_enabled: false, sms_code_login_enabled: false,
     registration_enabled: false, registration_success_subject: 's', registration_success_body: 'b', password_reset_subject: 's', password_reset_body: 'b', verification_template_channel: 'email', verification_subject: 's', verification_body: '{{captcha}}', verification_sms_body: '${captcha}', verification_sms_template_id: '', terms_title: 't', terms_body: 'b', username_required: false, email_required: false, email_verification_required: false, phone_required: false, phone_verification_required: false, qq_required: false,
-    login_failure_limit_per_hour: 30, login_captcha_threshold_per_hour: 3, session_region_check: false, email_anti_abuse_mode: 'none', sms_anti_abuse_mode: 'none', captcha_provider: 'tencent', captcha_secret_id_reference: '', captcha_secret_key_reference: '', captcha_app_id: '', captcha_app_secret_reference: '', captcha_turnstile_site_key: '', identity_verification_method: 'none', enterprise_verification_enabled: false, identity_policy_saved: false, wechat_payment_enabled: false, alipay_payment_enabled: false, bank_transfer_enabled: false, default_recharge_method: 'none', recharge_restriction: 'none', default_phone_country_code: '86',
+    login_failure_limit_per_hour: 30, login_captcha_threshold_per_hour: 3, session_region_check: false, email_anti_abuse_mode: 'none', sms_anti_abuse_mode: 'none', captcha_provider: 'tencent', captcha_secret_id_reference: '', captcha_secret_key_reference: '', captcha_app_id: '', captcha_app_secret_reference: '', captcha_turnstile_site_key: '', identity_verification_method: 'none', enterprise_verification_enabled: false, identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '', wechat_payment_enabled: false, alipay_payment_enabled: false, bank_transfer_enabled: false, default_recharge_method: 'none', recharge_restriction: 'none', default_phone_country_code: '86',
   },
 } satisfies PlatformSystemUserSettingsDocument
 
@@ -109,6 +109,35 @@ describe('KYC provider credentials and identity policy', () => {
     expect(put.mock.calls[0][5]).toEqual({ kyc_api_key: 'kyc-api-key-0123456789', kyc_callback_hmac_key: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' })
     expect(put.mock.calls[0][2]).toMatchObject({ identity_policy_saved: true })
     expect(JSON.stringify(put.mock.calls[0][2])).not.toContain('kyc-api-key')
+  })
+
+  it('saves the KYC service and object store fields; the object store keys are write-only', async () => {
+    const put = setupUser('payment')
+    const user = userEvent.setup()
+    expect(await screen.findByText('未填写的项使用运行环境中对应的 IDENTITY_VERIFICATION_* 配置')).toBeInTheDocument()
+    const endpoint = screen.getByRole('textbox', { name: '服务地址' })
+    await user.type(endpoint, 'https://kyc.example.com/')
+    await user.tab()
+    expect(endpoint).toHaveValue('https://kyc.example.com')
+    await user.type(screen.getByRole('textbox', { name: '存储桶' }), 'kyc-bucket')
+    const secretKey = screen.getByLabelText('Secret Access Key')
+    expect(secretKey).toHaveAttribute('type', 'password')
+    await user.type(secretKey, 'plain-object-secret')
+    await user.click(screen.getByRole('button', { name: '保存认证与支付设置' }))
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+    expect(put.mock.calls[0][2]).toMatchObject({ kyc_endpoint: 'https://kyc.example.com', kyc_object_bucket: 'kyc-bucket' })
+    expect(put.mock.calls[0][5]).toMatchObject({ kyc_object_secret_access_key: 'plain-object-secret' })
+    expect(JSON.stringify(put.mock.calls[0][2])).not.toContain('plain-object-secret')
+    expect(await screen.findByText('已设置（指纹 0123456789abcdef），加密保存，不会回显')).toBeInTheDocument()
+  })
+
+  it('shows the KYC service as configured when the page holds every required value', async () => {
+    const saved = Object.fromEntries(['kyc_api_key', 'kyc_callback_hmac_key', 'kyc_object_access_key_id', 'kyc_object_secret_access_key']
+      .flatMap((name) => [[`${name}_configured`, true], [`${name}_fingerprint`, '0123456789abcdef']]))
+    setupUser('payment', { ...userDocument, ...saved, value: { ...userDocument.value, kyc_provider_name: 'trusted-kyc', kyc_endpoint: 'https://kyc.example.com',
+      kyc_callback_key_id: 'callback-1', kyc_object_endpoint: 'https://s3.example.com', kyc_object_region: 'us-east-1', kyc_object_bucket: 'kyc-bucket',
+      kyc_object_kms_key_id: 'kms-1' } })
+    expect(await screen.findByText('页面已配置齐全')).toBeInTheDocument()
   })
 
   it('does not mark the identity policy saved from the account tab', async () => {

@@ -165,7 +165,7 @@ paths:
       description: >-
         Event-centric administrator view of member notification facts. Fields that are not backed
         by durable facts are returned as null. Site and package use the subject recorded when the
-        event was raised (migration 502); older package-monitor rows fall back to the monitor
+        event was raised; older package-monitor rows fall back to the monitor
         transition's exact subscription. Events raised without a site subject never match a site
         filter, and ownership is never inferred from current bindings. Titles, channel bodies and
         email_state/sms_state come from original generation-1 outbox facts (null = that channel was

@@ -383,6 +383,14 @@ enum CapabilityName {
   // with a site that has it requires this capability (site object
   // capability "site_content_rewrite").
   CAPABILITY_NAME_SITE_CONTENT_REWRITE = 90;
+  // SAME_VERSION_UPGRADE v1 (92): the Agent, its root helper and packaging
+  // scripts install a same-version re-release (signed release_sequence
+  // above the installed one) from a v3 upgrade execution, refuse an equal or
+  // lower one, and restore the replaced build when the observation fails
+  // after the commit. Declared only once a Gateway listed it in
+  // known_capabilities, together with
+  // AgentCapabilities.installed_release_sequence.
+  CAPABILITY_NAME_SAME_VERSION_UPGRADE = 92;
 }
 
 // Capability advertises the highest implementation version for one feature.
@@ -441,6 +449,11 @@ message AgentCapabilities {
   string architecture = 4;
   string openresty_version = 5;
   repeated Capability features = 6;
+  // installed_release_sequence is the signed release_sequence of the
+  // installed release manifest. Set only with
+  // SAME_VERSION_UPGRADE, i.e. only for a Gateway that knows the field;
+  // informational: the helper re-checks the installed manifest.
+  uint64 installed_release_sequence = 7;
 }
 
 // CertificateBundle contains public certificate material only. The private key

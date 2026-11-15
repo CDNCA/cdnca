@@ -407,7 +407,9 @@ func validatePreparedAck(ack PreparedAck, version int) error {
 	if ack.SchemaVersion != wantSchema || !validID(ack.TransactionID) || !validDigest(ack.InstallPayloadSHA256) ||
 		ack.ReleaseSequence == 0 || !validDigest(ack.ArtifactSHA256) || !validDigest(ack.ManifestSHA256) ||
 		!validDigest(ack.ExecutableSHA256) || !validDigest(ack.SBOMSHA256) || !validID(ack.PreviousVersion) ||
-		!validID(ack.TargetVersion) || ack.PreviousVersion == ack.TargetVersion {
+		!validID(ack.TargetVersion) || ack.PreviousVersion == ack.TargetVersion && version != JournalV3Version {
+		// A same-version re-release is a v3 journal only; the helper
+		// proved its release_sequence is above the installed one.
 		return ErrMalformed
 	}
 	if version == JournalV3Version && ack.ExecutionSequence == 0 || version != JournalV3Version && ack.ExecutionSequence != 0 {

@@ -59,6 +59,8 @@ type controlUpgradeRolloutSummaryResponse struct {
 	Blockers                  []controlupgrade.RolloutBlocker `json:"blockers"`
 	CreatedAt                 time.Time                       `json:"created_at"`
 	UpdatedAt                 time.Time                       `json:"updated_at"`
+	ReleaseSequence           uint64                          `json:"release_sequence,omitempty"`
+	CurrentReleaseSequence    uint64                          `json:"current_release_sequence,omitempty"`
 }
 
 type controlUpgradeRolloutNodeResponse struct {
@@ -422,6 +424,7 @@ func controlUpgradeRolloutSummary(summary controlupgrade.RolloutSummary) control
 		DispatchedNodes: summary.DispatchedNodes, HealthyNodes: summary.HealthyNodes,
 		FailedNodes: summary.FailedNodes, RolledBackNodes: summary.RolledBackNodes,
 		Blockers: summary.Blockers, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt,
+		ReleaseSequence: summary.ReleaseSequence, CurrentReleaseSequence: summary.CurrentReleaseSequence,
 	}
 }
 

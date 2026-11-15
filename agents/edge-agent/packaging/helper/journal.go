@@ -405,7 +405,7 @@ func validateJournalRecordWithKeys(record JournalRecord, trustedKeys map[string]
 		!validHelperDigest(record.ManifestSHA256) || !validHelperDigest(record.ExecutableSHA256) || !validHelperDigest(record.SBOMSHA256) ||
 		(record.NativeSHA256 != "" && !validHelperDigest(record.NativeSHA256)) ||
 		!validHelperVersion(record.PreviousVersion) || !validHelperVersion(record.TargetVersion) ||
-		record.PreviousVersion == record.TargetVersion {
+		record.PreviousVersion == record.TargetVersion && !sameVersionRerelease(record) {
 		return ErrJournalCorrupt
 	}
 	switch record.SchemaVersion {
@@ -459,6 +459,15 @@ func validateJournalRecordWithKeys(record JournalRecord, trustedKeys map[string]
 		return ErrJournalCorrupt
 	}
 	return nil
+}
+
+// sameVersionRerelease: a v3 upgrade to a higher release_sequence of the
+// installed version. The version alone no longer tells the two
+// builds apart; the physical release sequence and manifest digest do.
+func sameVersionRerelease(record JournalRecord) bool {
+	return record.SchemaVersion == journalSchemaVersionV3 && record.Action == protocol.ActionUpgrade &&
+		record.PreviousVersion == record.TargetVersion && record.PreviousPhysicalReleaseSequence != 0 &&
+		record.ReleaseSequence > record.PreviousPhysicalReleaseSequence
 }
 
 func validateJournalTransition(previous, next JournalRecord) error {

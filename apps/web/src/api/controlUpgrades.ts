@@ -93,7 +93,7 @@ export interface ControlUpgradeBlocker {
 
 export interface ControlUpgradeRolloutSummary {
   id: string
-  schema_version: 2
+  schema_version: 2 | 3
   installation_id: string
   component: string
   current_version: string
@@ -119,6 +119,10 @@ export interface ControlUpgradeRolloutSummary {
   blockers: ControlUpgradeBlocker[]
   created_at: string
   updated_at: string
+  /** Same-version re-release only, the target build's release_sequence. */
+  release_sequence?: number
+  /** Same-version re-release only, the installed release_sequence it replaces. */
+  current_release_sequence?: number
 }
 
 export interface ControlUpgradeRolloutBatch {
@@ -216,7 +220,7 @@ export const maintenanceUpgradeReasons = [
   'control_upgrade_plan_writer_unconfigured', 'control_upgrade_state_unavailable',
   'control_upgrade_ha_unavailable', 'control_upgrade_runner_unconfirmed', 'control_upgrade_draining',
   'node_disabled', 'node_offline', 'node_capability_unavailable',
-  'upgrade_available', 'same_version', 'target_is_older', 'target_unset',
+  'upgrade_available', 'rerelease_available', 'same_version', 'target_is_older', 'target_unset',
   'license_inactive', 'customer_inactive', 'channel_inactive', 'target_not_allowed',
   'artifact_unavailable', 'artifact_unverified', 'protocol_incompatible',
   'version_not_allowed', 'signing_key_unavailable',
@@ -227,6 +231,8 @@ export interface MaintenanceUpgradeCandidate {
   reason: string
   version: string | null
   expires_at: string | null
+  /** Target build's release_sequence, when the node's installed one was asked with. */
+  release_sequence?: number
 }
 
 export interface MaintenanceUpgradeRuntime {
@@ -248,6 +254,8 @@ export interface MaintenanceUpgradeNode {
   runtime: MaintenanceUpgradeRuntime
   reason: string
   eligible: boolean
+  /** Installed release_sequence; present only when the node can take a same-version re-release. */
+  current_release_sequence?: number
 }
 
 // The console's /downloads node package sync (the package 重装/安装 commands download).
@@ -422,9 +430,11 @@ const summaryKeys = [
   'active_batch', 'total_nodes', 'pending_nodes', 'dispatched_nodes', 'healthy_nodes', 'failed_nodes',
   'rolled_back_nodes', 'blockers', 'created_at', 'updated_at',
 ] as const
+const rereleaseKeys = ['release_sequence', 'current_release_sequence'] as const
 
 function summary(value: unknown): value is ControlUpgradeRolloutSummary {
-  if (!isRecord(value) || !hasExactKeys(value, summaryKeys) || !uuid(value.id) || value.schema_version !== 2 ||
+  if (!isRecord(value) || !hasExactKeys(value, summaryKeys, rereleaseKeys) || !uuid(value.id) ||
+    (value.schema_version !== 2 && value.schema_version !== 3) ||
     !uuid(value.installation_id) || typeof value.component !== 'string' || !codePattern.test(value.component) ||
     typeof value.current_version !== 'string' || !validVersion(value.current_version) ||
     typeof value.target_version !== 'string' || !validVersion(value.target_version) ||
@@ -442,6 +452,12 @@ function summary(value: unknown): value is ControlUpgradeRolloutSummary {
     value.rollback_artifact_size_bytes > 0
   const noRollback = value.rollback_artifact_id === '' && value.rollback_artifact_sha256 === '' &&
     value.rollback_artifact_size_bytes === 0
+  // A same-version re-release is a schema 3 plan with both sequences, rising, and no rollback build.
+  const rerelease = value.current_release_sequence !== undefined || value.release_sequence !== undefined
+  if (rerelease && !(value.schema_version === 3 && noRollback && value.current_version === value.target_version &&
+    optionalReleaseSequence(value.release_sequence) && optionalReleaseSequence(value.current_release_sequence) &&
+    typeof value.release_sequence === 'number' && typeof value.current_release_sequence === 'number' &&
+    value.release_sequence > value.current_release_sequence)) return false
   return (hasRollback || noRollback) &&
     value.pending_nodes + value.dispatched_nodes + value.healthy_nodes + value.failed_nodes + value.rolled_back_nodes === value.total_nodes &&
     Date.parse(value.updated_at) >= Date.parse(value.created_at)
@@ -512,8 +528,8 @@ function statusReceipt(value: unknown): value is ControlUpgradeStatusReceipt {
 }
 
 function detail(value: unknown): value is ControlUpgradeRolloutDetail {
-  if (!isRecord(value) || !hasExactKeys(value, [...summaryKeys, 'batches', 'nodes', 'events', 'status_receipts'])) return false
-  const summaryValue = Object.fromEntries(summaryKeys.map((key) => [key, value[key]]))
+  if (!isRecord(value) || !hasExactKeys(value, [...summaryKeys, 'batches', 'nodes', 'events', 'status_receipts'], rereleaseKeys)) return false
+  const summaryValue = Object.fromEntries([...summaryKeys, ...rereleaseKeys].filter((key) => key in value).map((key) => [key, value[key]]))
   if (!summary(summaryValue) ||
     !Array.isArray(value.batches) || !value.batches.every(batch) || !Array.isArray(value.nodes) ||
     !value.nodes.every(node) || !Array.isArray(value.events) || !value.events.every(event) ||
@@ -556,8 +572,8 @@ function maintenanceReason(value: unknown): value is string {
 }
 
 function maintenanceCandidate(value: unknown): value is MaintenanceUpgradeCandidate {
-  if (!isRecord(value) || !hasExactKeys(value, ['state', 'reason', 'version', 'expires_at']) ||
-    !maintenanceReason(value.reason)) return false
+  if (!isRecord(value) || !hasExactKeys(value, ['state', 'reason', 'version', 'expires_at'], ['release_sequence']) ||
+    !maintenanceReason(value.reason) || !optionalReleaseSequence(value.release_sequence)) return false
   if (value.state === 'unavailable') return value.version === null &&
     (value.expires_at === null || dateTime(value.expires_at))
   return typeof value.state === 'string' && ['available', 'up_to_date', 'rollback_required'].includes(value.state) &&
@@ -587,10 +603,16 @@ function versionOrder(left: string, right: string): number {
   return prereleaseA.length - prereleaseB.length
 }
 
+function optionalReleaseSequence(value: unknown): boolean {
+  return value === undefined || typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
 function candidateMatchesVersion(candidate: MaintenanceUpgradeCandidate, current: string | null): boolean {
   if (candidate.state === 'unavailable') return true
   if (current === null || candidate.version === null) return false
   const order = versionOrder(candidate.version, current)
+  // A same-version re-release is "available" at an equal version.
+  if (candidate.state === 'available' && candidate.reason === 'rerelease_available') return order === 0
   return candidate.state === 'available' ? order > 0 : candidate.state === 'up_to_date' ? order === 0 : order < 0
 }
 
@@ -642,7 +664,8 @@ function parseMaintenanceStatus(value: unknown, nodeIDs: string[]): MaintenanceU
   const requested = new Set(nodeIDs)
   const received = new Set<string>()
   for (const node of data.nodes) {
-    if (!isRecord(node) || !hasExactKeys(node, ['node_id', 'current_version', 'candidate', 'runtime', 'reason', 'eligible']) ||
+    if (!isRecord(node) || !hasExactKeys(node, ['node_id', 'current_version', 'candidate', 'runtime', 'reason', 'eligible'], ['current_release_sequence']) ||
+      !optionalReleaseSequence(node.current_release_sequence) ||
       !uuid(node.node_id) || !requested.has(node.node_id) || received.has(node.node_id) ||
       !nullableVersion(node.current_version) || !maintenanceCandidate(node.candidate) ||
       !candidateMatchesVersion(node.candidate, node.current_version) ||

@@ -1,7 +1,7 @@
 import type { ControlUpgradeRolloutDetail } from '../api/controlUpgrades'
 import { nativePublicationFixture, nativeStatusFixture } from '../api/controlUpgrades.native.fixtures'
 import { maintenanceUpgradeMessage } from '../i18n/maintenanceUpgrade'
-import { masterUpgradeLogLines, nodeErrorText, nodeUpgradeLogLines, upgradeLogTime } from './controlUpgradeLogs'
+import { masterUpgradeLogLines, nodeErrorText, nodeUpgradeLogLines, rolloutVersionText, upgradeLogTime } from './controlUpgradeLogs'
 
 const mt = (key: Parameters<typeof maintenanceUpgradeMessage>[1]) => maintenanceUpgradeMessage('zh-CN', key)
 const nodeA = '00000000-0000-4000-8000-0000000000a1'
@@ -88,6 +88,21 @@ describe('upgrade log lines', () => {
     expect(nodeUpgradeLogLines(plan, nodeA, mt)).toEqual([
       '[INFO] [' + upgradeLogTime(Date.parse(created)) + '] 创建升级任务 1.0.0 → 1.1.0',
     ])
+  })
+
+  it('shows a same-version re-release plan by release sequence instead of an equal version pair', () => {
+    const created = '2026-11-16T08:00:00Z'
+    const plan = {
+      created_at: created, current_version: '1.0.35', target_version: '1.0.35',
+      current_release_sequence: 41, release_sequence: 44, events: [], status_receipts: [],
+    } as unknown as ControlUpgradeRolloutDetail
+    expect(nodeUpgradeLogLines(plan, nodeA, mt)).toEqual([
+      '[INFO] [' + upgradeLogTime(Date.parse(created)) + '] 创建升级任务 1.0.35（序号 41→44）',
+    ])
+    const en = (key: Parameters<typeof maintenanceUpgradeMessage>[1]) => maintenanceUpgradeMessage('en-US', key)
+    expect(rolloutVersionText(plan, en)).toBe('1.0.35 (release sequence 41→44)')
+    expect(rolloutVersionText({ ...plan, current_release_sequence: undefined, release_sequence: undefined }, mt))
+      .toBe('1.0.35 → 1.0.35')
   })
 
   it('explains the node failure code and the installed version from the node receipts', () => {

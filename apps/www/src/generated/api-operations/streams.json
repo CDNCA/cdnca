@@ -641,7 +641,7 @@
        "name": "overrides",
        "type": "StreamOverrides",
        "required": true,
-       "description": "The stream's own CNAME domain / mode and line; null follows its package. line and cname_domain are the effective values."
+       "description": "The stream's own CNAME domain / mode and line (更多操作); null follows its package (a stream belongs to no website). line and cname_domain are the effective values."
       },
       {
        "name": "line",
@@ -1218,7 +1218,7 @@
        "name": "overrides",
        "type": "StreamOverrides",
        "required": true,
-       "description": "The stream's own CNAME domain / mode and line; null follows its package. line and cname_domain are the effective values."
+       "description": "The stream's own CNAME domain / mode and line (更多操作); null follows its package (a stream belongs to no website). line and cname_domain are the effective values."
       },
       {
        "name": "line",
@@ -1744,7 +1744,7 @@
        "name": "overrides",
        "type": "StreamOverrides",
        "required": true,
-       "description": "The stream's own CNAME domain / mode and line; null follows its package. line and cname_domain are the effective values."
+       "description": "The stream's own CNAME domain / mode and line (更多操作); null follows its package (a stream belongs to no website). line and cname_domain are the effective values."
       },
       {
        "name": "line",

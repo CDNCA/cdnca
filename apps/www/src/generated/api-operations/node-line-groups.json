@@ -319,7 +319,7 @@
        "name": "backup_states",
        "type": "array<LineBackupState>",
        "description": "Whether each address family is currently resolving to backup IPs; returned only by the list and the current revision detail. Address families that never used backups are absent (that is, normal).",
-       "description_zh": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
+       "description_zh": "各地址族当前是否在解析备用 IP；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
       }
      ]
     },
@@ -966,7 +966,7 @@
        "name": "backup_states",
        "type": "array<LineBackupState>",
        "description": "Whether each address family is currently resolving to backup IPs; returned only by the list and the current revision detail. Address families that never used backups are absent (that is, normal).",
-       "description_zh": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
+       "description_zh": "各地址族当前是否在解析备用 IP；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
       }
      ]
     },

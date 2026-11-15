@@ -478,7 +478,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "It is not a reviewer, administrator, or scheduler endpoint and cannot substitute another actor.",
+   "description": "This is the narrow applicant-only operation authorized by the current core. It is not a reviewer, administrator, or scheduler endpoint and cannot substitute another actor.",
    "permissions": [
     "identity_verification.self.manage"
    ],
@@ -835,7 +835,7 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires a live tenant session and identity_verification.self.manage. The durable local intent is committed before the HTTPS provider call; an unknown provider outcome is retried with the exact provider request identity. Once the platform saved its identity policy (system user settings identity_policy_saved), a personal kind with identity_verification_method none or the enterprise kind with enterprise_verification_enabled false is refused with 403 identity_verification_kind_disabled.",
+   "description": "Requires a live tenant session and identity_verification.self.manage. The durable local intent is committed before the HTTPS provider call; an unknown provider outcome is retried with the exact provider request identity. Once the platform saved its identity policy (system user settings identity_policy_saved), a personal kind with identity_verification_method none or the enterprise kind with enterprise_verification_enabled false is refused with 403 identity_verification_kind_disabled. The KYC service and its private object store come from the system user settings (kyc_* fields and secrets, each falling back to IDENTITY_VERIFICATION_*) and apply without a restart; until all required values are set this route, uploads and callbacks answer 503 identity_verification_not_configured.",
    "permissions": [
     "identity_verification.self.manage"
    ],
@@ -1388,7 +1388,7 @@
      "in": "query",
      "type": "string(uuid)",
      "description": "Platform administrator sessions only (platform administrators may review on a tenant's behalf): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform).",
-     "description_zh": "Platform administrator sessions only (user 10-27: 平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+     "description_zh": "Platform administrator sessions only (平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
     }
    ],
    "responses": [
@@ -1464,7 +1464,7 @@
      "in": "query",
      "type": "string(uuid)",
      "description": "Platform administrator sessions only (platform administrators may review on a tenant's behalf): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform).",
-     "description_zh": "Platform administrator sessions only (user 10-27: 平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+     "description_zh": "Platform administrator sessions only (平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
     }
    ],
    "responses": [
@@ -1628,7 +1628,7 @@
      "in": "query",
      "type": "string(uuid)",
      "description": "Platform administrator sessions only (platform administrators may review on a tenant's behalf): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform).",
-     "description_zh": "Platform administrator sessions only (user 10-27: 平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+     "description_zh": "Platform administrator sessions only (平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
     }
    ]
   },
@@ -1678,7 +1678,7 @@
      "in": "query",
      "type": "string(uuid)",
      "description": "Platform administrator sessions only (platform administrators may review on a tenant's behalf): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform).",
-     "description_zh": "Platform administrator sessions only (user 10-27: 平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+     "description_zh": "Platform administrator sessions only (平台管理员也能代审): the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
     }
    ],
    "body": {

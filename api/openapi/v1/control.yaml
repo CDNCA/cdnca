@@ -1438,7 +1438,7 @@ paths:
       summary: Authorize the plugin; the control plane issues its identity and hands it to the plugin backend
       description: >-
         Requires api_keys.self.manage (same rule as POST /v1/account/api-keys; refused while impersonating). The
-        control plane issues an API key bound to this tenant's installation (migration 604) with the scopes of
+        control plane issues an API key bound to this tenant's installation with the scopes of
         GET .../identity granted_scopes, and delivers it only to the plugin backend: PUT {api_base_url}/plugin-identity
         signed like the proxy (X-Cdnca-Plugin-*; context delivery "plugin_identity") with body {api_key, api_key_id,
         scopes, issued_by_user_id, issued_by_display_name, issued_at}. Once delivered, older identities of the
@@ -9146,7 +9146,10 @@ components:
         - updated_at
       properties:
         id: { type: string, format: uuid }
-        schema_version: { type: integer, const: 2 }
+        schema_version:
+          type: integer
+          enum: [2, 3]
+          description: 3 when the forward and rollback builds have different release sequences, or for a same-version re-release.
         installation_id: { type: string, format: uuid }
         component: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
         current_version:
@@ -9187,6 +9190,16 @@ components:
           items: { $ref: '#/components/schemas/ControlUpgradeRolloutBlocker' }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        release_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Same-version re-release only; the target build's release sequence.
+        current_release_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Same-version re-release only; the installed release sequence the target build replaces.
     ControlUpgradeRolloutSummary:
       allOf:
         - $ref: '#/components/schemas/ControlUpgradeRolloutFields'
@@ -9261,11 +9274,11 @@ components:
           oneOf:
             - { type: string, const: '' }
             - { type: string, const: AGENT_DEPLOYMENT_STATUS }
-          description: Empty only for immutable receipts created before migration 102; new receipts bind the exact JetStream stream.
+          description: Empty only for immutable receipts created by earlier versions; new receipts bind the exact JetStream stream.
         delivery_consumer:
           type: string
           pattern: '^(|[A-Za-z0-9_-]{1,128})$'
-          description: Empty only for immutable receipts created before migration 102.
+          description: Empty only for immutable receipts created by earlier versions.
         delivery_sequence:
           oneOf:
             - { type: string, const: '0' }
@@ -10787,7 +10800,7 @@ components:
           uniqueItems: true
           items: {type: string, enum: [country, province, city, isp, country_code]}
           description: >-
-            管理员修正过的 IP 归属字段（迁移 547）。不在列表里的字段取主控 IP 库自动解析的值（写入时
+            管理员修正过的 IP 归属字段。不在列表里的字段取主控 IP 库自动解析的值（写入时
             服务端强制，ip_location 里这些字段的值被忽略）；从列表去掉一个字段即恢复自动。省略时（旧调用方）值有变化的
             字段记为人工修正，其余保持原样。
         auto_disable:

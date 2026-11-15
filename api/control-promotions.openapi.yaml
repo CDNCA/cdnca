@@ -6,7 +6,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   description: >-
-    Independently mountable BILL-09 HTTP contract for versioned coupon and
+    Independently mountable HTTP contract for versioned coupon and
     automatic promotion policies, tenant quote/reservation operations, and
     commerce-workload-only reservation transitions and adjustments. Browser
     principals and commerce workloads use separate authenticators. This
@@ -334,7 +334,7 @@ paths:
       summary: Append an explicit expired state transition
       description: >-
         Contract-reserved endpoint. The first slice returns 503
-        operation_unavailable because migration 044 has no durable idempotency
+        operation_unavailable because there is no durable idempotency
         operation for expiration and the promotion domain exposes no Expire
         command. Reads still project elapsed reserved facts as expired. Do not
         retry with a different idempotency key.

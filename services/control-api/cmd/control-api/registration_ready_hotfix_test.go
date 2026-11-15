@@ -75,23 +75,19 @@ func TestKYCPageCredentialsApplyWithoutRestart(t *testing.T) {
 		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 	}
 	client.Transport = transport
-	inner, err := identityverificationhttp.NewHTTPSKYCProvider(identityverificationhttp.HTTPSKYCProviderConfig{
-		Name: "kyc", Endpoint: "https://example.com", APIKey: envKey, CallbackKeyID: "key-1", CallbackHMACKey: envHMAC,
-		CallbackMaxAge: time.Minute, RequestTimeout: 5 * time.Second,
-	}, client, time.Now)
-	if err != nil {
-		t.Fatal(err)
-	}
+	environment := identityVerificationProviderEnvironment{ProviderName: "kyc", ProviderEndpoint: "https://example.com",
+		ProviderAPIKey: envKey, CallbackKeyID: "key-1", CallbackHMACKey: envHMAC,
+		ObjectEndpoint: "https://s3.example.com", ObjectRegion: "us-east-1", ObjectBucket: "kyc-bucket",
+		ObjectAccessKey: []byte("access-key"), ObjectSecretKey: []byte("object-secret-key"), ObjectKMSKeyID: "kms-key-1"}
 	revision, reads := int64(3), 0
 	var page systemusersettings.IdentityVerificationRuntime
-	provider := newKYCPageCredentialProvider(inner, nil, nil,
-		identityVerificationProviderEnvironment{ProviderAPIKey: envKey, CallbackHMACKey: envHMAC}, revision)
-	provider.revisionOf = func(context.Context) (int64, error) { return revision, nil }
-	provider.page = func(context.Context) (systemusersettings.IdentityVerificationRuntime, error) {
-		reads++
-		return systemusersettings.IdentityVerificationRuntime{KYCAPIKey: bytes.Clone(page.KYCAPIKey),
-			KYCCallbackHMAC: bytes.Clone(page.KYCCallbackHMAC)}, nil
-	}
+	runtime := newKYCPageRuntime(environment, func(context.Context) (int64, error) { return revision, nil },
+		func(context.Context) (systemusersettings.IdentityVerificationRuntime, error) {
+			reads++
+			return systemusersettings.IdentityVerificationRuntime{KYCAPIKey: bytes.Clone(page.KYCAPIKey),
+				KYCCallbackHMAC: bytes.Clone(page.KYCCallbackHMAC)}, nil
+		}, client, time.Now)
+	provider := runtime.Provider()
 	defer provider.Close()
 	create := func() string {
 		t.Helper()
@@ -102,22 +98,22 @@ func TestKYCPageCredentialsApplyWithoutRestart(t *testing.T) {
 		defer mu.Unlock()
 		return seen[len(seen)-1]
 	}
-	if got := create(); got != "Bearer environment-kyc-api-key" || reads != 0 {
+	if got := create(); got != "Bearer environment-kyc-api-key" || reads != 1 {
 		t.Fatalf("start: %q reads=%d", got, reads)
 	}
 	// saved on the page (revision 4): the next request uses it
 	page = systemusersettings.IdentityVerificationRuntime{KYCAPIKey: []byte("page-kyc-api-key-0001"),
 		KYCCallbackHMAC: []byte(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{2}, 48)))}
 	revision = 4
-	if got := create(); got != "Bearer page-kyc-api-key-0001" || reads != 1 {
+	if got := create(); got != "Bearer page-kyc-api-key-0001" || reads != 2 {
 		t.Fatalf("after the page: %q reads=%d", got, reads)
 	}
-	if got := create(); got != "Bearer page-kyc-api-key-0001" || reads != 1 {
+	if got := create(); got != "Bearer page-kyc-api-key-0001" || reads != 2 {
 		t.Fatalf("unchanged revision decrypted again: %q reads=%d", got, reads)
 	}
 	// cleared on the page: back to the environment
 	page, revision = systemusersettings.IdentityVerificationRuntime{}, 5
-	if got := create(); got != "Bearer environment-kyc-api-key" || reads != 2 {
+	if got := create(); got != "Bearer environment-kyc-api-key" || reads != 3 {
 		t.Fatalf("after clearing: %q reads=%d", got, reads)
 	}
 }

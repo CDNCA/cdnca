@@ -895,11 +895,15 @@ install_release() {
 # back. Only a signed manifest whose release_sequence is above the installed
 # release's replaces it; check_release_replay already refused one below the
 # accepted sequence, and an equal or lower one is refused here.
+# After the commit the replaced build stays at .previous-<version> (only the
+# latest one), so a failed observation after the commit can still put it back
+# (rollback.sh --restore-previous-build).
 rerelease_paths() {
   validate_version "$1"
   rerelease_versions_root=$(root_path /usr/lib/cdnca-edge-agent/versions)
   RERELEASE_STAGED=${rerelease_versions_root}/.rerelease-$1
   RERELEASE_SUPERSEDED=${rerelease_versions_root}/.superseded-$1
+  RERELEASE_PREVIOUS=${rerelease_versions_root}/.previous-$1
 }
 
 remove_rerelease_dir() {
@@ -968,9 +972,9 @@ swap_rerelease_release() {
   verify_installed_release "${VERIFIED_VERSION}"
 }
 
-# Rollback of an upgrade transaction: put the superseded build back.
+# Rollback of an upgrade or restore transaction: put the superseded build back.
 restore_transaction_rerelease() {
-  [ "${TX_OPERATION}" = upgrade ] || return 0
+  [ "${TX_OPERATION}" = upgrade ] || [ "${TX_OPERATION}" = restore ] || return 0
   release_root=$(root_path "/usr/lib/cdnca-edge-agent/versions/${TX_NEW_VERSION}")
   versions_root=$(dirname -- "${release_root}")
   rerelease_paths "${TX_NEW_VERSION}"
@@ -983,12 +987,42 @@ restore_transaction_rerelease() {
   remove_rerelease_dir "${RERELEASE_STAGED}"
 }
 
-# A committed transaction: the superseded build is no longer needed.
+# A committed transaction. A re-release keeps the build it replaced as
+# .previous-<version>; a committed restore drops the build it backed out of;
+# a version change drops the old version's kept build.
 cleanup_transaction_rerelease() {
-  [ "${TX_OPERATION}" = upgrade ] || return 0
+  case "${TX_OPERATION}" in upgrade|restore) ;; *) return 0 ;; esac
   rerelease_paths "${TX_NEW_VERSION}"
+  if [ "${TX_OPERATION}" = upgrade ] && { [ -e "${RERELEASE_SUPERSEDED}" ] || [ -L "${RERELEASE_SUPERSEDED}" ]; }; then
+    [ -d "${RERELEASE_SUPERSEDED}" ] && [ ! -L "${RERELEASE_SUPERSEDED}" ] || die "superseded release path is unsafe"
+    remove_rerelease_dir "${RERELEASE_PREVIOUS}"
+    mv -T "${RERELEASE_SUPERSEDED}" "${RERELEASE_PREVIOUS}"
+    durable_sync "$(dirname -- "${RERELEASE_PREVIOUS}")"
+  fi
   remove_rerelease_dir "${RERELEASE_SUPERSEDED}"
   remove_rerelease_dir "${RERELEASE_STAGED}"
+  if [ -n "${TX_OLD_TARGET}" ] && [ "${TX_OLD_TARGET#versions/}" != "${TX_NEW_VERSION}" ]; then
+    rerelease_paths "${TX_OLD_TARGET#versions/}"
+    remove_rerelease_dir "${RERELEASE_PREVIOUS}"
+  fi
+}
+
+# rollback.sh --restore-previous-build: the Agent is stopped and the
+# transaction (operation restore) records the current switch intent. The
+# build being backed out of waits at .superseded-<version> until the commit.
+swap_previous_release() {
+  release_root=$(root_path "/usr/lib/cdnca-edge-agent/versions/$1")
+  versions_root=$(dirname -- "${release_root}")
+  rerelease_paths "$1"
+  [ -d "${RERELEASE_PREVIOUS}" ] && [ ! -L "${RERELEASE_PREVIOUS}" ] || die "previous build is unavailable"
+  [ ! -e "${RERELEASE_SUPERSEDED}" ] && [ ! -L "${RERELEASE_SUPERSEDED}" ] || die "superseded release path exists"
+  [ -d "${release_root}" ] && [ ! -L "${release_root}" ] || die "release $1 is not installed"
+  mv -T "${release_root}" "${RERELEASE_SUPERSEDED}"
+  durable_sync "${versions_root}"
+  failpoint_sigkill restore-mid-swap
+  mv -T "${RERELEASE_PREVIOUS}" "${release_root}"
+  durable_sync "${versions_root}"
+  verify_installed_release "$1"
 }
 
 process_start_ticks() {
@@ -1456,7 +1490,7 @@ load_package_transaction() {
   TX_COMMIT_INTENT=$(manifest_value "${transaction_journal}" 12 commit_intent)
   TX_STATE_RESTORE_STAGING=$(manifest_value "${transaction_journal}" 13 state_restore_staging)
 
-  case "${TX_OPERATION}" in install|upgrade|rollback) ;; *) die "package transaction operation is invalid" ;; esac
+  case "${TX_OPERATION}" in install|upgrade|rollback|restore) ;; *) die "package transaction operation is invalid" ;; esac
   validate_version "${TX_NEW_VERSION}"
   if [ -n "${TX_OLD_TARGET}" ]; then
     case "${TX_OLD_TARGET}" in versions/*) ;; *) die "package transaction old target is unsafe" ;; esac

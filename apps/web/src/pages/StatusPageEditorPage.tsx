@@ -96,8 +96,11 @@ function PageTab({ token, canManage }: { token: string; canManage: boolean }) {
     onSuccess: (view) => { queryClient.setQueryData(['status-page'], view); setChanged(false); setSavedNote(true) },
     onError: (error) => feedback.error(statusPageErrorText(error)),
   })
+  if (query.isError) {
+    return <Alert type="error" showIcon message={statusPageErrorText(query.error)}
+      action={<Button size="small" loading={query.isFetching} onClick={() => void query.refetch()}>{t('common:retry')}</Button>} />
+  }
   if (query.isLoading || !settings) return <Card loading bordered={false} />
-  if (query.isError) return <Alert type="error" showIcon message={statusPageErrorText(query.error)} />
   const touch = () => { setChanged(true); setSavedNote(false) }
   const update = (key: string, patch: Partial<Row>) => { setRows((current) => current.map((row) => row.key === key ? { ...row, ...patch } : row)); touch() }
   const updateGroup = (id: string, patch: Partial<GroupRow>) => { setGroups((current) => current.map((group) => group.id === id ? { ...group, ...patch } : group)); touch() }

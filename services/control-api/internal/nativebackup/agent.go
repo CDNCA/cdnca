@@ -1,12 +1,15 @@
 package nativebackup
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"filippo.io/age"
 )
 
 // Settings are written by control-api (root) and read by the backup agent.
@@ -68,34 +73,180 @@ func (settings Settings) Validate() error {
 	return nil
 }
 
+// settingsFile is the on-disk form of Settings. Target credentials are not
+// kept in Targets: SealedSecrets holds them age-encrypted to this host's
+// backup identity (keys/backup), which lives in the same configuration tree
+// and is restored with it. A file without SealedSecrets but with credentials
+// in Targets was written before they were sealed; it is still read and is
+// rewritten sealed by SealLegacySettings or the next SaveSettings.
+type settingsFile struct {
+	Settings
+	SealedSecrets string `json:"sealed_secrets,omitempty"`
+}
+
+type targetSecrets struct {
+	AccessKey  string `json:"access_key,omitempty"`
+	SecretKey  string `json:"secret_key,omitempty"`
+	Password   string `json:"password,omitempty"`
+	PrivateKey string `json:"private_key,omitempty"`
+}
+
 func LoadSettings(layout Layout) (Settings, error) {
+	settings, _, err := loadSettings(layout)
+	return settings, err
+}
+
+// loadSettings also reports whether the file still holds plain credentials.
+func loadSettings(layout Layout) (Settings, bool, error) {
 	encoded, err := readPrivateFile(layout.Path(SettingsFile), 1<<20)
 	if errors.Is(err, os.ErrNotExist) {
-		return DefaultSettings(), nil
+		return DefaultSettings(), false, nil
 	}
 	if err != nil {
-		return Settings{}, err
+		return Settings{}, false, err
 	}
-	var settings Settings
-	if err := json.Unmarshal(encoded, &settings); err != nil {
-		return Settings{}, errors.New("backup settings are unreadable")
+	var stored settingsFile
+	if err := json.Unmarshal(encoded, &stored); err != nil {
+		return Settings{}, false, errors.New("backup settings are unreadable")
 	}
-	return settings, settings.Validate()
+	settings, plain := stored.Settings, false
+	for _, target := range settings.Targets {
+		plain = plain || secretsOf(target) != targetSecrets{}
+	}
+	if stored.SealedSecrets != "" {
+		if plain {
+			return Settings{}, false, errors.New("backup settings are unreadable")
+		}
+		if err := openSettingsSecrets(layout, &settings, stored.SealedSecrets); err != nil {
+			return Settings{}, false, err
+		}
+	}
+	return settings, plain, settings.Validate()
+}
+
+var errSettingsSecretsSealed = errors.New("backup target credentials in " + SettingsFile +
+	" are sealed to the backup identity in " + BackupKeyDirectory + " and cannot be opened on this host;" +
+	" restore " + BackupKeyDirectory + " from the same backup, or remove the settings file and configure the targets again")
+
+func openSettingsSecrets(layout Layout, settings *Settings, sealed string) error {
+	keys, err := LoadKeys(layout)
+	if err != nil {
+		return errSettingsSecretsSealed
+	}
+	ciphertext, err := base64.StdEncoding.Strict().DecodeString(sealed)
+	if err != nil {
+		return errors.New("backup settings are unreadable")
+	}
+	reader, err := age.Decrypt(bytes.NewReader(ciphertext), keys.Identity)
+	if err != nil {
+		return errSettingsSecretsSealed
+	}
+	plaintext, err := io.ReadAll(io.LimitReader(reader, 1<<20))
+	if err != nil {
+		return errSettingsSecretsSealed
+	}
+	secrets := map[string]targetSecrets{}
+	err = json.Unmarshal(plaintext, &secrets)
+	clear(plaintext)
+	if err != nil {
+		return errors.New("backup settings are unreadable")
+	}
+	for index := range settings.Targets {
+		target := &settings.Targets[index]
+		secret := secrets[target.Name]
+		target.AccessKey, target.SecretKey, target.Password, target.PrivateKey = secret.AccessKey, secret.SecretKey, secret.Password, secret.PrivateKey
+		delete(secrets, target.Name)
+	}
+	if len(secrets) != 0 {
+		return errors.New("backup settings are unreadable")
+	}
+	return nil
+}
+
+func secretsOf(target Target) targetSecrets {
+	return targetSecrets{AccessKey: target.AccessKey, SecretKey: target.SecretKey, Password: target.Password, PrivateKey: target.PrivateKey}
 }
 
 func SaveSettings(layout Layout, settings Settings) error {
 	if err := settings.Validate(); err != nil {
 		return err
 	}
-	path := layout.Path(SettingsFile)
-	if err := ensurePrivateDirectory(filepath.Dir(path)); err != nil {
+	directory := filepath.Dir(layout.Path(SettingsFile))
+	if err := ensurePrivateDirectory(directory); err != nil {
 		return err
 	}
-	encoded, err := json.MarshalIndent(settings, "", "  ")
+	unlock, err := lockDirectory(directory)
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(path, append(encoded, '\n'), 0o600)
+	defer unlock()
+	return writeSettings(layout, settings)
+}
+
+// SealLegacySettings rewrites a settings file that still holds target
+// credentials in plain JSON with them sealed, once; it reports whether it
+// rewrote the file. The backup agent calls it on every tick.
+func SealLegacySettings(layout Layout) (bool, error) {
+	path := layout.Path(SettingsFile)
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	unlock, err := lockDirectory(filepath.Dir(path))
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	// Re-read under the lock: a console save may have replaced the file.
+	settings, plain, err := loadSettings(layout)
+	if err != nil || !plain {
+		return false, err
+	}
+	return true, writeSettings(layout, settings)
+}
+
+// writeSettings needs the settings directory lock.
+func writeSettings(layout Layout, settings Settings) error {
+	stored := settingsFile{Settings: settings}
+	if settings.Targets != nil {
+		// A copy: the caller keeps its secrets.
+		stored.Targets = make([]Target, len(settings.Targets))
+	}
+	secrets := map[string]targetSecrets{}
+	for index, target := range settings.Targets {
+		if secret := secretsOf(target); secret != (targetSecrets{}) {
+			secrets[target.Name] = secret
+		}
+		target.AccessKey, target.SecretKey, target.Password, target.PrivateKey = "", "", "", ""
+		stored.Targets[index] = target
+	}
+	if len(secrets) != 0 {
+		keys, err := LoadOrCreateKeys(layout)
+		if err != nil {
+			return err
+		}
+		plaintext, err := json.Marshal(secrets)
+		if err != nil {
+			return err
+		}
+		var sealed bytes.Buffer
+		writer, err := age.Encrypt(&sealed, keys.Identity.Recipient())
+		if err == nil {
+			_, err = writer.Write(plaintext)
+		}
+		clear(plaintext)
+		if err == nil {
+			err = writer.Close()
+		}
+		if err != nil {
+			return err
+		}
+		stored.SealedSecrets = base64.StdEncoding.EncodeToString(sealed.Bytes())
+	}
+	encoded, err := json.MarshalIndent(stored, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(layout.Path(SettingsFile), append(encoded, '\n'), 0o600)
 }
 
 // ---- requests and runs ----
@@ -399,6 +550,12 @@ func (agent Agent) Tick(ctx context.Context) error {
 			return err
 		}
 	}
+	// Settings written before target credentials were sealed are sealed on
+	// the first tick after an upgrade (the timer runs 5 minutes after boot).
+	var sealErr error
+	if _, err := SealLegacySettings(agent.Layout); err != nil {
+		sealErr = fmt.Errorf("seal backup settings: %w", err)
+	}
 	settings, err := LoadSettings(agent.Layout)
 	if err != nil {
 		return err
@@ -412,7 +569,7 @@ func (agent Agent) Tick(ctx context.Context) error {
 		}
 	}
 	sort.Strings(names)
-	var joined error
+	joined := sealErr
 	for _, name := range names {
 		joined = errors.Join(joined, agent.handleRequest(ctx, settings, filepath.Join(requestsDirectory(agent.Layout), name)))
 	}

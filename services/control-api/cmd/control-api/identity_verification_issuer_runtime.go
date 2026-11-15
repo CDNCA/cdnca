@@ -158,14 +158,8 @@ func openIdentityVerificationIssuerRuntime(ctx context.Context, pool *pgxpool.Po
 	if !ok {
 		return nil, errors.New("identity verification durable source cannot issue workload evidence")
 	}
-	credentials := aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
-		return aws.Credentials{AccessKeyID: string(providerEnvironment.ObjectAccessKey),
-			SecretAccessKey: string(providerEnvironment.ObjectSecretKey),
-			SessionToken:    string(providerEnvironment.ObjectSessionToken),
-			Source:          "identity-verification-issuer"}, nil
-	})
 	awsConfig := aws.Config{Region: providerEnvironment.ObjectRegion,
-		Credentials: aws.NewCredentialsCache(credentials), HTTPClient: http.DefaultClient,
+		Credentials: aws.NewCredentialsCache(identityVerificationIssuerCredentials(providerEnvironment)), HTTPClient: http.DefaultClient,
 		Retryer: func() aws.Retryer {
 			return awsretry.NewStandard(func(options *awsretry.StandardOptions) { options.MaxAttempts = 3 })
 		}}
@@ -201,6 +195,19 @@ func openIdentityVerificationIssuerRuntime(ctx context.Context, pool *pgxpool.Po
 		return nil, errors.New("initialize identity verification issuer mTLS listener")
 	}
 	return &identityVerificationIssuerRuntime{listener: listener}, nil
+}
+
+// identityVerificationIssuerCredentials copies the object store keys: the
+// production runtime clears providerEnvironment's byte slices when it returns,
+// long before the first KMS call.
+func identityVerificationIssuerCredentials(providerEnvironment identityVerificationProviderEnvironment) aws.CredentialsProvider {
+	credentials := aws.Credentials{AccessKeyID: string(providerEnvironment.ObjectAccessKey),
+		SecretAccessKey: string(providerEnvironment.ObjectSecretKey),
+		SessionToken:    string(providerEnvironment.ObjectSessionToken),
+		Source:          "identity-verification-issuer"}
+	return aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+		return credentials, nil
+	})
 }
 
 func (runtime *identityVerificationIssuerRuntime) Run(ctx context.Context) error {

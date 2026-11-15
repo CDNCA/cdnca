@@ -69,7 +69,7 @@ bootstrap_transaction_recovery "$@"
 . "${script_dir}/lib.sh"
 
 usage() {
-  printf 'usage: %s --version VERSION [--destdir PATH] [--service-driver PATH] [--health-timeout SECONDS] [--health-stable SECONDS]\n' "$0" >&2
+  printf 'usage: %s --version VERSION [--restore-previous-build] [--destdir PATH] [--service-driver PATH] [--health-timeout SECONDS] [--health-stable SECONDS]\n' "$0" >&2
   exit 64
 }
 
@@ -78,8 +78,10 @@ SERVICE_DRIVER=
 target_version=
 health_timeout=30
 health_stable=5
+restore_previous=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --restore-previous-build) restore_previous=true; shift ;;
     --version|--destdir|--service-driver|--health-timeout|--health-stable)
       [ "$#" -ge 2 ] || usage
       case "$1" in
@@ -142,6 +144,41 @@ fi
 old_target=$(read_current_target)
 old_version=${old_target#versions/}
 verify_installed_release "${target_version}"
+if [ "${restore_previous}" = true ]; then
+  # Same-version re-release backed out after its commit: put the
+  # kept .previous-<version> build back under versions/<version>.
+  [ "${old_version}" = "${target_version}" ] || die "--restore-previous-build needs the current version"
+  installed_sequence=${VERIFIED_SEQUENCE}
+  rerelease_paths "${target_version}"
+  previous_build=${RERELEASE_PREVIOUS}
+  assert_safe_tree "${previous_build}"
+  [ -d "${previous_build}" ] && [ ! -L "${previous_build}" ] || \
+    die_reason ROLLBACK_PREVIOUS_BUILD_UNAVAILABLE "no kept previous build of ${target_version}"
+  verify_bundle "${previous_build}/edge-agent" "${previous_build}/edge-agent.spdx.json" "${previous_build}/manifest" \
+    "${previous_build}/manifest.sig" "$(root_path /etc/cdnca-edge-agent/package-signing.pem)"
+  [ "${VERIFIED_VERSION}" = "${target_version}" ] && [ "${VERIFIED_SEQUENCE}" -lt "${installed_sequence}" ] || \
+    die_reason ROLLBACK_PREVIOUS_BUILD_UNAVAILABLE "kept build of ${target_version} is not an older release sequence"
+  probe_release_version "${previous_build}/edge-agent" "${target_version}"
+  config_path=$(root_path /etc/cdnca-edge-agent/config.json)
+  probe_release_config "${previous_build}/edge-agent" "${config_path}"
+  begin_package_transaction restore "${old_target}" "${target_version}"
+  record_transaction_service_stop
+  service_action stop
+  backup_state "${old_version}" "${target_version}" rollback-guard
+  record_transaction_state_backup "${STATE_BACKUP}"
+  record_transaction_current_switch
+  swap_previous_release "${target_version}"
+  service_action restart
+  wait_for_health "${health_timeout}" "${health_stable}" || die "previous build did not become healthy"
+  record_transaction_commit
+  cleanup_transaction_rerelease
+  clear_package_transaction
+  release_lock
+  trap - EXIT HUP INT TERM
+  printf 'restored cdnca-edge-agent %s release sequence %s; replaced state retained at %s\n' \
+    "${target_version}" "${VERIFIED_SEQUENCE}" "${STATE_BACKUP}"
+  exit 0
+fi
 probe_release_version "$(root_path "/usr/lib/cdnca-edge-agent/versions/${target_version}/edge-agent")" "${target_version}"
 if [ "${old_version}" = "${target_version}" ]; then
   release_lock

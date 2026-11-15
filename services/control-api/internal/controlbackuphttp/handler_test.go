@@ -157,6 +157,10 @@ func TestSettingsKeepSecretsAndNeverReturnThem(t *testing.T) {
 	if settings.Targets[0].SecretKey != "very-secret-value" {
 		t.Fatal("secret must be kept when the field is left empty")
 	}
+	if raw, err := os.ReadFile(h.layout.Path(nativebackup.SettingsFile)); err != nil ||
+		strings.Contains(string(raw), "very-secret-value") || strings.Contains(string(raw), "AKIAEXAMPLE") {
+		t.Fatalf("settings file must hold the target credentials sealed: %v", err)
+	}
 	for _, audit := range h.audits {
 		if strings.Contains(audit, "secret") && strings.Contains(audit, "very") {
 			t.Fatalf("audit leaks a secret: %s", audit)

@@ -127,6 +127,7 @@ type RolloutPlanInput struct {
 	RollbackArtifactSizeBytes int64
 	CurrentVersion            string
 	TargetVersion             string
+	CurrentReleaseSequence    uint64
 	AutomaticRollback         bool
 	ForwardProfile            CommandProfile
 	RollbackProfile           CommandProfile
@@ -306,6 +307,10 @@ type RolloutPlan struct {
 	Blockers                  []PlanBlocker
 	CommandReceipts           []PlanCommandReceipt
 	HealthReceipts            []PlanHealthReceipt
+
+	// CurrentReleaseSequence marks a same-version re-release plan; omitted
+	// otherwise so snapshots of other plans keep their bytes.
+	CurrentReleaseSequence uint64 `json:",omitempty"`
 }
 
 type PlanApplyResult struct {
@@ -323,7 +328,8 @@ func NewRolloutPlan(input RolloutPlanInput) (RolloutPlan, error) {
 		!validCanonicalPlanUUID(input.ArtifactID) || !validPlanDigest(input.SHA256Digest) || input.ArtifactSizeBytes <= 0 ||
 		!validCanonicalVersion(input.CurrentVersion) ||
 		!validCanonicalVersion(input.TargetVersion) ||
-		semver.Compare("v"+input.CurrentVersion, "v"+input.TargetVersion) >= 0 ||
+		!validPlanDirection(input.CurrentVersion, input.TargetVersion, input.CurrentReleaseSequence,
+			input.ReleaseSequence, input.Safety.RollbackAvailable) ||
 		input.Safety.RollbackAvailable && (input.RollbackGrantDigest != input.GrantDigest ||
 			input.RollbackReleaseSequence == 0 || input.RollbackReleaseSequence > input.ReleaseSequence ||
 			!validCanonicalPlanUUID(input.RollbackArtifactID) ||
@@ -339,7 +345,7 @@ func NewRolloutPlan(input RolloutPlanInput) (RolloutPlan, error) {
 	}
 
 	schemaVersion := RolloutPlanSchemaVersionV2
-	if input.RollbackReleaseSequence != input.ReleaseSequence {
+	if input.RollbackReleaseSequence != input.ReleaseSequence || input.CurrentReleaseSequence != 0 {
 		schemaVersion = RolloutPlanSchemaVersion
 	}
 	plan := RolloutPlan{
@@ -354,8 +360,8 @@ func NewRolloutPlan(input RolloutPlanInput) (RolloutPlan, error) {
 		RollbackArtifactID: input.RollbackArtifactID, RollbackSHA256Digest: input.RollbackSHA256Digest,
 		RollbackArtifactSizeBytes: input.RollbackArtifactSizeBytes,
 		CurrentVersion:            input.CurrentVersion, TargetVersion: input.TargetVersion,
-		AutomaticRollback: input.AutomaticRollback,
-		ForwardProfile:    cloneCommandProfile(input.ForwardProfile), RollbackProfile: cloneCommandProfile(input.RollbackProfile),
+		CurrentReleaseSequence: input.CurrentReleaseSequence, AutomaticRollback: input.AutomaticRollback,
+		ForwardProfile: cloneCommandProfile(input.ForwardProfile), RollbackProfile: cloneCommandProfile(input.RollbackProfile),
 		Safety: input.Safety, State: PlanQueued, Revision: 1, ActiveBatch: -1,
 		Targets: make(map[string]PlanTarget), NodeStates: make(map[string]PlanNodeState),
 		NodeDispatchRevisions: make(map[string]uint64),
@@ -603,7 +609,8 @@ func applyPlanHealthTransition(plan *RolloutPlan, health PlanHealthEvent) (PlanE
 }
 
 func shouldBeginAutomaticRollback(plan RolloutPlan) bool {
-	if !plan.AutomaticRollback || plan.State != PlanPaused {
+	// A re-release plan has no control-issued rollback; the plan stays paused.
+	if !plan.AutomaticRollback || plan.State != PlanPaused || plan.CurrentReleaseSequence != 0 {
 		return false
 	}
 	hasDefinitiveFailure := false
@@ -769,6 +776,17 @@ func derivedPlanID(planID, kind, value string) string {
 	return uuid.NewSHA1(uuid.MustParse(planID), []byte(kind+":"+value)).String()
 }
 
+// validPlanDirection: a plan moves to a newer version, or re-releases
+// the same version to a release_sequence above the installed one, without a
+// control-issued rollback.
+func validPlanDirection(currentVersion, targetVersion string, currentReleaseSequence, releaseSequence uint64,
+	rollbackAvailable bool) bool {
+	if currentReleaseSequence != 0 {
+		return currentVersion == targetVersion && releaseSequence > currentReleaseSequence && !rollbackAvailable
+	}
+	return semver.Compare("v"+currentVersion, "v"+targetVersion) < 0
+}
+
 func validRolloutPlan(plan RolloutPlan) bool {
 	if (plan.SchemaVersion != RolloutPlanSchemaVersionV2 && plan.SchemaVersion != RolloutPlanSchemaVersion) ||
 		!validCanonicalPlanUUID(plan.ID) ||
@@ -781,7 +799,9 @@ func validRolloutPlan(plan RolloutPlan) bool {
 		plan.ArtifactSizeBytes <= 0 ||
 		!validCanonicalVersion(plan.CurrentVersion) ||
 		!validCanonicalVersion(plan.TargetVersion) ||
-		semver.Compare("v"+plan.CurrentVersion, "v"+plan.TargetVersion) >= 0 ||
+		!validPlanDirection(plan.CurrentVersion, plan.TargetVersion, plan.CurrentReleaseSequence,
+			plan.ReleaseSequence, plan.Safety.RollbackAvailable) ||
+		plan.CurrentReleaseSequence != 0 && plan.SchemaVersion != RolloutPlanSchemaVersion ||
 		plan.Safety.RollbackAvailable && (plan.RollbackGrantDigest != plan.GrantDigest ||
 			plan.RollbackReleaseSequence == 0 || plan.RollbackReleaseSequence > plan.ReleaseSequence ||
 			!validCanonicalPlanUUID(plan.RollbackArtifactID) ||
@@ -990,7 +1010,7 @@ func expectedPlanBlockers(plan RolloutPlan) []PlanBlocker {
 	if plan.Safety.IrreversibleMigration {
 		blockers = append(blockers, PlanBlocker{Code: BlockerIrreversibleMigration})
 	}
-	if !plan.Safety.RollbackAvailable {
+	if !plan.Safety.RollbackAvailable && plan.CurrentReleaseSequence == 0 {
 		blockers = append(blockers, PlanBlocker{Code: BlockerRollbackUnavailable})
 	}
 	for _, batch := range plan.Batches {

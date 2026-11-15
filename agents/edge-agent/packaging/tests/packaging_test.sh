@@ -1460,6 +1460,30 @@ cmp -s "${workdir}/v2r10/manifest" "${versions_dir}/v2/manifest" || fail "refuse
 [ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${accepted_digest}" ] || fail "refused install changed replay state"
 assert_no_rerelease_staging
 assert_package_lock_idle
+# A committed re-release keeps the build it replaced; rollback.sh
+# --restore-previous-build puts it back (an observation failure after the commit).
+cmp -s "${workdir}/v2/manifest" "${versions_dir}/.previous-v2/manifest" || fail "committed re-release did not keep the replaced build"
+"${root}/usr/libexec/cdnca-edge-agent/rollback.sh" --version v2 --restore-previous-build \
+  --destdir "${root}" --service-driver "${service_driver}" --health-timeout 2 --health-stable 0 >/dev/null
+[ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/v2 ] || fail "restore changed the current target"
+cmp -s "${workdir}/v2/manifest" "${versions_dir}/v2/manifest" || fail "restore did not put the kept build back"
+[ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")" = "${accepted_digest}" ] || fail "restore lowered replay state"
+[ -f "${workdir}/service-active" ] || fail "restore left the service stopped"
+assert_absent "${versions_dir}/.previous-v2"
+assert_no_rerelease_staging
+assert_package_lock_idle
+assert_no_transaction_staging
+if "${root}/usr/libexec/cdnca-edge-agent/rollback.sh" --version v2 --restore-previous-build \
+  --destdir "${root}" --service-driver "${service_driver}" --health-timeout 2 --health-stable 0 >"${workdir}/restore-none.out" 2>&1; then
+  fail "restore without a kept build succeeded"
+fi
+grep -F ROLLBACK_PREVIOUS_BUILD_UNAVAILABLE "${workdir}/restore-none.out" >/dev/null || fail "restore without a kept build gave no reason"
+cmp -s "${workdir}/v2/manifest" "${versions_dir}/v2/manifest" || fail "refused restore changed versions/v2"
+# The accepted sequence stays 10, so only a higher re-release moves forward again.
+upgrade_bundle "${workdir}/v2r13" >/dev/null
+cmp -s "${workdir}/v2r13/manifest" "${versions_dir}/v2/manifest" || fail "re-release after restore did not install"
+assert_no_rerelease_staging
+assert_package_lock_idle
 printf '%s\n' v2-state >"${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt"
 accepted_digest=$(sha256_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest")
 
@@ -1553,8 +1577,8 @@ assert_file "${root}/var/lib/cdnca-edge-agent-packaging/accepted-manifest"
 
 # Reinstalling after a default uninstall reuses the retained canonical state.
 retained_state_before_reinstall=$(sha256_file "${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt")
-# The retained replay state is the re-release v2r10 (sequence 10) accepted above.
-install_bundle "${workdir}/v2r10" >/dev/null
+# The retained replay state is the re-release v2r13 (sequence 13) accepted above.
+install_bundle "${workdir}/v2r13" >/dev/null
 [ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/v2 ] || fail "reinstall after uninstall did not select v2"
 [ "$(sha256_file "${root}/var/lib/cdnca-edge-agent-backups/active-state/state.txt")" = "${retained_state_before_reinstall}" ] || \
   fail "reinstall after uninstall changed retained state"

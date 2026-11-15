@@ -23,29 +23,31 @@ const (
 var safeIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 type signablePlan struct {
-	Domain                  string         `json:"domain,omitempty"`
-	SchemaVersion           int            `json:"schema_version"`
-	PlanID                  string         `json:"plan_id"`
-	Revision                uint64         `json:"revision"`
-	BatchID                 string         `json:"batch_id,omitempty"`
-	ArtifactBundleID        string         `json:"artifact_bundle_id,omitempty"`
-	ArtifactBundleSHA256    string         `json:"artifact_bundle_sha256,omitempty"`
-	CommandIssuanceNotAfter int64          `json:"command_issuance_not_after,omitempty"`
-	ExecutionSequence       uint64         `json:"execution_sequence,omitempty"`
-	ReleaseSequence         uint64         `json:"release_sequence"`
-	IssuedAt                time.Time      `json:"issued_at"`
-	ExpiresAt               time.Time      `json:"expires_at"`
-	Action                  Action         `json:"action"`
-	CurrentVersion          string         `json:"current_version"`
-	TargetVersion           string         `json:"target_version"`
-	Platform                string         `json:"platform"`
-	Architecture            string         `json:"architecture"`
-	Artifact                Artifact       `json:"artifact"`
-	Compatibility           Compatibility  `json:"compatibility"`
-	Health                  HealthPolicy   `json:"health"`
-	Rollout                 RolloutPolicy  `json:"rollout"`
-	Rollback                RollbackPolicy `json:"rollback"`
-	KeyID                   string         `json:"key_id"`
+	Domain                  string `json:"domain,omitempty"`
+	SchemaVersion           int    `json:"schema_version"`
+	PlanID                  string `json:"plan_id"`
+	Revision                uint64 `json:"revision"`
+	BatchID                 string `json:"batch_id,omitempty"`
+	ArtifactBundleID        string `json:"artifact_bundle_id,omitempty"`
+	ArtifactBundleSHA256    string `json:"artifact_bundle_sha256,omitempty"`
+	CommandIssuanceNotAfter int64  `json:"command_issuance_not_after,omitempty"`
+	ExecutionSequence       uint64 `json:"execution_sequence,omitempty"`
+	ReleaseSequence         uint64 `json:"release_sequence"`
+	// CurrentReleaseSequence: a same-version re-release only.
+	CurrentReleaseSequence uint64         `json:"current_release_sequence,omitempty"`
+	IssuedAt               time.Time      `json:"issued_at"`
+	ExpiresAt              time.Time      `json:"expires_at"`
+	Action                 Action         `json:"action"`
+	CurrentVersion         string         `json:"current_version"`
+	TargetVersion          string         `json:"target_version"`
+	Platform               string         `json:"platform"`
+	Architecture           string         `json:"architecture"`
+	Artifact               Artifact       `json:"artifact"`
+	Compatibility          Compatibility  `json:"compatibility"`
+	Health                 HealthPolicy   `json:"health"`
+	Rollout                RolloutPolicy  `json:"rollout"`
+	Rollback               RollbackPolicy `json:"rollback"`
+	KeyID                  string         `json:"key_id"`
 }
 
 func SigningBytes(plan Plan) ([]byte, error) {
@@ -54,7 +56,8 @@ func SigningBytes(plan Plan) ([]byte, error) {
 		BatchID: plan.BatchID, ArtifactBundleID: plan.ArtifactBundleID,
 		ArtifactBundleSHA256: plan.ArtifactBundleSHA256, CommandIssuanceNotAfter: plan.CommandIssuanceNotAfter,
 		ExecutionSequence: plan.ExecutionSequence, ReleaseSequence: plan.ReleaseSequence,
-		IssuedAt: plan.IssuedAt, ExpiresAt: plan.ExpiresAt, Action: plan.Action,
+		CurrentReleaseSequence: plan.CurrentReleaseSequence,
+		IssuedAt:               plan.IssuedAt, ExpiresAt: plan.ExpiresAt, Action: plan.Action,
 		CurrentVersion: plan.CurrentVersion, TargetVersion: plan.TargetVersion,
 		Platform: plan.Platform, Architecture: plan.Architecture, Artifact: plan.Artifact,
 		Compatibility: plan.Compatibility, Health: plan.Health, Rollout: plan.Rollout, Rollback: plan.Rollback,
@@ -152,9 +155,13 @@ func validatePlan(plan Plan, config Config, now time.Time, allowExpired bool) er
 		return fmt.Errorf("%w: target version", ErrInvalidPlan)
 	}
 	comparison := compareVersion(target, current)
+	if plan.CurrentReleaseSequence != 0 && !sameVersionRerelease(plan.SchemaVersion == planSchemaVersionV3,
+		plan.Action, comparison, plan.CurrentReleaseSequence, plan.ReleaseSequence) {
+		return fmt.Errorf("%w: current release sequence", ErrInvalidPlan)
+	}
 	switch plan.Action {
 	case ActionUpgrade:
-		if comparison <= 0 {
+		if comparison < 0 || comparison == 0 && plan.CurrentReleaseSequence == 0 {
 			return ErrDowngrade
 		}
 	case ActionRollback:

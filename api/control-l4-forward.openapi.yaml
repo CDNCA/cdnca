@@ -964,8 +964,8 @@ components:
         package_subscription_id:
           type: string
           format: uuid
-          description: "The stream's package subscription. A stream belongs to no website (migration 506); its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME."
-          x-description-zh: The stream's package subscription (所属套餐). A stream belongs to no website (migration 506); its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME.
+          description: "The stream's package subscription. A stream belongs to no website; its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME."
+          x-description-zh: The stream's package subscription (所属套餐). A stream belongs to no website; its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME.
         name: {type: string, minLength: 1, maxLength: 128}
         remark: {type: string, maxLength: 256}
         protocol: {$ref: '#/components/schemas/StreamProtocol'}
@@ -1138,7 +1138,7 @@ components:
       additionalProperties: false
       readOnly: true
       required: [cname_domain, cname_mode, region_id, node_group_id, backup_node_group_id]
-      description: The stream's own CNAME domain / mode and line (migration 499, 更多操作); null follows its package (a stream belongs to no website, migration 506). line and cname_domain are the effective values.
+      description: The stream's own CNAME domain / mode and line (更多操作); null follows its package (a stream belongs to no website). line and cname_domain are the effective values.
       properties:
         cname_domain: {type: [string, 'null']}
         cname_mode: {type: [string, 'null'], enum: [site, package, null]}
@@ -1748,7 +1748,7 @@ components:
         tls_passthrough: [server_names]
         server_names: [tls_passthrough]
       description: >-
-        Immutable target identity (no site_id since migration 506; every v2
+        Immutable target identity (no site_id; every v2
         stream requires TCP/UDP capability API version 12). tenant_id, stream_id, and revision
         identify the exact configuration compiled for publication; callers must
         not substitute a list index or the stream's current revision.
@@ -1862,8 +1862,8 @@ components:
             cname:
               type: [string, 'null']
               readOnly: true
-              description: "Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname (migration 505) once written to DNS; otherwise package mode (effective cname_mode package) projects the package's allocation, and forwarding-rule mode without an override has none (null)."
-              x-description-zh: Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname (migration 505) once written to DNS; otherwise 按套餐 (effective cname_mode package) projects the package's allocation, and 按转发 without an override has none (null).
+              description: "Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname once written to DNS; otherwise package mode (effective cname_mode package) projects the package's allocation, and forwarding-rule mode without an override has none (null)."
+              x-description-zh: Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname once written to DNS; otherwise 按套餐 (effective cname_mode package) projects the package's allocation, and 按转发 without an override has none (null).
             cname_domain:
               type: [string, 'null']
               readOnly: true

@@ -47,6 +47,15 @@ export interface PlatformSystemUserSettings {
   enterprise_verification_enabled: boolean
   /** The two fields above were chosen on the page; until then both kinds follow whether the KYC provider is configured. */
   identity_policy_saved: boolean
+  /** The KYC service and its private object store; '' = not set here, the runtime uses IDENTITY_VERIFICATION_*. */
+  kyc_provider_name: string
+  kyc_endpoint: string
+  kyc_callback_key_id: string
+  kyc_object_endpoint: string
+  kyc_object_region: string
+  kyc_object_bucket: string
+  kyc_object_prefix: string
+  kyc_object_kms_key_id: string
   wechat_payment_enabled: boolean
   alipay_payment_enabled: boolean
   bank_transfer_enabled: boolean
@@ -56,8 +65,9 @@ export interface PlatformSystemUserSettings {
   default_phone_country_code: string
 }
 
-/** Write-only secrets typed on the page: the CAPTCHA ones pair with `<name>_reference`; the KYC ones fall back to IDENTITY_VERIFICATION_KYC_*. */
-export const userSettingsSecretNames = ['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret', 'captcha_turnstile_secret', 'kyc_api_key', 'kyc_callback_hmac_key'] as const
+/** Write-only secrets typed on the page: the CAPTCHA ones pair with `<name>_reference`; the KYC ones fall back to IDENTITY_VERIFICATION_KYC_* / _OBJECT_*. */
+export const userSettingsSecretNames = ['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret', 'captcha_turnstile_secret', 'kyc_api_key', 'kyc_callback_hmac_key',
+  'kyc_object_access_key_id', 'kyc_object_secret_access_key', 'kyc_object_session_token'] as const
 export type UserSettingsSecretName = typeof userSettingsSecretNames[number]
 export type CaptchaSecretName = 'captcha_secret_id' | 'captcha_secret_key' | 'captcha_app_secret'
 /** A secret to send: undefined keeps the stored one, '' clears it. */
@@ -81,6 +91,12 @@ export interface PlatformSystemUserSettingsDocument {
   kyc_api_key_fingerprint?: string
   kyc_callback_hmac_key_configured?: boolean
   kyc_callback_hmac_key_fingerprint?: string
+  kyc_object_access_key_id_configured?: boolean
+  kyc_object_access_key_id_fingerprint?: string
+  kyc_object_secret_access_key_configured?: boolean
+  kyc_object_secret_access_key_fingerprint?: string
+  kyc_object_session_token_configured?: boolean
+  kyc_object_session_token_fingerprint?: string
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -92,9 +108,14 @@ const settingKeys = [
   'login_failure_limit_per_hour', 'login_captcha_threshold_per_hour', 'session_region_check', 'email_anti_abuse_mode', 'sms_anti_abuse_mode',
   'captcha_provider', 'captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference',
   'captcha_turnstile_site_key', 'identity_verification_method', 'enterprise_verification_enabled', 'identity_policy_saved',
+  'kyc_provider_name', 'kyc_endpoint', 'kyc_callback_key_id', 'kyc_object_endpoint', 'kyc_object_region', 'kyc_object_bucket', 'kyc_object_prefix', 'kyc_object_kms_key_id',
   'wechat_payment_enabled', 'alipay_payment_enabled', 'bank_transfer_enabled', 'default_recharge_method', 'recharge_restriction',
   'default_phone_country_code',
 ] as const
+
+/** The KYC provider fields (plain text, checked by the server on save). */
+export const kycProviderKeys = ['kyc_provider_name', 'kyc_endpoint', 'kyc_callback_key_id', 'kyc_object_endpoint', 'kyc_object_region',
+  'kyc_object_bucket', 'kyc_object_prefix', 'kyc_object_kms_key_id'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -146,7 +167,8 @@ function isSettings(value: unknown, saved: readonly UserSettingsSecretName[] = [
     !validText(value.verification_sms_body, 1, 1024) || !validText(value.verification_sms_template_id, 0, 256) ||
     !validText(value.terms_title, 1, 256) || !validText(value.terms_body, 1, 65536) || !validText(value.captcha_app_id, 0, 256) ||
     typeof value.captcha_turnstile_site_key !== 'string' || !/^([A-Za-z0-9_-]{1,256})?$/.test(value.captcha_turnstile_site_key) ||
-    !validReference(value.captcha_secret_id_reference) || !validReference(value.captcha_secret_key_reference) || !validReference(value.captcha_app_secret_reference)) return false
+    !validReference(value.captcha_secret_id_reference) || !validReference(value.captcha_secret_key_reference) || !validReference(value.captcha_app_secret_reference) ||
+    !kycProviderKeys.every((key) => validText(value[key], 0, 512))) return false
   if (!member(value.verification_template_channel, ['email', 'sms']) || !member(value.email_anti_abuse_mode, ['none', 'native', 'tencent', 'geetest_v4']) ||
     !member(value.sms_anti_abuse_mode, ['none', 'native', 'tencent', 'geetest_v4']) || !member(value.captcha_provider, ['tencent', 'geetest_v4']) ||
     !member(value.identity_verification_method, ['none', 'alipay', 'wechat_face', 'phone_three_factor']) ||

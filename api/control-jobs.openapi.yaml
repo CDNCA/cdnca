@@ -6,7 +6,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
   description: >-
-    OPS-03 background job query and settlement contract backed by the canonical
+    Background job query and settlement contract backed by the canonical
     jobstate projection. Platform and tenant identities use separate route
     namespaces. Cancel, retry, and operator replay use durable idempotency
     receipts and atomic audits. Immutable settlement receipts and dead letters

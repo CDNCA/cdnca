@@ -287,12 +287,20 @@ function MaintenanceOverview({
     const timer = window.setTimeout(() => updateClock((clock) => clock + 1), Math.min(nextExpiry - Date.now() + 1, 2147483647))
     return () => window.clearTimeout(timer)
   }, [nextExpiry])
+  // A same-version re-release is "available" with reason rerelease_available.
+  const rerelease = (candidate?: MaintenanceUpgradeCandidate) => candidate?.state === 'available' && candidate.reason === 'rerelease_available'
   const freshCandidate = (candidate?: MaintenanceUpgradeCandidate) => Boolean(candidate &&
-    knownReasons.has(candidate.reason) && ({ available: 'upgrade_available', up_to_date: 'same_version', rollback_required: 'target_is_older', unavailable: '' })[candidate.state] === candidate.reason &&
+    knownReasons.has(candidate.reason) && (rerelease(candidate) ||
+      ({ available: 'upgrade_available', up_to_date: 'same_version', rollback_required: 'target_is_older', unavailable: '' })[candidate.state] === candidate.reason) &&
     candidate.expires_at && Date.parse(candidate.expires_at) > now)
   const nodeEligible = (node?: MaintenanceUpgradeNode) => Boolean(node && node.eligible && node.reason === 'eligible' &&
     node.runtime.ready && node.runtime.reason === 'ready' && freshCandidate(node.candidate) &&
-    node.candidate.state === 'available' && node.current_version && node.current_version !== node.candidate.version)
+    node.candidate.state === 'available' && node.current_version && (rerelease(node.candidate)
+      ? node.current_version === node.candidate.version && (node.candidate.release_sequence ?? 0) > (node.current_release_sequence ?? Infinity)
+      : node.current_version !== node.candidate.version))
+  const canUpgradeText = (node: MaintenanceUpgradeNode) => rerelease(node.candidate)
+    ? mt('canRerelease').replace('{from}', String(node.current_release_sequence)).replace('{to}', String(node.candidate.release_sequence))
+    : mt('canUpgrade')
   const controlUpToDate = Boolean(control && freshCandidate(control.candidate) && control.candidate.state === 'up_to_date' &&
     control.current_version && control.current_version === control.candidate.version && control.configured_version_matches === true &&
     control.authorization.state === 'valid' && control.authorization.reason === 'eligible' && control.runtime.ready && control.runtime.reason === 'ready')
@@ -393,7 +401,7 @@ function MaintenanceOverview({
     if (node && ['node_disabled', 'node_offline', 'node_capability_unavailable', 'version_unavailable'].includes(node.reason)) {
       return reasonText(node.reason)
     }
-    return nodeUpToDate(node) ? mt('noUpgrade') : nodeEligible(node) ? mt('canUpgrade') :
+    return nodeUpToDate(node) ? mt('noUpgrade') : nodeEligible(node) ? canUpgradeText(node!) :
       !node ? mt('nodeStatusUnavailable') : !freshCandidate(node.candidate) ? candidateText(node.candidate) :
         node.candidate.state === 'rollback_required' ? mt('rollbackRequired') :
           !node.runtime.ready || node.runtime.reason !== 'ready' ? reasonText(node.runtime.reason) : node.reason === 'eligible' ? candidateText(node.candidate) : reasonText(node.reason)
@@ -410,10 +418,14 @@ function MaintenanceOverview({
     { title: mt('status'), key: 'status', width: '25%', sorter: (left, right) => statusCollator.compare(maintenanceNodeStatus(left), maintenanceNodeStatus(right)),
       render: (_, item) => {
         const rollout = rolloutStatus(item)
-        const current = !rollout && nodeUpToDate(nodeStates.get(item.id))
-        return <Tag color={rollout ? rolloutStatusColors[rollout] : nodeEligible(nodeStates.get(item.id)) ? 'warning' : undefined}
+        const node = nodeStates.get(item.id)
+        const current = !rollout && nodeUpToDate(node)
+        const tag = <Tag color={rollout ? rolloutStatusColors[rollout] : nodeEligible(node) ? 'warning' : undefined}
           className={current ? 'maintenance-current-status' : undefined}
           icon={current ? <CircleCheck size={12} aria-hidden="true" /> : undefined}>{maintenanceNodeStatus(item)}</Tag>
+        // Nodes that cannot take a same-version re-release yet get a one-line note.
+        return current && node?.current_release_sequence === undefined
+          ? <>{tag}<span className="maintenance-candidate-hint">{mt('rereleaseManualOnce')}</span></> : tag
       } },
     { title: mt('action'), key: 'actions', width: '15%', render: (_, item) => <Space size={4} wrap={false}>
       <Button type="link" size="small" className="maintenance-row-action" icon={<FileText size={14} />} onClick={() => setNodeLogID(item.id)}>{mt('logs')}</Button>

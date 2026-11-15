@@ -85,7 +85,20 @@ type Settings struct {
 	// enterprise_verification_enabled as chosen on the page. Until then the
 	// runtime keeps the earlier behaviour: personal and enterprise
 	// verification are on whenever the KYC provider is configured.
-	IdentityPolicySaved   bool   `json:"identity_policy_saved"`
+	IdentityPolicySaved bool `json:"identity_policy_saved"`
+	// The KYC provider and its private object store (identity documents and
+	// liveness material). Empty: not set on the page, the runtime uses the
+	// matching IDENTITY_VERIFICATION_* environment value. The provider keys
+	// and object store keys are page secrets (SecretKYC*).
+	KYCProviderName   string `json:"kyc_provider_name"`
+	KYCEndpoint       string `json:"kyc_endpoint"`
+	KYCCallbackKeyID  string `json:"kyc_callback_key_id"`
+	KYCObjectEndpoint string `json:"kyc_object_endpoint"`
+	KYCObjectRegion   string `json:"kyc_object_region"`
+	KYCObjectBucket   string `json:"kyc_object_bucket"`
+	KYCObjectPrefix   string `json:"kyc_object_prefix"`
+	KYCObjectKMSKeyID string `json:"kyc_object_kms_key_id"`
+
 	WeChatPaymentEnabled  bool   `json:"wechat_payment_enabled"`
 	AlipayPaymentEnabled  bool   `json:"alipay_payment_enabled"`
 	BankTransferEnabled   bool   `json:"bank_transfer_enabled"`
@@ -143,7 +156,8 @@ type CaptchaRuntime struct {
 // (dnsacme.AESGCMCredentialCipher satisfies it).
 // IdentityVerificationRuntime is what the KYC runtime reads from the page:
 // whether personal / enterprise verification is offered and the KYC provider
-// credentials saved there (nil when not saved; the caller clears them).
+// configuration saved there ("" / nil when not saved; the caller clears the
+// secrets).
 type IdentityVerificationRuntime struct {
 	// PolicySaved is false until the page saved the identity policy; the
 	// runtime then treats both kinds as on (the earlier behaviour).
@@ -152,6 +166,27 @@ type IdentityVerificationRuntime struct {
 	EnterpriseEnabled bool
 	KYCAPIKey         []byte
 	KYCCallbackHMAC   []byte
+
+	KYCProviderName    string
+	KYCEndpoint        string
+	KYCCallbackKeyID   string
+	ObjectEndpoint     string
+	ObjectRegion       string
+	ObjectBucket       string
+	ObjectPrefix       string
+	ObjectKMSKeyID     string
+	ObjectAccessKey    []byte
+	ObjectSecretKey    []byte
+	ObjectSessionToken []byte
+}
+
+// Clear wipes the secrets of the runtime view.
+func (runtime *IdentityVerificationRuntime) Clear() {
+	clear(runtime.KYCAPIKey)
+	clear(runtime.KYCCallbackHMAC)
+	clear(runtime.ObjectAccessKey)
+	clear(runtime.ObjectSecretKey)
+	clear(runtime.ObjectSessionToken)
 }
 
 // KindEnabled reports whether a verification kind (personal_initial,
@@ -198,19 +233,25 @@ type Document struct {
 	Value     Settings  `json:"value"`
 	// The CAPTCHA, Turnstile and KYC provider secrets entered on the page
 	// are write-only: only whether each is set and a fingerprint are returned.
-	CaptchaSecretIDConfigured         bool   `json:"captcha_secret_id_configured"`
-	CaptchaSecretIDFingerprint        string `json:"captcha_secret_id_fingerprint,omitempty"`
-	CaptchaSecretKeyConfigured        bool   `json:"captcha_secret_key_configured"`
-	CaptchaSecretKeyFingerprint       string `json:"captcha_secret_key_fingerprint,omitempty"`
-	CaptchaAppSecretConfigured        bool   `json:"captcha_app_secret_configured"`
-	CaptchaAppSecretFingerprint       string `json:"captcha_app_secret_fingerprint,omitempty"`
-	CaptchaTurnstileSecretConfigured  bool   `json:"captcha_turnstile_secret_configured"`
-	CaptchaTurnstileSecretFingerprint string `json:"captcha_turnstile_secret_fingerprint,omitempty"`
-	KYCAPIKeyConfigured               bool   `json:"kyc_api_key_configured"`
-	KYCAPIKeyFingerprint              string `json:"kyc_api_key_fingerprint,omitempty"`
-	KYCCallbackHMACKeyConfigured      bool   `json:"kyc_callback_hmac_key_configured"`
-	KYCCallbackHMACKeyFingerprint     string `json:"kyc_callback_hmac_key_fingerprint,omitempty"`
-	Replayed                          bool   `json:"-"`
+	CaptchaSecretIDConfigured           bool   `json:"captcha_secret_id_configured"`
+	CaptchaSecretIDFingerprint          string `json:"captcha_secret_id_fingerprint,omitempty"`
+	CaptchaSecretKeyConfigured          bool   `json:"captcha_secret_key_configured"`
+	CaptchaSecretKeyFingerprint         string `json:"captcha_secret_key_fingerprint,omitempty"`
+	CaptchaAppSecretConfigured          bool   `json:"captcha_app_secret_configured"`
+	CaptchaAppSecretFingerprint         string `json:"captcha_app_secret_fingerprint,omitempty"`
+	CaptchaTurnstileSecretConfigured    bool   `json:"captcha_turnstile_secret_configured"`
+	CaptchaTurnstileSecretFingerprint   string `json:"captcha_turnstile_secret_fingerprint,omitempty"`
+	KYCAPIKeyConfigured                 bool   `json:"kyc_api_key_configured"`
+	KYCAPIKeyFingerprint                string `json:"kyc_api_key_fingerprint,omitempty"`
+	KYCCallbackHMACKeyConfigured        bool   `json:"kyc_callback_hmac_key_configured"`
+	KYCCallbackHMACKeyFingerprint       string `json:"kyc_callback_hmac_key_fingerprint,omitempty"`
+	KYCObjectAccessKeyIDConfigured      bool   `json:"kyc_object_access_key_id_configured"`
+	KYCObjectAccessKeyIDFingerprint     string `json:"kyc_object_access_key_id_fingerprint,omitempty"`
+	KYCObjectSecretAccessKeyConfigured  bool   `json:"kyc_object_secret_access_key_configured"`
+	KYCObjectSecretAccessKeyFingerprint string `json:"kyc_object_secret_access_key_fingerprint,omitempty"`
+	KYCObjectSessionTokenConfigured     bool   `json:"kyc_object_session_token_configured"`
+	KYCObjectSessionTokenFingerprint    string `json:"kyc_object_session_token_fingerprint,omitempty"`
+	Replayed                            bool   `json:"-"`
 }
 
 type SaveRequest struct {

@@ -78,12 +78,14 @@ func (client *maintenanceUpgradeClient) Close() {
 	client.http.CloseIdleConnections()
 }
 
-func (client *maintenanceUpgradeClient) ReadCandidate(ctx context.Context, component, currentVersion string, protocol int) (controlupgrade.MaintenanceCandidate, error) {
+func (client *maintenanceUpgradeClient) ReadCandidate(ctx context.Context, component, currentVersion string, protocol int,
+	currentReleaseSequence uint64) (controlupgrade.MaintenanceCandidate, error) {
 	if client == nil || ctx == nil {
 		return controlupgrade.MaintenanceCandidate{}, errMaintenanceCandidateUnavailable
 	}
 	body, err := entitlement.CanonicalUpgradeCandidateRequest(entitlement.UpgradeCandidateRequest{
 		Schema: entitlement.UpgradeCandidateRequestSchema, Component: component, CurrentVersion: currentVersion, ProtocolVersion: protocol,
+		CurrentReleaseSequence: currentReleaseSequence,
 	})
 	if err != nil {
 		return controlupgrade.MaintenanceCandidate{}, err
@@ -166,6 +168,7 @@ func (client *maintenanceUpgradeClient) ReadCandidate(ctx context.Context, compo
 		Now: now, ExpectedInstallationID: client.installationID.String(), ExpectedRequestID: requestID,
 		ExpectedRequestSHA256: base64.RawURLEncoding.EncodeToString(proofMessage),
 		ExpectedComponent:     component, ExpectedCurrentVersion: currentVersion, ExpectedProtocolVersion: protocol,
+		ExpectedCurrentReleaseSequence: currentReleaseSequence,
 	}); err != nil {
 		return controlupgrade.MaintenanceCandidate{}, err
 	}
@@ -182,6 +185,10 @@ func (client *maintenanceUpgradeClient) ReadCandidate(ctx context.Context, compo
 		version := signed.Snapshot.Candidate.Manifest.Version
 		candidate.Version = &version
 		candidate.Channel = signed.Snapshot.Authority.Version.Channel
+	}
+	if signed.Snapshot.ReleaseSequence != 0 {
+		sequence := signed.Snapshot.ReleaseSequence
+		candidate.ReleaseSequence = &sequence
 	}
 	return candidate, nil
 }

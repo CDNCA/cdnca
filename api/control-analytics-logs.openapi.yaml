@@ -1137,7 +1137,7 @@ components:
           description: >-
             Origin address(es) the node sent the request to (nginx $upstream_addr, cut to 64 bytes);
             empty when not sent to origin, when the platform does not record it (access_log_fields
-            upstream_addr) or for events logged before CH migration 028.
+            upstream_addr) or for events logged before origin addresses were recorded.
         status_code: {type: integer, minimum: 100, maximum: 599}
         request_bytes: {type: integer, format: uint64, minimum: 0}
         response_bytes: {type: integer, format: uint64, minimum: 0}
@@ -1394,7 +1394,7 @@ components:
       required: [revision]
       description: >-
         What the control plane's verified IP intelligence library says about
-        client_ip, looked up when the page is served (G3-d), so it
+        client_ip, looked up when the page is served, so it
         reflects the library revision then, not when the request was logged.
         Absent when the control plane has no library or the address is not in
         it; absent fields are unknown.

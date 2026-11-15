@@ -399,6 +399,14 @@ const (
 	// with a site that has it requires this capability (site object
 	// capability "site_content_rewrite").
 	CapabilityName_CAPABILITY_NAME_SITE_CONTENT_REWRITE CapabilityName = 90
+	// SAME_VERSION_UPGRADE v1 (92): the Agent, its root helper and packaging
+	// scripts install a same-version re-release (signed release_sequence
+	// above the installed one) from a v3 upgrade execution, refuse an equal or
+	// lower one, and restore the replaced build when the observation fails
+	// after the commit. Declared only once a Gateway listed it in
+	// known_capabilities, together with
+	// AgentCapabilities.installed_release_sequence.
+	CapabilityName_CAPABILITY_NAME_SAME_VERSION_UPGRADE CapabilityName = 92
 )
 
 // Enum value maps for CapabilityName.
@@ -486,6 +494,7 @@ var (
 		87: "CAPABILITY_NAME_URL_AUTH",
 		89: "CAPABILITY_NAME_SITE_RUM",
 		90: "CAPABILITY_NAME_SITE_CONTENT_REWRITE",
+		92: "CAPABILITY_NAME_SAME_VERSION_UPGRADE",
 	}
 	CapabilityName_value = map[string]int32{
 		"CAPABILITY_NAME_UNSPECIFIED":                     0,
@@ -570,6 +579,7 @@ var (
 		"CAPABILITY_NAME_URL_AUTH":                        87,
 		"CAPABILITY_NAME_SITE_RUM":                        89,
 		"CAPABILITY_NAME_SITE_CONTENT_REWRITE":            90,
+		"CAPABILITY_NAME_SAME_VERSION_UPGRADE":            92,
 	}
 )
 
@@ -2962,8 +2972,13 @@ type AgentCapabilities struct {
 	Architecture     string                 `protobuf:"bytes,4,opt,name=architecture,proto3" json:"architecture,omitempty"`
 	OpenrestyVersion string                 `protobuf:"bytes,5,opt,name=openresty_version,json=openrestyVersion,proto3" json:"openresty_version,omitempty"`
 	Features         []*Capability          `protobuf:"bytes,6,rep,name=features,proto3" json:"features,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// installed_release_sequence is the signed release_sequence of the
+	// installed release manifest. Set only with
+	// SAME_VERSION_UPGRADE, i.e. only for a Gateway that knows the field;
+	// informational: the helper re-checks the installed manifest.
+	InstalledReleaseSequence uint64 `protobuf:"varint,7,opt,name=installed_release_sequence,json=installedReleaseSequence,proto3" json:"installed_release_sequence,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *AgentCapabilities) Reset() {
@@ -3036,6 +3051,13 @@ func (x *AgentCapabilities) GetFeatures() []*Capability {
 		return x.Features
 	}
 	return nil
+}
+
+func (x *AgentCapabilities) GetInstalledReleaseSequence() uint64 {
+	if x != nil {
+		return x.InstalledReleaseSequence
+	}
+	return 0
 }
 
 // CertificateBundle contains public certificate material only. The private key
@@ -14975,14 +14997,15 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x18previous_config_identity\x18\x05 \x01(\v2\x1e.agent.v1.ActiveConfigIdentityR\x16previousConfigIdentity\x12G\n" +
 	"\x11last_apply_result\x18\x06 \x01(\v2\x1b.agent.v1.ScopedApplyResultR\x0flastApplyResultB\x1c\n" +
 	"\x1a_current_config_version_idB\x1d\n" +
-	"\x1b_previous_config_version_id\"\x81\x02\n" +
+	"\x1b_previous_config_version_id\"\xbf\x02\n" +
 	"\x11AgentCapabilities\x12#\n" +
 	"\ragent_version\x18\x01 \x01(\tR\fagentVersion\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12)\n" +
 	"\x10operating_system\x18\x03 \x01(\tR\x0foperatingSystem\x12\"\n" +
 	"\farchitecture\x18\x04 \x01(\tR\farchitecture\x12+\n" +
 	"\x11openresty_version\x18\x05 \x01(\tR\x10openrestyVersion\x120\n" +
-	"\bfeatures\x18\x06 \x03(\v2\x14.agent.v1.CapabilityR\bfeatures\"\xde\x02\n" +
+	"\bfeatures\x18\x06 \x03(\v2\x14.agent.v1.CapabilityR\bfeatures\x12<\n" +
+	"\x1ainstalled_release_sequence\x18\a \x01(\x04R\x18installedReleaseSequence\"\xde\x02\n" +
 	"\x11CertificateBundle\x120\n" +
 	"\x14leaf_certificate_pem\x18\x01 \x01(\fR\x12leafCertificatePem\x12*\n" +
 	"\x11issuing_chain_pem\x18\x02 \x03(\fR\x0fissuingChainPem\x12#\n" +
@@ -16071,7 +16094,7 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\x10total_size_bytes\x18\x05 \x01(\x04R\x0etotalSizeBytes\x12\"\n" +
 	"\rend_of_object\x18\x06 \x01(\bR\vendOfObject\"K\n" +
 	"\x18FetchSiteObjectsResponse\x12/\n" +
-	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\xe4\x17\n" +
+	"\x05chunk\x18\x01 \x01(\v2\x19.agent.v1.SiteObjectChunkR\x05chunk*\x8e\x18\n" +
 	"\x0eCapabilityName\x12\x1f\n" +
 	"\x1bCAPABILITY_NAME_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CAPABILITY_NAME_HTTP_1_1\x10\x01\x12\x1a\n" +
@@ -16155,7 +16178,8 @@ const file_agent_v1_types_proto_rawDesc = "" +
 	"\"CAPABILITY_NAME_CHALLENGE_EXTERNAL\x10V\x12\x1c\n" +
 	"\x18CAPABILITY_NAME_URL_AUTH\x10W\x12\x1c\n" +
 	"\x18CAPABILITY_NAME_SITE_RUM\x10Y\x12(\n" +
-	"$CAPABILITY_NAME_SITE_CONTENT_REWRITE\x10Z\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
+	"$CAPABILITY_NAME_SITE_CONTENT_REWRITE\x10Z\x12(\n" +
+	"$CAPABILITY_NAME_SAME_VERSION_UPGRADE\x10\\\"\x04\b\x1e\x10\x1e*\x1cCAPABILITY_NAME_NODE_PLUGINS*q\n" +
 	"\x1aActiveConfigIdentitySchema\x12-\n" +
 	")ACTIVE_CONFIG_IDENTITY_SCHEMA_UNSPECIFIED\x10\x00\x12$\n" +
 	" ACTIVE_CONFIG_IDENTITY_SCHEMA_V1\x10\x01*\x9a\x04\n" +

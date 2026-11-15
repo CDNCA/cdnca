@@ -1540,7 +1540,7 @@ components:
           allOf: [{$ref: '#/components/schemas/SyncStatus'}]
           readOnly: true
           description: >-
-            Derived by the server (PJ-C02, migration 503) from the site's latest automatic publication: succeeded synced,
+            Derived by the server from the site's latest automatic publication: succeeded synced,
             failed failed, otherwise pending; synced without one. Always present in responses; a write carrying it is
             refused (400).
         is_default:

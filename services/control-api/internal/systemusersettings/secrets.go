@@ -17,7 +17,8 @@ import (
 // bound to the platform scope; reads return only whether each is set and a
 // fingerprint. The CAPTCHA secrets keep their *_reference field for operators
 // whose secret manager holds the value (at most one of the two); the KYC
-// credentials fall back to IDENTITY_VERIFICATION_KYC_* instead.
+// provider credentials and object store keys fall back to
+// IDENTITY_VERIFICATION_KYC_* / IDENTITY_VERIFICATION_OBJECT_* instead.
 const secretsDomain = "cdnca-system-user-settings-secrets/v1\x00"
 
 const (
@@ -33,10 +34,25 @@ const (
 	// the same canonical padded base64 of 32-128 bytes).
 	SecretKYCAPIKey          = "kyc_api_key"
 	SecretKYCCallbackHMACKey = "kyc_callback_hmac_key"
+	// The KYC private object store keys replace
+	// IDENTITY_VERIFICATION_OBJECT_ACCESS_KEY_ID / _SECRET_ACCESS_KEY /
+	// _SESSION_TOKEN (migration 671).
+	SecretKYCObjectAccessKeyID     = "kyc_object_access_key_id"
+	SecretKYCObjectSecretAccessKey = "kyc_object_secret_access_key"
+	SecretKYCObjectSessionToken    = "kyc_object_session_token"
 )
 
 var secretNames = []string{SecretCaptchaSecretID, SecretCaptchaSecretKey, SecretCaptchaAppSecret,
-	SecretCaptchaTurnstileSecret, SecretKYCAPIKey, SecretKYCCallbackHMACKey}
+	SecretCaptchaTurnstileSecret, SecretKYCAPIKey, SecretKYCCallbackHMACKey,
+	SecretKYCObjectAccessKeyID, SecretKYCObjectSecretAccessKey, SecretKYCObjectSessionToken}
+
+// secretMaxLength is the longest value a page secret may have.
+func secretMaxLength(name string) int {
+	if name == SecretKYCObjectSessionToken {
+		return 4096
+	}
+	return 1024
+}
 
 // secretReference is the reference field paired with a page secret.
 func secretReference(value Settings, name string) string {
@@ -76,6 +92,20 @@ func secretReason(name, secret string) string {
 		if err != nil || len(decoded) < 32 || len(decoded) > 128 || base64.StdEncoding.EncodeToString(decoded) != secret {
 			return fielderr.InvalidFormat
 		}
+	case SecretKYCObjectAccessKeyID:
+		return lengthReason(secret, 3, 256)
+	case SecretKYCObjectSecretAccessKey:
+		return lengthReason(secret, 8, 512)
+	}
+	return ""
+}
+
+func lengthReason(value string, min, max int) string {
+	switch {
+	case len(value) < min:
+		return fielderr.TooShort
+	case len(value) > max:
+		return fielderr.TooLong
 	}
 	return ""
 }
@@ -97,7 +127,7 @@ func secretsFieldError(value Settings, secrets map[string]*string, stored []stri
 				// clear the saved secret before switching to a reference
 				return field("value."+name+"_reference", fielderr.Invalid)
 			}
-		case len(*secret) > 1024:
+		case len(*secret) > secretMaxLength(name):
 			return field(name, fielderr.TooLong)
 		case strings.ContainsAny(*secret, "\r\n\x00") || strings.TrimSpace(*secret) != *secret:
 			return field(name, fielderr.InvalidFormat)
@@ -232,4 +262,7 @@ func (document *Document) setSecrets(fingerprints map[string]string) {
 	document.CaptchaTurnstileSecretConfigured, document.CaptchaTurnstileSecretFingerprint = print(SecretCaptchaTurnstileSecret)
 	document.KYCAPIKeyConfigured, document.KYCAPIKeyFingerprint = print(SecretKYCAPIKey)
 	document.KYCCallbackHMACKeyConfigured, document.KYCCallbackHMACKeyFingerprint = print(SecretKYCCallbackHMACKey)
+	document.KYCObjectAccessKeyIDConfigured, document.KYCObjectAccessKeyIDFingerprint = print(SecretKYCObjectAccessKeyID)
+	document.KYCObjectSecretAccessKeyConfigured, document.KYCObjectSecretAccessKeyFingerprint = print(SecretKYCObjectSecretAccessKey)
+	document.KYCObjectSessionTokenConfigured, document.KYCObjectSessionTokenFingerprint = print(SecretKYCObjectSessionToken)
 }

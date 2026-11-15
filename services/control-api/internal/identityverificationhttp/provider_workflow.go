@@ -139,9 +139,12 @@ func NewProviderWorkflow(pool *pgxpool.Pool, auditor identityverification.AuditA
 	if config.EraseRetryDelay == 0 {
 		config.EraseRetryDelay = defaultProviderEraseRetry
 	}
+	// A store configured at runtime (system settings page) supplies the
+	// encryption key ID per upload instead.
+	_, runtimeKeyID := objects.(runtimeEncryptionKeyID)
 	if len(config.TokenKey) < 32 || len(config.TokenKey) > 128 ||
 		!resolverNamePattern.MatchString(config.ResolverName) ||
-		!evidenceKeyIDPattern.MatchString(config.EncryptionKeyID) ||
+		!runtimeKeyID && !evidenceKeyIDPattern.MatchString(config.EncryptionKeyID) ||
 		config.SessionTTL < time.Minute || config.SessionTTL > 24*time.Hour ||
 		config.UploadTTL < time.Minute || config.UploadTTL > config.SessionTTL ||
 		config.RetentionPeriod <= 0 || config.CallbackMaxAge <= 0 || config.CallbackFutureSkew < 0 ||
@@ -194,8 +197,7 @@ func (workflow *ProviderWorkflow) Close() {
 func (workflow *ProviderWorkflow) StartSession(ctx context.Context, actor identityverification.Actor,
 	request StartProviderSessionRequest,
 ) (ProviderSessionView, error) {
-	if !workflow.Configured() || ctx == nil || validateStartProviderSession(actor, request) != nil ||
-		request.Provider != workflow.provider.Name() {
+	if !workflow.Configured() || ctx == nil || validateStartProviderSession(actor, request) != nil {
 		return ProviderSessionView{}, ErrProviderInvalid
 	}
 	if workflow.kindEnabled != nil {
@@ -209,7 +211,7 @@ func (workflow *ProviderWorkflow) StartSession(ctx context.Context, actor identi
 	}
 	// No provider credentials yet: refuse before a session row is written.
 	switch ready := workflow.provider.(type) {
-	case interface{ EnsureCredentials(context.Context) error }:
+	case runtimeConfiguredProvider:
 		if err := ready.EnsureCredentials(ctx); err != nil {
 			return ProviderSessionView{}, err
 		}
@@ -217,6 +219,11 @@ func (workflow *ProviderWorkflow) StartSession(ctx context.Context, actor identi
 		if !ready.CredentialsReady() {
 			return ProviderSessionView{}, ErrProviderNotConfigured
 		}
+	}
+	// after the readiness check: a provider configured at runtime has no
+	// name until then
+	if request.Provider != workflow.provider.Name() {
+		return ProviderSessionView{}, ErrProviderInvalid
 	}
 	digest := providerSessionRequestDigest(request)
 	now := workflow.now().UTC().Truncate(time.Microsecond)
@@ -360,10 +367,14 @@ func (workflow *ProviderWorkflow) CreateUpload(ctx context.Context, actor identi
 	if !workflow.Configured() || ctx == nil || validateCreateProviderUpload(actor, request) != nil {
 		return ProviderUploadView{}, ErrProviderInvalid
 	}
+	encryptionKeyID, err := workflow.currentEncryptionKeyID(ctx)
+	if err != nil {
+		return ProviderUploadView{}, err
+	}
 	now := workflow.now().UTC().Truncate(time.Microsecond)
 	var record providerUploadRecord
 	replayed := false
-	err := pgx.BeginFunc(ctx, workflow.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, workflow.pool, func(tx pgx.Tx) error {
 		if err := workflow.authorizer.AuthorizeProviderWrite(ctx, tx, actor); err != nil {
 			return err
 		}
@@ -408,13 +419,13 @@ func (workflow *ProviderWorkflow) CreateUpload(ctx context.Context, actor identi
 			content_type,encryption_key_id,idempotency_key,request_id,state,revision,created_at,updated_at,expires_at
 		) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'issued',1,$13,$13,$14)`, id, session.ID,
 			actor.ScopeID, actor.UserID, request.MaterialKind, key, request.SHA256[:], request.SizeBytes,
-			request.ContentType, workflow.encryptionKeyID, request.IdempotencyKey, request.RequestID, now, expiresAt)
+			request.ContentType, encryptionKeyID, request.IdempotencyKey, request.RequestID, now, expiresAt)
 		if err != nil {
 			return err
 		}
 		record = providerUploadRecord{ID: id, SessionID: session.ID, TenantScopeID: actor.ScopeID, ActorUserID: actor.UserID,
 			MaterialKind: request.MaterialKind, ObjectKey: key, ObjectSHA256: request.SHA256[:], SizeBytes: request.SizeBytes,
-			ContentType: request.ContentType, EncryptionKeyID: workflow.encryptionKeyID, IdempotencyKey: request.IdempotencyKey,
+			ContentType: request.ContentType, EncryptionKeyID: encryptionKeyID, IdempotencyKey: request.IdempotencyKey,
 			State: ProviderUploadIssued, Revision: 1, ExpiresAt: expiresAt, UpdatedAt: now}
 		return workflow.appendAudit(ctx, tx, actor.ScopeID, &actor.UserID, id,
 			"identity_verification.provider_upload.issued", request.RequestID,
@@ -518,7 +529,15 @@ func (workflow *ProviderWorkflow) FinalizeUpload(ctx context.Context, actor iden
 }
 
 func (workflow *ProviderWorkflow) ApplyCallback(ctx context.Context, envelope ProviderCallbackEnvelope) (ProviderCallbackResult, error) {
-	if !workflow.Configured() || ctx == nil || envelope.Provider != workflow.provider.Name() {
+	if !workflow.Configured() || ctx == nil {
+		return ProviderCallbackResult{}, ErrProviderCallbackAuth
+	}
+	if ready, ok := workflow.provider.(runtimeConfiguredProvider); ok {
+		if err := ready.EnsureCredentials(ctx); err != nil {
+			return ProviderCallbackResult{}, err
+		}
+	}
+	if envelope.Provider != workflow.provider.Name() {
 		return ProviderCallbackResult{}, ErrProviderCallbackAuth
 	}
 	verified, err := workflow.provider.VerifyCallback(ctx, envelope)
@@ -1001,7 +1020,38 @@ func configuredKYCProvider(provider KYCProvider) (configured bool) {
 			configured = false
 		}
 	}()
-	return provider.Configured() && resolverNamePattern.MatchString(provider.Name())
+	// a provider configured at runtime has no name until it is configured
+	_, runtime := provider.(runtimeConfiguredProvider)
+	return provider.Configured() && (resolverNamePattern.MatchString(provider.Name()) || runtime && provider.Name() == "")
+}
+
+// runtimeConfiguredProvider is a KYC provider whose configuration may change
+// while control-api runs (cmd/control-api: the system settings page).
+// EnsureCredentials picks up the current configuration and answers
+// ErrProviderNotConfigured while it is incomplete.
+type runtimeConfiguredProvider interface {
+	EnsureCredentials(context.Context) error
+}
+
+// runtimeEncryptionKeyID is a private object store that supplies the current
+// KMS key ID of new uploads (ErrProviderNotConfigured while unset).
+type runtimeEncryptionKeyID interface {
+	EncryptionKeyID(context.Context) (string, error)
+}
+
+func (workflow *ProviderWorkflow) currentEncryptionKeyID(ctx context.Context) (string, error) {
+	source, ok := workflow.objects.(runtimeEncryptionKeyID)
+	if !ok {
+		return workflow.encryptionKeyID, nil
+	}
+	keyID, err := source.EncryptionKeyID(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !evidenceKeyIDPattern.MatchString(keyID) || len(keyID) > 256 {
+		return "", ErrProviderUnavailable
+	}
+	return keyID, nil
 }
 func isNilProviderAuthorizer(value providerWriteAuthorizer) bool {
 	if value == nil {

@@ -93,6 +93,12 @@ components:
         kyc_api_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
         kyc_callback_hmac_key_configured: {type: boolean, description: The KYC provider callback signing key entered on the settings page is stored encrypted (never returned).}
         kyc_callback_hmac_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        kyc_object_access_key_id_configured: {type: boolean, description: The KYC private object store access key ID entered on the settings page is stored encrypted (never returned).}
+        kyc_object_access_key_id_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        kyc_object_secret_access_key_configured: {type: boolean, description: The KYC private object store secret access key entered on the settings page is stored encrypted (never returned).}
+        kyc_object_secret_access_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        kyc_object_session_token_configured: {type: boolean, description: The KYC private object store session token entered on the settings page is stored encrypted (never returned).}
+        kyc_object_session_token_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
     WriteRequest:
       type: object
       additionalProperties: false
@@ -120,6 +126,26 @@ components:
             - {$ref: '#/components/schemas/WriteOnlySecret'}
           description: Callback signing key of the KYC provider, canonical padded base64 of 32-128 bytes; replaces IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64, which stays the fallback; a change applies without restarting the control plane.
           x-description-zh: 实名认证服务回调验签密钥，32–128 字节的标准带填充 Base64；替换 IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64，未保存时沿用该环境变量；修改后无需重启控制面即生效。
+        kyc_object_access_key_id:
+          allOf:
+            - {$ref: '#/components/schemas/WriteOnlySecret'}
+          minLength: 3
+          maxLength: 256
+          description: Access key ID of the KYC private object store (identity documents and liveness material); replaces IDENTITY_VERIFICATION_OBJECT_ACCESS_KEY_ID, which stays the fallback; a change applies without restarting the control plane.
+          x-description-zh: 实名材料私有对象存储的 Access Key ID；替换 IDENTITY_VERIFICATION_OBJECT_ACCESS_KEY_ID，未保存时沿用该环境变量；修改后无需重启控制面即生效。
+        kyc_object_secret_access_key:
+          allOf:
+            - {$ref: '#/components/schemas/WriteOnlySecret'}
+          minLength: 8
+          maxLength: 512
+          description: Secret access key of the KYC private object store; replaces IDENTITY_VERIFICATION_OBJECT_SECRET_ACCESS_KEY, which stays the fallback.
+          x-description-zh: 实名材料私有对象存储的 Secret Access Key；替换 IDENTITY_VERIFICATION_OBJECT_SECRET_ACCESS_KEY，未保存时沿用该环境变量。
+        kyc_object_session_token:
+          type: string
+          maxLength: 4096
+          writeOnly: true
+          description: Optional session token of temporary object store credentials, otherwise like WriteOnlySecret; replaces IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN, which stays the fallback.
+          x-description-zh: 选填，对象存储临时凭据的 Session Token，其余同 WriteOnlySecret；替换 IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN，未保存时沿用该环境变量。
     WriteOnlySecret:
       type: string
       maxLength: 1024
@@ -179,6 +205,55 @@ components:
           type: boolean
           description: True once the identity tab was saved. Until then a new KYC session of any kind may start whenever the KYC provider is configured (the behaviour before these settings applied); afterwards identity_verification_method and enterprise_verification_enabled decide, and a turned-off kind is refused with identity_verification_kind_disabled.
           x-description-zh: 认证页保存过即为 true。此前只要实名认证服务已配置，任何类型都可发起；此后由 identity_verification_method 与 enterprise_verification_enabled 决定，关闭的类型以 identity_verification_kind_disabled 拒绝。
+        kyc_provider_name:
+          type: string
+          pattern: '^([a-z][a-z0-9._-]{0,63})?$'
+          default: ''
+          description: Name of the KYC service (the provider of provider sessions and callbacks). Empty uses IDENTITY_VERIFICATION_KYC_PROVIDER_NAME. Each KYC value saved here applies to the next KYC request without restarting the control plane; until the service name, URL, API key, callback key ID, callback signing key, object store URL, region, bucket, access key ID, secret access key and KMS key ID are all set (here or in the environment) the provider routes answer 503 identity_verification_not_configured.
+          x-description-zh: 实名认证服务名称（服务商会话与回调使用的提供商名）；留空使用 IDENTITY_VERIFICATION_KYC_PROVIDER_NAME。这里保存的各项 KYC 配置下一次实名请求即生效，无需重启控制面；服务名称、服务地址、API Key、回调密钥 ID、回调签名密钥、存储地址、区域、存储桶、Access Key ID、Secret Access Key 与 KMS 密钥 ID 在本页或环境中齐全前，服务商相关接口返回 503 identity_verification_not_configured。
+        kyc_endpoint:
+          type: string
+          maxLength: 512
+          default: ''
+          description: https origin of the KYC service (scheme and DNS host only, port 443; no path, IP literal or localhost), refused as value.kyc_endpoint invalid_format otherwise. Empty uses IDENTITY_VERIFICATION_KYC_ENDPOINT.
+          x-description-zh: 实名认证服务的 https 源地址（只含协议与域名、端口仅 443，不带路径、IP 或 localhost），不符合时以 value.kyc_endpoint invalid_format 拒绝；留空使用 IDENTITY_VERIFICATION_KYC_ENDPOINT。
+        kyc_callback_key_id:
+          type: string
+          pattern: '^([A-Za-z0-9][A-Za-z0-9._:-]{0,127})?$'
+          default: ''
+          description: Expected X-KYC-Key-ID of KYC responses and callbacks. Empty uses IDENTITY_VERIFICATION_KYC_CALLBACK_KEY_ID.
+          x-description-zh: KYC 响应与回调请求头 X-KYC-Key-ID 的值；留空使用 IDENTITY_VERIFICATION_KYC_CALLBACK_KEY_ID。
+        kyc_object_endpoint:
+          type: string
+          maxLength: 512
+          default: ''
+          description: https origin of the S3-compatible private object store for identity material (same form as kyc_endpoint). Empty uses IDENTITY_VERIFICATION_OBJECT_ENDPOINT.
+          x-description-zh: 存放实名材料的 S3 兼容私有对象存储 https 源地址（格式同 kyc_endpoint）；留空使用 IDENTITY_VERIFICATION_OBJECT_ENDPOINT。
+        kyc_object_region:
+          type: string
+          pattern: '^([A-Za-z0-9][A-Za-z0-9-]{0,62})?$'
+          default: ''
+          description: Object store region. Empty uses IDENTITY_VERIFICATION_OBJECT_REGION.
+          x-description-zh: 对象存储区域；留空使用 IDENTITY_VERIFICATION_OBJECT_REGION。
+        kyc_object_bucket:
+          type: string
+          pattern: '^([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])?$'
+          default: ''
+          description: Object store bucket (DNS-style, not an IP address). Empty uses IDENTITY_VERIFICATION_OBJECT_BUCKET.
+          x-description-zh: 对象存储桶（DNS 风格名称，不能是 IP）；留空使用 IDENTITY_VERIFICATION_OBJECT_BUCKET。
+        kyc_object_prefix:
+          type: string
+          maxLength: 490
+          pattern: '^[^/\\%?#]*$'
+          default: ''
+          description: Optional single path segment before the object keys (not . or ..). Empty uses IDENTITY_VERIFICATION_OBJECT_PREFIX.
+          x-description-zh: 选填，对象键前的单段路径（不能是 . 或 ..）；留空使用 IDENTITY_VERIFICATION_OBJECT_PREFIX。
+        kyc_object_kms_key_id:
+          type: string
+          pattern: '^([A-Za-z0-9][A-Za-z0-9._:/-]{0,255})?$'
+          default: ''
+          description: KMS key ID or ARN for server-side encryption (SSE-KMS) of new uploads. Empty uses IDENTITY_VERIFICATION_OBJECT_KMS_KEY_ID.
+          x-description-zh: 新上传材料服务端加密（SSE-KMS）使用的 KMS 密钥 ID 或 ARN；留空使用 IDENTITY_VERIFICATION_OBJECT_KMS_KEY_ID。
         wechat_payment_enabled: {type: boolean}
         alipay_payment_enabled: {type: boolean}
         bank_transfer_enabled: {type: boolean}

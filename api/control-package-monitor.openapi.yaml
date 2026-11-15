@@ -4,8 +4,8 @@ info:
   version: 0.1.0
   description: >-
     Read-only views over the durable package-monitor policy heads, alert heads,
-    and immutable transition facts introduced by control migration 078, plus
-    durable alert acknowledgement commands introduced by migration 121.
+    and immutable transition facts, plus
+    durable alert acknowledgement commands.
     Responses intentionally omit threshold_identity, evidence_digest,
     source_event_id, notification_event_id, job_id, and request_id.
 servers:

@@ -38,7 +38,7 @@ func boolValue(value bool) *bool { return &value }
 
 type maintenanceReaderFunc func(context.Context, string, string, int) (MaintenanceCandidate, error)
 
-func (f maintenanceReaderFunc) ReadCandidate(ctx context.Context, component, version string, protocol int) (MaintenanceCandidate, error) {
+func (f maintenanceReaderFunc) ReadCandidate(ctx context.Context, component, version string, protocol int, _ uint64) (MaintenanceCandidate, error) {
 	return f(ctx, component, version, protocol)
 }
 
@@ -75,7 +75,7 @@ func TestMaintenanceCandidateExpiryAuthorizationAndDependencyFailure(t *testing.
 				}
 				return candidate, test.failure
 			})
-			got := maintenanceReadCandidate(t.Context(), reader, "control-api", "2.4.1", 1, authorization, grant, func() time.Time { return now })
+			got := maintenanceReadCandidate(t.Context(), reader, "control-api", "2.4.1", 1, 0, authorization, grant, func() time.Time { return now })
 			if got.Reason != test.want {
 				t.Fatalf("got %+v want %s", got, test.want)
 			}
@@ -90,7 +90,7 @@ func TestMaintenanceCandidateExpiryAuthorizationAndDependencyFailure(t *testing.
 			called = true
 			return MaintenanceCandidate{}, nil
 		})
-		result := maintenanceReadCandidate(t.Context(), reader, "control-api", "2.4.1", 1, MaintenanceAuthorization{State: state, Reason: "blocked"}, grant, func() time.Time { return now })
+		result := maintenanceReadCandidate(t.Context(), reader, "control-api", "2.4.1", 1, 0, MaintenanceAuthorization{State: state, Reason: "blocked"}, grant, func() time.Time { return now })
 		if called || result.State != "unavailable" || result.Reason != "blocked" {
 			t.Fatal("authorization denial contacted upstream")
 		}
@@ -144,7 +144,7 @@ func TestMaintenanceCandidateRejectsInconsistentReaderStates(t *testing.T) {
 			reader := maintenanceReaderFunc(func(context.Context, string, string, int) (MaintenanceCandidate, error) {
 				return MaintenanceCandidate{State: test.state, Reason: test.reason, Version: &test.version, ExpiresAt: &expires, Channel: "stable"}, nil
 			})
-			result := maintenanceReadCandidate(t.Context(), reader, "control-api", "2.4.1", 1,
+			result := maintenanceReadCandidate(t.Context(), reader, "control-api", "2.4.1", 1, 0,
 				MaintenanceAuthorization{State: "valid"}, entitlementguard.VersionGrant{Channel: "stable", MinVersion: "2.0.0", MaxVersion: "3.0.0"}, func() time.Time { return now })
 			if result.State != "unavailable" || result.Version != nil {
 				t.Fatalf("inconsistent candidate accepted: %+v", result)

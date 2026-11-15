@@ -98,9 +98,16 @@ components:
           description: Stable localizable reason; never a raw upstream error.
         version: {type: [string, 'null']}
         expires_at: {type: [string, 'null'], format: date-time}
+        release_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Release sequence of the target build; present only when the node's installed release_sequence was asked with.
       description: >-
         Positive states require an unexpired signed candidate and local authorization.
-        SemVer direction determines available, up_to_date or rollback_required.
+        SemVer direction determines available, up_to_date or rollback_required. A node
+        with an installed release_sequence is also available (reason rerelease_available)
+        at an equal version when the registered build has a higher release_sequence.
         Unavailable always has a null version. A signed negative snapshot may have
         an expiry; a local failure has null expiry. Clients disable stale candidates.
     Runtime:
@@ -156,6 +163,13 @@ components:
         runtime: {$ref: '#/components/schemas/Runtime'}
         reason: {type: string}
         eligible: {type: boolean}
+        current_release_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >-
+            Installed release_sequence reported by the node; present only when the node
+            can take a same-version re-release (capability SAME_VERSION_UPGRADE).
       description: >-
         Eligibility allows preflight plan creation only. It requires confirmed current
         version/session, fresh online heartbeat, active node, valid upgrade capabilities,

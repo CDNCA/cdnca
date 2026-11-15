@@ -104,6 +104,7 @@ components:
         component: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
         current_version: {type: string, description: 'Canonical semantic version of the running component, without v prefix or build metadata.'}
         protocol_version: {type: integer, minimum: 1}
+        current_release_sequence: {type: integer, minimum: 1, description: 'Optional. Installed release_sequence; a same-version candidate with a higher registry release_sequence is a re-release. Omitted by older control planes; placed after protocol_version in the canonical body.'}
     CandidateAuthority:
       type: object
       additionalProperties: false
@@ -155,9 +156,11 @@ components:
         status: {type: string, enum: [available, up_to_date, rollback_required, unavailable]}
         reason:
           type: string
-          enum: [upgrade_available, same_version, target_is_older, target_unset, license_inactive, customer_inactive, channel_inactive, target_not_allowed, artifact_unavailable, artifact_unverified, protocol_incompatible, version_not_allowed, signing_key_unavailable]
+          enum: [upgrade_available, rerelease_available, same_version, target_is_older, target_unset, license_inactive, customer_inactive, channel_inactive, target_not_allowed, artifact_unavailable, artifact_unverified, protocol_incompatible, version_not_allowed, signing_key_unavailable]
         authority: {$ref: '#/components/schemas/CandidateAuthority'}
         candidate: {$ref: '#/components/schemas/CandidateArtifact'}
+        current_release_sequence: {type: integer, minimum: 1, description: Echo of the request field; present only when requested.}
+        release_sequence: {type: integer, minimum: 1, description: 'Registry release_sequence of the candidate; present only with current_release_sequence and a candidate.'}
         issued_at: {type: integer, minimum: 1}
         expires_at: {type: integer, minimum: 1, description: Greater than issued_at and at most 60 seconds later.}
       allOf:
@@ -168,7 +171,7 @@ components:
               reason: {enum: [target_unset, license_inactive, customer_inactive, channel_inactive, target_not_allowed, artifact_unavailable, artifact_unverified, protocol_incompatible, version_not_allowed, signing_key_unavailable]}
           else: {required: [authority, candidate]}
         - if: {properties: {status: {const: available}}}
-          then: {properties: {reason: {const: upgrade_available}}}
+          then: {properties: {reason: {enum: [upgrade_available, rerelease_available]}}}
         - if: {properties: {status: {const: up_to_date}}}
           then: {properties: {reason: {const: same_version}}}
         - if: {properties: {status: {const: rollback_required}}}

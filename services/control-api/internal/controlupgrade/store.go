@@ -236,9 +236,15 @@ func validPlanGrantBinding(identity RolloutIdentity, plan RolloutPlan, binding P
 		bundle.Forward.Manifest.ArtifactID == plan.ArtifactID &&
 		bundle.Forward.Manifest.SHA256Digest == plan.SHA256Digest &&
 		bundle.Forward.Manifest.ArtifactSizeBytes == plan.ArtifactSizeBytes &&
-		bundle.Rollback.Manifest.ArtifactID == plan.RollbackArtifactID &&
-		bundle.Rollback.Manifest.SHA256Digest == plan.RollbackSHA256Digest &&
-		bundle.Rollback.Manifest.ArtifactSizeBytes == plan.RollbackArtifactSizeBytes &&
+		bundle.CurrentReleaseSequence == plan.CurrentReleaseSequence &&
+		// A same-version re-release plan carries no control-issued rollback even
+		// though its bundle names the one registered build twice.
+		(plan.CurrentReleaseSequence != 0 && plan.RollbackArtifactID == "" &&
+			plan.RollbackSHA256Digest == "" && plan.RollbackArtifactSizeBytes == 0 ||
+			plan.CurrentReleaseSequence == 0 &&
+				bundle.Rollback.Manifest.ArtifactID == plan.RollbackArtifactID &&
+				bundle.Rollback.Manifest.SHA256Digest == plan.RollbackSHA256Digest &&
+				bundle.Rollback.Manifest.ArtifactSizeBytes == plan.RollbackArtifactSizeBytes) &&
 		bundle.CommandIssuanceNotAfter == plan.CommandIssuanceNotAfter
 }
 

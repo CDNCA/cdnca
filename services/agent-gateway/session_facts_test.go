@@ -223,3 +223,17 @@ func TestSessionFactsDropUnknownCapabilities(t *testing.T) {
 		t.Fatalf("known capabilities %v", known)
 	}
 }
+
+// The installed release_sequence and SAME_VERSION_UPGRADE reach control in the session facts.
+func TestSessionFactsKeepInstalledReleaseSequence(t *testing.T) {
+	hello := &agentv1.AgentHello{Capabilities: &agentv1.AgentCapabilities{AgentVersion: "1.0.40", BuildId: "build",
+		OperatingSystem: "linux", Architecture: "amd64", InstalledReleaseSequence: 41,
+		Features: []*agentv1.Capability{{Name: agentv1.CapabilityName_CAPABILITY_NAME_EDGE_UPGRADE, ApiVersion: 1},
+			{Name: agentv1.CapabilityName_CAPABILITY_NAME_SAME_VERSION_UPGRADE, ApiVersion: 1}}},
+		ArtifactEncryptionKeyId: "key-1"}
+	facts := newGatewaySessionFacts(nodeIdentity{NodeID: testNodeID}, 1, &commonv1.ProtocolVersion{Major: 1}, hello)
+	if facts == nil || facts.Capabilities.InstalledReleaseSequence != 41 || len(facts.Capabilities.Features) != 2 ||
+		!slices.Contains(knownCapabilities(), agentv1.CapabilityName_CAPABILITY_NAME_SAME_VERSION_UPGRADE) {
+		t.Fatalf("facts = %v", facts)
+	}
+}

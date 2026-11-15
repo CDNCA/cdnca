@@ -23,6 +23,12 @@ type PackageOperator interface {
 	Rollback(context.Context, string) error
 }
 
+// PreviousBuildRestorer puts back the build a committed same-version
+// re-release replaced (rollback.sh --restore-previous-build).
+type PreviousBuildRestorer interface {
+	RestorePreviousBuild(context.Context, string) error
+}
+
 type ServiceConfig struct {
 	Paths      RuntimePaths
 	OwnerUID   uint32
@@ -327,8 +333,11 @@ func (service *Service) prepareInstall(packet []byte, request protocol.Request, 
 	if code != "" {
 		return JournalRecord{}, code
 	}
+	// A same-version target is a re-release: v3 upgrade only, and its
+	// release_sequence must be above the installed one (checked under the lock).
+	sameVersion := request.TargetVersion == current.CurrentVersion
 	if request.CurrentReceipt == nil || !sameReceipt(*request.CurrentReceipt, current) || request.CurrentVersion != current.CurrentVersion ||
-		request.TargetVersion == current.CurrentVersion ||
+		sameVersion && (request.ProtocolVersion != protocol.JournalV3Version || request.Action != protocol.ActionUpgrade) ||
 		request.ProtocolVersion != protocol.JournalV3Version && request.ReleaseSequence <= current.ReleaseSequence ||
 		request.ProtocolVersion == protocol.JournalV3Version && request.ExecutionSequence <= receiptSequence(current) {
 		return JournalRecord{}, protocol.ErrorTransactionConflict
@@ -402,6 +411,9 @@ func (service *Service) prepareInstall(packet []byte, request protocol.Request, 
 			current.ArtifactSHA256 != facts.OuterArtifactSHA256 ||
 			request.ProtocolVersion != protocol.JournalV3Version && facts.ReleaseSequence >= request.ReleaseSequence {
 			return ErrCurrentFacts
+		}
+		if sameVersion && facts.ReleaseSequence >= request.ReleaseSequence {
+			return ErrTransactionConflict
 		}
 		record.PreviousPhysicalReleaseSequence = facts.ReleaseSequence
 		record.PreviousManifestSHA256 = facts.ManifestSHA256
@@ -1176,7 +1188,17 @@ func (service *Service) completeRollbackLocked(ctx context.Context, record Journ
 	if !service.installedTargetMatches(record, facts) || record.ActiveReceipt == nil || !service.currentReceiptMatches(*record.ActiveReceipt, facts) {
 		return protocol.Receipt{}, protocol.ErrorStateUncertain
 	}
-	runErr := service.config.Runner.Rollback(ctx, record.PreviousVersion)
+	var runErr error
+	if record.PreviousVersion == record.TargetVersion {
+		// Re-release backed out after its commit: the replaced build was kept.
+		restorer, ok := service.config.Runner.(PreviousBuildRestorer)
+		if !ok {
+			return protocol.Receipt{}, protocol.ErrorRollbackFailed
+		}
+		runErr = restorer.RestorePreviousBuild(ctx, record.PreviousVersion)
+	} else {
+		runErr = service.config.Runner.Rollback(ctx, record.PreviousVersion)
+	}
 	facts, inspectErr = InspectInstalled(service.config.Paths, service.config.ReleasePublicKey, service.config.OwnerUID, service.config.OwnerGID)
 	if inspectErr != nil {
 		if runErr != nil {

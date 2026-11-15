@@ -172,7 +172,7 @@ func TestMaintenanceUpgradeClientSignedCandidateAndPrivateProjection(t *testing.
 			if state == "rollback_required" {
 				version = "1.2.0"
 			}
-			got, err := client.ReadCandidate(t.Context(), "control-api", version, 2)
+			got, err := client.ReadCandidate(t.Context(), "control-api", version, 2, 0)
 			if err != nil || got.State != state || got.ExpiresAt == nil || !got.ExpiresAt.Equal(fixture.now.Add(time.Minute)) {
 				t.Fatalf("candidate = (%+v,%v)", got, err)
 			}
@@ -239,7 +239,7 @@ func TestMaintenanceUpgradeClientRejectsTamperingBindingAndExpiry(t *testing.T) 
 				}
 				return maintenanceCandidateHTTPResponse(t, signed), nil
 			}))
-			if got, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2); err == nil || !reflect.DeepEqual(got, controlupgrade.MaintenanceCandidate{}) {
+			if got, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2, 0); err == nil || !reflect.DeepEqual(got, controlupgrade.MaintenanceCandidate{}) {
 				t.Fatalf("invalid candidate = (%+v,%v)", got, err)
 			}
 		})
@@ -275,7 +275,7 @@ func TestMaintenanceUpgradeClientVerifiesBothSigningKeyWindows(t *testing.T) {
 			client := fixture.client(t, maintenanceCandidateTransport(func(request *http.Request) (*http.Response, error) {
 				return maintenanceCandidateHTTPResponse(t, fixture.response(t, request)), nil
 			}))
-			got, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2)
+			got, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2, 0)
 			if name == "retired artifact still verifiable" {
 				if err != nil || got.State != "available" {
 					t.Fatalf("attestation-time verification = (%+v,%v)", got, err)
@@ -308,7 +308,7 @@ func TestMaintenanceUpgradeClientRejectsRevokedReleaseSigners(t *testing.T) {
 			client := fixture.client(t, maintenanceCandidateTransport(func(request *http.Request) (*http.Response, error) {
 				return maintenanceCandidateHTTPResponse(t, fixture.response(t, request)), nil
 			}))
-			got, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2)
+			got, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2, 0)
 			if !errors.Is(err, entitlementguard.ErrSignerRevoked) || got.State != "" {
 				t.Fatalf("revoked %s signer candidate = (%+v,%v)", role, got, err)
 			}
@@ -348,7 +348,7 @@ func TestMaintenanceUpgradeClientBoundsTransportAndClearsKey(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
 			defer cancel()
-			if got, err := client.ReadCandidate(ctx, "control-api", "1.0.0", 2); !errors.Is(err, errMaintenanceCandidateUnavailable) || got.State != "" {
+			if got, err := client.ReadCandidate(ctx, "control-api", "1.0.0", 2, 0); !errors.Is(err, errMaintenanceCandidateUnavailable) || got.State != "" {
 				t.Fatalf("failed transport = (%+v,%v)", got, err)
 			}
 		})
@@ -363,7 +363,7 @@ func TestMaintenanceUpgradeClientBoundsTransportAndClearsKey(t *testing.T) {
 	if !bytes.Equal(owned, make([]byte, ed25519.PrivateKeySize)) || bytes.Equal(fixture.privateKey, owned) {
 		t.Fatal("client key ownership was not cleared independently")
 	}
-	if _, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2); err == nil {
+	if _, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2, 0); err == nil {
 		t.Fatal("closed client remained usable")
 	}
 }
@@ -382,7 +382,7 @@ func TestMaintenanceUpgradeClientRejectsRedirectAndUnsafeOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(client.Close)
-	if _, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2); err == nil || hits.Load() != 1 {
+	if _, err := client.ReadCandidate(t.Context(), "control-api", "1.0.0", 2, 0); err == nil || hits.Load() != 1 {
 		t.Fatalf("redirect: err=%v requests=%d", err, hits.Load())
 	}
 	for _, origin := range []string{"http://license.example.test", "https://user:password@license.example.test", "https://license.example.test/", "https://license.example.test?", "https://license.example.test?key=value", "https://license.example.test#fragment"} {

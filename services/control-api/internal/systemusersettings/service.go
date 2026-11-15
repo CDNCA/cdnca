@@ -198,14 +198,14 @@ func (s *Service) CaptchaRuntime(ctx context.Context) (CaptchaRuntime, error) {
 }
 
 // IdentityVerificationRuntime reads the identity policy and the KYC provider
-// credentials saved on the page for the identity verification runtime. Like
+// configuration (fields and secrets) saved on the page for the identity verification runtime. Like
 // CaptchaRuntime it needs no actor and is only reachable from the runtime.
 func (s *Service) IdentityVerificationRuntime(ctx context.Context) (IdentityVerificationRuntime, error) {
 	return s.identityVerificationRuntime(ctx, true)
 }
 
-// IdentityPolicy is IdentityVerificationRuntime without the credentials (no
-// decryption), for the per-request kind gate.
+// IdentityPolicy is IdentityVerificationRuntime without the provider
+// configuration (no decryption), for the per-request kind gate.
 func (s *Service) IdentityPolicy(ctx context.Context) (IdentityVerificationRuntime, error) {
 	return s.identityVerificationRuntime(ctx, false)
 }
@@ -226,19 +226,17 @@ func (s *Service) identityVerificationRuntime(ctx context.Context, credentials b
 	}
 	runtime := IdentityVerificationRuntime{PolicySaved: value.IdentityPolicySaved,
 		PersonalEnabled: value.IdentityVerificationMethod != "none", EnterpriseEnabled: value.EnterpriseVerificationEnabled}
-	if credentials && row.keyID != nil {
-		secrets, err := openSecrets(s.cipher, row.scopeID.String(), *row.keyID, row.ciphertext)
-		if err != nil {
+	if !credentials {
+		return runtime, nil
+	}
+	var secrets map[string]string
+	if row.keyID != nil {
+		if secrets, err = openSecrets(s.cipher, row.scopeID.String(), *row.keyID, row.ciphertext); err != nil {
 			return IdentityVerificationRuntime{}, fmt.Errorf("open platform KYC credentials: %w", err)
 		}
-		if secret := secrets[SecretKYCAPIKey]; secret != "" {
-			runtime.KYCAPIKey = []byte(secret)
-		}
-		if secret := secrets[SecretKYCCallbackHMACKey]; secret != "" {
-			runtime.KYCCallbackHMAC = []byte(secret)
-		}
-		clear(secrets)
 	}
+	setKYCProviderRuntime(&runtime, value, secrets)
+	clear(secrets)
 	return runtime, nil
 }
 
@@ -596,6 +594,9 @@ func settingsFieldError(value Settings, secrets ...string) error {
 	}
 	if !phonenumber.ValidCountryCode(value.DefaultPhoneCountryCode) {
 		return field("default_phone_country_code", fielderr.Invalid)
+	}
+	if err := kycProviderFieldError(value); err != nil {
+		return err
 	}
 	externalCaptchaConfigured := configured(SecretCaptchaSecretID) && configured(SecretCaptchaSecretKey) && value.CaptchaAppID != "" && configured(SecretCaptchaAppSecret)
 	switch {

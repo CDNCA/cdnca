@@ -1,4 +1,4 @@
-import type { ControlUpgradeRolloutDetail } from '../api/controlUpgrades'
+import type { ControlUpgradeRolloutDetail, ControlUpgradeRolloutSummary } from '../api/controlUpgrades'
 import type { NativeUpgradeHistoryEntry, NativeUpgradeRunLog, NativeUpgradeRunLogEntry, NativeUpgradeStatus } from '../api/controlUpgrades.native'
 import { runLogMessage } from '../i18n/controlUpgradeRunLog'
 import type { maintenanceUpgradeMessage } from '../i18n/maintenanceUpgrade'
@@ -69,6 +69,15 @@ export function nodeErrorText(code: string, language: string): string {
   return runLogMessage(language, `node_${code}`) ?? runLogMessage(language, 'nodeErrorUnknown', { code })!
 }
 
+// A same-version re-release reads "1.0.35（序号 a→b）" instead of "1.0.35 → 1.0.35".
+export function rolloutVersionText(plan: ControlUpgradeRolloutSummary, mt: Translate): string {
+  if (plan.current_release_sequence === undefined || plan.release_sequence === undefined) {
+    return `${plan.current_version} → ${plan.target_version}`
+  }
+  return mt('planRereleaseVersion').replace('{version}', plan.target_version)
+    .replace('{from}', String(plan.current_release_sequence)).replace('{to}', String(plan.release_sequence))
+}
+
 export function nodeUpgradeLogLines(plan: ControlUpgradeRolloutDetail, nodeID: string, mt: Translate, language = 'zh-CN'): string[] {
   const entries: { at: number; order: number; kind: string; text: string }[] = []
   plan.events.forEach((event, index) => {
@@ -89,7 +98,7 @@ export function nodeUpgradeLogLines(plan: ControlUpgradeRolloutDetail, nodeID: s
   })
   entries.sort((left, right) => left.at - right.at || left.order - right.order)
   return [
-    line('INFO', Date.parse(plan.created_at), `${mt('logPlanCreated')} ${plan.current_version} → ${plan.target_version}`),
+    line('INFO', Date.parse(plan.created_at), `${mt('logPlanCreated')} ${rolloutVersionText(plan, mt)}`),
     ...entries.map((entry) => line(errorEntries.has(entry.kind) ? 'ERROR' : warningEntries.has(entry.kind) ? 'WARNING' : 'INFO', entry.at, entry.text)),
   ]
 }

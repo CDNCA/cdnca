@@ -34,7 +34,9 @@ type MaintenanceBuild struct {
 }
 
 type MaintenanceCandidateReader interface {
-	ReadCandidate(context.Context, string, string, int) (MaintenanceCandidate, error)
+	// ReadCandidate's last argument is the node's installed release_sequence
+	// (0 = not known or not able to re-release).
+	ReadCandidate(context.Context, string, string, int, uint64) (MaintenanceCandidate, error)
 }
 
 type MaintenanceCandidate struct {
@@ -42,7 +44,10 @@ type MaintenanceCandidate struct {
 	Reason    string     `json:"reason"`
 	Version   *string    `json:"version"`
 	ExpiresAt *time.Time `json:"expires_at"`
-	Channel   string     `json:"-"`
+	// ReleaseSequence is the target build's release_sequence, set only when a
+	// release_sequence was asked for (re-release display).
+	ReleaseSequence *uint64 `json:"release_sequence,omitempty"`
+	Channel         string  `json:"-"`
 }
 
 type MaintenanceAuthorization struct {
@@ -73,6 +78,9 @@ type MaintenanceNodeStatus struct {
 	Runtime        MaintenanceRuntimeState `json:"runtime"`
 	Reason         string                  `json:"reason"`
 	Eligible       bool                    `json:"eligible"`
+	// CurrentReleaseSequence is the installed release_sequence, present
+	// only when the node declares SAME_VERSION_UPGRADE (it can take a re-release).
+	CurrentReleaseSequence *uint64 `json:"current_release_sequence,omitempty"`
 }
 
 type MaintenanceStatus struct {
@@ -86,9 +94,10 @@ type MaintenanceStatus struct {
 }
 
 type maintenanceNodeFact struct {
-	Status   MaintenanceNodeStatus
-	Version  string
-	Protocol int
+	Status          MaintenanceNodeStatus
+	Version         string
+	Protocol        int
+	ReleaseSequence uint64
 }
 
 func (s *Service) ReadMaintenanceStatus(ctx context.Context, actor Actor, runtime MaintenanceRuntime, nodeIDs []string) (MaintenanceStatus, error) {
@@ -147,25 +156,27 @@ func (s *Service) ReadMaintenanceStatus(ctx context.Context, actor Actor, runtim
 	type candidateKey struct {
 		component, version string
 		protocol           int
+		releaseSequence    uint64
 	}
 	cache := make(map[candidateKey]MaintenanceCandidate)
-	readCandidate := func(component, version string, protocol int) MaintenanceCandidate {
-		key := candidateKey{component, version, protocol}
+	readCandidate := func(component, version string, protocol int, releaseSequence uint64) MaintenanceCandidate {
+		key := candidateKey{component, version, protocol, releaseSequence}
 		if candidate, ok := cache[key]; ok {
 			return candidate
 		}
-		candidate := maintenanceReadCandidate(ctx, runtime.Candidates, component, version, protocol, result.Control.Authorization, grant, s.store.now)
+		candidate := maintenanceReadCandidate(ctx, runtime.Candidates, component, version, protocol, releaseSequence,
+			result.Control.Authorization, grant, s.store.now)
 		cache[key] = candidate
 		return candidate
 	}
-	result.Control.Candidate = readCandidate("control-api", runtime.CurrentVersion, runtime.ProtocolVersion)
+	result.Control.Candidate = readCandidate("control-api", runtime.CurrentVersion, runtime.ProtocolVersion, 0)
 	nodeRuntime := MaintenanceRuntimeState{Reason: "node_upgrade_runtime_unavailable"}
 	if s.rollout != nil && runtime.NodeReady != nil && runtime.NodeReady() == nil {
 		nodeRuntime = MaintenanceRuntimeState{Ready: true, Reason: "ready"}
 	}
 	for _, fact := range facts {
 		status := fact.Status
-		status.Candidate = readCandidate("edge-agent", fact.Version, fact.Protocol)
+		status.Candidate = readCandidate("edge-agent", fact.Version, fact.Protocol, fact.ReleaseSequence)
 		status.Runtime = nodeRuntime
 		status = maintenanceNodeEligibility(status)
 		result.Nodes = append(result.Nodes, status)
@@ -220,7 +231,7 @@ func unavailableMaintenanceCandidate(reason string) MaintenanceCandidate {
 }
 
 func maintenanceReadCandidate(ctx context.Context, reader MaintenanceCandidateReader, component, version string, protocol int,
-	authorization MaintenanceAuthorization, grant entitlementguard.VersionGrant, now func() time.Time) MaintenanceCandidate {
+	currentReleaseSequence uint64, authorization MaintenanceAuthorization, grant entitlementguard.VersionGrant, now func() time.Time) MaintenanceCandidate {
 	if !validCanonicalVersion(version) {
 		return unavailableMaintenanceCandidate("version_unavailable")
 	}
@@ -236,7 +247,7 @@ func maintenanceReadCandidate(ctx context.Context, reader MaintenanceCandidateRe
 	if ctx.Err() != nil {
 		return unavailableMaintenanceCandidate("candidate_service_unavailable")
 	}
-	candidate, err := reader.ReadCandidate(ctx, component, version, protocol)
+	candidate, err := reader.ReadCandidate(ctx, component, version, protocol, currentReleaseSequence)
 	if err != nil {
 		return unavailableMaintenanceCandidate("candidate_service_unavailable")
 	}
@@ -255,6 +266,8 @@ func maintenanceReadCandidate(ctx context.Context, reader MaintenanceCandidateRe
 	comparison := semver.Compare("v"+*candidate.Version, "v"+version)
 	validDirection := candidate.State == "available" && candidate.Reason == "upgrade_available" && comparison > 0 ||
 		candidate.State == "up_to_date" && candidate.Reason == "same_version" && comparison == 0 ||
+		candidate.State == "available" && candidate.Reason == "rerelease_available" && comparison == 0 &&
+			currentReleaseSequence != 0 && candidate.ReleaseSequence != nil && *candidate.ReleaseSequence > currentReleaseSequence ||
 		candidate.State == "rollback_required" && candidate.Reason == "target_is_older" && comparison < 0
 	if !validDirection {
 		return unavailableMaintenanceCandidate("candidate_not_authorized")
@@ -315,7 +328,11 @@ func readMaintenanceNodeFacts(ctx context.Context, tx pgx.Tx, actor Actor, nodeI
 			fact.Protocol = int(*protocol)
 		}
 		cohortFact := rolloutNodeCapabilityFact{NodeID: fact.Status.NodeID, PresenceVersion: fact.Version, ProtocolVersion: uint32(fact.Protocol), CapabilityBytes: capabilities, CapabilitySHA256: digest}
-		_, capabilityErr := rolloutCohortFromFacts([]rolloutNodeCapabilityFact{cohortFact})
+		cohort, capabilityErr := rolloutCohortFromFacts([]rolloutNodeCapabilityFact{cohortFact})
+		if capabilityErr == nil && cohort.CurrentReleaseSequence != 0 {
+			sequence := cohort.CurrentReleaseSequence
+			fact.ReleaseSequence, fact.Status.CurrentReleaseSequence = sequence, &sequence
+		}
 		switch {
 		case adminState != "active":
 			fact.Status.Reason = "node_disabled"

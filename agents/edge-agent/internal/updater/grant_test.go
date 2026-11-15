@@ -576,7 +576,8 @@ func fixturePlan(envelope fixtureEnvelope) Plan {
 	plan := Plan{
 		SchemaVersion: 1, PlanID: envelope.Execution.CommandID,
 		Revision: envelope.Execution.ReleaseSequence, ReleaseSequence: envelope.Execution.ReleaseSequence,
-		IssuedAt: time.Unix(envelope.Execution.IssuedAt, 0).UTC(), ExpiresAt: time.Unix(envelope.Execution.ExpiresAt, 0).UTC(),
+		CurrentReleaseSequence: envelope.Execution.CurrentReleaseSequence,
+		IssuedAt:               time.Unix(envelope.Execution.IssuedAt, 0).UTC(), ExpiresAt: time.Unix(envelope.Execution.ExpiresAt, 0).UTC(),
 		Action: Action(envelope.Execution.Operation), CurrentVersion: envelope.Execution.CurrentVersion,
 		TargetVersion: envelope.Execution.TargetVersion, Platform: envelope.Execution.Platform,
 		Architecture: envelope.Execution.Architecture,
@@ -664,6 +665,7 @@ type fixtureExecution struct {
 	CommandIssuanceNotAfter int64                              `json:"command_issuance_not_after,omitempty"`
 	ExecutionSequence       uint64                             `json:"execution_sequence,omitempty"`
 	ReleaseSequence         uint64                             `json:"release_sequence"`
+	CurrentReleaseSequence  uint64                             `json:"current_release_sequence,omitempty"`
 	Component               string                             `json:"component"`
 	Operation               string                             `json:"operation"`
 	CurrentVersion          string                             `json:"current_version"`

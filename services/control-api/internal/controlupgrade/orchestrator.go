@@ -218,7 +218,8 @@ func issueRolloutArtifacts(ctx context.Context, config RolloutRuntimeConfig, int
 	entitlement.UpgradePlanArtifactBundle, error) {
 	parentResult, err := config.License.IssueParentGrant(ctx, ParentGrantRequest{
 		IdempotencyKey: "parent." + strings.ReplaceAll(intent.ID, "-", ""), RequestID: request.RequestID,
-		Component: "edge-agent", CurrentVersion: cohort.CurrentVersion, ProtocolVersion: int(cohort.ProtocolVersion)})
+		Component: "edge-agent", CurrentVersion: cohort.CurrentVersion, ProtocolVersion: int(cohort.ProtocolVersion),
+		CurrentReleaseSequence: cohort.CurrentReleaseSequence})
 	if err != nil {
 		return PlanGrantBinding{}, entitlement.UpgradeGrant{}, entitlement.UpgradePlanArtifactBundle{}, err
 	}
@@ -226,7 +227,8 @@ func issueRolloutArtifacts(ctx context.Context, config RolloutRuntimeConfig, int
 		Now: config.Clock().UTC(), ExpectedAudience: entitlement.UpgradeGrantAudience,
 		ExpectedInstallationID: config.InstallationID.String()}, config.SignerRevocation)
 	if err != nil || parentResult.ID.String() != parent.GrantID || parent.Component != "edge-agent" ||
-		parent.CurrentVersion != cohort.CurrentVersion || parent.ProtocolVersion != int(cohort.ProtocolVersion) {
+		parent.CurrentVersion != cohort.CurrentVersion || parent.ProtocolVersion != int(cohort.ProtocolVersion) ||
+		parent.CurrentReleaseSequence != 0 && parent.CurrentReleaseSequence != cohort.CurrentReleaseSequence {
 		return PlanGrantBinding{}, entitlement.UpgradeGrant{}, entitlement.UpgradePlanArtifactBundle{}, ErrGrantInvalid
 	}
 	parentDigest, err := entitlement.CanonicalUpgradeGrantDigest(parentResult.Encoded)
@@ -255,7 +257,8 @@ func issueRolloutArtifacts(ctx context.Context, config RolloutRuntimeConfig, int
 			signedBundle.Bundle.Forward.SignatureKeyID, signedBundle.Bundle.Rollback.SignatureKeyID)
 	}
 	if err != nil || bundleResult.ID.String() != bundle.BundleID || bundleResult.CommandIssuanceNotAfter != deadline ||
-		bundle.ParentGrantID != parent.GrantID || bundle.ParentGrantSHA256 != parentDigest {
+		bundle.ParentGrantID != parent.GrantID || bundle.ParentGrantSHA256 != parentDigest ||
+		bundle.CurrentReleaseSequence != parent.CurrentReleaseSequence {
 		return PlanGrantBinding{}, entitlement.UpgradeGrant{}, entitlement.UpgradePlanArtifactBundle{}, ErrGrantInvalid
 	}
 	binding := PlanGrantBinding{ParentGrantBytes: bytes.Clone(parentResult.Encoded), ParentGrantSHA256: parentDigest,
@@ -320,20 +323,31 @@ func newRolloutPlanFromArtifacts(planID string, parent entitlement.UpgradeGrant,
 		forwardReleaseSequence = forward.ReleaseSequence
 		rollbackReleaseSequence = rollback.ReleaseSequence
 	}
+	rollbackGrantDigest, rollbackAvailable := binding.ParentGrantSHA256, true
+	rollbackArtifactID, rollbackDigest, rollbackSize := rollback.ArtifactID, rollback.SHA256Digest, rollback.ArtifactSizeBytes
+	if bundle.CurrentReleaseSequence != 0 {
+		// Re-release: the registry keeps no older build of the version, so
+		// the plan has no control-issued rollback; a failed node restores its replaced
+		// build locally inside the forward command.
+		rollbackGrantDigest, rollbackAvailable, rollbackReleaseSequence = "", false, 0
+		rollbackArtifactID, rollbackDigest, rollbackSize = "", "", 0
+	}
 	return NewRolloutPlan(RolloutPlanInput{ID: planID, ParentGrantID: parent.GrantID,
 		GrantDigest: binding.ParentGrantSHA256, ParentGrantExpiresAt: parent.ExpiresAt,
 		ArtifactBundleID: bundle.BundleID, ArtifactBundleSHA256: binding.ArtifactBundleSHA256,
 		CommandIssuanceNotAfter: bundle.CommandIssuanceNotAfter, ReleaseSequence: forwardReleaseSequence,
 		Component: bundle.Component, ArtifactID: forward.ArtifactID, SHA256Digest: forward.SHA256Digest,
-		ArtifactSizeBytes: forward.ArtifactSizeBytes, RollbackGrantDigest: binding.ParentGrantSHA256,
-		RollbackReleaseSequence: rollbackReleaseSequence, RollbackArtifactID: rollback.ArtifactID,
-		RollbackSHA256Digest: rollback.SHA256Digest, RollbackArtifactSizeBytes: rollback.ArtifactSizeBytes,
+		ArtifactSizeBytes: forward.ArtifactSizeBytes, RollbackGrantDigest: rollbackGrantDigest,
+		CurrentReleaseSequence:  bundle.CurrentReleaseSequence,
+		RollbackReleaseSequence: rollbackReleaseSequence, RollbackArtifactID: rollbackArtifactID,
+		RollbackSHA256Digest: rollbackDigest, RollbackArtifactSizeBytes: rollbackSize,
 		CurrentVersion: bundle.CurrentVersion, TargetVersion: bundle.Version, AutomaticRollback: true,
 		ForwardProfile: profiles.forward, RollbackProfile: profiles.rollback,
 		Safety: PlanSafety{MinAgentVersion: profiles.forward.Compatibility.MinAgentVersion,
-			MaxAgentVersion: profiles.forward.Compatibility.MaxAgentVersion,
-			ProtocolMin:     uint32(max(forward.ProtocolMin, rollback.ProtocolMin)),
-			ProtocolMax:     uint32(min(forward.ProtocolMax, rollback.ProtocolMax)), RollbackAvailable: true}, Groups: groups})
+			MaxAgentVersion:   profiles.forward.Compatibility.MaxAgentVersion,
+			ProtocolMin:       uint32(max(forward.ProtocolMin, rollback.ProtocolMin)),
+			ProtocolMax:       uint32(min(forward.ProtocolMax, rollback.ProtocolMax)),
+			RollbackAvailable: rollbackAvailable}, Groups: groups})
 }
 
 func (s *Service) ApplyRolloutAction(ctx context.Context, actor Actor,
@@ -442,7 +456,8 @@ func (s *Service) issueRolloutDispatch(ctx context.Context, requestID string, pl
 		(grant.Schema != entitlement.UpgradeCommandGrantV2Schema && grant.Schema != entitlement.UpgradeCommandGrantV3Schema) ||
 		(plan.SchemaVersion == RolloutPlanSchemaVersion && (grant.Schema != entitlement.UpgradeCommandGrantV3Schema ||
 			grant.ExecutionSequence == 0 || grant.ReleaseSequence != expectedReleaseSequence)) ||
-		grant.Operation != action || grant.ArtifactBundleID != plan.ArtifactBundleID ||
+		grant.Operation != action || grant.CurrentReleaseSequence != plan.CurrentReleaseSequence ||
+		grant.ArtifactBundleID != plan.ArtifactBundleID ||
 		grant.ArtifactBundleSHA256 != plan.ArtifactBundleSHA256 ||
 		grant.CommandIssuanceNotAfter != plan.CommandIssuanceNotAfter ||
 		grant.ExpiresAt-grant.IssuedAt > int64(config.ExecutionTTL/time.Second) {

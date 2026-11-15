@@ -56,7 +56,7 @@ paths:
       operationId: getThemeAuthStyle
       x-summary-zh: "读取登录页主题样式"
       description: >-
-        Public sign-in page style of the theme plugin active on the user console (site theme C, auth_style):
+        Public sign-in page style of the theme plugin active on the user console (auth_style):
         CSS the console puts in a <style> of its own on /auth/* and the plugin's images. Forms and submission
         stay the platform's; nginx serves /auth/* with img-src, font-src and connect-src 'self'. An empty css
         without one. Cache-Control no-cache.
@@ -118,7 +118,7 @@ paths:
       x-summary-zh: "启用主题包"
       security: [{bearerAuth: []}]
       description: >-
-        Make a downloaded package the active theme of one console (site theme C, migration 461): no body is both
+        Make a downloaded package the active theme of one console: no body is both
         consoles as before; {"slot":"admin"|"user"|"all"} names one. The admin console (admin, all) takes official
         themes only (built in, uploads and copies, or the io.cdnca market namespace); a third party's market theme
         is a user console theme. An admin activation records a new error page publication revision pinned to the

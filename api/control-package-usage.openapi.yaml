@@ -496,7 +496,7 @@ components:
       additionalProperties: false
       required: [cycle_starts_at, cycle_ends_at, covered_bytes, batches, first_deducted_at, last_deducted_at]
       properties:
-        cycle_starts_at: {type: [string, 'null'], format: date-time, description: 迁移 333 之前写入的周期为 null}
+        cycle_starts_at: {type: [string, 'null'], format: date-time, description: 早期版本写入的周期为 null}
         cycle_ends_at: {type: [string, 'null'], format: date-time}
         covered_bytes: {$ref: '#/components/schemas/UInt64String'}
         batches: {type: integer, minimum: 1}

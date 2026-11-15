@@ -115,43 +115,46 @@ type upgradeExecutionEnvelope struct {
 }
 
 type upgradeExecutionWire struct {
-	Schema                  string                        `json:"schema"`
-	Audience                string                        `json:"audience"`
-	Purpose                 string                        `json:"purpose"`
-	Action                  string                        `json:"action"`
-	GrantDigestAlgorithm    string                        `json:"grant_digest_algorithm"`
-	GrantDigest             string                        `json:"grant_digest"`
-	GrantExpiresAt          int64                         `json:"grant_expires_at"`
-	InstallationID          string                        `json:"installation_id"`
-	NodeID                  string                        `json:"node_id"`
-	CommandID               string                        `json:"command_id"`
-	Nonce                   string                        `json:"nonce"`
-	PlanID                  string                        `json:"plan_id,omitempty"`
-	PlanRevision            uint64                        `json:"plan_revision,omitempty"`
-	BatchID                 string                        `json:"batch_id,omitempty"`
-	ArtifactBundleID        string                        `json:"artifact_bundle_id,omitempty"`
-	ArtifactBundleSHA256    string                        `json:"artifact_bundle_sha256,omitempty"`
-	CommandIssuanceNotAfter int64                         `json:"command_issuance_not_after,omitempty"`
-	ExecutionSequence       uint64                        `json:"execution_sequence,omitempty"`
-	ReleaseSequence         uint64                        `json:"release_sequence"`
-	Component               string                        `json:"component"`
-	Operation               string                        `json:"operation"`
-	CurrentVersion          string                        `json:"current_version"`
-	TargetVersion           string                        `json:"target_version"`
-	ArtifactID              string                        `json:"artifact_id"`
-	DigestAlgorithm         string                        `json:"digest_algorithm"`
-	SHA256Digest            string                        `json:"sha256_digest"`
-	DownloadURL             string                        `json:"download_url"`
-	ArtifactSizeBytes       int64                         `json:"artifact_size_bytes"`
-	Platform                string                        `json:"platform"`
-	Architecture            string                        `json:"architecture"`
-	Compatibility           upgradeExecutionCompatibility `json:"compatibility"`
-	Health                  upgradeExecutionHealth        `json:"health"`
-	Rollout                 upgradeExecutionRollout       `json:"rollout"`
-	Rollback                upgradeExecutionRollback      `json:"rollback"`
-	IssuedAt                int64                         `json:"issued_at"`
-	NotBefore               int64                         `json:"not_before"`
-	ExpiresAt               int64                         `json:"expires_at"`
+	Schema                  string `json:"schema"`
+	Audience                string `json:"audience"`
+	Purpose                 string `json:"purpose"`
+	Action                  string `json:"action"`
+	GrantDigestAlgorithm    string `json:"grant_digest_algorithm"`
+	GrantDigest             string `json:"grant_digest"`
+	GrantExpiresAt          int64  `json:"grant_expires_at"`
+	InstallationID          string `json:"installation_id"`
+	NodeID                  string `json:"node_id"`
+	CommandID               string `json:"command_id"`
+	Nonce                   string `json:"nonce"`
+	PlanID                  string `json:"plan_id,omitempty"`
+	PlanRevision            uint64 `json:"plan_revision,omitempty"`
+	BatchID                 string `json:"batch_id,omitempty"`
+	ArtifactBundleID        string `json:"artifact_bundle_id,omitempty"`
+	ArtifactBundleSHA256    string `json:"artifact_bundle_sha256,omitempty"`
+	CommandIssuanceNotAfter int64  `json:"command_issuance_not_after,omitempty"`
+	ExecutionSequence       uint64 `json:"execution_sequence,omitempty"`
+	ReleaseSequence         uint64 `json:"release_sequence"`
+	// CurrentReleaseSequence: a same-version re-release only;
+	// older agents refuse the field (DisallowUnknownFields) and so the command.
+	CurrentReleaseSequence uint64                        `json:"current_release_sequence,omitempty"`
+	Component              string                        `json:"component"`
+	Operation              string                        `json:"operation"`
+	CurrentVersion         string                        `json:"current_version"`
+	TargetVersion          string                        `json:"target_version"`
+	ArtifactID             string                        `json:"artifact_id"`
+	DigestAlgorithm        string                        `json:"digest_algorithm"`
+	SHA256Digest           string                        `json:"sha256_digest"`
+	DownloadURL            string                        `json:"download_url"`
+	ArtifactSizeBytes      int64                         `json:"artifact_size_bytes"`
+	Platform               string                        `json:"platform"`
+	Architecture           string                        `json:"architecture"`
+	Compatibility          upgradeExecutionCompatibility `json:"compatibility"`
+	Health                 upgradeExecutionHealth        `json:"health"`
+	Rollout                upgradeExecutionRollout       `json:"rollout"`
+	Rollback               upgradeExecutionRollback      `json:"rollback"`
+	IssuedAt               int64                         `json:"issued_at"`
+	NotBefore              int64                         `json:"not_before"`
+	ExpiresAt              int64                         `json:"expires_at"`
 	// DownloadPolicy is the control plane's current download endpoint
 	// (libs/entitlement UpgradeDownloadPolicy, control-signed; fix-btenv3).
 	DownloadPolicy *entitlement.UpgradeDownloadPolicy `json:"download_policy,omitempty"`
@@ -390,7 +393,11 @@ func validateUpgradeExecution(execution upgradeExecutionWire) error {
 		return ErrInvalidUpgradeExecutionEnvelope
 	}
 	comparison := compareVersion(target, current)
-	if (execution.Operation == string(ActionUpgrade) && comparison <= 0) ||
+	if execution.CurrentReleaseSequence != 0 && !sameVersionRerelease(v3, Action(execution.Operation), comparison,
+		execution.CurrentReleaseSequence, execution.ReleaseSequence) {
+		return ErrInvalidUpgradeExecutionEnvelope
+	}
+	if (execution.Operation == string(ActionUpgrade) && (comparison < 0 || comparison == 0 && execution.CurrentReleaseSequence == 0)) ||
 		(execution.Operation == string(ActionRollback) && comparison >= 0) ||
 		(execution.Operation != string(ActionUpgrade) && execution.Operation != string(ActionRollback)) {
 		return ErrInvalidUpgradeExecutionEnvelope
@@ -454,7 +461,8 @@ func upgradeExecutionSignablePlan(envelope upgradeExecutionEnvelope) (signablePl
 	document := signablePlan{
 		SchemaVersion: planSchemaVersion, PlanID: execution.CommandID,
 		Revision: execution.ReleaseSequence, ReleaseSequence: execution.ReleaseSequence,
-		IssuedAt: time.Unix(execution.IssuedAt, 0).UTC(), ExpiresAt: time.Unix(execution.ExpiresAt, 0).UTC(),
+		CurrentReleaseSequence: execution.CurrentReleaseSequence,
+		IssuedAt:               time.Unix(execution.IssuedAt, 0).UTC(), ExpiresAt: time.Unix(execution.ExpiresAt, 0).UTC(),
 		Action: Action(execution.Operation), CurrentVersion: execution.CurrentVersion,
 		TargetVersion: execution.TargetVersion, Platform: execution.Platform, Architecture: execution.Architecture,
 		Artifact: Artifact{URL: execution.DownloadURL, SHA256: hex.EncodeToString(artifactDigest), Size: execution.ArtifactSizeBytes},
@@ -502,12 +510,21 @@ func upgradeExecutionPlan(envelope upgradeExecutionEnvelope) (Plan, error) {
 		ArtifactBundleSHA256:    document.ArtifactBundleSHA256,
 		CommandIssuanceNotAfter: document.CommandIssuanceNotAfter,
 		ExecutionSequence:       document.ExecutionSequence, ReleaseSequence: document.ReleaseSequence,
-		IssuedAt: document.IssuedAt, ExpiresAt: document.ExpiresAt, Action: document.Action,
+		CurrentReleaseSequence: document.CurrentReleaseSequence,
+		IssuedAt:               document.IssuedAt, ExpiresAt: document.ExpiresAt, Action: document.Action,
 		CurrentVersion: document.CurrentVersion, TargetVersion: document.TargetVersion,
 		Platform: document.Platform, Architecture: document.Architecture, Artifact: document.Artifact,
 		Compatibility: document.Compatibility, Health: document.Health, Rollout: document.Rollout,
 		Rollback: document.Rollback, Signature: Signature{KeyID: document.KeyID},
 	}, nil
+}
+
+// sameVersionRerelease: a same-version upgrade is a re-release:
+// v3 only, release_sequence strictly above the installed current one. The
+// helper and install.sh check the installed signed manifest again.
+func sameVersionRerelease(v3 bool, action Action, comparison int, currentReleaseSequence, releaseSequence uint64) bool {
+	return v3 && action == ActionUpgrade && comparison == 0 && currentReleaseSequence > 0 &&
+		releaseSequence > currentReleaseSequence
 }
 
 func validUpgradeExecutionUUID(value string) bool {
