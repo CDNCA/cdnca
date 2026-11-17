@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -87,6 +88,58 @@ func TestLicenseClientCommandGrantExactHeadersProofAndBody(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("HTTP calls = %d, want 1", calls)
+	}
+}
+
+// The plan target's receipt sequence goes last in the signed body, and only when known,
+// so a body without it stays byte-identical to what an older License (DisallowUnknownFields) accepts.
+func TestLicenseClientCommandGrantNodeReceiptSequenceInSignedBody(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{0x62}, ed25519.SeedSize))
+	installationID := uuid.MustParse("00000000-0000-4000-8000-000000000004")
+	var bodies []string
+	transport := roundTripUpgradeFunc(func(request *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bodies = append(bodies, string(body))
+		return &http.Response{StatusCode: http.StatusServiceUnavailable,
+			Header: http.Header{"Content-Type": []string{"application/json"}},
+			Body:   io.NopCloser(bytes.NewBufferString(`{"code":"signer_unavailable","request_id":"license-request"}`))}, nil
+	})
+	client, err := NewLicenseClient("https://license.example.test", transport, installationID, privateKey, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := CommandProfile{Platform: "linux", Architecture: "amd64",
+		Compatibility: entitlement.UpgradeExecutionCompatibility{MinAgentVersion: "1.0.0", MaxAgentVersion: "2.0.0"},
+		Health: entitlement.UpgradeExecutionHealthPolicy{Command: []string{"{artifact}", "--version"},
+			ActivationTimeoutNanoseconds: int64(time.Minute), ObservationWindowNanoseconds: int64(time.Minute),
+			IntervalNanoseconds: int64(time.Second), ProbeTimeoutNanoseconds: int64(time.Second),
+			RequiredConsecutiveSuccesses: 3},
+		Rollout:  entitlement.UpgradeExecutionRolloutPolicy{Percentage: 100},
+		Rollback: entitlement.UpgradeExecutionRollbackPolicy{Automatic: true}}
+	input := CommandGrantRequest{IdempotencyKey: "command.intent.1",
+		PlanID: "00000000-0000-4000-8000-000000000020", PlanRevision: 2,
+		BatchID:   "00000000-0000-4000-8000-000000000023",
+		CommandID: "00000000-0000-4000-8000-000000000021", NodeID: "00000000-0000-4000-8000-000000000022",
+		Operation: "forward", ArtifactBundle: []byte(`{"algorithm":"Ed25519"}`),
+		ForwardProfile: profile, RollbackProfile: profile}
+	for _, sequence := range []uint64{0, 124} {
+		input.NodeReceiptSequence = sequence
+		if _, err := client.IssueCommandGrant(context.Background(), input); !errors.Is(err, ErrLicenseUnavailable) {
+			t.Fatalf("IssueCommandGrant(%d) error = %v", sequence, err)
+		}
+	}
+	input.NodeReceiptSequence = math.MaxInt64
+	if _, err := client.IssueCommandGrant(context.Background(), input); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("IssueCommandGrant(MaxInt64) error = %v, want invalid input", err)
+	}
+	if len(bodies) != 2 || strings.Contains(bodies[0], "node_receipt_sequence") ||
+		!strings.HasSuffix(bodies[1], `},"node_receipt_sequence":124}`) ||
+		strings.TrimSuffix(bodies[1], `,"node_receipt_sequence":124}`)+"}" != bodies[0] {
+		t.Fatalf("request bodies = %q", bodies)
 	}
 }
 

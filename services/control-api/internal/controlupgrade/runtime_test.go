@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nats-io/nats.go"
 )
 
@@ -100,6 +102,64 @@ func TestOutboxDispatcherSettlesExactBrokerOutcomes(t *testing.T) {
 	}
 }
 
+// A cancelled plan's unconfirmed commands are deleted from the stream; a failed delete is
+// retried on the next pass, a deleted one is not repeated until its grant expires.
+func TestOutboxDispatcherRetractsCancelledCommandsAndRetriesFailures(t *testing.T) {
+	now := time.Date(2026, 11, 17, 1, 0, 0, 0, time.UTC)
+	expires := now.Add(15 * time.Minute)
+	first, second := planID(51), planID(52)
+	store := &fakeOutboxRuntimeStore{retractions: []RolloutCommandRetraction{
+		{OutboxID: first, Stream: upgradeCommandStream, Sequence: 7, ExpiresAt: &expires},
+		{OutboxID: second, Stream: upgradeCommandStream, Sequence: 8, ExpiresAt: &expires},
+	}}
+	publisher := &fakeRolloutPublisher{deleteErr: map[uint64]error{8: errors.New("nats: timeout")}}
+	clock := now
+	dispatcher, err := NewOutboxDispatcher(store, publisher, OutboxDispatcherConfig{
+		WorkerID: "upgrade-worker", ClaimLease: time.Minute, ClaimBatch: 1, Clock: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := dispatcher.RetractCancelledOnce(context.Background()); deleted != 1 || err == nil {
+		t.Fatalf("first pass = (%d, %v), want one deleted and the timeout", deleted, err)
+	}
+	delete(publisher.deleteErr, 8)
+	if deleted, err := dispatcher.RetractCancelledOnce(context.Background()); deleted != 1 || err != nil {
+		t.Fatalf("retry pass = (%d, %v)", deleted, err)
+	}
+	if deleted, err := dispatcher.RetractCancelledOnce(context.Background()); deleted != 0 || err != nil {
+		t.Fatalf("settled pass = (%d, %v)", deleted, err)
+	}
+	if len(publisher.deleted) != 2 || publisher.deleted[0] != 7 || publisher.deleted[1] != 8 {
+		t.Fatalf("deleted sequences = %v", publisher.deleted)
+	}
+	if skip := store.skips[2]; len(skip) != 2 {
+		t.Fatalf("third pass skip = %v, want both deleted commands", skip)
+	}
+	clock = expires
+	if _, err := dispatcher.RetractCancelledOnce(context.Background()); err != nil || len(store.skips[3]) != 0 {
+		t.Fatalf("after grant expiry skip = %v (%v), want the memory released", store.skips[3], err)
+	}
+}
+
+func TestCommandMessageGoneMatchesServerMissingSequenceReplies(t *testing.T) {
+	for _, test := range []struct {
+		err  error
+		gone bool
+	}{
+		{nats.ErrMsgNotFound, true},
+		{&nats.APIError{Code: 500, ErrorCode: 10057, Description: "no message found"}, true},
+		{&nats.APIError{Code: 500, ErrorCode: 10057, Description: "stream store EOF"}, true},
+		{&nats.APIError{Code: 404, ErrorCode: 10043, Description: "sequence 9 not found"}, true},
+		{&nats.APIError{Code: 500, ErrorCode: 10057, Description: "message delete not permitted"}, false},
+		{nats.ErrTimeout, false},
+		{nil, false},
+	} {
+		if got := commandMessageGone(test.err); got != test.gone {
+			t.Fatalf("commandMessageGone(%v) = %v", test.err, got)
+		}
+	}
+}
+
 func TestRolloutOutboxRetryDelayIsDeterministicAndBounded(t *testing.T) {
 	for _, test := range []struct {
 		attempt int
@@ -179,6 +239,70 @@ func TestStatusProcessorCommitsBeforeAckAndPersistsPoisonBeforeTerm(t *testing.T
 	})
 }
 
+// A node's accepted status was NAKed every second because the 105 trigger raised P9302.
+// A status trigger refusal is final (rejection row + Term); any other database error stays retryable,
+// with a delay that grows with the delivery count.
+func TestStatusProcessorRejectsDatabaseRefusalAndBacksOffRetries(t *testing.T) {
+	identity := RolloutIdentity{ActorScopeID: planID(91), ActorUserID: planID(92), InstallationID: planID(4)}
+	statusTrigger := &pgconn.PgError{Code: "P9302", Message: "invalid upgrade status binding",
+		Where: "PL/pgSQL function validate_control_upgrade_status_105() line 33 at RAISE"}
+	pubAckTrigger := &pgconn.PgError{Code: "P1022", Message: "new control upgrade status requires exact PubAck delivery facts",
+		Where: "PL/pgSQL function validate_control_upgrade_status_puback_identity_102() line 10 at RAISE"}
+	planTrigger := &pgconn.PgError{Code: "P9302", Where: "PL/pgSQL function validate_control_upgrade_plan_093() line 5 at RAISE"}
+	for _, test := range []struct {
+		name        string
+		err         error
+		delivered   uint64
+		disposition string
+		reason      string
+		delay       time.Duration
+	}{
+		{"status trigger refusal", fmt.Errorf("record control upgrade status: %w", statusTrigger), 7, StatusDispositionTerm, "status_database_rejected", 0},
+		{"PubAck trigger refusal", fmt.Errorf("record control upgrade status: %w", pubAckTrigger), 1, StatusDispositionTerm, "status_database_rejected", 0},
+		{"store verdict", ErrInvalidPlanTransition, 1, StatusDispositionTerm, "status_rejected", 0},
+		{"other trigger stays retryable", fmt.Errorf("record control upgrade status: %w", planTrigger), 1, StatusDispositionNak, "", time.Second},
+		{"connection error second delivery", errors.New("connection reset"), 2, StatusDispositionNak, "", 2 * time.Second},
+		{"unavailable fifth delivery", ErrResourceUnavailable, 5, StatusDispositionNak, "", 16 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			delivery := exactStatusDelivery()
+			delivery.delivered = test.delivered
+			store := &fakeStatusRuntimeStore{identity: identity, recordErr: test.err}
+			disposition, err := mustStatusProcessor(t, store, delivery).ProcessOnce(context.Background())
+			if disposition != test.disposition {
+				t.Fatalf("ProcessOnce() = (%q,%v), want %q", disposition, err, test.disposition)
+			}
+			if test.disposition == StatusDispositionTerm {
+				if err != nil || delivery.terms != 1 || delivery.naks != 0 || len(store.rejections) != 1 ||
+					store.rejections[0].Reason != test.reason {
+					t.Fatalf("err=%v delivery=%#v rejections=%#v", err, delivery, store.rejections)
+				}
+				return
+			}
+			if !errors.Is(err, test.err) || delivery.naks != 1 || delivery.terms != 0 || len(store.rejections) != 0 ||
+				delivery.nakDelay != test.delay {
+				t.Fatalf("err=%v delivery=%#v rejections=%#v", err, delivery, store.rejections)
+			}
+		})
+	}
+}
+
+func TestStatusNakDelayDoublesPerDeliveryAndIsBounded(t *testing.T) {
+	for _, test := range []struct {
+		base      time.Duration
+		delivered uint64
+		want      time.Duration
+	}{
+		{time.Second, 0, time.Second}, {time.Second, 1, time.Second}, {time.Second, 2, 2 * time.Second},
+		{time.Second, 5, 16 * time.Second}, {time.Second, 6, statusNakMaximumDelay},
+		{time.Second, ^uint64(0), statusNakMaximumDelay}, {45 * time.Second, 3, 45 * time.Second},
+	} {
+		if got := statusNakDelay(test.base, test.delivered); got != test.want {
+			t.Errorf("statusNakDelay(%v,%d) = %v, want %v", test.base, test.delivered, got, test.want)
+		}
+	}
+}
+
 func TestUpgradeStatusConsumerConfigRejectsBehaviorDrift(t *testing.T) {
 	config := DefaultStatusConsumerConfig()
 	expected := expectedUpgradeStatusConsumer(config)
@@ -243,6 +367,8 @@ func mustStatusProcessor(t *testing.T, store statusRuntimeStore, delivery status
 type fakeOutboxRuntimeStore struct {
 	claims      []RolloutOutboxClaim
 	settlements []RolloutOutboxSettlement
+	retractions []RolloutCommandRetraction
+	skips       [][]string
 }
 
 func (store *fakeOutboxRuntimeStore) ClaimOutbox(context.Context, string, time.Time, time.Duration, int) ([]RolloutOutboxClaim, error) {
@@ -252,14 +378,34 @@ func (store *fakeOutboxRuntimeStore) SettleOutbox(_ context.Context, settlement 
 	store.settlements = append(store.settlements, settlement)
 	return nil
 }
+func (store *fakeOutboxRuntimeStore) ListCommandRetractions(_ context.Context, skip []string,
+	_ int) ([]RolloutCommandRetraction, error) {
+	store.skips = append(store.skips, append([]string(nil), skip...))
+	var items []RolloutCommandRetraction
+	for _, item := range store.retractions {
+		if !containsNode(skip, item.OutboxID) {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
 
 type fakeRolloutPublisher struct {
-	result PublishResult
-	err    error
+	result    PublishResult
+	err       error
+	deleteErr map[uint64]error
+	deleted   []uint64
 }
 
 func (publisher *fakeRolloutPublisher) Publish(context.Context, RolloutOutboxMessage) (PublishResult, error) {
 	return publisher.result, publisher.err
+}
+func (publisher *fakeRolloutPublisher) Delete(_ context.Context, _ string, sequence uint64) error {
+	if err := publisher.deleteErr[sequence]; err != nil {
+		return err
+	}
+	publisher.deleted = append(publisher.deleted, sequence)
+	return nil
 }
 func (*fakeRolloutPublisher) Stream() string { return upgradeCommandStream }
 
@@ -280,6 +426,7 @@ type fakeStatusDelivery struct {
 	delivered uint64
 	acks      int
 	naks      int
+	nakDelay  time.Duration
 	terms     int
 	steps     *[]string
 }
@@ -307,8 +454,9 @@ func (delivery *fakeStatusDelivery) Ack(context.Context) error {
 	}
 	return nil
 }
-func (delivery *fakeStatusDelivery) Nak(context.Context, time.Duration) error {
+func (delivery *fakeStatusDelivery) Nak(_ context.Context, delay time.Duration) error {
 	delivery.naks++
+	delivery.nakDelay = delay
 	if delivery.steps != nil {
 		*delivery.steps = append(*delivery.steps, "nak")
 	}

@@ -187,6 +187,15 @@ func TestPurposeGatesMeteringObservationsAndDiagnose(t *testing.T) {
 	if got := f.count(t, `SELECT requests FROM probe_dnspup_usage WHERE purpose='edge_health'`); got != 1 {
 		t.Fatalf("edge usage = %d", got)
 	}
+	// Another site bound to the same supply host shares the job: no new charge, one observation.
+	if shared, err := runtime.Probe(ctx, ConsumerEdge, "site-2", "edge.example.net|443", runtime.RoundFor(ConsumerEdge, f.now, time.Minute),
+		ProbeRequest{Type: "tcping", Target: "edge.example.net", Port: 443}); err != nil || len(shared) != 2 {
+		t.Fatalf("shared edge probe %v %v", shared, err)
+	}
+	if usage, rows := f.count(t, `SELECT requests FROM probe_dnspup_usage WHERE purpose='edge_health'`),
+		f.count(t, `SELECT count(*) FROM probe_dnspup_observations WHERE consumer='edge'`); usage != 1 || rows != 1 {
+		t.Fatalf("shared: usage %d observations %d", usage, rows)
+	}
 	matrix, err := f.service.ReadMatrix(ctx, f.admin, SubjectEdge, "edge.example.net", "1h")
 	if err != nil || len(matrix.Cells) != 2 || len(matrix.Series) != 1 {
 		t.Fatalf("matrix %+v %v", matrix, err)

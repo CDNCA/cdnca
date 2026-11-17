@@ -102,7 +102,9 @@ describe('stream quick search', () => {
     fireEvent.change(box(), { target: { value } })
     await user.click(screen.getByRole('button', { name: '查询' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/端口|编号|源站/)
-    expect(list).toHaveBeenCalledTimes(1)
+    // 转发ID 是 IdOrNameInput：300 ms 后按名称联想（streamsApi.list 带 search），那不是列表请求；
+    // 负载下联想会在断言前触发，只数不带 search 的列表请求。
+    expect(list.mock.calls.filter(([, params]) => params.search === undefined)).toHaveLength(1)
   })
 
   // 转发ID/用户ID 输入名称即按名称参数过滤（forward/owner），数字按编号。

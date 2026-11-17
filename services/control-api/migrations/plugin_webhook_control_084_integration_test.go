@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -8596,6 +8597,47 @@ func pluginWebhookDatabaseTime084(t *testing.T, db pluginWebhookDB084) time.Time
 		t.Fatal(err)
 	}
 	return now
+}
+
+// ensurePluginWebhookLogins084 creates the two login roles these tests connect
+// as when the server lacks them: the role baseline in
+// tests/postgres-integration/run.sh has only the NOLOGIN group roles. A login
+// inherits its group, like the control and runtime logins of an install, and
+// reuses the TEST_DATABASE_URL password so password authentication works.
+// Existing roles are left unchanged; on failure the tests report the missing
+// role as before.
+func ensurePluginWebhookLogins084() {
+	base := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
+	if base == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	connection, err := pgx.Connect(ctx, base)
+	if err != nil {
+		return
+	}
+	defer connection.Close(ctx)
+	var password *string
+	if value := connection.Config().Password; value != "" {
+		password = &value
+	}
+	for _, role := range [][2]string{
+		{"open084_control_login", "cdnca_control_app"},
+		{"open084_runtime_login", "cdnca_plugin_webhook_runtime"},
+	} {
+		var statement *string
+		if err := connection.QueryRow(ctx, `SELECT CASE WHEN to_regrole($1) IS NULL AND to_regrole($2) IS NOT NULL THEN
+			format('CREATE ROLE %I LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS IN ROLE %I PASSWORD %L',
+				$1::text, $2::text, $3::text) END`, role[0], role[1], password).Scan(&statement); err != nil || statement == nil {
+			continue
+		}
+		var pgErr *pgconn.PgError
+		if _, err := connection.Exec(ctx, *statement); err != nil &&
+			!(errors.As(err, &pgErr) && (pgErr.Code == "42710" || pgErr.Code == "23505")) {
+			fmt.Fprintf(os.Stderr, "create login role %s: %v\n", role[0], err)
+		}
+	}
 }
 
 func pluginWebhookLoginPool084(t *testing.T, ownerPool *pgxpool.Pool, login string) *pgxpool.Pool {

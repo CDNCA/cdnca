@@ -34,7 +34,6 @@ type RolloutRuntimeConfig struct {
 	EdgeSigner         entitlement.Signer
 	InstallationID     uuid.UUID
 	CommandIssuanceTTL time.Duration
-	ExecutionTTL       time.Duration
 	Profiles           RolloutProfilePolicy
 	// Artifacts caches the signed forward/rollback artifacts on the control
 	// plane; executions then point nodes at the cache, never at the license origin.
@@ -45,6 +44,10 @@ type RolloutRuntimeConfig struct {
 	Clock          func() time.Time
 }
 
+// rolloutWriteTimeout bounds a create or action detached from its client:
+// License calls plus two artifact downloads of at most 10 minutes each.
+const rolloutWriteTimeout = 25 * time.Minute
+
 type RolloutRuntime struct {
 	config            RolloutRuntimeConfig
 	createPreparation rolloutCreatePreparationStore
@@ -54,6 +57,7 @@ type rolloutCreatePreparationStore interface {
 	PrepareCreateRollout(context.Context, Actor, RolloutIdentity, CreateRolloutRequest,
 		[32]byte) (CreateRolloutIntent, RolloutWriteResult, error)
 	LoadRolloutTargetCohort(context.Context, Actor, []string) (RolloutTargetCohort, error)
+	licenseExpiresAt(context.Context) (*time.Time, error)
 }
 
 func NewRolloutRuntime(config RolloutRuntimeConfig) (*RolloutRuntime, error) {
@@ -63,7 +67,6 @@ func NewRolloutRuntime(config RolloutRuntimeConfig) (*RolloutRuntime, error) {
 	if config.License == nil || config.LicenseKeys == nil || config.CommandGrantKeys == nil || config.Artifacts == nil ||
 		config.ControlSigner == nil || config.EdgeSigner == nil || config.InstallationID == uuid.Nil ||
 		config.CommandIssuanceTTL <= 0 || config.CommandIssuanceTTL > 7*24*time.Hour ||
-		config.ExecutionTTL <= 0 || config.ExecutionTTL > config.CommandIssuanceTTL ||
 		!validRolloutProfilePolicy(config.Profiles) ||
 		entitlement.ValidateKeyID(config.ControlSigner.KeyID()) != nil ||
 		entitlement.ValidateKeyID(config.EdgeSigner.KeyID()) != nil ||
@@ -113,6 +116,11 @@ func (s *Service) CreateRollout(ctx context.Context, actor Actor,
 	if validateCreateRolloutRequest(request) != nil {
 		return RolloutWriteResult{}, ErrInvalidInput
 	}
+	// A browser that gives up must not abandon License issuance or the artifact
+	// download half way: the create runs to its end and the console's retry with
+	// the same Idempotency-Key gets the stored result.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rolloutWriteTimeout)
+	defer cancel()
 	config := s.rollout.config
 	identity := RolloutIdentity{ActorScopeID: actor.ScopeID.String(), ActorUserID: actor.UserID.String(),
 		InstallationID: config.InstallationID.String()}
@@ -139,7 +147,11 @@ func (s *Service) CreateRollout(ctx context.Context, actor Actor,
 	if intent.State == createIntentAcquired {
 		parent, bundle, err = verifyRolloutArtifacts(config, intent.PlanID, binding)
 	} else {
-		binding, parent, bundle, err = issueRolloutArtifacts(ctx, config, intent, cohort, request)
+		var licenseExpiresAt *time.Time
+		if licenseExpiresAt, err = preparation.licenseExpiresAt(ctx); err != nil {
+			return RolloutWriteResult{}, err
+		}
+		binding, parent, bundle, err = issueRolloutArtifacts(ctx, config, intent, cohort, request, licenseExpiresAt)
 	}
 	if err != nil {
 		return RolloutWriteResult{}, err
@@ -214,8 +226,8 @@ func rolloutProfiles(cohort RolloutTargetCohort, targetVersion string,
 }
 
 func issueRolloutArtifacts(ctx context.Context, config RolloutRuntimeConfig, intent CreateRolloutIntent,
-	cohort RolloutTargetCohort, request CreateRolloutRequest) (PlanGrantBinding, entitlement.UpgradeGrant,
-	entitlement.UpgradePlanArtifactBundle, error) {
+	cohort RolloutTargetCohort, request CreateRolloutRequest, licenseExpiresAt *time.Time) (PlanGrantBinding,
+	entitlement.UpgradeGrant, entitlement.UpgradePlanArtifactBundle, error) {
 	parentResult, err := config.License.IssueParentGrant(ctx, ParentGrantRequest{
 		IdempotencyKey: "parent." + strings.ReplaceAll(intent.ID, "-", ""), RequestID: request.RequestID,
 		Component: "edge-agent", CurrentVersion: cohort.CurrentVersion, ProtocolVersion: int(cohort.ProtocolVersion),
@@ -235,7 +247,7 @@ func issueRolloutArtifacts(ctx context.Context, config RolloutRuntimeConfig, int
 	if err != nil {
 		return PlanGrantBinding{}, entitlement.UpgradeGrant{}, entitlement.UpgradePlanArtifactBundle{}, ErrGrantInvalid
 	}
-	deadline := config.Clock().UTC().Add(config.CommandIssuanceTTL).Unix()
+	deadline := commandIssuanceDeadline(config.Clock(), config.CommandIssuanceTTL, licenseExpiresAt)
 	bundleResult, err := config.License.IssuePlanArtifactBundle(ctx, PlanArtifactBundleRequest{
 		IdempotencyKey: "bundle." + strings.ReplaceAll(intent.ID, "-", ""), RequestID: request.RequestID,
 		PlanID: intent.PlanID, InitialPlanRevision: 1, ParentUpgradeGrant: parentResult.Encoded,
@@ -265,6 +277,17 @@ func issueRolloutArtifacts(ctx context.Context, config RolloutRuntimeConfig, int
 		ArtifactBundleBytes:  bytes.Clone(bundleResult.Encoded),
 		ArtifactBundleSHA256: base64.RawURLEncoding.EncodeToString(bundleResult.Digest[:])}
 	return binding, parent, bundle, nil
+}
+
+// commandIssuanceDeadline is now+ttl, cut to the license expiry when that is
+// earlier: License refuses a plan bundle whose deadline passes the license
+// expiry. The expiry floors to the second, so the deadline never passes it.
+func commandIssuanceDeadline(now time.Time, ttl time.Duration, licenseExpiresAt *time.Time) int64 {
+	deadline := now.UTC().Add(ttl).Unix()
+	if licenseExpiresAt != nil {
+		deadline = min(deadline, licenseExpiresAt.Unix())
+	}
+	return deadline
 }
 
 func verifyRolloutArtifacts(config RolloutRuntimeConfig, planID string,
@@ -355,6 +378,10 @@ func (s *Service) ApplyRolloutAction(ctx context.Context, actor Actor,
 	if s == nil || s.store == nil || s.rollout == nil {
 		return RolloutWriteResult{}, ErrRuntimeUnavailable
 	}
+	// Detached like CreateRollout: a browser giving up must not leave command
+	// grants issued but undispatched; the same request replays the result.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rolloutWriteTimeout)
+	defer cancel()
 	prepared, replay, err := s.store.PrepareRolloutAction(ctx, actor, request)
 	if err != nil || replay.Replayed {
 		return replay, err
@@ -425,12 +452,13 @@ func (s *Service) issueRolloutDispatch(ctx context.Context, requestID string, pl
 	if dispatch.Action == entitlement.RollbackOperation {
 		operation, action = "rollback", entitlement.RollbackOperation
 	}
+	receiptSequence := plan.Targets[dispatch.NodeID].ReceiptSequence
 	result, err := config.License.IssueCommandGrant(ctx, CommandGrantRequest{
 		IdempotencyKey: "command." + strings.ReplaceAll(dispatch.CommandID, "-", ""),
 		RequestID:      requestID, PlanID: dispatch.PlanID, PlanRevision: dispatch.PlanRevision,
 		BatchID: dispatch.BatchID, CommandID: dispatch.CommandID, NodeID: dispatch.NodeID, Operation: operation,
 		ArtifactBundle: binding.ArtifactBundleBytes, ForwardProfile: plan.ForwardProfile,
-		RollbackProfile: plan.RollbackProfile})
+		RollbackProfile: plan.RollbackProfile, NodeReceiptSequence: receiptSequence})
 	if err != nil {
 		return RolloutNodeCommand{}, RolloutOutboxMessage{}, err
 	}
@@ -452,15 +480,21 @@ func (s *Service) issueRolloutDispatch(ctx context.Context, requestID string, pl
 	if action == entitlement.RollbackOperation {
 		expectedReleaseSequence = plan.RollbackReleaseSequence
 	}
-	if err != nil || result.ID.String() != grant.CommandID ||
+	// result.ID names License's issued_upgrade_command_grants row, not the command (the command
+	// is bound by ExpectedCommandID above). The lifetime bound is the protocol maximum that
+	// Validate enforces (entitlement.MaxUpgradeGrantLifetime); the response's expires_at, which
+	// becomes the stored command expiry, must be the signed one. A v3 execution_sequence at or
+	// below the node's receipt sequence would be refused by its helper (an older
+	// License numbers from 1 per node).
+	if err != nil || result.ExpiresAt != grant.ExpiresAt ||
+		(grant.Schema == entitlement.UpgradeCommandGrantV3Schema && grant.ExecutionSequence <= receiptSequence) ||
 		(grant.Schema != entitlement.UpgradeCommandGrantV2Schema && grant.Schema != entitlement.UpgradeCommandGrantV3Schema) ||
 		(plan.SchemaVersion == RolloutPlanSchemaVersion && (grant.Schema != entitlement.UpgradeCommandGrantV3Schema ||
 			grant.ExecutionSequence == 0 || grant.ReleaseSequence != expectedReleaseSequence)) ||
 		grant.Operation != action || grant.CurrentReleaseSequence != plan.CurrentReleaseSequence ||
 		grant.ArtifactBundleID != plan.ArtifactBundleID ||
 		grant.ArtifactBundleSHA256 != plan.ArtifactBundleSHA256 ||
-		grant.CommandIssuanceNotAfter != plan.CommandIssuanceNotAfter ||
-		grant.ExpiresAt-grant.IssuedAt > int64(config.ExecutionTTL/time.Second) {
+		grant.CommandIssuanceNotAfter != plan.CommandIssuanceNotAfter {
 		return RolloutNodeCommand{}, RolloutOutboxMessage{}, ErrGrantInvalid
 	}
 	downloadURL, err := config.Artifacts.Ensure(ctx, grant.DownloadURL, grant.SHA256Digest, grant.ArtifactSizeBytes)

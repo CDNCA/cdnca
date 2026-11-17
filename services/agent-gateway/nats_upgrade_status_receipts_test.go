@@ -28,21 +28,22 @@ const (
 
 type upgradeProofJetStream struct {
 	nats.JetStreamContext
-	mu              sync.Mutex
-	nextSequence    uint64
-	firstSequence   uint64
-	last            map[string]*nats.RawStreamMsg
-	history         map[uint64]*nats.RawStreamMsg
-	messageIDs      map[string]uint64
-	getMsgCalls     int
-	streamInfoCalls int
-	published       []*nats.Msg
-	ackOverride     *nats.PubAck
-	publishErr      error
-	storeOnError    bool
-	corruptAckWire  bool
-	beforePublish   func(*nats.Msg)
-	rejectPublish   func(*nats.Msg) error
+	mu               sync.Mutex
+	nextSequence     uint64
+	firstSequence    uint64
+	last             map[string]*nats.RawStreamMsg
+	history          map[uint64]*nats.RawStreamMsg
+	messageIDs       map[string]uint64
+	getMsgCalls      int
+	streamInfoCalls  int
+	subjectInfoCalls int
+	published        []*nats.Msg
+	ackOverride      *nats.PubAck
+	publishErr       error
+	storeOnError     bool
+	corruptAckWire   bool
+	beforePublish    func(*nats.Msg)
+	rejectPublish    func(*nats.Msg) error
 }
 
 func (s *upgradeProofJetStream) GetLastMsg(stream, subject string, _ ...nats.JSOpt) (*nats.RawStreamMsg, error) {
@@ -72,14 +73,26 @@ func (s *upgradeProofJetStream) GetMsg(stream string, sequence uint64, _ ...nats
 	return cloneUpgradeRawMessage(message), nil
 }
 
-func (s *upgradeProofJetStream) StreamInfo(stream string, _ ...nats.JSOpt) (*nats.StreamInfo, error) {
+func (s *upgradeProofJetStream) StreamInfo(stream string, options ...nats.JSOpt) (*nats.StreamInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.streamInfoCalls++
 	if stream != UpgradeStatusStream {
 		return nil, errors.New("wrong stream")
 	}
 	state := nats.StreamState{Msgs: uint64(len(s.history)), LastSeq: s.nextSequence}
+	for _, option := range options {
+		if request, ok := option.(*nats.StreamInfoRequest); ok && request.SubjectsFilter != "" {
+			s.subjectInfoCalls++
+			state.Subjects = map[string]uint64{}
+			for _, message := range s.history {
+				if message != nil && subjectMatchesFilter(message.Subject, request.SubjectsFilter) {
+					state.Subjects[message.Subject]++
+				}
+			}
+			return &nats.StreamInfo{Config: nats.StreamConfig{Name: stream}, State: state}, nil
+		}
+	}
+	s.streamInfoCalls++
 	if s.firstSequence != 0 {
 		state.FirstSeq = s.firstSequence
 		return &nats.StreamInfo{Config: nats.StreamConfig{Name: stream}, State: state}, nil
@@ -91,6 +104,16 @@ func (s *upgradeProofJetStream) StreamInfo(stream string, _ ...nats.JSOpt) (*nat
 		}
 	}
 	return &nats.StreamInfo{Config: nats.StreamConfig{Name: stream}, State: state}, nil
+}
+
+// subjectMatchesFilter covers the single-token "*" filters the gateway sends.
+func subjectMatchesFilter(subject, filter string) bool {
+	prefix, wildcard := strings.CutSuffix(filter, ".*")
+	if !wildcard {
+		return subject == filter
+	}
+	rest, ok := strings.CutPrefix(subject, prefix+".")
+	return ok && rest != "" && !strings.Contains(rest, ".")
 }
 
 func upgradeStatusBusinessPublishCount(messages []*nats.Msg) int {
@@ -1423,4 +1446,46 @@ func upgradePublishedSubjects(messages []*nats.Msg) []string {
 		result = append(result, message.Subject)
 	}
 	return result
+}
+
+// The status stream held 8391 unrelated deployment statuses and no legacy
+// upgrade.<node> message; the first v2 status publish returned "migration in progress"
+// twice and the node's gateway session dropped each time.
+func TestUpgradeStatusPublishWithoutLegacySubjectsSkipsFullStreamScan(t *testing.T) {
+	command := validUpgradeCommandRecord(t)
+	status := validUpgradeStatusRecord(t, command)
+	jetstream := &upgradeProofJetStream{nextSequence: 8391, firstSequence: 1,
+		last: map[string]*nats.RawStreamMsg{}, history: map[uint64]*nats.RawStreamMsg{}}
+	for sequence := uint64(1); sequence <= jetstream.nextSequence; sequence++ {
+		raw := &nats.RawStreamMsg{Subject: fmt.Sprintf("cdnca.agent.deployment-status.generic-v2.%s.%d", command.NodeID, sequence),
+			Sequence: sequence, Data: []byte("{}")}
+		jetstream.history[sequence] = raw
+		jetstream.last[raw.Subject] = raw
+	}
+	bus := &NATSUpgradeCommandBus{js: jetstream, operationTimeout: time.Second}
+
+	publication, err := bus.PublishUpgradeStatus(t.Context(), command.NodeID, status.Encoded)
+	if err != nil || publication.Sequence == 0 {
+		t.Fatalf("first status over an unrelated history=(%+v,%v)", publication, err)
+	}
+	if jetstream.getMsgCalls > 16 {
+		t.Fatalf("first status read %d stream sequences, want no history scan", jetstream.getMsgCalls)
+	}
+	progress, found, err := bus.loadUpgradeStatusMigrationState(t.Context())
+	if err != nil || !found || !progress.Complete || progress.HorizonSequence != 8391 || progress.NextSequence != 8392 {
+		t.Fatalf("migration progress=(%+v,found=%t,err=%v)", progress, found, err)
+	}
+	progressWrites := len(jetstream.published)
+	next := distinctUpgradeStatusRecord(t, status, 2)
+	if second, err := bus.PublishUpgradeStatus(t.Context(), command.NodeID, next.Encoded); err != nil || second.Sequence <= publication.Sequence {
+		t.Fatalf("second status=(%+v,%v)", second, err)
+	}
+	for _, message := range jetstream.published[progressWrites:] {
+		if message.Subject == upgradeStatusMigrationSubject {
+			t.Fatal("second status rewrote migration progress although no legacy subject exists")
+		}
+	}
+	if jetstream.getMsgCalls > 32 {
+		t.Fatalf("second status read %d stream sequences, want no history scan", jetstream.getMsgCalls)
+	}
 }

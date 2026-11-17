@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -71,6 +72,9 @@ type CommandGrantRequest struct {
 	ArtifactBundle  []byte
 	ForwardProfile  CommandProfile
 	RollbackProfile CommandProfile
+	// NodeReceiptSequence (0 = not sent) is the plan target's ReceiptSequence;
+	// License issues the v3 execution_sequence above it (license 175).
+	NodeReceiptSequence uint64
 }
 
 type IssueUpgradeCommandGrantHTTPBody struct {
@@ -84,6 +88,7 @@ type IssueUpgradeCommandGrantHTTPBody struct {
 	UpgradePlanArtifactBundle string         `json:"upgrade_plan_artifact_bundle"`
 	ForwardProfile            CommandProfile `json:"forward_profile"`
 	RollbackProfile           CommandProfile `json:"rollback_profile"`
+	NodeReceiptSequence       uint64         `json:"node_receipt_sequence,omitempty"`
 }
 
 type CommandGrantResult struct {
@@ -168,7 +173,8 @@ func (client *LicenseClient) IssueCommandGrant(ctx context.Context, input Comman
 		input.PlanRevision > maxRolloutRevision || !validCanonicalPlanUUID(input.BatchID) ||
 		!validCanonicalPlanUUID(input.CommandID) || !validCanonicalPlanUUID(input.NodeID) ||
 		(input.Operation != "forward" && input.Operation != "rollback") || len(input.ArtifactBundle) == 0 ||
-		!validCommandProfile(input.ForwardProfile) || !validCommandProfile(input.RollbackProfile) {
+		!validCommandProfile(input.ForwardProfile) || !validCommandProfile(input.RollbackProfile) ||
+		input.NodeReceiptSequence >= math.MaxInt64 {
 		return CommandGrantResult{}, ErrInvalidInput
 	}
 	body := IssueUpgradeCommandGrantHTTPBody{Schema: upgradeCommandGrantRequestSchema,
@@ -176,7 +182,8 @@ func (client *LicenseClient) IssueCommandGrant(ctx context.Context, input Comman
 		CommandID: input.CommandID, NodeID: input.NodeID, Operation: input.Operation,
 		UpgradePlanArtifactBundle: base64.RawURLEncoding.EncodeToString(input.ArtifactBundle),
 		ForwardProfile:            cloneCommandProfile(input.ForwardProfile),
-		RollbackProfile:           cloneCommandProfile(input.RollbackProfile)}
+		RollbackProfile:           cloneCommandProfile(input.RollbackProfile),
+		NodeReceiptSequence:       input.NodeReceiptSequence}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return CommandGrantResult{}, ErrInvalidInput

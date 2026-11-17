@@ -683,6 +683,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
     post:
       operationId: createTenantMember
+      x-summary-zh: "在调用者租户范围新增子账号（tenant_viewer 角色，更多权限经 /v1/custom-rbac 授予）"
       summary: Add a sub-account to the caller's tenant scope (tenant_viewer role; grant more with /v1/custom-rbac)
       description: >-
         Suspend, delete, password reset and forced password change answer 403 tenant_member_outranks for a
@@ -716,6 +717,7 @@ paths:
   /v1/tenant/members/{user_id}/suspend:
     post:
       operationId: suspendTenantMember
+      x-summary-zh: "停用成员（撤销其会话，其网站停止服务，见 account_suspension）"
       summary: Suspend a member (revokes its sessions; its sites stop serving, see account_suspension)
       description: >-
         With transfer_to, the member's transferable resources first go to that member in the same
@@ -745,6 +747,7 @@ paths:
   /v1/tenant/members/{user_id}/resume:
     post:
       operationId: resumeTenantMember
+      x-summary-zh: "恢复已停用的成员"
       summary: Resume a suspended member
       parameters:
         - {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -764,6 +767,7 @@ paths:
   /v1/tenant/members/{user_id}:
     delete:
       operationId: deleteTenantMember
+      x-summary-zh: "删除调用者租户范围的子账号"
       summary: Delete a sub-account of the caller's tenant scope
       description: >-
         The user is disabled and marked deleted, every session is revoked at once (audited
@@ -805,6 +809,7 @@ paths:
   /v1/tenant/members/{user_id}/password-change:
     put:
       operationId: setTenantMemberPasswordChange
+      x-summary-zh: "要求（或取消）成员下次登录时修改密码"
       summary: Require (or withdraw) a password change at the member's next sign-in
       description: >-
         While required, the member's session requests are refused with 403 password_change_required
@@ -845,6 +850,7 @@ paths:
   /v1/tenant/members/{user_id}/password-reset:
     post:
       operationId: resetTenantMemberPassword
+      x-summary-zh: "为子账号生成新密码（撤销其会话，下次登录须修改密码）"
       summary: Give a sub-account a generated password (revokes its sessions, requires a change at the next sign-in)
       description: >-
         The generated password is kept encrypted for 10 minutes, bound to the caller and the Idempotency-Key.
@@ -903,6 +909,7 @@ paths:
   /v1/tenant/member-invitations:
     get:
       operationId: listTenantMemberInvitations
+      x-summary-zh: "列出调用者租户的成员邀请（超过有效期的待接受邀请显示为已过期）"
       summary: List the caller's tenant member invitations (pending ones past expiry read expired)
       responses:
         '200':
@@ -921,6 +928,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
     post:
       operationId: inviteTenantMember
+      x-summary-zh: "发送一次性邀请链接邮件（72 小时有效），受邀者成为只读子账号"
       summary: Email a one-time invitation link (72 hours) to become a read-only sub-account
       description: >-
         Audited identity.tenant_member.invite. The mail goes through the notification outbox (email channel);
@@ -961,6 +969,7 @@ paths:
   /v1/tenant/member-invitations/{invitation_id}/revoke:
     post:
       operationId: revokeTenantMemberInvitation
+      x-summary-zh: "撤回待接受的邀请"
       summary: Withdraw a pending invitation
       parameters:
         - {name: invitation_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -976,6 +985,7 @@ paths:
   /v1/auth/member-invitations/accept:
     post:
       operationId: acceptTenantMemberInvitation
+      x-summary-zh: "接受邀请并创建只读子账号（匿名调用，令牌即凭据）"
       summary: Accept an invitation and create the read-only sub-account (anonymous; the token is the credential)
       security: []
       requestBody:
@@ -2520,6 +2530,29 @@ paths:
       description: >-
         Requires control.upgrades.manage and a current expected revision. Rollback remains blocked
         for irreversible migrations, missing rollback artifacts, or an in-flight dispatched batch.
+      x-required-permissions: [control.upgrades.manage]
+      parameters:
+        - $ref: '#/components/parameters/ControlUpgradeRolloutID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: { $ref: '#/components/requestBodies/ControlUpgradeRolloutAction' }
+      responses:
+        '200': { $ref: '#/components/responses/ControlUpgradeRolloutWrite' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/RequestTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/control-upgrade-rollouts/{rollout_id}/cancel:
+    post:
+      operationId: cancelControlUpgradeRollout
+      x-summary-zh: "取消排队中的主控升级发布"
+      summary: Cancel a queued control upgrade rollout
+      description: >-
+        Requires control.upgrades.manage and a current expected revision. Only a queued rollout can be cancelled;
+        no node has a command yet, cancelled is terminal and the nodes can be put in a new rollout.
       x-required-permissions: [control.upgrades.manage]
       parameters:
         - $ref: '#/components/parameters/ControlUpgradeRolloutID'
@@ -9054,7 +9087,7 @@ components:
           $ref: '#/components/schemas/ControlUpgradePolicyDecision'
     ControlUpgradeRolloutState:
       type: string
-      enum: [queued, canary, running, paused, rolling_back, completed, failed]
+      enum: [queued, canary, running, paused, rolling_back, completed, failed, cancelled]
     ControlUpgradeRevision:
       type: string
       description: Canonical decimal uint63 in the inclusive range 1..9223372036854775807.

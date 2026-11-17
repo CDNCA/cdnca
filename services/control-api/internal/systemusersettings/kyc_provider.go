@@ -103,4 +103,5 @@ func setKYCProviderRuntime(runtime *IdentityVerificationRuntime, value Settings,
 	runtime.KYCAPIKey, runtime.KYCCallbackHMAC = secret(SecretKYCAPIKey), secret(SecretKYCCallbackHMACKey)
 	runtime.ObjectAccessKey, runtime.ObjectSecretKey = secret(SecretKYCObjectAccessKeyID), secret(SecretKYCObjectSecretAccessKey)
 	runtime.ObjectSessionToken = secret(SecretKYCObjectSessionToken)
+	setKYCIssuerRuntime(runtime, value, secrets)
 }

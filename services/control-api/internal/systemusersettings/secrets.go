@@ -40,16 +40,25 @@ const (
 	SecretKYCObjectAccessKeyID     = "kyc_object_access_key_id"
 	SecretKYCObjectSecretAccessKey = "kyc_object_secret_access_key"
 	SecretKYCObjectSessionToken    = "kyc_object_session_token"
+	// SecretKYCIssuerServerPrivateKey is the PEM private key of the evidence
+	// issuer's server certificate; it replaces the file named by
+	// IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_PRIVATE_KEY_FILE
+	// (migration 673).
+	SecretKYCIssuerServerPrivateKey = "kyc_issuer_server_private_key"
 )
 
 var secretNames = []string{SecretCaptchaSecretID, SecretCaptchaSecretKey, SecretCaptchaAppSecret,
 	SecretCaptchaTurnstileSecret, SecretKYCAPIKey, SecretKYCCallbackHMACKey,
-	SecretKYCObjectAccessKeyID, SecretKYCObjectSecretAccessKey, SecretKYCObjectSessionToken}
+	SecretKYCObjectAccessKeyID, SecretKYCObjectSecretAccessKey, SecretKYCObjectSessionToken,
+	SecretKYCIssuerServerPrivateKey}
 
 // secretMaxLength is the longest value a page secret may have.
 func secretMaxLength(name string) int {
-	if name == SecretKYCObjectSessionToken {
+	switch name {
+	case SecretKYCObjectSessionToken:
 		return 4096
+	case SecretKYCIssuerServerPrivateKey:
+		return 8192
 	}
 	return 1024
 }
@@ -96,6 +105,10 @@ func secretReason(name, secret string) string {
 		return lengthReason(secret, 3, 256)
 	case SecretKYCObjectSecretAccessKey:
 		return lengthReason(secret, 8, 512)
+	case SecretKYCIssuerServerPrivateKey:
+		if !validKYCIssuerPrivateKey(secret) {
+			return fielderr.InvalidFormat
+		}
 	}
 	return ""
 }
@@ -129,7 +142,8 @@ func secretsFieldError(value Settings, secrets map[string]*string, stored []stri
 			}
 		case len(*secret) > secretMaxLength(name):
 			return field(name, fielderr.TooLong)
-		case strings.ContainsAny(*secret, "\r\n\x00") || strings.TrimSpace(*secret) != *secret:
+		case strings.ContainsAny(*secret, "\r\x00") || strings.TrimSpace(*secret) != *secret,
+			name != SecretKYCIssuerServerPrivateKey && strings.Contains(*secret, "\n"):
 			return field(name, fielderr.InvalidFormat)
 		case *secret != "" && reference != "":
 			return field(name, fielderr.Invalid)
@@ -265,4 +279,5 @@ func (document *Document) setSecrets(fingerprints map[string]string) {
 	document.KYCObjectAccessKeyIDConfigured, document.KYCObjectAccessKeyIDFingerprint = print(SecretKYCObjectAccessKeyID)
 	document.KYCObjectSecretAccessKeyConfigured, document.KYCObjectSecretAccessKeyFingerprint = print(SecretKYCObjectSecretAccessKey)
 	document.KYCObjectSessionTokenConfigured, document.KYCObjectSessionTokenFingerprint = print(SecretKYCObjectSessionToken)
+	document.KYCIssuerServerPrivateKeyConfigured, document.KYCIssuerServerPrivateKeyFingerprint = print(SecretKYCIssuerServerPrivateKey)
 }

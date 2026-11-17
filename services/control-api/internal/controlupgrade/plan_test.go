@@ -362,15 +362,16 @@ func TestRolloutPlanRollbackUnknownOutcomeWaitsForReconciliation(t *testing.T) {
 }
 
 func TestCanPlanTransitionIsExhaustive(t *testing.T) {
-	states := []PlanState{PlanQueued, PlanCanary, PlanRunning, PlanPaused, PlanRollingBack, PlanCompleted, PlanFailed}
+	states := []PlanState{PlanQueued, PlanCanary, PlanRunning, PlanPaused, PlanRollingBack, PlanCompleted, PlanFailed,
+		PlanCancelled}
 	allowed := map[[2]PlanState]bool{
-		{PlanQueued, PlanCanary}: true,
+		{PlanQueued, PlanCanary}: true, {PlanQueued, PlanCancelled}: true,
 		{PlanCanary, PlanCanary}: true, {PlanCanary, PlanRunning}: true,
 		{PlanCanary, PlanPaused}: true, {PlanCanary, PlanRollingBack}: true, {PlanCanary, PlanCompleted}: true,
 		{PlanRunning, PlanRunning}: true, {PlanRunning, PlanPaused}: true,
 		{PlanRunning, PlanRollingBack}: true, {PlanRunning, PlanCompleted}: true,
 		{PlanPaused, PlanCanary}: true, {PlanPaused, PlanRunning}: true,
-		{PlanPaused, PlanPaused}: true, {PlanPaused, PlanRollingBack}: true,
+		{PlanPaused, PlanPaused}: true, {PlanPaused, PlanRollingBack}: true, {PlanPaused, PlanCancelled}: true,
 		{PlanRollingBack, PlanRollingBack}: true, {PlanRollingBack, PlanCompleted}: true, {PlanRollingBack, PlanFailed}: true,
 		{PlanCompleted, PlanRollingBack}: true,
 	}
@@ -380,6 +381,61 @@ func TestCanPlanTransitionIsExhaustive(t *testing.T) {
 				t.Fatalf("CanPlanTransition(%q, %q) = %v", from, to, got)
 			}
 		}
+	}
+}
+
+// Only a queued plan can be cancelled; cancelled is terminal and replays.
+func TestRolloutPlanCancelQueuedOnly(t *testing.T) {
+	plan := mustRolloutPlan(t)
+	cancel := planCommand(PlanCancel, plan.Revision, "operator_requested")
+	result := mustPlanCommand(t, plan, cancel)
+	cancelled := result.Plan
+	if cancelled.State != PlanCancelled || result.Event.From != PlanQueued || result.Event.To != PlanCancelled ||
+		result.Event.Action != "cancel" || !validRolloutPlan(cancelled) ||
+		!allPlanNodesState(cancelled.NodeStates, NodePending) {
+		t.Fatalf("cancelled plan state=%s event=%+v valid=%v", cancelled.State, result.Event, validRolloutPlan(cancelled))
+	}
+	if replay := mustPlanCommand(t, cancelled, cancel); !replay.Replayed || replay.Event != result.Event {
+		t.Fatalf("cancel replay = %+v", replay)
+	}
+	for _, action := range []PlanAction{PlanStart, PlanPauseAction, PlanResume, PlanRollback, PlanCancel} {
+		if _, err := ApplyPlanCommand(cancelled, planCommand(action, cancelled.Revision, "operator_requested")); err == nil {
+			t.Fatalf("%s on a cancelled plan succeeded", action)
+		}
+	}
+	started := mustPlanCommand(t, plan, planCommand(PlanStart, plan.Revision, "start_requested")).Plan
+	if _, err := ApplyPlanCommand(started, planCommand(PlanCancel, started.Revision, "operator_requested")); !errors.Is(err, ErrInvalidPlanTransition) {
+		t.Fatalf("cancel of a started plan error = %v", err)
+	}
+	corrupted := cloneRolloutPlan(cancelled)
+	corrupted.NodeStates[corrupted.Batches[0].NodeIDs[0]] = NodeDispatched
+	if validRolloutPlan(corrupted) {
+		t.Fatal("cancelled plan with a dispatched node is valid")
+	}
+}
+
+// A paused plan can be cancelled too (the store refuses it once a node started installing);
+// the cancelled plan keeps the forward progress it was paused with and is terminal.
+func TestRolloutPlanCancelPaused(t *testing.T) {
+	plan := mustRolloutPlan(t)
+	started := mustPlanCommand(t, plan, planCommand(PlanStart, plan.Revision, "start_requested")).Plan
+	paused := mustPlanCommand(t, started, planCommand(PlanPauseAction, started.Revision, "operator_requested")).Plan
+	result := mustPlanCommand(t, paused, planCommand(PlanCancel, paused.Revision, "operator_requested"))
+	cancelled := result.Plan
+	if cancelled.State != PlanCancelled || cancelled.ResumeState != "" || result.Event.From != PlanPaused ||
+		cancelled.ActiveBatch != paused.ActiveBatch || !validRolloutPlan(cancelled) {
+		t.Fatalf("cancelled paused plan state=%s resume=%q event=%+v valid=%v", cancelled.State,
+			cancelled.ResumeState, result.Event, validRolloutPlan(cancelled))
+	}
+	for _, action := range []PlanAction{PlanResume, PlanRollback, PlanPauseAction} {
+		if _, err := ApplyPlanCommand(cancelled, planCommand(action, cancelled.Revision, "operator_requested")); err == nil {
+			t.Fatalf("%s on a plan cancelled while paused succeeded", action)
+		}
+	}
+	corrupted := cloneRolloutPlan(cancelled)
+	corrupted.ResumeState = PlanCanary
+	if validRolloutPlan(corrupted) {
+		t.Fatal("cancelled plan with a resume state is valid")
 	}
 }
 

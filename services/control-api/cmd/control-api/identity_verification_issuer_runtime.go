@@ -16,6 +16,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/identityverification"
 	"github.com/cdnca/cdnca/services/control-api/internal/identityverificationhttp"
 	"github.com/cdnca/cdnca/services/control-api/internal/identityverificationissuerhttp"
+	"github.com/cdnca/cdnca/services/control-api/internal/systemusersettings"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -66,21 +67,25 @@ func loadIdentityVerificationIssuerEnvironment(environment []string) (identityVe
 		values[name] = value
 	}
 	enabled, err := identityVerificationBool(identityVerificationIssuerEnabledEnv, values[identityVerificationIssuerEnabledEnv])
-	if err != nil || !enabled {
-		return identityVerificationIssuerEnvironment{}, err
-	}
-	for _, name := range []string{identityVerificationIssuerListenAddressEnv, identityVerificationIssuerServerCertEnv,
-		identityVerificationIssuerServerKeyEnv, identityVerificationIssuerClientCAEnv, identityVerificationIssuerIdentitiesEnv} {
-		if values[name] == "" || strings.TrimSpace(values[name]) != values[name] {
-			return identityVerificationIssuerEnvironment{}, errors.New(name + " is required for the issuer")
-		}
-	}
-	identities, err := parseIdentityVerificationIssuerIdentities(values[identityVerificationIssuerIdentitiesEnv])
 	if err != nil {
 		return identityVerificationIssuerEnvironment{}, err
 	}
-	if _, err := identityverificationissuerhttp.NewMTLSAuthenticator(identities, time.Now); err != nil {
-		return identityVerificationIssuerEnvironment{}, errors.New(identityVerificationIssuerIdentitiesEnv + " is invalid")
+	// Off, the other values are the fallback of the system settings page;
+	// the values present are checked either way.
+	for _, name := range []string{identityVerificationIssuerListenAddressEnv, identityVerificationIssuerServerCertEnv,
+		identityVerificationIssuerServerKeyEnv, identityVerificationIssuerClientCAEnv, identityVerificationIssuerIdentitiesEnv} {
+		if enabled && values[name] == "" || strings.TrimSpace(values[name]) != values[name] {
+			return identityVerificationIssuerEnvironment{}, errors.New(name + " is required for the issuer")
+		}
+	}
+	var identities []identityverificationissuerhttp.WorkloadIdentity
+	if raw := values[identityVerificationIssuerIdentitiesEnv]; raw != "" {
+		if identities, err = parseIdentityVerificationIssuerIdentities(raw); err != nil {
+			return identityVerificationIssuerEnvironment{}, err
+		}
+		if _, err := identityverificationissuerhttp.NewMTLSAuthenticator(identities, time.Now); err != nil {
+			return identityVerificationIssuerEnvironment{}, errors.New(identityVerificationIssuerIdentitiesEnv + " is invalid")
+		}
 	}
 	if endpoint := values[identityVerificationIssuerKMSEndpointEnv]; endpoint != "" {
 		parsed, parseErr := url.Parse(endpoint)
@@ -131,24 +136,29 @@ func isLoopbackHost(host string) bool {
 }
 
 type identityVerificationIssuerRuntime struct {
-	listener *identityverificationissuerhttp.Listener
+	supervisor *identityVerificationIssuerSupervisor
 }
 
+// openIdentityVerificationIssuerRuntime opens the issuer of the environment
+// and the system settings page (identity_verification_issuer_page.go). nil:
+// the dependencies for a page issuer are missing and the environment
+// declares none.
 func openIdentityVerificationIssuerRuntime(ctx context.Context, pool *pgxpool.Pool,
 	providerEnvironment identityVerificationProviderEnvironment,
 	clock identityverification.Clock, source identityVerificationEvidenceSource,
+	settings *systemusersettings.Service,
 ) (*identityVerificationIssuerRuntime, error) {
 	issuerEnvironment, err := loadIdentityVerificationIssuerEnvironment(os.Environ())
 	if err != nil {
 		return nil, err
 	}
-	if !issuerEnvironment.Enabled {
-		if providerEnvironment.Enabled {
-			return nil, errors.New(identityVerificationIssuerEnabledEnv + " must be true for the provider workflow")
-		}
-		return nil, nil
+	if !issuerEnvironment.Enabled && providerEnvironment.Enabled {
+		return nil, errors.New(identityVerificationIssuerEnabledEnv + " must be true for the provider workflow")
 	}
-	if !providerEnvironment.Enabled || pool == nil || clock == nil || source == nil {
+	if issuerEnvironment.Enabled && !providerEnvironment.Enabled || pool == nil || clock == nil || source == nil || settings == nil {
+		if !issuerEnvironment.Enabled {
+			return nil, nil
+		}
 		return nil, errors.New("identity verification issuer dependencies are incomplete")
 	}
 	issuer, ok := source.(interface {
@@ -156,77 +166,79 @@ func openIdentityVerificationIssuerRuntime(ctx context.Context, pool *pgxpool.Po
 			identityverificationhttp.RuntimeEvidenceIssueRequest) (identityverificationhttp.RuntimeEvidenceIssueResult, error)
 	})
 	if !ok {
+		if !issuerEnvironment.Enabled {
+			return nil, nil
+		}
 		return nil, errors.New("identity verification durable source cannot issue workload evidence")
 	}
-	awsConfig := aws.Config{Region: providerEnvironment.ObjectRegion,
-		Credentials: aws.NewCredentialsCache(identityVerificationIssuerCredentials(providerEnvironment)), HTTPClient: http.DefaultClient,
-		Retryer: func() aws.Retryer {
-			return awsretry.NewStandard(func(options *awsretry.StandardOptions) { options.MaxAttempts = 3 })
-		}}
-	kmsClient := kms.NewFromConfig(awsConfig, func(options *kms.Options) {
-		if issuerEnvironment.KMSEndpoint != "" {
-			options.BaseEndpoint = aws.String(issuerEnvironment.KMSEndpoint)
-		}
-	})
-	sealer, err := identityverificationissuerhttp.NewKMSMaterialEnvelopeSealer(kmsClient)
-	if err != nil {
-		return nil, errors.New("initialize identity verification KMS sealer")
-	}
-	resolver, err := identityverificationissuerhttp.NewPostgresEvidenceResolver(pool, sealer, audit.New(pool))
-	if err != nil {
-		return nil, errors.New("initialize identity verification evidence resolver")
-	}
 	issuerClock := identityverificationissuerhttp.Clock(clock)
-	authenticator, err := identityverificationissuerhttp.NewMTLSAuthenticator(issuerEnvironment.WorkloadIdentities, issuerClock)
-	if err != nil {
-		return nil, errors.New("initialize identity verification issuer workload identity")
+	newHandler := func(config identityVerificationIssuerConfig) (http.Handler, error) {
+		credentials := config.credentials
+		awsConfig := aws.Config{Region: config.region,
+			Credentials: aws.NewCredentialsCache(aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+				return credentials, nil
+			})), HTTPClient: http.DefaultClient,
+			Retryer: func() aws.Retryer {
+				return awsretry.NewStandard(func(options *awsretry.StandardOptions) { options.MaxAttempts = 3 })
+			}}
+		kmsClient := kms.NewFromConfig(awsConfig, func(options *kms.Options) {
+			if config.kmsEndpoint != "" {
+				options.BaseEndpoint = aws.String(config.kmsEndpoint)
+			}
+		})
+		sealer, err := identityverificationissuerhttp.NewKMSMaterialEnvelopeSealer(kmsClient)
+		if err != nil {
+			return nil, errors.New("initialize identity verification KMS sealer")
+		}
+		resolver, err := identityverificationissuerhttp.NewPostgresEvidenceResolver(pool, sealer, audit.New(pool))
+		if err != nil {
+			return nil, errors.New("initialize identity verification evidence resolver")
+		}
+		authenticator, err := identityverificationissuerhttp.NewMTLSAuthenticator(config.identities, issuerClock)
+		if err != nil {
+			return nil, errors.New("initialize identity verification issuer workload identity")
+		}
+		handler, err := identityverificationissuerhttp.NewHandler(identityverificationissuerhttp.Dependencies{
+			Authenticator: authenticator, Resolver: resolver, Issuer: issuer, Clock: issuerClock,
+		})
+		if err != nil {
+			return nil, errors.New("initialize identity verification issuer handler")
+		}
+		return handler, nil
 	}
-	handler, err := identityverificationissuerhttp.NewHandler(identityverificationissuerhttp.Dependencies{
-		Authenticator: authenticator, Resolver: resolver, Issuer: issuer, Clock: issuerClock,
-	})
-	if err != nil {
-		return nil, errors.New("initialize identity verification issuer handler")
+	supervisor := newIdentityVerificationIssuerSupervisor(issuerEnvironment, providerEnvironment,
+		func(ctx context.Context) (int64, error) { return kycSettingsRevision(ctx, pool) },
+		settings.IdentityVerificationRuntime, issuerClock, newHandler)
+	supervisor.refresh(ctx)
+	if issuerEnvironment.Enabled && supervisor.address() == "" {
+		err := supervisor.lastError()
+		supervisor.Close()
+		if err == nil {
+			err = errors.New("initialize identity verification issuer mTLS listener")
+		}
+		return nil, err
 	}
-	listener, err := identityverificationissuerhttp.NewListener(ctx, identityverificationissuerhttp.ListenerConfig{
-		ListenAddress: issuerEnvironment.ListenAddress, ServerCertificateFile: issuerEnvironment.ServerCertificate,
-		ServerPrivateKeyFile: issuerEnvironment.ServerPrivateKey, ClientCAFile: issuerEnvironment.ClientCA, Clock: issuerClock,
-	}, handler)
-	if err != nil {
-		return nil, errors.New("initialize identity verification issuer mTLS listener")
-	}
-	return &identityVerificationIssuerRuntime{listener: listener}, nil
-}
-
-// identityVerificationIssuerCredentials copies the object store keys: the
-// production runtime clears providerEnvironment's byte slices when it returns,
-// long before the first KMS call.
-func identityVerificationIssuerCredentials(providerEnvironment identityVerificationProviderEnvironment) aws.CredentialsProvider {
-	credentials := aws.Credentials{AccessKeyID: string(providerEnvironment.ObjectAccessKey),
-		SecretAccessKey: string(providerEnvironment.ObjectSecretKey),
-		SessionToken:    string(providerEnvironment.ObjectSessionToken),
-		Source:          "identity-verification-issuer"}
-	return aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
-		return credentials, nil
-	})
+	return &identityVerificationIssuerRuntime{supervisor: supervisor}, nil
 }
 
 func (runtime *identityVerificationIssuerRuntime) Run(ctx context.Context) error {
-	if runtime == nil || runtime.listener == nil {
+	if runtime == nil || runtime.supervisor == nil {
 		return errors.New("identity verification issuer runtime is unavailable")
 	}
-	return runtime.listener.Run(ctx)
+	return runtime.supervisor.Run(ctx)
 }
 
 func (runtime *identityVerificationIssuerRuntime) Ready() error {
-	if runtime == nil || runtime.listener == nil {
+	if runtime == nil || runtime.supervisor == nil {
 		return errors.New("identity verification issuer runtime is unavailable")
 	}
-	return runtime.listener.Ready()
+	return runtime.supervisor.Ready()
 }
 
 func (runtime *identityVerificationIssuerRuntime) Close() error {
-	if runtime == nil || runtime.listener == nil {
+	if runtime == nil || runtime.supervisor == nil {
 		return nil
 	}
-	return runtime.listener.Close()
+	runtime.supervisor.Close()
+	return nil
 }

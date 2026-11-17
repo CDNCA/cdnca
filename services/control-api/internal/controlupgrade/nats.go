@@ -81,6 +81,34 @@ func (bus *CommandBus) Publish(ctx context.Context, message RolloutOutboxMessage
 	return PublishResult{Stream: ack.Stream, Sequence: ack.Sequence, Duplicate: ack.Duplicate}, nil
 }
 
+// Delete removes a published command from the stream (a cancelled plan's unconfirmed command).
+// A message already gone (deleted earlier, or aged out) counts as deleted.
+func (bus *CommandBus) Delete(ctx context.Context, stream string, sequence uint64) error {
+	if bus == nil || bus.jetstream == nil || stream != bus.stream || sequence == 0 {
+		return ErrInvalidInput
+	}
+	err := bus.jetstream.DeleteMsg(stream, sequence, nats.Context(ctx))
+	if commandMessageGone(err) {
+		return nil
+	}
+	return err
+}
+
+// commandMessageGone: nats-server 2.11.4 and 2.12.15 answer a delete of a missing sequence with 10057
+// carrying the store error ("no message found" below the last sequence, "stream store EOF" past it), or
+// 10043 when nothing was removed.
+func commandMessageGone(err error) bool {
+	if errors.Is(err, nats.ErrMsgNotFound) {
+		return true
+	}
+	var apiError *nats.APIError
+	if !errors.As(err, &apiError) {
+		return false
+	}
+	return apiError.ErrorCode == 10043 || apiError.ErrorCode == 10057 &&
+		(apiError.Description == "no message found" || apiError.Description == "stream store EOF")
+}
+
 func (bus *CommandBus) Stream() string {
 	if bus == nil {
 		return ""

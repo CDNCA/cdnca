@@ -40,6 +40,10 @@ const (
 	UpgradePlanArtifactBundleV2Schema = "cdnca.upgrade.plan-artifact-bundle/v2"
 	UpgradePlanArtifactBundleAudience = "cdnca-control-plane-upgrade-plan"
 	UpgradePlanArtifactBundlePurpose  = "cdnca-upgrade-plan-artifact-bundle"
+	// MaxUpgradeGrantLifetime is the protocol upper bound (expires_at - issued_at) of a parent
+	// upgrade grant and of a command grant. License issues exactly up to it and every verifier
+	// enforces it through Validate; it is the single source for both sides.
+	MaxUpgradeGrantLifetime = 15 * time.Minute
 
 	artifactManifestSignatureDomain              = "cdnca-release-artifact-signature/v1"
 	artifactManifestV2SignatureDomain            = "cdnca-release-artifact-signature/v2"
@@ -53,7 +57,7 @@ const (
 	maxEncodedUpgradeGrantBytes                  = 128 * 1024
 	maxEncodedUpgradeCommandGrantBytes           = 128 * 1024
 	maxEncodedUpgradePlanArtifactBundleBytes     = 256 * 1024
-	maxUpgradeGrantLifetimeSeconds               = int64((15 * time.Minute) / time.Second)
+	maxUpgradeGrantLifetimeSeconds               = int64(MaxUpgradeGrantLifetime / time.Second)
 	maxUpgradePlanCommandIssuanceLifetimeSeconds = int64((7 * 24 * time.Hour) / time.Second)
 )
 

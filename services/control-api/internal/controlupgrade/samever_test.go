@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -156,6 +157,58 @@ func TestRereleaseRolloutPlan(t *testing.T) {
 	encoded, err := json.Marshal(mustRolloutPlan(t))
 	if err != nil || bytes.Contains(encoded, []byte("CurrentReleaseSequence")) {
 		t.Fatalf("ordinary plan snapshot mentions CurrentReleaseSequence (%v)", err)
+	}
+}
+
+// A re-release node reports the build it replaced as last known good
+// (updater healthGate); the plan has no rollback digest, so healthy only needs a
+// last known good other than the target. Before the fix every healthy was refused.
+func TestRereleaseHealthyAcceptsReplacedBuild(t *testing.T) {
+	plan, err := NewRolloutPlan(rereleasePlanInput(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := mustPlanCommand(t, plan, planCommand(PlanStart, plan.Revision, "start_requested")).Plan
+	node := started.Batches[0].NodeIDs[0]
+	withLastKnownGood := func(digest string) PlanHealthEvent {
+		health := currentPlanHealth(started, node, true)
+		health.ActiveEvidence.LastKnownGoodArtifactSHA256 = digest
+		health.ActiveEvidence.EvidenceSHA256 =
+			activeProbeEvidenceDigest(health.InstallerTransactionID, *health.ActiveEvidence)
+		return health
+	}
+	replaced := planDigest(0x5a)
+	healthy := mustPlanHealth(t, started, withLastKnownGood(replaced)).Plan
+	if healthy.NodeStates[node] != NodeHealthy || !validRolloutPlan(healthy) {
+		t.Fatalf("re-release healthy node=%s valid=%v", healthy.NodeStates[node], validRolloutPlan(healthy))
+	}
+	targetHex, _ := base64.RawURLEncoding.DecodeString(started.SHA256Digest)
+	for name, health := range map[string]PlanHealthEvent{
+		"last known good is the target":     withLastKnownGood(started.SHA256Digest),
+		"last known good is the target hex": withLastKnownGood(hex.EncodeToString(targetHex)),
+		"last known good empty":             withLastKnownGood(""),
+	} {
+		if _, err := ApplyPlanHealth(started, health); !errors.Is(err, ErrInvalidPlanEvent) {
+			t.Errorf("%s: error = %v, want invalid event", name, err)
+		}
+	}
+	wrongActive := withLastKnownGood(replaced)
+	wrongActive.ActiveEvidence.ActiveArtifactSHA256 = replaced
+	wrongActive.ActiveEvidence.LastKnownGoodArtifactSHA256 = planDigest(0x5b)
+	wrongActive.ActiveEvidence.EvidenceSHA256 =
+		activeProbeEvidenceDigest(wrongActive.InstallerTransactionID, *wrongActive.ActiveEvidence)
+	if _, err := ApplyPlanHealth(started, wrongActive); !errors.Is(err, ErrInvalidPlanEvent) {
+		t.Fatalf("re-release healthy on another build error = %v", err)
+	}
+	// Cross-version plans still require last known good == rollback artifact.
+	cross := mustRolloutPlan(t)
+	crossStarted := mustPlanCommand(t, cross, planCommand(PlanStart, cross.Revision, "start_requested")).Plan
+	crossHealth := currentPlanHealth(crossStarted, crossStarted.Batches[0].NodeIDs[0], true)
+	crossHealth.ActiveEvidence.LastKnownGoodArtifactSHA256 = replaced
+	crossHealth.ActiveEvidence.EvidenceSHA256 =
+		activeProbeEvidenceDigest(crossHealth.InstallerTransactionID, *crossHealth.ActiveEvidence)
+	if _, err := ApplyPlanHealth(crossStarted, crossHealth); !errors.Is(err, ErrInvalidPlanEvent) {
+		t.Fatalf("cross-version healthy with another last known good error = %v", err)
 	}
 }
 

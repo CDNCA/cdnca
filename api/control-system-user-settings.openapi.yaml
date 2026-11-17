@@ -99,6 +99,8 @@ components:
         kyc_object_secret_access_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
         kyc_object_session_token_configured: {type: boolean, description: The KYC private object store session token entered on the settings page is stored encrypted (never returned).}
         kyc_object_session_token_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+        kyc_issuer_server_private_key_configured: {type: boolean, description: The private key of the evidence issuer's server certificate entered on the settings page is stored encrypted (never returned).}
+        kyc_issuer_server_private_key_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
     WriteRequest:
       type: object
       additionalProperties: false
@@ -146,6 +148,12 @@ components:
           writeOnly: true
           description: Optional session token of temporary object store credentials, otherwise like WriteOnlySecret; replaces IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN, which stays the fallback.
           x-description-zh: 选填，对象存储临时凭据的 Session Token，其余同 WriteOnlySecret；替换 IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN，未保存时沿用该环境变量。
+        kyc_issuer_server_private_key:
+          type: string
+          maxLength: 8192
+          writeOnly: true
+          description: PEM private key (one PRIVATE KEY, EC PRIVATE KEY or RSA PRIVATE KEY block; line breaks allowed, no carriage returns or surrounding whitespace) of the evidence issuer's server certificate, otherwise like WriteOnlySecret; refused as invalid_format when it does not parse, and as invalid when sent with a value.kyc_issuer_server_certificate it does not match. Replaces the file named by IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_PRIVATE_KEY_FILE, which stays the fallback; a change applies without restarting the control plane.
+          x-description-zh: 证据签发端服务端证书的 PEM 私钥（一个 PRIVATE KEY、EC PRIVATE KEY 或 RSA PRIVATE KEY 块；允许换行，不含回车与首尾空白），其余同 WriteOnlySecret；无法解析时以 invalid_format 拒绝，与同时提交的 value.kyc_issuer_server_certificate 不配对时以 invalid 拒绝。替换 IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_PRIVATE_KEY_FILE 指向的文件，未保存时沿用该文件；修改后无需重启控制面即生效。
     WriteOnlySecret:
       type: string
       maxLength: 1024
@@ -254,6 +262,41 @@ components:
           default: ''
           description: KMS key ID or ARN for server-side encryption (SSE-KMS) of new uploads. Empty uses IDENTITY_VERIFICATION_OBJECT_KMS_KEY_ID.
           x-description-zh: 新上传材料服务端加密（SSE-KMS）使用的 KMS 密钥 ID 或 ARN；留空使用 IDENTITY_VERIFICATION_OBJECT_KMS_KEY_ID。
+        kyc_issuer_enabled:
+          type: boolean
+          default: false
+          description: Turn on the evidence issuer, the mutual-TLS listener trusted workloads fetch sealed identity evidence from. It is also on whenever IDENTITY_VERIFICATION_ISSUER_ENABLED is true. It serves once every issuer value is present (each kyc_issuer_* value saved here, otherwise its IDENTITY_VERIFICATION_ISSUER_* fallback) together with the object store keys and region, which its KMS client uses; a save applies within a few seconds without restarting the control plane.
+          x-description-zh: 开启证据签发端（受信任工作负载通过双向 TLS 取回加密实名证据的监听）；IDENTITY_VERIFICATION_ISSUER_ENABLED 为 true 时也始终开启。各签发端项（此处保存的 kyc_issuer_* 值，未保存时用对应 IDENTITY_VERIFICATION_ISSUER_*）以及其 KMS 客户端使用的对象存储密钥与区域都齐全后开始监听；保存后数秒内生效，无需重启控制面。
+        kyc_issuer_listen_address:
+          type: string
+          maxLength: 65536
+          default: ''
+          description: host:port of the issuer listener (port 1-65535), refused as value.kyc_issuer_listen_address invalid_format otherwise. Empty uses IDENTITY_VERIFICATION_ISSUER_MTLS_LISTEN_ADDR.
+          x-description-zh: 签发端监听的 主机:端口（端口 1–65535），不符合时以 value.kyc_issuer_listen_address invalid_format 拒绝；留空使用 IDENTITY_VERIFICATION_ISSUER_MTLS_LISTEN_ADDR。
+        kyc_issuer_server_certificate:
+          type: string
+          maxLength: 65536
+          default: ''
+          description: PEM certificate chain of the issuer, the server certificate first (not a CA, usable for server authentication) followed by the CAs that signed it in order; invalid_format when it is not only CERTIFICATE blocks, invalid when the chain does not hold, and on save invalid unless every certificate is valid now and the server one for at least another hour. Empty uses the file named by IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_CERT_FILE.
+          x-description-zh: 签发端的 PEM 证书链：服务端证书在前（非 CA、可用于服务端认证），签发它的 CA 依次在后；不全是 CERTIFICATE 块时为 invalid_format，证书链不成立时为 invalid；保存时还要求每张证书当前有效、服务端证书至少还有 1 小时，否则为 invalid。留空使用 IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_CERT_FILE 指向的文件。
+        kyc_issuer_client_ca:
+          type: string
+          maxLength: 65536
+          default: ''
+          description: PEM CA certificates that issue the workload client certificates (each a CA allowed to sign certificates and usable for client authentication); invalid_format / invalid like kyc_issuer_server_certificate, and on save invalid unless each is valid now. Empty uses the file named by IDENTITY_VERIFICATION_ISSUER_MTLS_CLIENT_CA_FILE.
+          x-description-zh: 签发工作负载客户端证书的 PEM CA 证书（每张都必须是可签发证书、可用于客户端认证的 CA）；invalid_format / invalid 同 kyc_issuer_server_certificate，保存时还要求每张当前有效。留空使用 IDENTITY_VERIFICATION_ISSUER_MTLS_CLIENT_CA_FILE 指向的文件。
+        kyc_issuer_workload_identities:
+          type: string
+          maxLength: 65536
+          default: ''
+          description: Workloads allowed to fetch evidence, as comma-separated "spiffe-uri|workload-id" pairs (canonical spiffe:// URIs, workload IDs of letters, digits and ._:-, at most 1024, none repeated); invalid_format otherwise. Empty uses IDENTITY_VERIFICATION_ISSUER_WORKLOAD_IDENTITIES.
+          x-description-zh: 允许取回证据的工作负载，逗号分隔的 "spiffe-uri|工作负载 ID"（规范 spiffe:// URI，工作负载 ID 由字母、数字与 ._:- 组成，最多 1024 个且不重复），否则为 invalid_format；留空使用 IDENTITY_VERIFICATION_ISSUER_WORKLOAD_IDENTITIES。
+        kyc_issuer_kms_endpoint:
+          type: string
+          maxLength: 65536
+          default: ''
+          description: Optional KMS endpoint of the issuer, an https origin (http only on a loopback host) without path, query or user info; invalid_format otherwise. Empty uses IDENTITY_VERIFICATION_ISSUER_KMS_ENDPOINT, and with neither set the regional default.
+          x-description-zh: 选填，签发端使用的 KMS 地址：https 源地址（回环主机可用 http），不带路径、查询或用户信息，否则为 invalid_format；留空使用 IDENTITY_VERIFICATION_ISSUER_KMS_ENDPOINT，均未设置时使用所在区域的默认地址。
         wechat_payment_enabled: {type: boolean}
         alipay_payment_enabled: {type: boolean}
         bank_transfer_enabled: {type: boolean}

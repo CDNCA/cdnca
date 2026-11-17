@@ -202,6 +202,21 @@ func (s *Store) PrepareRolloutAction(ctx context.Context, actor Actor,
 	return prepared, replay, nil
 }
 
+// pausedPlanNodesStartedTx reports whether a node of the plan may be installing: one of its commands has
+// a status past accepted, or an accepted one that has not expired (the node runs it as soon as it is
+// accepted). A command not yet published, published without a status, or accepted and expired cannot
+// start. Migration 675 refuses the same paused -> cancelled update. The caller holds the plan row lock,
+// which every status write takes first.
+func pausedPlanNodesStartedTx(ctx context.Context, tx pgx.Tx, planID string) (bool, error) {
+	var started bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM control_upgrade_node_commands command
+		JOIN control_upgrade_status_receipts status ON status.command_id=command.command_id
+		WHERE command.plan_id=$1 AND (status.state<>'accepted' OR
+			coalesce(command.command_grant_expires_at>transaction_timestamp(), true)))`, planID).Scan(&started)
+	return started, err
+}
+
 func (s *Store) FinalizeRolloutAction(ctx context.Context, prepared PreparedRolloutAction,
 	commands []RolloutNodeCommand, outbox []RolloutOutboxMessage) (RolloutWriteResult, error) {
 	if err := validatePreparedRolloutAction(prepared); err != nil {
@@ -239,6 +254,15 @@ func (s *Store) FinalizeRolloutAction(ctx context.Context, prepared PreparedRoll
 			record.SnapshotSHA256 != prepared.PlanSnapshotSHA256 {
 			return ErrStalePlanRevision
 		}
+		if prepared.Command.Action == PlanCancel && record.Plan.State == PlanPaused {
+			started, err := pausedPlanNodesStartedTx(ctx, tx, record.Plan.ID)
+			if err != nil {
+				return err
+			}
+			if started {
+				return ErrPlanCancelNodesStarted
+			}
+		}
 		causeBytes, err := encodeRolloutValue(prepared.Command)
 		if err != nil {
 			return err
@@ -251,10 +275,20 @@ func (s *Store) FinalizeRolloutAction(ctx context.Context, prepared PreparedRoll
 		if err != nil {
 			return err
 		}
+		// One database clock for the audit event and the write receipt: migration 096 refuses an audit
+		// event later than the receipt's completed_at, which an application clock ahead of PostgreSQL's
+		// produced (P9602 on start/cancel).
+		var completedAt, createdAt, updatedAt time.Time
+		if err := tx.QueryRow(ctx, `SELECT clock_timestamp(),created_at,updated_at
+			FROM control_upgrade_rollout_plans WHERE id=$1`, prepared.Request.PlanID).
+			Scan(&completedAt, &createdAt, &updatedAt); err != nil {
+			return err
+		}
+		completedAt = completedAt.UTC().Truncate(time.Microsecond)
 		if err := s.auditor.Append(ctx, tx, audit.Event{ScopeID: prepared.Actor.ScopeID,
 			ActorUserID: &prepared.Actor.UserID, Action: "control_upgrade_rollout." + prepared.Request.Operation,
 			ResourceType: "control_upgrade_rollout", ResourceID: prepared.Request.PlanID,
-			RequestID: prepared.Request.RequestID, Result: "success",
+			RequestID: prepared.Request.RequestID, Result: "success", OccurredAt: completedAt,
 			Payload: map[string]any{"revision": commit.Plan.Revision, "state": commit.Plan.State}}); err != nil {
 			return err
 		}
@@ -263,12 +297,6 @@ func (s *Store) FinalizeRolloutAction(ctx context.Context, prepared PreparedRoll
 			AND action=$3 AND request_id=$4 AND result='success' ORDER BY stream_position DESC LIMIT 1`,
 			prepared.Actor.ScopeID, prepared.Actor.UserID, "control_upgrade_rollout."+prepared.Request.Operation,
 			prepared.Request.RequestID).Scan(&auditID); err != nil {
-			return err
-		}
-		var completedAt, createdAt, updatedAt time.Time
-		if err := tx.QueryRow(ctx, `SELECT clock_timestamp(),created_at,updated_at
-			FROM control_upgrade_rollout_plans WHERE id=$1`, prepared.Request.PlanID).
-			Scan(&completedAt, &createdAt, &updatedAt); err != nil {
 			return err
 		}
 		snapshot, err := encodeRolloutValue(commit.Plan)
@@ -288,7 +316,7 @@ func (s *Store) FinalizeRolloutAction(ctx context.Context, prepared PreparedRoll
 			prepared.Actor.ScopeID, prepared.Actor.UserID, record.Identity.InstallationID,
 			prepared.Request.PlanID, prepared.Request.Operation, prepared.Request.IdempotencyKey,
 			prepared.RequestDigest[:], prepared.Request.RequestID, snapshot, snapshotDigest,
-			commit.Plan.Revision, auditID, completedAt.UTC().Truncate(time.Microsecond)); err != nil {
+			commit.Plan.Revision, auditID, completedAt); err != nil {
 			return err
 		}
 		result.Detail = rolloutDetail(commit.Plan, record.Identity.InstallationID, createdAt, updatedAt)
@@ -521,7 +549,8 @@ func rolloutActionCommand(actor Actor, request RolloutActionRequest) PlanCommand
 func validateRolloutActionRequest(actor Actor, request RolloutActionRequest) error {
 	if !validRolloutActor(actor) || !validCanonicalPlanUUID(request.PlanID) ||
 		(request.Operation != string(PlanStart) && request.Operation != string(PlanPauseAction) &&
-			request.Operation != string(PlanResume) && request.Operation != string(PlanRollback)) ||
+			request.Operation != string(PlanResume) && request.Operation != string(PlanRollback) &&
+			request.Operation != string(PlanCancel)) ||
 		request.ExpectedRevision == 0 || request.ExpectedRevision > maxRolloutRevision ||
 		!planReasonPattern.MatchString(request.Reason) ||
 		!writeMetadataPattern.MatchString(request.IdempotencyKey) ||

@@ -337,6 +337,9 @@ func (s *Service) Save(ctx context.Context, actor Actor, request SaveRequest) (D
 	if err := settingsFieldError(request.Value, keptSecrets(request.Secrets, secretNames)...); err != nil {
 		return Document{}, err
 	}
+	if err := kycIssuerSaveError(request.Value, request.Secrets, s.now()); err != nil {
+		return Document{}, err
+	}
 	for _, secret := range request.Secrets {
 		if secret != nil && *secret != "" && s.cipher == nil {
 			return Document{}, ErrInvalidInput
@@ -596,6 +599,9 @@ func settingsFieldError(value Settings, secrets ...string) error {
 		return field("default_phone_country_code", fielderr.Invalid)
 	}
 	if err := kycProviderFieldError(value); err != nil {
+		return err
+	}
+	if err := kycIssuerFieldError(value); err != nil {
 		return err
 	}
 	externalCaptchaConfigured := configured(SecretCaptchaSecretID) && configured(SecretCaptchaSecretKey) && value.CaptchaAppID != "" && configured(SecretCaptchaAppSecret)

@@ -455,6 +455,130 @@ describe('ControlUpgradesPage', () => {
     expect(within(row).getByRole('button', { name: '升级' })).toBeDisabled()
   })
 
+  // A plan whose start failed or whose create response was lost stays queued; after a refresh
+  // the node offers Start upgrade, which starts that plan instead of creating another.
+  it('starts a queued plan found after a refresh without creating another plan', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    const queued = rolloutDetail([nodes[0].id], { revision: '1' })
+    const started = rolloutDetail([nodes[0].id], { revision: '2', state: 'canary', active_batch: 0,
+      nodes: [{ node_id: nodes[0].id, agent_version: '2.0.0', protocol_version: 1, state: 'dispatched', dispatch_revision: '2' }] })
+    let plans: ControlUpgradeRolloutDetail[] = [queued]
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      if (url.pathname.endsWith('/start') && init?.method === 'POST') { plans = [started]; return Promise.resolve(json({ data: started, replayed: false })) }
+      if (url.pathname === `/v1/admin/control-upgrade-rollouts/${ids.plan}`) return Promise.resolve(json({ data: plans[0] }))
+      return Promise.resolve(json(listResponse(...plans)))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    expect(await within(row).findByText('等待升级')).toBeInTheDocument()
+    const start = await within(row).findByRole('button', { name: '开始升级' })
+    await waitFor(() => expect(start).toBeEnabled())
+    expect(within(row).queryByRole('button', { name: '升级' })).not.toBeInTheDocument()
+    await user.click(start)
+    expect(await screen.findByText('已开始升级节点')).toBeInTheDocument()
+    const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
+    expect(posts.map(([input]) => String(input))).toEqual([`/v1/admin/control-upgrade-rollouts/${ids.plan}/start`])
+    expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ expected_revision: '1', reason: 'operator_upgrade' })
+    expect(await within(row).findByText('升级中')).toBeInTheDocument()
+  })
+
+  // A queued plan can be cancelled after a confirmation; the node is then free to upgrade.
+  it('cancels a queued plan after confirmation and frees the node', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    const queued = rolloutDetail([nodes[0].id], { revision: '1' })
+    const cancelled = rolloutDetail([nodes[0].id], { revision: '2', state: 'cancelled' })
+    let plans: ControlUpgradeRolloutDetail[] = [queued]
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      if (url.pathname.endsWith('/cancel') && init?.method === 'POST') { plans = [cancelled]; return Promise.resolve(json({ data: cancelled, replayed: false })) }
+      if (url.pathname === `/v1/admin/control-upgrade-rollouts/${ids.plan}`) return Promise.resolve(json({ data: plans[0] }))
+      return Promise.resolve(json(listResponse(...plans)))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    const cancel = await within(row).findByRole('button', { name: '取消' })
+    await waitFor(() => expect(cancel).toBeEnabled())
+    await user.click(cancel)
+    const dialog = await findDialog('取消升级计划')
+    expect(dialog).toHaveTextContent('取消后该计划不会再下发任何升级命令')
+    // Keeping the plan sends nothing.
+    await user.click(within(dialog).getByRole('button', { name: '保留' }))
+    await waitFor(() => expect(queryDialog('取消升级计划')).toBeNull())
+    expect(fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')).toEqual([])
+    await user.click(within(row).getByRole('button', { name: '取消' }))
+    await user.click(within(await findDialog('取消升级计划')).getByRole('button', { name: '取消计划' }))
+    expect(await screen.findByText('升级计划已取消')).toBeInTheDocument()
+    const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
+    expect(posts.map(([input]) => String(input))).toEqual([`/v1/admin/control-upgrade-rollouts/${ids.plan}/cancel`])
+    expect(JSON.parse(String(posts[0][1]!.body))).toEqual({ expected_revision: '1', reason: 'operator_requested' })
+    expect((posts[0][1]!.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^control-upgrade-cancel-/)
+    await waitFor(() => expect(within(row).getByRole('button', { name: '升级' })).toBeEnabled())
+    expect(within(row).queryByRole('button', { name: '开始升级' })).not.toBeInTheDocument()
+  })
+
+  // A paused plan offers Cancel too; control refuses it once a node started installing.
+  it('cancels a paused plan and shows the refusal when a node started installing', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    const paused = rolloutDetail([nodes[0].id], { revision: '4', state: 'paused' })
+    let refuse = true
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      if (url.pathname.endsWith('/cancel') && init?.method === 'POST') {
+        if (refuse) return Promise.resolve(json({ error: { code: 'control_upgrade_rollout_nodes_started', message: 'started', request_id: 'req-started' } }, 409))
+        return Promise.resolve(json({ data: rolloutDetail([nodes[0].id], { revision: '5', state: 'cancelled' }), replayed: false }))
+      }
+      if (url.pathname === `/v1/admin/control-upgrade-rollouts/${ids.plan}`) return Promise.resolve(json({ data: paused }))
+      return Promise.resolve(json(listResponse(paused)))
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    const cancel = await within(row).findByRole('button', { name: '取消' })
+    await waitFor(() => expect(cancel).toBeEnabled())
+    await user.click(cancel)
+    const dialog = await findDialog('取消升级计划')
+    expect(dialog).toHaveTextContent('已有节点开始安装时无法取消')
+    await user.click(within(dialog).getByRole('button', { name: '取消计划' }))
+    // FeedbackWhen renders the message in parts.
+    await waitFor(() => expect(document.body).toHaveTextContent(/已有节点开始安装.?无法取消计划/))
+    refuse = false
+    await user.click(within(row).getByRole('button', { name: '取消' }))
+    await user.click(within(await findDialog('取消升级计划')).getByRole('button', { name: '取消计划' }))
+    expect(await screen.findByText('升级计划已取消')).toBeInTheDocument()
+    const posts = fetchSpy.mock.calls.filter(([, request]) => request?.method === 'POST')
+    expect(posts).toHaveLength(2)
+    expect(JSON.parse(String(posts[1][1]!.body))).toEqual({ expected_revision: '4', reason: 'operator_requested' })
+  })
+
+  it('does not offer Start upgrade on a queued plan without control.upgrades.manage', async () => {
+    authenticate(['control.upgrades.read', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      const queued = rolloutDetail([nodes[0].id], { revision: '1' })
+      if (url.pathname === `/v1/admin/control-upgrade-rollouts/${ids.plan}`) return Promise.resolve(json({ data: queued }))
+      return Promise.resolve(json(listResponse(queued)))
+    })
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    expect(await within(row).findByRole('button', { name: '开始升级' })).toBeDisabled()
+    expect(within(row).getByRole('button', { name: '取消' })).toBeDisabled()
+  })
+
   it('upgrades a selected batch with the first selected node as canary', async () => {
     authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
     const nodes = [inventoryNode(1), inventoryNode(2)]

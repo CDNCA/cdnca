@@ -9430,6 +9430,15 @@ components:
           description: Canonical unpadded base64url of the exact signed plan artifact bundle bytes.
         forward_profile: {$ref: '#/components/schemas/UpgradeCommandProfile'}
         rollback_profile: {$ref: '#/components/schemas/UpgradeCommandProfile'}
+        node_receipt_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775806
+          description: >-
+            Highest sequence the control plane knows the node's root helper receipt holds (a schema-1 receipt
+            counts its installed release_sequence). The v3 execution_sequence is issued above it and above the
+            last one issued for the node. Omitted by older control planes; covered by the request proof.
     UpgradeCommandGrantResponse:
       type: object
       additionalProperties: false

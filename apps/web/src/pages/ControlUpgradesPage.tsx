@@ -14,7 +14,7 @@ import {
   Tag,
   type TableColumnsType,
 } from 'antd'
-import { CircleCheck, FileText, RefreshCw, UploadCloud } from 'lucide-react'
+import { CircleCheck, CircleX, FileText, RefreshCw, UploadCloud } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 
@@ -41,7 +41,7 @@ import ControlDBPoolPanel from './ControlDBPoolPanel'
 import NodeGatewayAddressPanel from './NodeGatewayAddressPanel'
 import { nativeControlUpgradesApi } from '../api/controlUpgrades.native'
 import UpgradeLogModal from './UpgradeLogModal'
-import { masterProgramLogLines, masterRunLogLines, masterUpgradeLogLines, nodeUpgradeLogLines } from './controlUpgradeLogs'
+import { masterProgramLogLines, masterRunLogLines, masterUpgradeLogLines, nodeUpgradeLogLines, rolloutVersionText } from './controlUpgradeLogs'
 import { runLogMessage } from '../i18n/controlUpgradeRunLog'
 import { maintenanceUpgradeCandidateHint, maintenanceUpgradeMessage, maintenanceUpgradeReasonMessage } from '../i18n/maintenanceUpgrade'
 import './ControlUpgradesPage.css'
@@ -96,7 +96,7 @@ function errorText(error: unknown, operation: 'read' | 'write', t: TFunction<'co
     'invalid_request', 'invalid_idempotency_key', 'permission_denied', 'forbidden',
     'control_upgrade_rollout_not_found', 'rollout_not_found', 'node_not_found', 'idempotency_conflict',
     'revision_conflict', 'rollout_revision_conflict', 'control_upgrade_rollout_invalid_transition',
-    'rollout_transition_invalid', 'control_upgrade_rollout_blocked', 'rollout_blocked',
+    'rollout_transition_invalid', 'control_upgrade_rollout_blocked', 'rollout_blocked', 'control_upgrade_rollout_nodes_started',
     'control_upgrade_cohort_incompatible', 'cohort_incompatible', 'control_upgrade_grant_invalid',
     'control_upgrade_execution_invalid', 'control_upgrade_artifact_invalid', 'control_upgrade_artifact_unavailable',
     'control_upgrade_license_outcome_unknown',
@@ -374,6 +374,51 @@ function MaintenanceOverview({
       void refresh()
     },
   })
+  // A plan created without its start (start refused or its outcome lost) stays queued; the same
+  // attempt path reads it and starts it.
+  const queuedPlan = (id: string) => {
+    const rollout = nodeRollouts.get(id)
+    return rollout?.plan.state === 'queued' ? rollout.plan : undefined
+  }
+  const startQueued = (id: string) => {
+    const plan = queuedPlan(id)
+    if (!canManage || !plan || unknownAttempt || upgradeMutation.isPending) return
+    setUpgradeError(null)
+    upgradeMutation.mutate({ nodeIDs: [id], planID: plan.id, createMetadata: createControlUpgradeRequestMetadata('create'),
+      startMetadata: createControlUpgradeRequestMetadata('start') })
+  }
+  // A paused plan can be cancelled too while none of its nodes started installing.
+  const pausedPlan = (id: string) => {
+    const rollout = nodeRollouts.get(id)
+    return rollout?.plan.state === 'paused' ? rollout.plan : undefined
+  }
+  // A queued plan that should not run is cancelled; the node is then free again.
+  const [cancelAttempt, setCancelAttempt] = useState<{ plan: ControlUpgradeRolloutDetail; metadata: ControlUpgradeRequestMetadata } | null>(null)
+  const cancelMutation = useMutation({
+    mutationFn: async (attempt: { plan: ControlUpgradeRolloutDetail; metadata: ControlUpgradeRequestMetadata }) => {
+      if (!accessToken || !hasPermission('control.upgrades.manage')) throw new ApiError('Permission changed', 403, 'permission_denied')
+      return (await controlUpgradesApi.cancel(accessToken, attempt.plan.id,
+        { expected_revision: attempt.plan.revision, reason: 'operator_requested' }, attempt.metadata)).data
+    },
+    onSuccess: () => {
+      setCancelAttempt(null)
+      setUpgradeError(null)
+      message.success(mt('cancelQueuedDone'))
+      void refresh()
+    },
+    onError: (error) => {
+      setCancelAttempt(null)
+      setUpgradeError(error)
+      void refresh()
+    },
+  })
+  const writeBusy = upgradeMutation.isPending || cancelMutation.isPending
+  const openCancel = (id: string) => {
+    const plan = queuedPlan(id) ?? pausedPlan(id)
+    if (!canManage || !plan || unknownAttempt || writeBusy) return
+    setUpgradeError(null)
+    setCancelAttempt({ plan, metadata: createControlUpgradeRequestMetadata('cancel') })
+  }
   const openUpgrade = (ids: string[]) => {
     if (!canManage || unknownAttempt || upgradeMutation.isPending || !ids.length) return
     setUpgradeError(null)
@@ -429,7 +474,17 @@ function MaintenanceOverview({
       } },
     { title: mt('action'), key: 'actions', width: '15%', render: (_, item) => <Space size={4} wrap={false}>
       <Button type="link" size="small" className="maintenance-row-action" icon={<FileText size={14} />} onClick={() => setNodeLogID(item.id)}>{mt('logs')}</Button>
-      <Button type="link" size="small" icon={<UploadCloud size={14} />} onClick={() => openUpgrade([item.id])} disabled={!canManage || Boolean(unknownAttempt) || !nodeUpgradable(item.id)}>{mt('upgrade')}</Button>
+      {queuedPlan(item.id)
+        ? <>
+          <Button type="link" size="small" icon={<UploadCloud size={14} />} title={mt('startQueuedHint')} loading={upgradeMutation.isPending && upgradeMutation.variables?.planID === queuedPlan(item.id)?.id}
+            onClick={() => startQueued(item.id)} disabled={!canManage || Boolean(unknownAttempt) || writeBusy}>{mt('startQueued')}</Button>
+          <Button type="link" size="small" danger icon={<CircleX size={14} />} title={mt('cancelQueuedHint')}
+            onClick={() => openCancel(item.id)} disabled={!canManage || Boolean(unknownAttempt) || writeBusy}>{mt('cancelQueued')}</Button>
+        </>
+        : pausedPlan(item.id)
+          ? <Button type="link" size="small" danger icon={<CircleX size={14} />} title={mt('cancelPausedHint')}
+            onClick={() => openCancel(item.id)} disabled={!canManage || Boolean(unknownAttempt) || writeBusy}>{mt('cancelQueued')}</Button>
+          : <Button type="link" size="small" icon={<UploadCloud size={14} />} onClick={() => openUpgrade([item.id])} disabled={!canManage || Boolean(unknownAttempt) || !nodeUpgradable(item.id)}>{mt('upgrade')}</Button>}
     </Space> },
   ]
 
@@ -503,6 +558,15 @@ function MaintenanceOverview({
           { key: 'version', label: mt('requiredVersion'), children: confirmVersions.size === 1 ? [...confirmVersions][0] : mt('requiredVersionMixed') },
         ]} />
         <p className="maintenance-command-note">{mt('upgradeConfirmNote')}</p>
+      </Modal>
+      <Modal title={mt('cancelQueuedTitle')} open={Boolean(cancelAttempt)} okText={mt('cancelQueuedConfirm')} cancelText={mt('cancelQueuedKeep')}
+        okButtonProps={{ danger: true }} confirmLoading={cancelMutation.isPending} maskClosable={!cancelMutation.isPending}
+        closable={!cancelMutation.isPending} onCancel={() => { if (!cancelMutation.isPending) setCancelAttempt(null) }}
+        onOk={() => { if (cancelAttempt && !cancelMutation.isPending) cancelMutation.mutate(cancelAttempt) }} destroyOnHidden>
+        <p>{mt(cancelAttempt?.plan.state === 'paused' ? 'cancelPausedMessage' : 'cancelQueuedMessage')}</p>
+        <Descriptions size="small" column={1} items={[
+          { key: 'version', label: mt('requiredVersion'), children: cancelAttempt ? rolloutVersionText(cancelAttempt.plan, mt) : null },
+        ]} />
       </Modal>
       <section className="maintenance-card node-install-section" aria-labelledby="node-install-title">
         <div className="maintenance-section-heading"><div><h2 id="node-install-title">{mt('installTitle')}</h2><p>{mt('installDescription')}</p></div></div>

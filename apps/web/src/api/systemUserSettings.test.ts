@@ -38,7 +38,7 @@ const value: PlatformSystemUserSettings = {
   captcha_app_secret_reference: '', captcha_turnstile_site_key: '',
   identity_verification_method: 'none',
   enterprise_verification_enabled: false,
-  identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '',
+  identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '', kyc_issuer_enabled: false, kyc_issuer_listen_address: '', kyc_issuer_server_certificate: '', kyc_issuer_client_ca: '', kyc_issuer_workload_identities: '', kyc_issuer_kms_endpoint: '',
   wechat_payment_enabled: false,
   alipay_payment_enabled: false,
   bank_transfer_enabled: false,
@@ -102,6 +102,21 @@ describe('systemUserSettingsApi', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ value: kyc, kyc_object_access_key_id: 'AKIAEXAMPLE', kyc_object_session_token: '' })
     const missing = Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'kyc_object_kms_key_id'))
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4, value: missing }))
+    await expect(systemUserSettingsApi.get('token')).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
+  it('reads the evidence issuer fields and sends its private key write-only', async () => {
+    const certificate = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----'
+    const issuer = { ...value, kyc_issuer_enabled: true, kyc_issuer_listen_address: '0.0.0.0:19443', kyc_issuer_server_certificate: certificate,
+      kyc_issuer_workload_identities: 'spiffe://control.cdnca.local/workload/kyc/a|a' }
+    const privateKey = '-----BEGIN PRIVATE KEY-----\nplain-issuer-key\n-----END PRIVATE KEY-----'
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 5, value: issuer,
+      kyc_issuer_server_private_key_configured: true, kyc_issuer_server_private_key_fingerprint: '0123456789abcdef' }))
+    await expect(systemUserSettingsApi.put('token', 4, issuer, undefined, undefined, { kyc_issuer_server_private_key: privateKey }))
+      .resolves.toMatchObject({ kyc_issuer_server_private_key_configured: true, value: { kyc_issuer_server_certificate: certificate } })
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ value: issuer, kyc_issuer_server_private_key: privateKey })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ schema: 'cdnca.platform-system-user-settings/v1', revision: 4,
+      value: { ...value, kyc_issuer_enabled: 'yes' } }))
     await expect(systemUserSettingsApi.get('token')).rejects.toMatchObject({ code: 'invalid_response' })
   })
 

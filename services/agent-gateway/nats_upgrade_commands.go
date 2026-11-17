@@ -271,6 +271,26 @@ func (b *NATSUpgradeCommandBus) ensureUpgradeStatusLegacyMigration(ctx context.C
 	if err != nil {
 		return false, err
 	}
+	// Only legacy upgrade.<node> messages need migrating, yet the scan below walks every
+	// sequence of the shared status stream. With 8391 unrelated deployment
+	// statuses the scan took three 4096-sequence calls and the first two dropped the node's session.
+	if lastSequence, legacyPresent, err := b.legacyUpgradeStatusHorizon(ctx); err != nil {
+		return false, err
+	} else if !legacyPresent {
+		if found && state.Complete {
+			return true, nil
+		}
+		candidate := upgradeStatusMigrationState{HorizonSequence: lastSequence, NextSequence: lastSequence + 1,
+			ProgressSequence: state.ProgressSequence, Complete: true}
+		if found && candidate.HorizonSequence < state.HorizonSequence {
+			return false, fmt.Errorf("upgrade status migration stream horizon moved backwards")
+		}
+		persisted, err := b.persistUpgradeStatusMigrationState(ctx, candidate, state.ProgressSequence)
+		if err != nil {
+			return false, err
+		}
+		return persisted.Complete, nil
+	}
 	emptyAtInitialization := false
 	if !found {
 		operationCtx, cancel := context.WithTimeout(ctx, b.operationTimeout)
@@ -324,6 +344,27 @@ func (b *NATSUpgradeCommandBus) ensureUpgradeStatusLegacyMigration(ctx context.C
 		}
 	}
 	return b.advanceUpgradeStatusLegacyMigration(ctx, state)
+}
+
+// legacyUpgradeStatusHorizon reports the stream's last sequence and whether any legacy
+// upgrade.<node> subject holds a message; both come from one server-side stream snapshot.
+func (b *NATSUpgradeCommandBus) legacyUpgradeStatusHorizon(ctx context.Context) (uint64, bool, error) {
+	operationCtx, cancel := context.WithTimeout(ctx, b.operationTimeout)
+	info, err := b.js.StreamInfo(UpgradeStatusStream, nats.Context(operationCtx),
+		&nats.StreamInfoRequest{SubjectsFilter: UpgradeStatusSubjectPrefix + ".*"})
+	cancel()
+	if err != nil {
+		return 0, false, fmt.Errorf("load legacy upgrade status subjects: %w", err)
+	}
+	if info == nil || (info.Config.Name != "" && info.Config.Name != UpgradeStatusStream) {
+		return 0, false, fmt.Errorf("legacy upgrade status stream identity is invalid")
+	}
+	for _, count := range info.State.Subjects {
+		if count != 0 {
+			return info.State.LastSeq, true, nil
+		}
+	}
+	return info.State.LastSeq, false, nil
 }
 
 func (b *NATSUpgradeCommandBus) advanceUpgradeStatusLegacyMigration(ctx context.Context,
@@ -436,33 +477,41 @@ func (s *natsUpgradeCommandSubscription) Next(ctx context.Context) (UpgradeComma
 	if s == nil || s.subscription == nil || isNilInterface(ctx) {
 		return nil, fmt.Errorf("upgrade subscription is invalid")
 	}
-	var messages []*nats.Msg
 	for {
-		fetchCtx, cancel := context.WithTimeout(ctx, s.fetchTimeout)
-		var err error
-		messages, err = s.subscription.Fetch(1, nats.Context(fetchCtx))
-		cancel()
-		if err == nil {
-			break
+		var messages []*nats.Msg
+		for {
+			fetchCtx, cancel := context.WithTimeout(ctx, s.fetchTimeout)
+			var err error
+			messages, err = s.subscription.Fetch(1, nats.Context(fetchCtx))
+			cancel()
+			if err == nil {
+				break
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
+				continue
+			}
+			return nil, err
 		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		if len(messages) != 1 {
+			return nil, fmt.Errorf("pull consumer returned an unexpected upgrade command batch")
 		}
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
-			continue
+		message := messages[0]
+		record, decodeErr := validateUpgradeCommandMessage(message, s.nodeID)
+		if decodeErr == nil {
+			return &natsUpgradeCommandDelivery{message: message, command: record}, nil
 		}
-		return nil, err
+		// The same bytes are refused on every delivery: a Nak redelivered them at once and the session
+		// dropped each time. Terminate the message and keep serving the node.
+		reference := message.Subject
+		if metadata, err := message.Metadata(); err == nil {
+			reference = fmt.Sprintf("%s stream_sequence=%d delivered=%d", message.Subject,
+				metadata.Sequence.Stream, metadata.NumDelivered)
+		}
+		refuseUpgradeCommand(&natsUpgradeCommandDelivery{message: message}, s.nodeID, reference, decodeErr, s.fetchTimeout)
 	}
-	if len(messages) != 1 {
-		return nil, fmt.Errorf("pull consumer returned an unexpected upgrade command batch")
-	}
-	message := messages[0]
-	record, decodeErr := validateUpgradeCommandMessage(message, s.nodeID)
-	if decodeErr != nil {
-		_ = message.Nak()
-		return nil, fmt.Errorf("durable upgrade command is invalid")
-	}
-	return &natsUpgradeCommandDelivery{message: message, command: record}, nil
 }
 
 func validateUpgradeCommandMessage(message *nats.Msg, nodeID string) (UpgradeCommandRecord, error) {
@@ -470,8 +519,11 @@ func validateUpgradeCommandMessage(message *nats.Msg, nodeID string) (UpgradeCom
 		return UpgradeCommandRecord{}, errors.New("invalid upgrade command message")
 	}
 	record, err := decodeUpgradeCommandRecord(message.Data)
-	if err != nil || record.NodeID != nodeID {
-		return UpgradeCommandRecord{}, errors.New("invalid upgrade command message")
+	if err != nil {
+		return UpgradeCommandRecord{}, err
+	}
+	if record.NodeID != nodeID {
+		return UpgradeCommandRecord{}, errors.New("upgrade command is for another node")
 	}
 	digest := sha256.Sum256(message.Data)
 	hexDigest := hex.EncodeToString(digest[:])
@@ -526,6 +578,26 @@ func (d *natsUpgradeCommandDelivery) Ack(ctx context.Context) error {
 	}
 	return nil
 }
+func (d *natsUpgradeCommandDelivery) Term(ctx context.Context) error {
+	if d == nil || d.message == nil || isNilInterface(ctx) {
+		return fmt.Errorf("upgrade command delivery is invalid")
+	}
+	if err := d.message.Term(nats.Context(ctx)); err != nil && !errors.Is(err, nats.ErrMsgAlreadyAckd) {
+		return err
+	}
+	return nil
+}
+
+func (d *natsUpgradeCommandDelivery) NakWithDelay(ctx context.Context, delay time.Duration) error {
+	if d == nil || d.message == nil || isNilInterface(ctx) {
+		return fmt.Errorf("upgrade command delivery is invalid")
+	}
+	if err := d.message.NakWithDelay(delay, nats.Context(ctx)); err != nil && !errors.Is(err, nats.ErrMsgAlreadyAckd) {
+		return err
+	}
+	return nil
+}
+
 func (d *natsUpgradeCommandDelivery) Nak(ctx context.Context) error {
 	if d == nil || d.message == nil || isNilInterface(ctx) {
 		return fmt.Errorf("upgrade command delivery is invalid")

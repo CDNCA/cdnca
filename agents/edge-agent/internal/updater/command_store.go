@@ -950,6 +950,19 @@ func (r *UpgradeRuntime) processCommand(ctx context.Context, command AcceptedUpg
 	if errors.Is(err, ErrUpgradeCommandNotClaimed) {
 		claimed, err = r.store.ClaimCommand(ctx, command.Command.CommandID, options)
 	}
+	if errors.Is(err, ErrUpgradeExecutionExpired) && found && last.State != EdgeUpgradeStateAccepted {
+		// The signed envelope of a claimed command expired mid-upgrade. Finish it from the
+		// plan the manager journalled at claim time; re-verifying the envelope can never
+		// succeed again and ended every gateway session of the node.
+		plan, transactionID, pending, pendingErr := r.manager.pendingTransaction(ctx)
+		if pendingErr != nil {
+			return pendingErr
+		}
+		if !pending || plan.PlanID != command.Command.PlanID || plan.Revision != command.Command.PlanRevision {
+			return err
+		}
+		return r.finishClaimed(ctx, command, last, plan, transactionID)
+	}
 	if err != nil {
 		return err
 	}
@@ -965,7 +978,17 @@ func (r *UpgradeRuntime) processCommand(ctx context.Context, command AcceptedUpg
 	}
 	if prepared.Complete {
 		if last.State == EdgeUpgradeStateClaimed {
-			return ErrUpgradeStatusConflict
+			if prepared.Result.State != StateFailed || prepared.Result.InstallerTransactionID == "" {
+				return ErrUpgradeStatusConflict
+			}
+			// The upgrade failed before the helper staged anything (download, preflight or a
+			// helper refusal). Claimed only moves to installing, so close it as installing ->
+			// failed instead of returning an error that ends every gateway session.
+			if err := r.emitStatus(ctx, command, EdgeUpgradeStateInstalling,
+				Result{InstallerTransactionID: prepared.Result.InstallerTransactionID}, ""); err != nil {
+				return err
+			}
+			last.State = EdgeUpgradeStateInstalling
 		}
 		result := normalizeUpgradeResult(command.Command.Action, prepared.Result)
 		for _, state := range upgradeResultStates(command.Command.Action, result,
@@ -989,9 +1012,23 @@ func (r *UpgradeRuntime) processCommand(ctx context.Context, command AcceptedUpg
 				Result{InstallerTransactionID: prepared.InstallerTransactionID}, ""); err != nil {
 				return err
 			}
+			last.State = EdgeUpgradeStateInstalling
 		}
 	}
-	result, processErr := r.manager.processPrepared(ctx, claimed.Plan, prepared.InstallerTransactionID)
+	return r.finishClaimed(ctx, command, last, claimed.Plan, prepared.InstallerTransactionID)
+}
+
+// finishClaimed runs a prepared transaction to its result and emits the remaining statuses.
+func (r *UpgradeRuntime) finishClaimed(ctx context.Context, command AcceptedUpgradeCommand, last EdgeUpgradeStatus,
+	plan Plan, installerTransactionID string) error {
+	result, processErr := r.manager.processPrepared(ctx, plan, installerTransactionID)
+	if last.State == EdgeUpgradeStateClaimed && result.State == StateFailed && result.InstallerTransactionID != "" {
+		if err := r.emitStatus(ctx, command, EdgeUpgradeStateInstalling,
+			Result{InstallerTransactionID: result.InstallerTransactionID}, ""); err != nil {
+			return err
+		}
+		last.State = EdgeUpgradeStateInstalling
+	}
 	if processErr != nil && result.State == "" {
 		_, transactionID, _, pendingErr := r.manager.pendingTransaction(ctx)
 		if pendingErr != nil {

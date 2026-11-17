@@ -87,6 +87,11 @@ func persistSessionCapabilities(ctx context.Context, tx pgx.Tx, request GetAutho
 	}
 	var certificateID uuid.UUID
 	var publicKey, publicHash, leafPEM, caPEM, caHash []byte
+	// The installation entitlement row is joined, never locked: installation_id is
+	// never updated and certificates reference it ON DELETE RESTRICT, while every
+	// entitlement-guarded write holds it FOR UPDATE, so a NOWAIT share lock failed
+	// this Connect with 55P03. Re-enrollment and CA changes are
+	// fenced by the node, certificate and epoch locks taken above.
 	err = tx.QueryRow(ctx, `SELECT cert.id,key.public_key,key.public_key_sha256,cert.leaf_certificate_pem,epoch.ca_certificate_pem,epoch.ca_certificate_sha256
   FROM nodes node
   JOIN node_identity_state state ON state.node_id=node.id
@@ -110,7 +115,7 @@ func persistSessionCapabilities(ctx context.Context, tx pgx.Tx, request GetAutho
    AND NOT EXISTS(SELECT 1 FROM node_certificate_revocations revoked WHERE revoked.certificate_id=cert.id
     AND revoked.node_id=node.id AND revoked.binding_status='bound' AND revoked.effective_at<=$5)
    AND NOT EXISTS(SELECT 1 FROM node_identity_authorizations newer WHERE newer.node_id=node.id AND newer.status='issued' AND newer.completed_at>auth.completed_at)
-  FOR SHARE OF state,key,auth,initial,installation NOWAIT`, request.NodeID, request.CertificateSerialNumber, request.CertificateSHA256[:], request.GatewayWorkloadIdentity, now, facts.ArtifactEncryptionKeyId).Scan(&certificateID, &publicKey, &publicHash, &leafPEM, &caPEM, &caHash)
+  FOR SHARE OF state,key,auth,initial NOWAIT`, request.NodeID, request.CertificateSerialNumber, request.CertificateSHA256[:], request.GatewayWorkloadIdentity, now, facts.ArtifactEncryptionKeyId).Scan(&certificateID, &publicKey, &publicHash, &leafPEM, &caPEM, &caHash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		if paused {
 			return nil, nil

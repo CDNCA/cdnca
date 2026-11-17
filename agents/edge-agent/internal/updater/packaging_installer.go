@@ -340,18 +340,21 @@ func (i *PackagingInstaller) roundTrip(ctx context.Context, request protocol.Req
 		return protocol.Response{}, ErrInstaller
 	}
 	if !response.OK {
+		code := string(response.ErrorCode)
 		switch response.ErrorCode {
 		case protocol.ErrorTransactionUnknown:
 			return protocol.Response{}, ErrInstallerUnknown
 		case protocol.ErrorProtocol:
 			if mutating {
-				return protocol.Response{}, ErrInstallerUncertain
+				return protocol.Response{}, &InstallerRefusal{Code: code, cause: ErrInstallerUncertain}
 			}
 			return protocol.Response{}, ErrInstaller
-		case protocol.ErrorTransactionConflict, protocol.ErrorCurrentUnavailable, protocol.ErrorStateUncertain, protocol.ErrorDeadline:
+		case protocol.ErrorTransactionConflict:
+			return protocol.Response{}, &InstallerRefusal{Code: code, cause: ErrInstallerUncertain}
+		case protocol.ErrorCurrentUnavailable, protocol.ErrorStateUncertain, protocol.ErrorDeadline:
 			return protocol.Response{}, ErrInstallerUncertain
 		default:
-			return protocol.Response{}, ErrInstaller
+			return protocol.Response{}, &InstallerRefusal{Code: code, cause: ErrInstaller}
 		}
 	}
 	return response, nil

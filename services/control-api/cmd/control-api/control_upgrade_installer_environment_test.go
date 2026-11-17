@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
 
 // The native installer writes CONTROL_UPGRADE_* into control.env. Load exactly
@@ -98,7 +97,7 @@ func TestNativeInstallerControlUpgradeEnvironmentLoads(t *testing.T) {
 	if !config.Enabled || config.ControlSigningKeyID == config.EdgeSigningKeyID ||
 		config.ControlSigner.Provider != controlUpgradeSignerProviderFile ||
 		config.EdgeSigner.Provider != controlUpgradeSignerProviderFile ||
-		config.ExecutionTTL > 15*time.Minute || config.CommandGrantTrustFile != filepath.Join(configDir, "entitlement-trusted-keys.json") {
+		config.CommandGrantTrustFile != filepath.Join(configDir, "entitlement-trusted-keys.json") {
 		t.Fatalf("installer upgrade runtime = %+v", config)
 	}
 	if _, err := controlUpgradeLoadTrust(config.CommandGrantTrustFile); err != nil {

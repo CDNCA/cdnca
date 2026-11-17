@@ -297,6 +297,9 @@ func validatorSearchPath273RestoreDB(t *testing.T, source *pgxpool.Pool) *pgxpoo
 	return restored
 }
 
+// validatorSearchPath273Command runs the PostgreSQL 17 pg_dump or pg_restore
+// from PG_TOOLS_DIR when set, otherwise from PATH; the native restore case
+// needs one of them.
 func validatorSearchPath273Command(t *testing.T, pool *pgxpool.Pool, tool string, args ...string) string {
 	t.Helper()
 	config := pool.Config().ConnConfig
@@ -305,7 +308,11 @@ func validatorSearchPath273Command(t *testing.T, pool *pgxpool.Pool, tool string
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, tool, args...)
+	path := tool
+	if directory := os.Getenv("PG_TOOLS_DIR"); directory != "" {
+		path = filepath.Join(directory, tool)
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
 	for _, variable := range os.Environ() {
 		if !strings.HasPrefix(variable, "PG") {
 			cmd.Env = append(cmd.Env, variable)

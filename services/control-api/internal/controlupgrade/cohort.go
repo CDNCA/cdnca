@@ -6,10 +6,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"time"
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
 )
@@ -31,82 +29,31 @@ type rolloutNodeCapabilityFact struct {
 	ProtocolVersion  uint32
 	CapabilityBytes  []byte
 	CapabilitySHA256 []byte
+	// LastExecutionSequence is the highest execution_sequence of the node's stored v3 commands.
+	LastExecutionSequence uint64
 }
 
+// LoadRolloutTargetCohort is the unlocked preliminary read the License grants are
+// requested for: FinalizeCreateRollout re-reads the cohort under row locks and
+// refuses any difference, so row locks here would only make creation fail or
+// wait on unrelated writers (a NOWAIT share lock on the installation
+// entitlement row, the mutex of every entitlement-guarded write, returned 500).
 func (s *Store) LoadRolloutTargetCohort(ctx context.Context, actor Actor,
 	nodeIDs []string) (RolloutTargetCohort, error) {
 	if s == nil || s.pool == nil || !validRolloutActor(actor) || len(nodeIDs) == 0 ||
 		len(nodeIDs) > 1000 || !strictCanonicalUUIDs(nodeIDs) {
 		return RolloutTargetCohort{}, ErrInvalidInput
 	}
-	parsed := make([]uuid.UUID, len(nodeIDs))
-	for index, nodeID := range nodeIDs {
-		parsed[index] = uuid.MustParse(nodeID)
-	}
-
 	var cohort RolloutTargetCohort
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if err := authorizeRolloutTx(ctx, tx, actor, rolloutManagePermission); err != nil {
-			return err
-		}
-		rows, err := tx.Query(ctx, `SELECT id FROM nodes
-			WHERE scope_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR SHARE`, actor.ScopeID, parsed)
-		if err != nil {
-			return err
-		}
-		found := 0
-		for rows.Next() {
-			found++
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return err
-		}
-		if found != len(parsed) {
-			return ErrNodeNotFound
-		}
-		if err := lockUpgradeSessionAuthority(ctx, tx, parsed); err != nil {
-			return err
-		}
-
-		var transactionNow time.Time
-		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&transactionNow); err != nil {
-			return err
-		}
-		rows, err = tx.Query(ctx, `SELECT node.id,presence.confirmed_agent_version,
-			node_authority.selected_protocol_major,node_authority.capabilities_snapshot,
-			node_authority.capabilities_sha256
-			FROM unnest($2::uuid[]) WITH ORDINALITY AS target(node_id,ordinality)
-			JOIN nodes node ON node.id=target.node_id AND node.scope_id=$1 AND node.admin_state='active'
-			JOIN node_presence presence ON presence.node_id=node.id AND presence.status='online'
-			  AND presence.confirmed_agent_version IS NOT NULL
-			JOIN LATERAL (`+upgradeSessionAuthoritySQL+` FOR SHARE OF facts,state,artifact,auth,initial,installation NOWAIT) node_authority ON true
-			ORDER BY target.ordinality FOR SHARE OF node,presence`, actor.ScopeID, parsed, transactionNow)
-		if err != nil {
-			return err
-		}
-		facts := make([]rolloutNodeCapabilityFact, 0, len(parsed))
-		for rows.Next() {
-			var fact rolloutNodeCapabilityFact
-			if err := rows.Scan(&fact.NodeID, &fact.PresenceVersion, &fact.ProtocolVersion,
-				&fact.CapabilityBytes, &fact.CapabilitySHA256); err != nil {
-				rows.Close()
+	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly},
+		func(tx pgx.Tx) error {
+			if err := authorizeUpgradeAccessTx(ctx, tx, actor, rolloutManagePermission, false); err != nil {
 				return err
 			}
-			facts = append(facts, fact)
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
+			var err error
+			cohort, err = loadRolloutTargetCohortTx(ctx, tx, actor.ScopeID, nodeIDs, false)
 			return err
-		}
-		if len(facts) != len(parsed) {
-			return ErrCohortIncompatible
-		}
-		cohort, err = rolloutCohortFromFacts(facts)
-		return err
-	})
+		})
 	if err != nil {
 		if errors.Is(err, ErrPermissionDenied) || errors.Is(err, ErrNodeNotFound) ||
 			errors.Is(err, ErrCohortIncompatible) || errors.Is(err, ErrInvalidInput) {
@@ -156,9 +103,10 @@ func rolloutCohortFromFacts(facts []rolloutNodeCapabilityFact) (RolloutTargetCoh
 			cohort.ProtocolVersion != fact.ProtocolVersion {
 			return RolloutTargetCohort{}, ErrCohortIncompatible
 		}
-		cohort.Targets = append(cohort.Targets, PlanTarget{NodeID: fact.NodeID,
-			AgentVersion: fact.PresenceVersion, ProtocolVersion: fact.ProtocolVersion})
 		sequence := installedReleaseSequence(&capabilities)
+		cohort.Targets = append(cohort.Targets, PlanTarget{NodeID: fact.NodeID,
+			AgentVersion: fact.PresenceVersion, ProtocolVersion: fact.ProtocolVersion,
+			ReceiptSequence: max(sequence, fact.LastExecutionSequence)})
 		allRerelease = allRerelease && sequence != 0
 		cohort.CurrentReleaseSequence = max(cohort.CurrentReleaseSequence, sequence)
 	}

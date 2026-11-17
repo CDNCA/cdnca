@@ -125,7 +125,7 @@ func TestSessionFactsUpgradeReadersPostgres(t *testing.T) {
 			t.Fatalf("preflight allowed=%v err=%v", allowed, err)
 		}
 		err = pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
-			_, err := loadRolloutTargetCohortTx(t.Context(), tx, actor.ScopeID, ids)
+			_, err := loadRolloutTargetCohortTx(t.Context(), tx, actor.ScopeID, ids, true)
 			if allowed && err != nil || !allowed && !errors.Is(err, ErrCohortIncompatible) {
 				t.Fatalf("finalize allowed=%v err=%v", allowed, err)
 			}

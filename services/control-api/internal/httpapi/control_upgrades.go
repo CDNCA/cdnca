@@ -250,6 +250,10 @@ func (s *Server) handleRollbackControlUpgradeRollout(w http.ResponseWriter, r *h
 	s.handleControlUpgradeRolloutAction(w, r, string(controlupgrade.PlanRollback))
 }
 
+func (s *Server) handleCancelControlUpgradeRollout(w http.ResponseWriter, r *http.Request) {
+	s.handleControlUpgradeRolloutAction(w, r, string(controlupgrade.PlanCancel))
+}
+
 func (s *Server) handleControlUpgradeRolloutAction(w http.ResponseWriter, r *http.Request, operation string) {
 	principal, ok := s.requireControlUpgradeActor(w, r)
 	if !ok {
@@ -504,7 +508,7 @@ func parseControlUpgradeListQuery(query url.Values) (controlupgrade.ListRollouts
 			if request.State != controlupgrade.PlanQueued && request.State != controlupgrade.PlanCanary &&
 				request.State != controlupgrade.PlanRunning && request.State != controlupgrade.PlanPaused &&
 				request.State != controlupgrade.PlanRollingBack && request.State != controlupgrade.PlanCompleted &&
-				request.State != controlupgrade.PlanFailed {
+				request.State != controlupgrade.PlanFailed && request.State != controlupgrade.PlanCancelled {
 				return controlupgrade.ListRolloutsRequest{}, controlupgrade.ErrInvalidInput
 			}
 		case "node_id":
@@ -564,6 +568,9 @@ func (s *Server) writeControlUpgradeError(w http.ResponseWriter, r *http.Request
 	case errors.Is(err, controlupgrade.ErrPlanBlocked):
 		s.writeAPIError(w, r, http.StatusConflict, "control_upgrade_rollout_blocked",
 			"control upgrade rollout is blocked")
+	case errors.Is(err, controlupgrade.ErrPlanCancelNodesStarted):
+		s.writeAPIError(w, r, http.StatusConflict, "control_upgrade_rollout_nodes_started",
+			"control upgrade rollout has nodes that started the upgrade")
 	case errors.Is(err, controlupgrade.ErrPlanNodeNotActive),
 		errors.Is(err, controlupgrade.ErrCohortIncompatible):
 		s.writeAPIError(w, r, http.StatusConflict, "control_upgrade_cohort_incompatible",

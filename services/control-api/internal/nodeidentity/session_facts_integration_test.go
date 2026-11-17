@@ -396,3 +396,63 @@ func TestNodeSessionCapabilitiesMigration277(t *testing.T) {
 		t.Fatal("refused down modified the ledger")
 	}
 }
+
+// The installation entitlement row is the mutex of every entitlement-guarded
+// write (guard check FOR UPDATE + last_verified_at UPDATE, ACME overlay, error page limits,
+// CA epochs, lease sync). Recording a node's session facts only joins it, so such a write in
+// flight must not turn the Connect authorization read into ErrPersistence (55P03).
+func TestNodeSessionFactsWhileEntitlementRowIsLockedPostgres(t *testing.T) {
+	pool := openIdentityTestDatabase(t, true)
+	now := time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC)
+	clock := &identityTestClock{value: now}
+	service := newIdentityTestService(t, pool, newIdentityTestCA(t, now), clock)
+	for _, test := range []struct{ name, statement string }{
+		{name: "guarded write FOR UPDATE",
+			statement: `SELECT 1 FROM control_installation_entitlement WHERE singleton FOR UPDATE`},
+		{name: "lease validation UPDATE",
+			statement: `UPDATE control_installation_entitlement SET updated_at=updated_at WHERE singleton`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			clock.set(now)
+			fixture := seedIdentityNode(t, pool, now, "pending", "initial_enrollment")
+			authorize := validAuthorizeRequest(t, testCSR(t, false))
+			key, err := ecdh.X25519().GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			authorize.RequestID, authorize.EnrollmentToken = uuid.NewString(), fixture.token
+			authorize.ArtifactEncryptionPublicKey = key.PublicKey().Bytes()
+			auth, err := service.Authorize(t.Context(), authorize)
+			if err != nil {
+				t.Fatal(err)
+			}
+			completion, err := service.Complete(t.Context(), CompleteRequest{RequestID: uuid.NewString(), AuthorizationID: auth.ID,
+				GatewayWorkloadIdentity: authorize.GatewayWorkloadIdentity, GatewayInstanceID: authorize.GatewayInstanceID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			certSHA := certificateDERDigest(t, completion.Certificate)
+			facts := &controlv1.GatewaySessionFactsV1{SchemaVersion: 1, NodeId: fixture.nodeID.String(), SessionEpoch: 1,
+				CertificateSha256: certSHA[:], SelectedProtocolVersion: &commonv1.ProtocolVersion{Major: 1},
+				ArtifactEncryptionKeyId: completion.ArtifactEncryptionKeyID,
+				Capabilities: &agentv1.AgentCapabilities{AgentVersion: "1.0.27", BuildId: "build", OperatingSystem: "linux",
+					Architecture: "amd64", Features: []*agentv1.Capability{{Name: agentv1.CapabilityName_CAPABILITY_NAME_EDGE_UPGRADE, ApiVersion: 1}}}}
+			clock.set(now.Add(6 * time.Minute))
+			tx, err := pool.Begin(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = tx.Rollback(context.Background()) }()
+			if _, err := tx.Exec(t.Context(), test.statement); err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := service.GetAuthorization(t.Context(), GetAuthorizationRequest{NodeID: fixture.nodeID,
+				CertificateSerialNumber: completion.Certificate.SerialNumber, CertificateSHA256: certSHA,
+				GatewayWorkloadIdentity: authorize.GatewayWorkloadIdentity, GatewayInstanceID: uuid.NewString(), SessionFacts: facts})
+			if err != nil || !snapshot.ConnectionAllowed || len(snapshot.SessionFactsSHA256) != 32 {
+				t.Fatalf("session facts while entitlement row is locked: allowed=%v receipt=%d err=%v",
+					snapshot.ConnectionAllowed, len(snapshot.SessionFactsSHA256), err)
+			}
+		})
+	}
+}

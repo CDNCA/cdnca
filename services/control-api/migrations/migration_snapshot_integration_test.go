@@ -39,6 +39,7 @@ var migrationSnapshots = struct {
 }{run: strings.ReplaceAll(uuid.NewString(), "-", "")[:12], names: map[int64]string{}}
 
 func TestMain(m *testing.M) {
+	ensurePluginWebhookLogins084()
 	code := m.Run()
 	dropMigrationSnapshots()
 	dropSteppedSnapshots()

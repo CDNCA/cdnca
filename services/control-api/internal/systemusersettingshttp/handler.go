@@ -118,6 +118,8 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request, requestID string, 
 		KYCObjectAccessKeyID     *string `json:"kyc_object_access_key_id,omitempty"`
 		KYCObjectSecretAccessKey *string `json:"kyc_object_secret_access_key,omitempty"`
 		KYCObjectSessionToken    *string `json:"kyc_object_session_token,omitempty"`
+		// the evidence issuer's server private key (PEM)
+		KYCIssuerServerPrivateKey *string `json:"kyc_issuer_server_private_key,omitempty"`
 	}
 	if err := decodeStrict(r.Body, &body); err != nil {
 		h.error(w, requestID, http.StatusBadRequest, "system_user_settings_validation_error", "用户相关配置字段无效")
@@ -127,11 +129,12 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request, requestID string, 
 	for name, secret := range map[string]*string{
 		systemusersettings.SecretCaptchaSecretID: body.CaptchaSecretID, systemusersettings.SecretCaptchaSecretKey: body.CaptchaSecretKey,
 		systemusersettings.SecretCaptchaAppSecret: body.CaptchaAppSecret, systemusersettings.SecretCaptchaTurnstileSecret: body.CaptchaTurnstileSecret,
-		systemusersettings.SecretKYCAPIKey:                body.KYCAPIKey,
-		systemusersettings.SecretKYCCallbackHMACKey:       body.KYCCallbackHMACKey,
-		systemusersettings.SecretKYCObjectAccessKeyID:     body.KYCObjectAccessKeyID,
-		systemusersettings.SecretKYCObjectSecretAccessKey: body.KYCObjectSecretAccessKey,
-		systemusersettings.SecretKYCObjectSessionToken:    body.KYCObjectSessionToken,
+		systemusersettings.SecretKYCAPIKey:                 body.KYCAPIKey,
+		systemusersettings.SecretKYCCallbackHMACKey:        body.KYCCallbackHMACKey,
+		systemusersettings.SecretKYCObjectAccessKeyID:      body.KYCObjectAccessKeyID,
+		systemusersettings.SecretKYCObjectSecretAccessKey:  body.KYCObjectSecretAccessKey,
+		systemusersettings.SecretKYCObjectSessionToken:     body.KYCObjectSessionToken,
+		systemusersettings.SecretKYCIssuerServerPrivateKey: body.KYCIssuerServerPrivateKey,
 	} {
 		if secret != nil {
 			secrets[name] = secret

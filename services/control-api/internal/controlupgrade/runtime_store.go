@@ -242,7 +242,7 @@ func validRolloutActor(actor Actor) bool {
 
 func validPlanState(state PlanState) bool {
 	return state == PlanQueued || state == PlanCanary || state == PlanRunning || state == PlanPaused ||
-		state == PlanRollingBack || state == PlanCompleted || state == PlanFailed
+		state == PlanRollingBack || state == PlanCompleted || state == PlanFailed || state == PlanCancelled
 }
 
 func rolloutSummary(plan RolloutPlan, installationID string, createdAt, updatedAt time.Time) RolloutSummary {

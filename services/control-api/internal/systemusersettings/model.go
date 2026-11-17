@@ -98,6 +98,17 @@ type Settings struct {
 	KYCObjectBucket   string `json:"kyc_object_bucket"`
 	KYCObjectPrefix   string `json:"kyc_object_prefix"`
 	KYCObjectKMSKeyID string `json:"kyc_object_kms_key_id"`
+	// The evidence issuer (mTLS listener the trusted workloads pull sealed
+	// evidence from). Empty / false: not set on the page, the
+	// runtime uses IDENTITY_VERIFICATION_ISSUER_*. The certificates are PEM
+	// text (the environment names files); the server private key is the page
+	// secret SecretKYCIssuerServerPrivateKey.
+	KYCIssuerEnabled            bool   `json:"kyc_issuer_enabled"`
+	KYCIssuerListenAddress      string `json:"kyc_issuer_listen_address"`
+	KYCIssuerServerCertificate  string `json:"kyc_issuer_server_certificate"`
+	KYCIssuerClientCA           string `json:"kyc_issuer_client_ca"`
+	KYCIssuerWorkloadIdentities string `json:"kyc_issuer_workload_identities"`
+	KYCIssuerKMSEndpoint        string `json:"kyc_issuer_kms_endpoint"`
 
 	WeChatPaymentEnabled  bool   `json:"wechat_payment_enabled"`
 	AlipayPaymentEnabled  bool   `json:"alipay_payment_enabled"`
@@ -178,6 +189,14 @@ type IdentityVerificationRuntime struct {
 	ObjectAccessKey    []byte
 	ObjectSecretKey    []byte
 	ObjectSessionToken []byte
+
+	IssuerEnabled            bool
+	IssuerListenAddress      string
+	IssuerServerCertificate  string
+	IssuerClientCA           string
+	IssuerWorkloadIdentities string
+	IssuerKMSEndpoint        string
+	IssuerServerPrivateKey   []byte
 }
 
 // Clear wipes the secrets of the runtime view.
@@ -187,6 +206,7 @@ func (runtime *IdentityVerificationRuntime) Clear() {
 	clear(runtime.ObjectAccessKey)
 	clear(runtime.ObjectSecretKey)
 	clear(runtime.ObjectSessionToken)
+	clear(runtime.IssuerServerPrivateKey)
 }
 
 // KindEnabled reports whether a verification kind (personal_initial,
@@ -233,25 +253,27 @@ type Document struct {
 	Value     Settings  `json:"value"`
 	// The CAPTCHA, Turnstile and KYC provider secrets entered on the page
 	// are write-only: only whether each is set and a fingerprint are returned.
-	CaptchaSecretIDConfigured           bool   `json:"captcha_secret_id_configured"`
-	CaptchaSecretIDFingerprint          string `json:"captcha_secret_id_fingerprint,omitempty"`
-	CaptchaSecretKeyConfigured          bool   `json:"captcha_secret_key_configured"`
-	CaptchaSecretKeyFingerprint         string `json:"captcha_secret_key_fingerprint,omitempty"`
-	CaptchaAppSecretConfigured          bool   `json:"captcha_app_secret_configured"`
-	CaptchaAppSecretFingerprint         string `json:"captcha_app_secret_fingerprint,omitempty"`
-	CaptchaTurnstileSecretConfigured    bool   `json:"captcha_turnstile_secret_configured"`
-	CaptchaTurnstileSecretFingerprint   string `json:"captcha_turnstile_secret_fingerprint,omitempty"`
-	KYCAPIKeyConfigured                 bool   `json:"kyc_api_key_configured"`
-	KYCAPIKeyFingerprint                string `json:"kyc_api_key_fingerprint,omitempty"`
-	KYCCallbackHMACKeyConfigured        bool   `json:"kyc_callback_hmac_key_configured"`
-	KYCCallbackHMACKeyFingerprint       string `json:"kyc_callback_hmac_key_fingerprint,omitempty"`
-	KYCObjectAccessKeyIDConfigured      bool   `json:"kyc_object_access_key_id_configured"`
-	KYCObjectAccessKeyIDFingerprint     string `json:"kyc_object_access_key_id_fingerprint,omitempty"`
-	KYCObjectSecretAccessKeyConfigured  bool   `json:"kyc_object_secret_access_key_configured"`
-	KYCObjectSecretAccessKeyFingerprint string `json:"kyc_object_secret_access_key_fingerprint,omitempty"`
-	KYCObjectSessionTokenConfigured     bool   `json:"kyc_object_session_token_configured"`
-	KYCObjectSessionTokenFingerprint    string `json:"kyc_object_session_token_fingerprint,omitempty"`
-	Replayed                            bool   `json:"-"`
+	CaptchaSecretIDConfigured            bool   `json:"captcha_secret_id_configured"`
+	CaptchaSecretIDFingerprint           string `json:"captcha_secret_id_fingerprint,omitempty"`
+	CaptchaSecretKeyConfigured           bool   `json:"captcha_secret_key_configured"`
+	CaptchaSecretKeyFingerprint          string `json:"captcha_secret_key_fingerprint,omitempty"`
+	CaptchaAppSecretConfigured           bool   `json:"captcha_app_secret_configured"`
+	CaptchaAppSecretFingerprint          string `json:"captcha_app_secret_fingerprint,omitempty"`
+	CaptchaTurnstileSecretConfigured     bool   `json:"captcha_turnstile_secret_configured"`
+	CaptchaTurnstileSecretFingerprint    string `json:"captcha_turnstile_secret_fingerprint,omitempty"`
+	KYCAPIKeyConfigured                  bool   `json:"kyc_api_key_configured"`
+	KYCAPIKeyFingerprint                 string `json:"kyc_api_key_fingerprint,omitempty"`
+	KYCCallbackHMACKeyConfigured         bool   `json:"kyc_callback_hmac_key_configured"`
+	KYCCallbackHMACKeyFingerprint        string `json:"kyc_callback_hmac_key_fingerprint,omitempty"`
+	KYCObjectAccessKeyIDConfigured       bool   `json:"kyc_object_access_key_id_configured"`
+	KYCObjectAccessKeyIDFingerprint      string `json:"kyc_object_access_key_id_fingerprint,omitempty"`
+	KYCObjectSecretAccessKeyConfigured   bool   `json:"kyc_object_secret_access_key_configured"`
+	KYCObjectSecretAccessKeyFingerprint  string `json:"kyc_object_secret_access_key_fingerprint,omitempty"`
+	KYCObjectSessionTokenConfigured      bool   `json:"kyc_object_session_token_configured"`
+	KYCObjectSessionTokenFingerprint     string `json:"kyc_object_session_token_fingerprint,omitempty"`
+	KYCIssuerServerPrivateKeyConfigured  bool   `json:"kyc_issuer_server_private_key_configured"`
+	KYCIssuerServerPrivateKeyFingerprint string `json:"kyc_issuer_server_private_key_fingerprint,omitempty"`
+	Replayed                             bool   `json:"-"`
 }
 
 type SaveRequest struct {

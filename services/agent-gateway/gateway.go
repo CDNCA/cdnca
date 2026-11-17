@@ -2568,6 +2568,12 @@ func (g *Gateway) serveSessionWithInstallation(
 			}
 			command := delivered.delivery.Command()
 			if command.NodeID != identity.NodeID || command.InstallationID != installationID {
+				// Issued for another installation: no later delivery to this node can succeed.
+				if refusable, ok := delivered.delivery.(refusableUpgradeDelivery); ok {
+					refuseUpgradeCommand(refusable, identity.NodeID, "command_id="+command.CommandID,
+						errors.New("upgrade command is bound to another installation"), g.config.CommandOperationTimeout)
+					continue
+				}
 				nakUpgradeCommand(delivered.delivery, g.config.CommandOperationTimeout)
 				return status.Error(codes.InvalidArgument, "durable upgrade command is invalid")
 			}

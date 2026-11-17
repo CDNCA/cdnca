@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 960 个 operation，并包含
-934 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 961 个 operation，并包含
+935 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -43,7 +43,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，682 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，683 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -171,6 +171,7 @@
 | `control.yaml` | `GET` | `/v1/admin/control-upgrade-rollouts` | `listControlUpgradeRollouts` |
 | `control.yaml` | `POST` | `/v1/admin/control-upgrade-rollouts` | `createControlUpgradeRollout` |
 | `control.yaml` | `GET` | `/v1/admin/control-upgrade-rollouts/{rollout_id}` | `getControlUpgradeRollout` |
+| `control.yaml` | `POST` | `/v1/admin/control-upgrade-rollouts/{rollout_id}/cancel` | `cancelControlUpgradeRollout` |
 | `control.yaml` | `POST` | `/v1/admin/control-upgrade-rollouts/{rollout_id}/pause` | `pauseControlUpgradeRollout` |
 | `control.yaml` | `POST` | `/v1/admin/control-upgrade-rollouts/{rollout_id}/resume` | `resumeControlUpgradeRollout` |
 | `control.yaml` | `POST` | `/v1/admin/control-upgrade-rollouts/{rollout_id}/rollback` | `rollbackControlUpgradeRollout` |

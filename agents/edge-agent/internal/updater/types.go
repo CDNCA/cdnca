@@ -57,6 +57,18 @@ var (
 	ErrRolloutIneligible  = errors.New("node is outside the signed rollout cohort")
 )
 
+// InstallerRefusal is a helper response that refused a request. It unwraps to the
+// sentinel the refusal has always mapped to, so existing errors.Is checks hold.
+type InstallerRefusal struct {
+	Code  string
+	cause error
+}
+
+func (e *InstallerRefusal) Error() string {
+	return e.cause.Error() + ": helper refused (" + e.Code + ")"
+}
+func (e *InstallerRefusal) Unwrap() error { return e.cause }
+
 type Artifact struct {
 	URL    string `json:"url"`
 	SHA256 string `json:"sha256"`

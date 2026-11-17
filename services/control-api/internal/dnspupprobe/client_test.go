@@ -162,9 +162,8 @@ func TestAsyncCreatePollAndIdempotency(t *testing.T) {
 	if _, err := prober.Run(context.Background(), "origin", "site-1", request.Target, 11, request); err != nil || fake.Creates != 2 {
 		t.Fatalf("next round: %v creates %d", err, fake.Creates)
 	}
-	if IdempotencyKey("origin", "site-1", request.Target, 10) == IdempotencyKey("origin", "site-1", request.Target, 11) ||
-		IdempotencyKey("origin", "site-1", "a", 10) == IdempotencyKey("origin", "site-2", "a", 10) {
-		t.Fatal("idempotency key must differ per site, target and round")
+	if IdempotencyKey("origin", request, 10) == IdempotencyKey("origin", request, 11) {
+		t.Fatal("idempotency key must differ per round")
 	}
 }
 
@@ -241,7 +240,7 @@ func TestIdempotencyConflictIsRefused(t *testing.T) {
 	fake, server := newFakeDNSPup(t)
 	fake.Answer = httpAnswer(200)
 	client, _ := NewClient(credentialsOf(fake, server.URL), nil)
-	key := IdempotencyKey("origin", "s", "https://a.example.com/", 1)
+	key := IdempotencyKey("origin", ProbeRequest{Type: "http", Target: "https://a.example.com/"}, 1)
 	if job, err := client.CreateProbe(context.Background(), key, ProbeRequest{Type: "http", Target: "https://a.example.com/"}); err != nil || !job.Created {
 		t.Fatalf("create: %+v %v", job, err)
 	}

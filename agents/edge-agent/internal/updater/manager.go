@@ -114,12 +114,39 @@ func (m *Manager) Process(ctx context.Context, plan Plan) (Result, error) {
 }
 
 func (m *Manager) prepare(ctx context.Context, plan Plan) (preparedUpgrade, error) {
-	unlock, err := m.lockState(ctx)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	unlockFile, err := m.fs.lock(ctx)
 	if err != nil {
 		return preparedUpgrade{}, err
 	}
-	defer unlock()
+	defer func() {
+		if unlockFile != nil {
+			unlockFile()
+		}
+	}()
 	prepared, value, err := m.prepareLocked(ctx, plan)
+	if err == nil && !prepared.Complete && m.installerV2 != nil && value != nil && value.Phase == phaseDownload {
+		// The download runs without the state file lock: the gateway session reads the
+		// upgrade status queue under the same flock, and a 60 s download
+		// blocked it past the heartbeat deadline. m.mu still serialises the manager.
+		unlockFile()
+		unlockFile = nil
+		downloadErr := m.downloadUnverified(ctx, value.Plan)
+		if unlockFile, err = m.fs.lock(ctx); err != nil {
+			return preparedUpgrade{}, err
+		}
+		if downloadErr != nil && ctx.Err() != nil {
+			return preparedUpgrade{}, ctx.Err()
+		}
+		value, err = m.fs.loadTransaction()
+		if err == nil && (value == nil || value.InstallerTransactionID != prepared.InstallerTransactionID) {
+			err = ErrReplay
+		}
+		if err == nil && downloadErr != nil && value.Phase == phaseDownload {
+			_, _ = m.fail(value, downloadFailureCode(downloadErr), downloadErr)
+		}
+	}
 	if err == nil && !prepared.Complete {
 		if err = m.prepareInstallerV2(ctx, value); err == nil && value != nil && value.Phase == phaseDone {
 			prepared.Complete = true
@@ -127,6 +154,28 @@ func (m *Manager) prepare(ctx context.Context, plan Plan) (preparedUpgrade, erro
 		}
 	}
 	return prepared, err
+}
+
+func downloadFailureCode(err error) string {
+	switch {
+	case errors.Is(err, ErrArtifactTooLarge):
+		return "ARTIFACT_TOO_LARGE"
+	case errors.Is(err, ErrArtifactIntegrity):
+		return "ARTIFACT_INTEGRITY_FAILED"
+	case errors.Is(err, ErrInsufficientDisk):
+		return "INSUFFICIENT_DISK"
+	default:
+		return "DOWNLOAD_FAILED"
+	}
+}
+
+// downloadUnverified fetches the plan's artifact unless the verified store already
+// holds it.
+func (m *Manager) downloadUnverified(ctx context.Context, plan Plan) error {
+	if file, _, err := m.fs.openVerified(plan.Artifact.SHA256, plan.Artifact.Size); err == nil {
+		return file.Close()
+	}
+	return m.download(ctx, plan)
 }
 
 func (m *Manager) prepareLocked(ctx context.Context, plan Plan) (preparedUpgrade, *transaction, error) {
@@ -524,20 +573,20 @@ func (m *Manager) prepareInstallerV2(ctx context.Context, value *transaction) er
 	if m.installerV2 == nil || value == nil || value.Phase == phaseDone {
 		return nil
 	}
+	if (value.Phase == phaseDownload || value.Phase == phaseInstall) && value.PreparedInstall == nil &&
+		!value.InstallStarted && !m.clock.Now().UTC().Before(value.Plan.ExpiresAt) {
+		// The helper holds nothing for this transaction: an expired plan is closed, not prepared.
+		if result, err := m.fail(value, "PLAN_EXPIRED", nil); err != nil || result.State != StateFailed {
+			return ErrInstallerUncertain
+		}
+		return nil
+	}
 	if value.Phase == phaseDownload {
-		if err := m.download(ctx, value.Plan); err != nil {
+		if err := m.downloadUnverified(ctx, value.Plan); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			code := "DOWNLOAD_FAILED"
-			if errors.Is(err, ErrArtifactTooLarge) {
-				code = "ARTIFACT_TOO_LARGE"
-			} else if errors.Is(err, ErrArtifactIntegrity) {
-				code = "ARTIFACT_INTEGRITY_FAILED"
-			} else if errors.Is(err, ErrInsufficientDisk) {
-				code = "INSUFFICIENT_DISK"
-			}
-			_, _ = m.fail(value, code, err)
+			_, _ = m.fail(value, downloadFailureCode(err), err)
 			return nil
 		}
 		value.Phase = phaseInstall
@@ -585,6 +634,16 @@ func (m *Manager) prepareInstallerV2(ctx context.Context, value *transaction) er
 		return m.consumeInstallerTransaction(value, status)
 	}
 	status, inspectErr := m.installerV2.Inspect(ctx, value.InstallerTransactionID)
+	var refusal *InstallerRefusal
+	if inspectErr == nil && status.Phase == InstallerTransactionUnknown && errors.As(prepareErr, &refusal) {
+		// The helper answered, refused the prepare and holds no transaction for it, so
+		// nothing on the node changed. Close the upgrade as failed: reporting it as
+		// uncertain made the node retry the same refused prepare forever.
+		if result, err := m.fail(value, installerRefusedCode, nil); err != nil || result.State != StateFailed {
+			return ErrInstallerUncertain
+		}
+		return nil
+	}
 	if inspectErr != nil || status.Phase == InstallerTransactionUnknown {
 		return ErrInstallerUncertain
 	}
@@ -650,7 +709,9 @@ func validPreparedInstall(prepared PreparedInstall, transactionID string) bool {
 		prepared.ReleaseSequence > 0 && validDigest(prepared.ArtifactSHA256) && validDigest(prepared.ManifestSHA256) &&
 		validDigest(prepared.ExecutableSHA256) && validDigest(prepared.SBOMSHA256) &&
 		safeIDPattern.MatchString(prepared.PreviousVersion) && safeIDPattern.MatchString(prepared.TargetVersion) &&
-		prepared.PreviousVersion != prepared.TargetVersion
+		// A same-version re-release exists only as a v3 execution (helper sameVersionRerelease); a node
+		// got a valid prepared ack for 1.0.35 -> 1.0.35 and judged it uncertain here.
+		(prepared.PreviousVersion != prepared.TargetVersion || prepared.SchemaVersion == 2)
 }
 
 func preparedInstallMatchesTransaction(prepared PreparedInstall, value *transaction) bool {
@@ -1173,6 +1234,10 @@ func (m *Manager) rollbackFailed(value *transaction, active *ActivationReceipt) 
 // stateIncompatibleCode reports a version change Config.BeforeActivating
 // refused.
 const stateIncompatibleCode = "L4_STATE_INCOMPATIBLE"
+
+// installerRefusedCode: the privileged helper refused to prepare the release and
+// staged nothing; the installed release is unchanged.
+const installerRefusedCode = "INSTALLER_REFUSED"
 
 func (m *Manager) beforeActivating(ctx context.Context, version string) error {
 	if m.config.BeforeActivating == nil {

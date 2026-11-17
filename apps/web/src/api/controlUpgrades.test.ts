@@ -393,7 +393,7 @@ describe('controlUpgradesApi', () => {
     })
   })
 
-  it.each<ControlUpgradeRolloutAction>(['start', 'pause', 'resume', 'rollback'])(
+  it.each<ControlUpgradeRolloutAction>(['start', 'pause', 'resume', 'rollback', 'cancel'])(
     'posts %s to the exact action route with the expected revision',
     async (action) => {
       const input = { expected_revision: '9223372036854775807', reason: `operator_${action}` }

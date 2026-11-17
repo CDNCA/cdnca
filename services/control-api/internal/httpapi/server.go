@@ -990,6 +990,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/admin/control-upgrade-rollouts/{id}/pause", s.handlePauseControlUpgradeRollout)
 	mux.HandleFunc("POST /v1/admin/control-upgrade-rollouts/{id}/resume", s.handleResumeControlUpgradeRollout)
 	mux.HandleFunc("POST /v1/admin/control-upgrade-rollouts/{id}/rollback", s.handleRollbackControlUpgradeRollout)
+	mux.HandleFunc("POST /v1/admin/control-upgrade-rollouts/{id}/cancel", s.handleCancelControlUpgradeRollout)
 	mux.HandleFunc("POST /v1/dns/providers", s.handleCreateDNSProvider)
 	mux.HandleFunc("GET /v1/dns/providers", s.handleListDNSProviders)
 	mux.HandleFunc("PATCH /v1/dns/providers/{id}", s.handleUpdateDNSProvider)

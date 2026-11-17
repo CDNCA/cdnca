@@ -33,11 +33,17 @@ var (
 	ErrListenerStopped       = errors.New("identity verification issuer listener stopped unexpectedly")
 )
 
+// ListenerConfig takes each TLS item from its file or, when the PEM field is
+// set instead, from that PEM content (the system settings page);
+// exactly one of the two per item.
 type ListenerConfig struct {
 	ListenAddress         string
 	ServerCertificateFile string
 	ServerPrivateKeyFile  string
 	ClientCAFile          string
+	ServerCertificatePEM  []byte
+	ServerPrivateKeyPEM   []byte
+	ClientCAPEM           []byte
 	Clock                 Clock
 }
 
@@ -81,6 +87,20 @@ func NewListener(ctx context.Context, config ListenerConfig, handler http.Handle
 		},
 		listener: tls.NewListener(listener, tlsConfig),
 	}, nil
+}
+
+// CheckListenerConfig runs every check of NewListener except binding the
+// address, so a new configuration can be checked before the running listener
+// is closed.
+func CheckListenerConfig(config ListenerConfig) error {
+	if config.Clock == nil {
+		config.Clock = time.Now
+	}
+	if err := validateListenerConfig(config); err != nil {
+		return err
+	}
+	_, err := loadListenerTLS(config)
+	return err
 }
 
 func (listener *Listener) Run(ctx context.Context) error {
@@ -172,8 +192,16 @@ func validateListenerConfig(config ListenerConfig) error {
 		strings.TrimSpace(config.ListenAddress) != config.ListenAddress {
 		return ErrListenerInvalidConfig
 	}
-	for _, path := range []string{config.ServerCertificateFile, config.ServerPrivateKeyFile, config.ClientCAFile} {
-		if path == "" || strings.TrimSpace(path) != path {
+	for _, item := range []struct {
+		path     string
+		contents []byte
+	}{
+		{config.ServerCertificateFile, config.ServerCertificatePEM},
+		{config.ServerPrivateKeyFile, config.ServerPrivateKeyPEM},
+		{config.ClientCAFile, config.ClientCAPEM},
+	} {
+		if item.path == "" && (len(item.contents) == 0 || len(item.contents) > maximumTLSMaterialBytes) ||
+			item.path != "" && (len(item.contents) != 0 || strings.TrimSpace(item.path) != item.path) {
 			return ErrListenerInvalidConfig
 		}
 	}
@@ -182,11 +210,11 @@ func validateListenerConfig(config ListenerConfig) error {
 
 func loadListenerTLS(config ListenerConfig) (*tls.Config, error) {
 	now := config.Clock().UTC()
-	certificatePEM, err := readTLSMaterial(config.ServerCertificateFile, false)
+	certificatePEM, err := listenerTLSMaterial(config.ServerCertificateFile, config.ServerCertificatePEM, false)
 	if err != nil {
 		return nil, ErrListenerInvalidConfig
 	}
-	privateKeyPEM, err := readTLSMaterial(config.ServerPrivateKeyFile, true)
+	privateKeyPEM, err := listenerTLSMaterial(config.ServerPrivateKeyFile, config.ServerPrivateKeyPEM, true)
 	if err != nil {
 		return nil, ErrListenerInvalidConfig
 	}
@@ -211,7 +239,11 @@ func loadListenerTLS(config ListenerConfig) (*tls.Config, error) {
 		child = issuer
 	}
 	certificate.Leaf = leaf
-	clientCAs, err := loadListenerClientCAs(config.ClientCAFile, now)
+	clientCAPEM, err := listenerTLSMaterial(config.ClientCAFile, config.ClientCAPEM, false)
+	if err != nil {
+		return nil, ErrListenerInvalidConfig
+	}
+	clientCAs, err := loadListenerClientCAs(clientCAPEM, now)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +255,14 @@ func loadListenerTLS(config ListenerConfig) (*tls.Config, error) {
 		ClientCAs:    clientCAs,
 		Time:         config.Clock,
 	}, nil
+}
+
+// listenerTLSMaterial is a copy of the PEM content when given, else the file.
+func listenerTLSMaterial(path string, contents []byte, private bool) ([]byte, error) {
+	if path == "" {
+		return bytes.Clone(contents), nil
+	}
+	return readTLSMaterial(path, private)
 }
 
 func readTLSMaterial(path string, private bool) ([]byte, error) {
@@ -243,11 +283,7 @@ func readTLSMaterial(path string, private bool) ([]byte, error) {
 	return contents, nil
 }
 
-func loadListenerClientCAs(path string, now time.Time) (*x509.CertPool, error) {
-	contents, err := readTLSMaterial(path, false)
-	if err != nil {
-		return nil, ErrListenerInvalidConfig
-	}
+func loadListenerClientCAs(contents []byte, now time.Time) (*x509.CertPool, error) {
 	pool := x509.NewCertPool()
 	count := 0
 	for remaining := bytes.TrimSpace(contents); len(remaining) > 0; {

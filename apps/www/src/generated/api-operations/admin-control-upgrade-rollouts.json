@@ -29,7 +29,7 @@
     {
      "name": "state",
      "in": "query",
-     "type": "string: queued / canary / running / paused / rolling_back / completed / failed"
+     "type": "string: queued / canary / running / paused / rolling_back / completed / failed / cancelled"
     },
     {
      "name": "node_id",
@@ -249,6 +249,108 @@
      "status": "404",
      "description": "The requested resource was not found.",
      "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelControlUpgradeRollout",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/cancel",
+   "summary": "Cancel a queued control upgrade rollout",
+   "summary_zh": "取消排队中的主控升级发布",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.manage and a current expected revision. Only a queued rollout can be cancelled; no node has a command yet, cancelled is terminal and the nodes can be put in a new rollout.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "string",
+      "required": true,
+      "description": "Canonical decimal uint63 in the inclusive range 1..9223372036854775807."
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The rollout transition committed, or the exact durable result was replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "ControlUpgradeRolloutDetail",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "413",
+     "description": "The request body exceeds the one MiB limit."
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
     },
     {
      "status": "503",

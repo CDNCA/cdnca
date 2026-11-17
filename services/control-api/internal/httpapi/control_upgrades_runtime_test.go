@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -302,6 +303,9 @@ func TestControlUpgradeStableErrorMapping(t *testing.T) {
 		{controlupgrade.ErrLicenseUnavailable, http.StatusServiceUnavailable, "control_upgrade_license_unavailable"},
 		{controlupgrade.ErrRuntimeUnavailable, http.StatusServiceUnavailable, "control_upgrade_runtime_unavailable"},
 		{controlupgrade.ErrResourceUnavailable, http.StatusServiceUnavailable, "control_upgrade_resource_unavailable"},
+		// A row lock conflict at finalization is retryable, never internal_error.
+		{fmt.Errorf("%w: finalize control upgrade rollout create: ERROR: could not obtain lock on row (SQLSTATE 55P03)",
+			controlupgrade.ErrResourceUnavailable), http.StatusServiceUnavailable, "control_upgrade_resource_unavailable"},
 	}
 	server := &Server{}
 	for _, test := range tests {

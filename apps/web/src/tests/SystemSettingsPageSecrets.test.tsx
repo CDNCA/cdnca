@@ -6,6 +6,7 @@ import { pluginProvidersApi } from '../api/pluginProviders'
 import { systemMailSettingsApi, type PlatformSystemMailSettingsDocument } from '../api/systemMailSettings'
 import { systemUserSettingsApi, type PlatformSystemUserSettingsDocument } from '../api/systemUserSettings'
 import { useSessionStore } from '../auth/session'
+import { systemGlobalSettingsEn } from '../i18n/systemGlobalSettings'
 import SystemGlobalSettingsPage from '../pages/SystemGlobalSettingsPage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
@@ -24,7 +25,7 @@ const userDocument = {
   value: {
     session_ttl_seconds: 86400, user_login_domains: '', admin_login_domains: '', email_code_login_enabled: false, sms_code_login_enabled: false,
     registration_enabled: false, registration_success_subject: 's', registration_success_body: 'b', password_reset_subject: 's', password_reset_body: 'b', verification_template_channel: 'email', verification_subject: 's', verification_body: '{{captcha}}', verification_sms_body: '${captcha}', verification_sms_template_id: '', terms_title: 't', terms_body: 'b', username_required: false, email_required: false, email_verification_required: false, phone_required: false, phone_verification_required: false, qq_required: false,
-    login_failure_limit_per_hour: 30, login_captcha_threshold_per_hour: 3, session_region_check: false, email_anti_abuse_mode: 'none', sms_anti_abuse_mode: 'none', captcha_provider: 'tencent', captcha_secret_id_reference: '', captcha_secret_key_reference: '', captcha_app_id: '', captcha_app_secret_reference: '', captcha_turnstile_site_key: '', identity_verification_method: 'none', enterprise_verification_enabled: false, identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '', wechat_payment_enabled: false, alipay_payment_enabled: false, bank_transfer_enabled: false, default_recharge_method: 'none', recharge_restriction: 'none', default_phone_country_code: '86',
+    login_failure_limit_per_hour: 30, login_captcha_threshold_per_hour: 3, session_region_check: false, email_anti_abuse_mode: 'none', sms_anti_abuse_mode: 'none', captcha_provider: 'tencent', captcha_secret_id_reference: '', captcha_secret_key_reference: '', captcha_app_id: '', captcha_app_secret_reference: '', captcha_turnstile_site_key: '', identity_verification_method: 'none', enterprise_verification_enabled: false, identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '', kyc_issuer_enabled: false, kyc_issuer_listen_address: '', kyc_issuer_server_certificate: '', kyc_issuer_client_ca: '', kyc_issuer_workload_identities: '', kyc_issuer_kms_endpoint: '', wechat_payment_enabled: false, alipay_payment_enabled: false, bank_transfer_enabled: false, default_recharge_method: 'none', recharge_restriction: 'none', default_phone_country_code: '86',
   },
 } satisfies PlatformSystemUserSettingsDocument
 
@@ -138,6 +139,39 @@ describe('KYC provider credentials and identity policy', () => {
       kyc_callback_key_id: 'callback-1', kyc_object_endpoint: 'https://s3.example.com', kyc_object_region: 'us-east-1', kyc_object_bucket: 'kyc-bucket',
       kyc_object_kms_key_id: 'kms-1' } })
     expect(await screen.findByText('页面已配置齐全')).toBeInTheDocument()
+  })
+
+  it('saves the evidence issuer fields; its private key is write-only', async () => {
+    const put = setupUser('payment')
+    const user = userEvent.setup()
+    expect(await screen.findByText('证据签发')).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: '启用证据签发' }))
+    await user.type(screen.getByRole('textbox', { name: '监听地址' }), '0.0.0.0:19443')
+    const identities = screen.getByRole('textbox', { name: '工作负载身份' })
+    await user.type(identities, 'spiffe://control.cdnca.local/workload/kyc/a|a{Enter}spiffe://control.cdnca.local/workload/kyc/b|b{Enter}')
+    await user.tab()
+    await user.click(screen.getByRole('textbox', { name: '服务端证书链' }))
+    await user.paste('-----BEGIN CERTIFICATE-----\r\nMIIB\r\n-----END CERTIFICATE-----\r\n')
+    const privateKey = screen.getByLabelText('服务端私钥')
+    await user.click(privateKey)
+    await user.paste('-----BEGIN PRIVATE KEY-----\nplain-issuer-key\n-----END PRIVATE KEY-----\n')
+    await user.tab()
+    await user.click(screen.getByRole('button', { name: '保存认证与支付设置' }))
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+    expect(put.mock.calls[0][2]).toMatchObject({ kyc_issuer_enabled: true, kyc_issuer_listen_address: '0.0.0.0:19443',
+      kyc_issuer_workload_identities: 'spiffe://control.cdnca.local/workload/kyc/a|a,spiffe://control.cdnca.local/workload/kyc/b|b',
+      kyc_issuer_server_certificate: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----' })
+    expect(put.mock.calls[0][5]).toMatchObject({ kyc_issuer_server_private_key: '-----BEGIN PRIVATE KEY-----\nplain-issuer-key\n-----END PRIVATE KEY-----' })
+    expect(JSON.stringify(put.mock.calls[0][2])).not.toContain('plain-issuer-key')
+  })
+
+  // 监听地址旁的中性说明，改端口后要在主控服务器放行。
+  it('reminds to allow the evidence issuer listen port on the control server', async () => {
+    setupUser('payment')
+    const listen = await screen.findByRole('textbox', { name: '监听地址' })
+    const item = listen.closest('.ant-form-item') as HTMLElement
+    expect(within(item).getByText(/修改监听端口后，请确保主控服务器放行该端口。$/)).toBeInTheDocument()
+    expect(systemGlobalSettingsEn.kycEnv.kyc_issuer_listen_address).toMatch(/After changing the listen port, make sure the control server allows that port\.$/)
   })
 
   it('does not mark the identity policy saved from the account tab', async () => {

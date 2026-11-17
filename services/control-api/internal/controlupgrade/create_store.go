@@ -15,6 +15,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -227,7 +228,7 @@ func (s *Store) FinalizeCreateRollout(ctx context.Context, actor Actor, identity
 		if state != createIntentAcquired || candidatePlanID != plan.ID || !bytes.Equal(requestDigest, digest[:]) {
 			return ErrIdempotencyConflict
 		}
-		confirmed, err := loadRolloutTargetCohortTx(ctx, tx, actor.ScopeID, request.NodeIDs)
+		confirmed, err := loadRolloutTargetCohortTx(ctx, tx, actor.ScopeID, request.NodeIDs, true)
 		if err != nil || !reflect.DeepEqual(confirmed, cohort) {
 			if err == nil {
 				err = ErrCohortIncompatible
@@ -280,10 +281,22 @@ func (s *Store) FinalizeCreateRollout(ctx context.Context, actor Actor, identity
 		result.Detail = rolloutDetail(plan, identity.InstallationID, createdAt, createdAt)
 		return nil
 	})
+	if lockNotAvailable(err) {
+		// A node's identity is changing right now (renewal, re-enrollment): the
+		// same request resumes from the acquired intent once it settles.
+		return RolloutWriteResult{}, fmt.Errorf("%w: finalize control upgrade rollout create: %v",
+			ErrResourceUnavailable, err)
+	}
 	if err != nil {
 		return RolloutWriteResult{}, fmt.Errorf("finalize control upgrade rollout create: %w", err)
 	}
 	return result, nil
+}
+
+// lockNotAvailable: a NOWAIT row lock met a concurrent writer.
+func lockNotAvailable(err error) bool {
+	var pgError *pgconn.PgError
+	return errors.As(err, &pgError) && pgError.Code == "55P03"
 }
 
 func insertRolloutPlanTx(ctx context.Context, tx pgx.Tx, identity RolloutIdentity, plan RolloutPlan,
@@ -314,14 +327,25 @@ func insertRolloutPlanTx(ctx context.Context, tx pgx.Tx, identity RolloutIdentit
 	return nil
 }
 
+// loadRolloutTargetCohortTx reads the cohort; locked (finalization) share-locks the
+// nodes and their session authority so the plan is inserted against exactly these
+// facts. The installation entitlement row is joined but never locked: its
+// installation_id is never updated and node certificates reference it ON DELETE
+// RESTRICT, while every entitlement-guarded write holds it FOR UPDATE.
 func loadRolloutTargetCohortTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID,
-	nodeIDs []string) (RolloutTargetCohort, error) {
+	nodeIDs []string, locked bool) (RolloutTargetCohort, error) {
 	parsed := make([]uuid.UUID, len(nodeIDs))
 	for index, nodeID := range nodeIDs {
 		parsed[index] = uuid.MustParse(nodeID)
 	}
+	nodeLock, authorityLock, targetLock := "", "", ""
+	if locked {
+		nodeLock = " FOR SHARE"
+		authorityLock = " FOR SHARE OF facts,state,artifact,auth,initial NOWAIT"
+		targetLock = " FOR SHARE OF node,presence"
+	}
 	rows, err := tx.Query(ctx, `SELECT id FROM nodes
-		WHERE scope_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR SHARE`, scopeID, parsed)
+		WHERE scope_id=$1 AND id=ANY($2::uuid[]) ORDER BY id`+nodeLock, scopeID, parsed)
 	if err != nil {
 		return RolloutTargetCohort{}, err
 	}
@@ -337,29 +361,34 @@ func loadRolloutTargetCohortTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID
 	if found != len(parsed) {
 		return RolloutTargetCohort{}, ErrNodeNotFound
 	}
-	if err := lockUpgradeSessionAuthority(ctx, tx, parsed); err != nil {
-		return RolloutTargetCohort{}, err
+	if locked {
+		if err := lockUpgradeSessionAuthority(ctx, tx, parsed); err != nil {
+			return RolloutTargetCohort{}, err
+		}
 	}
 	var transactionNow time.Time
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&transactionNow); err != nil {
 		return RolloutTargetCohort{}, err
 	}
 	rows, err = tx.Query(ctx, `SELECT node.id,presence.confirmed_agent_version,
-		node_authority.selected_protocol_major,node_authority.capabilities_snapshot,node_authority.capabilities_sha256
+		node_authority.selected_protocol_major,node_authority.capabilities_snapshot,node_authority.capabilities_sha256,
+		(SELECT COALESCE(max(command.execution_sequence),0) FROM control_upgrade_node_commands command
+		  WHERE command.node_id=node.id AND command.command_schema='cdnca.upgrade.command-grant/v3')
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS target(node_id,ordinality)
 		JOIN nodes node ON node.id=target.node_id AND node.scope_id=$1 AND node.admin_state='active'
 		JOIN node_presence presence ON presence.node_id=node.id AND presence.status='online'
 		  AND presence.confirmed_agent_version IS NOT NULL
-		JOIN LATERAL (`+upgradeSessionAuthoritySQL+` FOR SHARE OF facts,state,artifact,auth,initial,installation NOWAIT
-		) node_authority ON true ORDER BY target.ordinality FOR SHARE OF node,presence`, scopeID, parsed, transactionNow)
+		JOIN LATERAL (`+upgradeSessionAuthoritySQL+authorityLock+`
+		) node_authority ON true ORDER BY target.ordinality`+targetLock, scopeID, parsed, transactionNow)
 	if err != nil {
 		return RolloutTargetCohort{}, err
 	}
 	facts := make([]rolloutNodeCapabilityFact, 0, len(parsed))
 	for rows.Next() {
 		var fact rolloutNodeCapabilityFact
+		var lastExecution int64
 		if err := rows.Scan(&fact.NodeID, &fact.PresenceVersion, &fact.ProtocolVersion,
-			&fact.CapabilityBytes, &fact.CapabilitySHA256); err != nil {
+			&fact.CapabilityBytes, &fact.CapabilitySHA256, &lastExecution); err != nil {
 			rows.Close()
 			return RolloutTargetCohort{}, err
 		}
@@ -368,6 +397,7 @@ func loadRolloutTargetCohortTx(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID
 			rows.Close()
 			return RolloutTargetCohort{}, ErrCohortIncompatible
 		}
+		fact.LastExecutionSequence = uint64(lastExecution)
 		facts = append(facts, fact)
 	}
 	err = rows.Err()
@@ -403,4 +433,12 @@ func appendCreateRolloutDeniedAuditOnce(ctx context.Context, tx pgx.Tx, logger *
 	return logger.Append(ctx, tx, audit.Event{ScopeID: actor.ScopeID, ActorUserID: &actor.UserID,
 		Action: "control_upgrade_rollout.create", ResourceType: "control_upgrade_rollout", ResourceID: "create",
 		RequestID: request.RequestID, Result: "denied", Payload: map[string]any{"reason": "permission_denied"}})
+}
+
+// licenseExpiresAt is the license plan expiry used to cut the command issuance
+// deadline. The community edition keeps no license expiry cache (its license is
+// permanent), so it is always nil and the deadline stays now+ttl; License still
+// enforces the deadline itself.
+func (s *Store) licenseExpiresAt(context.Context) (*time.Time, error) {
+	return nil, nil
 }

@@ -124,7 +124,7 @@ export const enUS = {
         control_upgrade_rollout_not_found: 'The rollout was not found', rollout_not_found: 'The rollout was not found', node_not_found: 'The node was not found',
         idempotency_conflict: 'The idempotency key belongs to another request', revision_conflict: 'Someone else changed this content. Refresh before saving.', rollout_revision_conflict: 'Someone else changed this content. Refresh before saving.',
         control_upgrade_rollout_invalid_transition: 'The current state does not allow this operation', rollout_transition_invalid: 'The current state does not allow this operation',
-        control_upgrade_rollout_blocked: 'A safety gate blocked the rollout', rollout_blocked: 'A safety gate blocked the rollout',
+        control_upgrade_rollout_blocked: 'A safety gate blocked the rollout', control_upgrade_rollout_nodes_started: 'A node has started installing, so the plan cannot be cancelled', rollout_blocked: 'A safety gate blocked the rollout',
         control_upgrade_cohort_incompatible: 'The node cohort is incompatible', cohort_incompatible: 'The node cohort is incompatible',
         control_upgrade_grant_invalid: 'The upgrade grant is invalid', control_upgrade_execution_invalid: 'The upgrade execution credential is invalid', control_upgrade_artifact_invalid: 'The upgrade package does not match its signed manifest', control_upgrade_artifact_unavailable: 'The upgrade package could not be cached on the control plane',
         control_upgrade_license_outcome_unknown: 'The license service outcome is pending confirmation', upgrade_license_outcome_unknown: 'The license service outcome is pending confirmation',

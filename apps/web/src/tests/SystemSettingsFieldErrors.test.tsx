@@ -39,7 +39,7 @@ const userDocument: PlatformSystemUserSettingsDocument = {
     username_required: false, email_required: false, email_verification_required: false, phone_required: false, phone_verification_required: false, qq_required: false,
     login_failure_limit_per_hour: 30, login_captcha_threshold_per_hour: 3, session_region_check: true, email_anti_abuse_mode: 'none', sms_anti_abuse_mode: 'native',
     captcha_provider: 'tencent', captcha_secret_id_reference: '', captcha_secret_key_reference: '', captcha_app_id: '', captcha_app_secret_reference: '', captcha_turnstile_site_key: '',
-    identity_verification_method: 'alipay', enterprise_verification_enabled: false, identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '',
+    identity_verification_method: 'alipay', enterprise_verification_enabled: false, identity_policy_saved: false, kyc_provider_name: '', kyc_endpoint: '', kyc_callback_key_id: '', kyc_object_endpoint: '', kyc_object_region: '', kyc_object_bucket: '', kyc_object_prefix: '', kyc_object_kms_key_id: '', kyc_issuer_enabled: false, kyc_issuer_listen_address: '', kyc_issuer_server_certificate: '', kyc_issuer_client_ca: '', kyc_issuer_workload_identities: '', kyc_issuer_kms_endpoint: '',
     wechat_payment_enabled: false, alipay_payment_enabled: false, bank_transfer_enabled: false, default_recharge_method: 'none', recharge_restriction: 'none',
     default_phone_country_code: '86',
   },

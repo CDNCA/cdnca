@@ -124,7 +124,7 @@ export const zhCN = {
         control_upgrade_rollout_not_found: '发布计划不存在', rollout_not_found: '发布计划不存在', node_not_found: '节点不存在',
         idempotency_conflict: '幂等键已用于其他请求', revision_conflict: '内容已被其他人修改，请刷新后再保存', rollout_revision_conflict: '内容已被其他人修改，请刷新后再保存',
         control_upgrade_rollout_invalid_transition: '当前状态不允许此操作', rollout_transition_invalid: '当前状态不允许此操作',
-        control_upgrade_rollout_blocked: '发布计划被安全门禁阻止', rollout_blocked: '发布计划被安全门禁阻止',
+        control_upgrade_rollout_blocked: '发布计划被安全门禁阻止', control_upgrade_rollout_nodes_started: '已有节点开始安装，无法取消计划', rollout_blocked: '发布计划被安全门禁阻止',
         control_upgrade_cohort_incompatible: '节点批次不兼容', cohort_incompatible: '节点批次不兼容',
         control_upgrade_grant_invalid: '升级授权无效', control_upgrade_execution_invalid: '升级执行凭证无效', control_upgrade_artifact_invalid: '升级包与签名清单不一致', control_upgrade_artifact_unavailable: '升级包暂时无法缓存到主控',
         control_upgrade_license_outcome_unknown: '授权服务结果待确认', upgrade_license_outcome_unknown: '授权服务结果待确认',

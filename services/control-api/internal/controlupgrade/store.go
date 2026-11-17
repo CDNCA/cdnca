@@ -804,11 +804,14 @@ func (s *Store) ClaimOutbox(
 		SELECT id,plan_id,plan_revision,topic,message_key,payload_bytes,payload_sha256,
 			available_at,attempt_count
 		FROM control_upgrade_outbox
-		WHERE (state='pending' AND available_at <= $1) OR
+		WHERE ((state='pending' AND available_at <= $1) OR
 			(state='claimed' AND claim_expires_at <= $1) OR
 			(state='unknown' AND available_at <= $1 AND NOT EXISTS (
 				SELECT 1 FROM control_upgrade_outbox_rejections_096 rejection
-				WHERE rejection.outbox_id=control_upgrade_outbox.id))
+				WHERE rejection.outbox_id=control_upgrade_outbox.id))) AND
+			-- A cancelled plan publishes nothing more (paused plans can be cancelled too).
+			NOT EXISTS (SELECT 1 FROM control_upgrade_rollout_plans cancelled
+				WHERE cancelled.id=control_upgrade_outbox.plan_id AND cancelled.state='cancelled')
 		ORDER BY available_at,id
 		FOR UPDATE SKIP LOCKED
 		LIMIT $2`, now.UTC().Truncate(time.Microsecond), limit)
@@ -1025,6 +1028,45 @@ func (s *Store) SettleOutbox(ctx context.Context, settlement RolloutOutboxSettle
 	})
 }
 
+// RolloutCommandRetraction is a published command of a cancelled plan that no node has confirmed.
+type RolloutCommandRetraction struct {
+	OutboxID  string
+	Stream    string
+	Sequence  uint64
+	ExpiresAt *time.Time
+}
+
+// ListCommandRetractions returns the JetStream messages to delete for cancelled plans: published commands
+// without a node status (the Gateway acks a command only once the node accepted it) whose command grant has
+// not expired; an expired command is refused by the edge-agent. Rows in skip were already deleted.
+func (s *Store) ListCommandRetractions(ctx context.Context, skip []string, limit int) ([]RolloutCommandRetraction, error) {
+	if limit <= 0 || limit > 1000 {
+		return nil, ErrInvalidPlanCommand
+	}
+	if skip == nil {
+		skip = []string{} // a NULL array would make NOT (id = ANY(NULL)) drop every row
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT outbox.id::text,outbox.published_stream,outbox.published_sequence,command.command_grant_expires_at
+		FROM control_upgrade_rollout_plans plan
+		JOIN control_upgrade_outbox outbox ON outbox.plan_id=plan.id
+		JOIN control_upgrade_node_commands command ON command.command_id=outbox.id
+		WHERE plan.state='cancelled' AND outbox.state='published' AND command.state='published' AND
+			outbox.published_stream IS NOT NULL AND outbox.published_sequence IS NOT NULL AND
+			coalesce(command.command_grant_expires_at>transaction_timestamp(), true) AND
+			NOT (outbox.id::text=ANY($1::text[]))
+		ORDER BY outbox.published_at,outbox.id
+		LIMIT $2`, skip, limit)
+	if err != nil {
+		return nil, fmt.Errorf("select control upgrade command retractions: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (RolloutCommandRetraction, error) {
+		var item RolloutCommandRetraction
+		err := row.Scan(&item.OutboxID, &item.Stream, &item.Sequence, &item.ExpiresAt)
+		return item, err
+	})
+}
+
 func (s *Store) ReconcileOutbox(
 	ctx context.Context,
 	outboxID string,
@@ -1194,6 +1236,15 @@ func (s *Store) RecordStatus(
 	return replayed, nil
 }
 
+// rolloutStatusObservedInWindow bounds a node's observed_at by the command publication. published_at is
+// the outbox settlement time, written after JetStream acknowledged the publish, so a node can observe the
+// command before it: a node stamped accepted 29 ms earlier and both statuses were rejected for
+// good. Both bounds allow the same clock skew.
+func rolloutStatusObservedInWindow(observedAt time.Time, publishedAt *time.Time, transactionNow time.Time) bool {
+	return publishedAt != nil && !observedAt.Before(publishedAt.Add(-rolloutStatusFutureSkew)) &&
+		!observedAt.After(transactionNow.Add(rolloutStatusFutureSkew))
+}
+
 func (s *Store) readRolloutStatusContext(ctx context.Context, tx pgx.Tx, identity RolloutIdentity,
 	receipt *RolloutStatusReceipt, lock bool) (rolloutStatusContext, bool, error) {
 	var status rolloutStatusContext
@@ -1254,8 +1305,7 @@ func (s *Store) readRolloutStatusContext(ctx context.Context, tx pgx.Tx, identit
 		receipt.NodeID != status.Command.NodeID || receipt.InstallationID != status.Command.InstallationID ||
 		receipt.CommandSHA256 != hex.EncodeToString(status.CommandPayloadDigest) ||
 		(status.CommandState != "published" && status.CommandState != "acknowledged") ||
-		status.CommandPublishedAt == nil || receipt.ObservedAt.Before(*status.CommandPublishedAt) ||
-		receipt.ObservedAt.After(status.TransactionNow.Add(rolloutStatusFutureSkew)) {
+		!rolloutStatusObservedInWindow(receipt.ObservedAt, status.CommandPublishedAt, status.TransactionNow) {
 		return rolloutStatusContext{}, false, ErrInvalidPlanEvent
 	}
 	receipt.BatchID = status.Command.BatchID

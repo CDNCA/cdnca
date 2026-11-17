@@ -36,7 +36,7 @@ func TestControlUpgradeRuntimeConfigurationIsStrictAndDisabledReadsNoFiles(t *te
 		t.Fatal(err)
 	}
 	if !config.Enabled || config.NATSName != "cdnca-control-upgrade" || config.WorkerID != "control-upgrade-1" ||
-		config.CommandIssuanceTTL != 6*time.Hour || config.ExecutionTTL != 10*time.Minute ||
+		config.CommandIssuanceTTL != 6*time.Hour ||
 		config.RequiredConsecutiveSuccesses != 3 || config.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("runtime config = %+v", config)
 	}
@@ -48,6 +48,17 @@ func TestControlUpgradeRuntimeConfigurationIsStrictAndDisabledReadsNoFiles(t *te
 		controlUpgradeDownloadRootCAFileEnv+"=/etc/cdnca-control/keys/pki/root-ca-cert.pem"))
 	if err != nil || withRoot.DownloadRootCAFile != "/etc/cdnca-control/keys/pki/root-ca-cert.pem" {
 		t.Fatalf("download root = (%q,%v)", withRoot.DownloadRootCAFile, err)
+	}
+	// CONTROL_UPGRADE_EXECUTION_TTL no longer bounds command grants. Installed hosts
+	// (10m, any value) and new installs without the key both load.
+	for name, values := range map[string][]string{
+		"absent":    controlUpgradeDropEnvironment(append([]string(nil), environment...), controlUpgradeExecutionTTLEnv),
+		"installed": controlUpgradeReplaceEnvironment(append([]string(nil), environment...), controlUpgradeExecutionTTLEnv, "10m"),
+		"other":     controlUpgradeReplaceEnvironment(append([]string(nil), environment...), controlUpgradeExecutionTTLEnv, "7h"),
+	} {
+		if _, err := loadControlUpgradeRuntimeConfigFromEnv(values); err != nil {
+			t.Fatalf("%s execution TTL rejected: %v", name, err)
+		}
 	}
 
 	for name, mutate := range map[string]func([]string) []string{
@@ -68,9 +79,6 @@ func TestControlUpgradeRuntimeConfigurationIsStrictAndDisabledReadsNoFiles(t *te
 		},
 		"same signer identity": func(values []string) []string {
 			return controlUpgradeReplaceEnvironment(values, controlUpgradeEdgeSigningKeyIDEnv, "control-upgrade-signing")
-		},
-		"execution too long": func(values []string) []string {
-			return controlUpgradeReplaceEnvironment(values, controlUpgradeExecutionTTLEnv, "7h")
 		},
 		"zero successes": func(values []string) []string {
 			return controlUpgradeReplaceEnvironment(values, controlUpgradeRequiredSuccessesEnv, "0")

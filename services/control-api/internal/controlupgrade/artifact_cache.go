@@ -227,6 +227,10 @@ func retainedArtifactNames(plans []planArtifacts) map[string]bool {
 	}
 	latestFinished := map[[2]string]bool{}
 	for _, plan := range plans {
+		// A cancelled plan installed nothing and needs neither artifact.
+		if plan.State == PlanCancelled {
+			continue
+		}
 		if plan.State != PlanCompleted && plan.State != PlanFailed {
 			add(plan)
 			continue

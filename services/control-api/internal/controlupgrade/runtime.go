@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nats-io/nats.go"
 )
 
@@ -19,6 +22,8 @@ const (
 	StatusDispositionAck  = "ack"
 	StatusDispositionNak  = "nak"
 	StatusDispositionTerm = "term"
+
+	statusNakMaximumDelay = 30 * time.Second
 )
 
 type OutboxDispatcherConfig struct {
@@ -31,17 +36,25 @@ type OutboxDispatcherConfig struct {
 type outboxRuntimeStore interface {
 	ClaimOutbox(context.Context, string, time.Time, time.Duration, int) ([]RolloutOutboxClaim, error)
 	SettleOutbox(context.Context, RolloutOutboxSettlement) error
+	ListCommandRetractions(context.Context, []string, int) ([]RolloutCommandRetraction, error)
 }
 
 type rolloutPublisher interface {
 	Publish(context.Context, RolloutOutboxMessage) (PublishResult, error)
+	Delete(context.Context, string, uint64) error
 	Stream() string
 }
 
+// commandRetractionBatch bounds one RetractCancelledOnce pass.
+const commandRetractionBatch = 100
+
+// OutboxDispatcher is driven by one goroutine (DispatchOnce and RetractCancelledOnce are not concurrent).
 type OutboxDispatcher struct {
 	store     outboxRuntimeStore
 	publisher rolloutPublisher
 	config    OutboxDispatcherConfig
+	// retracted holds the commands this process already deleted from the stream, until their grant expires.
+	retracted map[string]*time.Time
 }
 
 func NewOutboxDispatcher(store outboxRuntimeStore, publisher rolloutPublisher,
@@ -51,7 +64,8 @@ func NewOutboxDispatcher(store outboxRuntimeStore, publisher rolloutPublisher,
 		config.ClaimLease > time.Hour || config.ClaimBatch < 1 || config.ClaimBatch > 100 || config.Clock == nil {
 		return nil, ErrInvalidInput
 	}
-	return &OutboxDispatcher{store: store, publisher: publisher, config: config}, nil
+	return &OutboxDispatcher{store: store, publisher: publisher, config: config,
+		retracted: map[string]*time.Time{}}, nil
 }
 
 func (dispatcher *OutboxDispatcher) DispatchOnce(ctx context.Context) (int, error) {
@@ -85,6 +99,41 @@ func (dispatcher *OutboxDispatcher) DispatchOnce(ctx context.Context) (int, erro
 		}
 	}
 	return len(claims), nil
+}
+
+// RetractCancelledOnce deletes from JetStream the published, unconfirmed commands of cancelled plans,
+// so no Gateway delivers them to a node. Cancelling never waits for it: a failed delete is
+// logged and retried on the next pass. It returns the number of messages deleted.
+func (dispatcher *OutboxDispatcher) RetractCancelledOnce(ctx context.Context) (int, error) {
+	now := dispatcher.config.Clock()
+	skip := make([]string, 0, len(dispatcher.retracted))
+	for id, expires := range dispatcher.retracted {
+		if expires != nil && !expires.After(now) {
+			delete(dispatcher.retracted, id)
+			continue
+		}
+		skip = append(skip, id)
+	}
+	items, err := dispatcher.store.ListCommandRetractions(ctx, skip, commandRetractionBatch)
+	if err != nil {
+		slog.Warn("control upgrade cancelled command retraction lookup failed", "error", err)
+		return 0, err
+	}
+	var failed error
+	deleted := 0
+	for _, item := range items {
+		if err := dispatcher.publisher.Delete(ctx, item.Stream, item.Sequence); err != nil {
+			slog.Warn("control upgrade cancelled command retraction failed", "command_id", item.OutboxID,
+				"stream", item.Stream, "sequence", item.Sequence, "error", err)
+			failed = errors.Join(failed, err)
+			continue
+		}
+		dispatcher.retracted[item.OutboxID] = item.ExpiresAt
+		deleted++
+		slog.Info("control upgrade cancelled command retracted", "command_id", item.OutboxID,
+			"stream", item.Stream, "sequence", item.Sequence)
+	}
+	return deleted, failed
 }
 
 type StatusRuntimeConfig struct {
@@ -163,17 +212,17 @@ func (processor *StatusProcessor) ProcessOnce(ctx context.Context) (string, erro
 	}
 	receipt, reason := decodeRolloutStatusDelivery(delivery, processor.config)
 	if reason != "" {
-		return processor.rejectAndTerm(ctx, delivery, reason)
+		return processor.rejectAndTerm(ctx, delivery, receipt, reason, nil)
 	}
 	identity, err := processor.store.ResolveStatusIdentity(ctx, receipt.CommandID)
 	if err == nil {
 		_, err = processor.store.RecordStatus(ctx, identity, receipt)
 	}
 	if err != nil {
-		if permanentStatusError(err) {
-			return processor.rejectAndTerm(ctx, delivery, "status_rejected")
+		if reason := permanentStatusReason(err); reason != "" {
+			return processor.rejectAndTerm(ctx, delivery, receipt, reason, err)
 		}
-		return processor.nak(ctx, delivery, err)
+		return processor.nak(ctx, delivery, receipt, err)
 	}
 	operationCtx, cancel := context.WithTimeout(ctx, processor.config.OperationTimeout)
 	defer cancel()
@@ -184,10 +233,13 @@ func (processor *StatusProcessor) ProcessOnce(ctx context.Context) (string, erro
 }
 
 func (processor *StatusProcessor) rejectAndTerm(ctx context.Context, delivery statusDelivery,
-	reason string) (string, error) {
+	receipt RolloutStatusReceipt, reason string, cause error) (string, error) {
+	if cause != nil {
+		slog.Warn("control upgrade status rejected", statusLogFields(delivery, receipt, cause, "reason", reason)...)
+	}
 	rejection := rolloutStatusRejection(delivery, processor.config.Stream, reason)
 	if err := processor.store.RejectStatus(ctx, rejection); err != nil {
-		return processor.nak(ctx, delivery, err)
+		return processor.nak(ctx, delivery, receipt, err)
 	}
 	operationCtx, cancel := context.WithTimeout(ctx, processor.config.OperationTimeout)
 	defer cancel()
@@ -197,19 +249,61 @@ func (processor *StatusProcessor) rejectAndTerm(ctx context.Context, delivery st
 	return StatusDispositionTerm, nil
 }
 
-func (processor *StatusProcessor) nak(ctx context.Context, delivery statusDelivery, cause error) (string, error) {
+func (processor *StatusProcessor) nak(ctx context.Context, delivery statusDelivery,
+	receipt RolloutStatusReceipt, cause error) (string, error) {
+	delay := statusNakDelay(processor.config.NakDelay, delivery.NumDelivered())
+	slog.Warn("control upgrade status nak", statusLogFields(delivery, receipt, cause, "delay", delay)...)
 	operationCtx, cancel := context.WithTimeout(ctx, processor.config.OperationTimeout)
 	defer cancel()
-	if err := delivery.Nak(operationCtx, processor.config.NakDelay); err != nil {
+	if err := delivery.Nak(operationCtx, delay); err != nil {
 		return StatusDispositionNak, errors.Join(cause, err)
 	}
 	return StatusDispositionNak, cause
 }
 
-func permanentStatusError(err error) bool {
-	return errors.Is(err, ErrInvalidPlanEvent) || errors.Is(err, ErrInvalidPlanCommand) ||
+// statusNakDelay doubles the redelivery delay of a retryable status on every delivery, up to
+// statusNakMaximumDelay (a status the database kept refusing used to be redelivered every second).
+func statusNakDelay(base time.Duration, delivered uint64) time.Duration {
+	delay := base
+	for count := uint64(1); count < delivered && delay < statusNakMaximumDelay; count++ {
+		delay *= 2
+	}
+	if delay > statusNakMaximumDelay {
+		return max(base, statusNakMaximumDelay)
+	}
+	return delay
+}
+
+// statusLogFields names a status delivery without its payload: identifiers, broker position and the
+// error with its SQLSTATE when the database refused it.
+func statusLogFields(delivery statusDelivery, receipt RolloutStatusReceipt, cause error, extra ...any) []any {
+	code := ""
+	var pgError *pgconn.PgError
+	if errors.As(cause, &pgError) {
+		code = pgError.Code
+	}
+	return append([]any{"subject", delivery.Subject(), "stream_sequence", delivery.StreamSequence(),
+		"delivered", delivery.NumDelivered(), "command_id", receipt.CommandID, "status_id", receipt.StatusID,
+		"status_revision", receipt.StatusRevision, "state", receipt.State, "error_code", code, "error", cause},
+		extra...)
+}
+
+// permanentStatusReason names why a status can never be recorded, or returns "" when it may succeed on
+// redelivery. Besides the store's own verdicts, the status receipt triggers (105 binding/JSON/transition
+// checks, 102 PubAck facts) only judge the immutable message against committed command facts, so their
+// refusal is final: they used to be NAKed forever (P9302 on every redelivery).
+func permanentStatusReason(err error) string {
+	if errors.Is(err, ErrInvalidPlanEvent) || errors.Is(err, ErrInvalidPlanCommand) ||
 		errors.Is(err, ErrInvalidPlanTransition) || errors.Is(err, ErrPlanIdempotencyConflict) ||
-		errors.Is(err, ErrStaleStatusEvidence)
+		errors.Is(err, ErrStaleStatusEvidence) {
+		return "status_rejected"
+	}
+	var pgError *pgconn.PgError
+	if errors.As(err, &pgError) && (pgError.Code == "P9302" || pgError.Code == "P1022") &&
+		strings.Contains(pgError.Where, "validate_control_upgrade_status_") {
+		return "status_database_rejected"
+	}
+	return ""
 }
 
 func decodeRolloutStatusDelivery(delivery statusDelivery,

@@ -243,8 +243,7 @@ func TestNewRolloutRuntimeRejectsUnsafeProfileAndSignerConfiguration(t *testing.
 		t.Fatalf("valid runtime config error = %v", err)
 	}
 	for name, mutate := range map[string]func(*RolloutRuntimeConfig){
-		"issuance too long":          func(value *RolloutRuntimeConfig) { value.CommandIssuanceTTL = 7*24*time.Hour + time.Second },
-		"execution exceeds issuance": func(value *RolloutRuntimeConfig) { value.ExecutionTTL = value.CommandIssuanceTTL + time.Second },
+		"issuance too long": func(value *RolloutRuntimeConfig) { value.CommandIssuanceTTL = 7*24*time.Hour + time.Second },
 		"probe exceeds activation": func(value *RolloutRuntimeConfig) {
 			value.Profiles.ProbeTimeout = value.Profiles.ActivationTimeout + time.Second
 		},
@@ -281,7 +280,7 @@ func testRolloutRuntimeConfig() RolloutRuntimeConfig {
 		CommandGrantKeys: entitlement.NewKeyRing(), ControlSigner: rolloutTestSigner{id: "control-upgrade-signing"},
 		EdgeSigner:         rolloutTestSigner{id: "edge-upgrade-signing"},
 		InstallationID:     uuid.MustParse("00000000-0000-4000-8000-000000000004"),
-		CommandIssuanceTTL: 6 * time.Hour, ExecutionTTL: 10 * time.Minute,
+		CommandIssuanceTTL: 6 * time.Hour,
 		Profiles: RolloutProfilePolicy{ActivationTimeout: 5 * time.Minute, ObservationWindow: 2 * time.Minute,
 			HealthInterval: 10 * time.Second, ProbeTimeout: 3 * time.Second, RequiredConsecutiveSuccesses: 3},
 		Clock: func() time.Time { return time.Unix(1_800_000_000, 0).UTC() }}
@@ -297,6 +296,11 @@ func (stub rolloutCreatePreparationStub) PrepareCreateRollout(ctx context.Contex
 	identity RolloutIdentity, request CreateRolloutRequest,
 	digest [32]byte) (CreateRolloutIntent, RolloutWriteResult, error) {
 	return stub.prepare(ctx, actor, identity, request, digest)
+}
+
+// licenseExpiresAt: no stored license expiry, as before the first lease exchange.
+func (rolloutCreatePreparationStub) licenseExpiresAt(context.Context) (*time.Time, error) {
+	return nil, nil
 }
 
 func (stub rolloutCreatePreparationStub) LoadRolloutTargetCohort(ctx context.Context, actor Actor,
@@ -333,4 +337,23 @@ type rolloutTestSigner struct{ id string }
 func (signer rolloutTestSigner) KeyID() string { return signer.id }
 func (rolloutTestSigner) Sign(context.Context, []byte) ([]byte, error) {
 	return make([]byte, ed25519.SignatureSize), nil
+}
+
+// The deadline is cut to the license expiry, floored to the second.
+func TestCommandIssuanceDeadline(t *testing.T) {
+	now := time.Date(2026, 11, 17, 8, 0, 0, 0, time.UTC)
+	soon := now.Add(90*time.Minute + 900*time.Millisecond)
+	late := now.Add(30 * time.Hour)
+	for name, test := range map[string]struct {
+		expiresAt *time.Time
+		want      int64
+	}{
+		"no expiry":         {nil, now.Add(6 * time.Hour).Unix()},
+		"expiry after ttl":  {&late, now.Add(6 * time.Hour).Unix()},
+		"expiry within ttl": {&soon, now.Add(90 * time.Minute).Unix()},
+	} {
+		if got := commandIssuanceDeadline(now, 6*time.Hour, test.expiresAt); got != test.want {
+			t.Errorf("%s: deadline = %d, want %d", name, got, test.want)
+		}
+	}
 }

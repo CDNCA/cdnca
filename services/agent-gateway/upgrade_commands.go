@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
@@ -23,6 +25,7 @@ import (
 const (
 	UpgradeCommandSchema         = "cdnca.edge.upgrade.command/v1"
 	UpgradeStatusSchema          = "cdnca.edge.upgrade.status/v1"
+	UpgradeStatusV2Schema        = "cdnca.edge.upgrade.status/v2"
 	UpgradeCommandStream         = "AGENT_COMMANDS"
 	UpgradeStatusStream          = "AGENT_DEPLOYMENT_STATUS"
 	UpgradeCommandSubjectPrefix  = "cdnca.agent.commands.upgrade"
@@ -31,6 +34,7 @@ const (
 	UpgradePayloadSHA256Header   = "X-CDNCA-Payload-SHA256"
 	UpgradeMessageKeyHeader      = "X-CDNCA-Message-Key"
 	upgradeExecutionV2Schema     = "cdnca.upgrade.execution/v2"
+	upgradeExecutionV3Schema     = "cdnca.upgrade.execution/v3"
 	maxUpgradeWireBytes          = 256 << 10
 	maxUpgradePlanRevision       = uint64(1<<63 - 1)
 )
@@ -90,6 +94,24 @@ type upgradeStatusWire struct {
 	ObservedAt             time.Time `json:"observed_at"`
 }
 
+// upgradeStatusWireV2 is the status every edge-agent emits (updater edgeUpgradeStatusWireV2): the v1 fields,
+// then active_evidence, null outside healthy/rolled_back. Control validates the evidence itself.
+type upgradeStatusWireV2 struct {
+	upgradeStatusWire
+	ActiveEvidence *upgradeActiveProbeEvidenceWire `json:"active_evidence"`
+}
+
+type upgradeActiveProbeEvidenceWire struct {
+	Schema                      string    `json:"schema"`
+	ActiveArtifactSHA256        string    `json:"active_artifact_sha256"`
+	ActiveConfigSHA256          string    `json:"active_config_sha256"`
+	LastKnownGoodArtifactSHA256 string    `json:"last_known_good_artifact_sha256"`
+	LastKnownGoodConfigSHA256   string    `json:"last_known_good_config_sha256"`
+	ProbeObservedAt             time.Time `json:"probe_observed_at"`
+	ProbeDeadline               time.Time `json:"probe_deadline"`
+	EvidenceSHA256              string    `json:"evidence_sha256"`
+}
+
 type upgradeExecutionEnvelopeWire struct {
 	ControlAlgorithm string          `json:"control_algorithm"`
 	ControlKeyID     string          `json:"control_key_id"`
@@ -101,10 +123,13 @@ type upgradeExecutionEnvelopeWire struct {
 }
 
 type upgradeExecutionRolloutWire struct {
-	Schema       string `json:"schema"`
-	PlanID       string `json:"plan_id"`
-	PlanRevision uint64 `json:"plan_revision"`
-	BatchID      string `json:"batch_id"`
+	Schema                 string `json:"schema"`
+	PlanID                 string `json:"plan_id"`
+	PlanRevision           uint64 `json:"plan_revision"`
+	BatchID                string `json:"batch_id"`
+	ExecutionSequence      uint64 `json:"execution_sequence,omitempty"`
+	ReleaseSequence        uint64 `json:"release_sequence,omitempty"`
+	CurrentReleaseSequence uint64 `json:"current_release_sequence,omitempty"`
 }
 
 type UpgradeCommandRecord struct {
@@ -145,9 +170,11 @@ func decodeUpgradeCommandRecord(encoded []byte) (UpgradeCommandRecord, error) {
 		return UpgradeCommandRecord{}, errors.New("invalid upgrade command")
 	}
 	rollout, err := decodeUpgradeExecutionRollout(wire.SignedExecution)
-	if err != nil || rollout.PlanID != wire.PlanID || rollout.PlanRevision != wire.PlanRevision ||
-		rollout.BatchID != wire.BatchID {
-		return UpgradeCommandRecord{}, errors.New("invalid upgrade command")
+	if err != nil {
+		return UpgradeCommandRecord{}, fmt.Errorf("invalid upgrade command: %w", err)
+	}
+	if rollout.PlanID != wire.PlanID || rollout.PlanRevision != wire.PlanRevision || rollout.BatchID != wire.BatchID {
+		return UpgradeCommandRecord{}, errors.New("invalid upgrade command: execution rollout binding differs")
 	}
 	return UpgradeCommandRecord{
 		CommandID: wire.CommandID, PlanID: wire.PlanID, PlanRevision: wire.PlanRevision,
@@ -166,18 +193,55 @@ func decodeUpgradeExecutionRollout(encoded []byte) (upgradeExecutionRolloutWire,
 		return upgradeExecutionRolloutWire{}, errors.New("invalid upgrade execution")
 	}
 	var rollout upgradeExecutionRolloutWire
-	if err := json.Unmarshal(envelope.Execution, &rollout); err != nil || rollout.Schema != upgradeExecutionV2Schema ||
+	if err := json.Unmarshal(envelope.Execution, &rollout); err != nil ||
+		(rollout.Schema != upgradeExecutionV2Schema && rollout.Schema != upgradeExecutionV3Schema) ||
 		!canonicalUpgradeUUID(rollout.PlanID) || rollout.PlanRevision == 0 ||
 		rollout.PlanRevision > maxUpgradePlanRevision || !canonicalUpgradeUUID(rollout.BatchID) {
 		return upgradeExecutionRolloutWire{}, errors.New("invalid upgrade execution")
 	}
+	// The sequence rules of libs/entitlement UpgradeExecution.Validate: v3 (same-version re-release, or a
+	// rollback sequence distinct from the forward one) carries the execution sequence and, for a
+	// re-release, the installed release sequence below the target one; v2 carries neither.
+	if rollout.Schema == upgradeExecutionV3Schema {
+		if rollout.ExecutionSequence == 0 || rollout.ReleaseSequence == 0 ||
+			(rollout.CurrentReleaseSequence != 0 && rollout.ReleaseSequence <= rollout.CurrentReleaseSequence) {
+			return upgradeExecutionRolloutWire{}, errors.New("invalid upgrade execution v3 sequences")
+		}
+	} else if rollout.ExecutionSequence != 0 || rollout.CurrentReleaseSequence != 0 {
+		return upgradeExecutionRolloutWire{}, errors.New("invalid upgrade execution v2 sequences")
+	}
 	return rollout, nil
 }
 
+// decodeUpgradeStatusDocument decodes a canonical status v1 or v2 document into its common fields.
+func decodeUpgradeStatusDocument(encoded []byte) (upgradeStatusWire, error) {
+	var header struct {
+		Schema string `json:"schema"`
+	}
+	if len(encoded) > maxUpgradeWireBytes || json.Unmarshal(encoded, &header) != nil {
+		return upgradeStatusWire{}, errors.New("invalid upgrade status")
+	}
+	switch header.Schema {
+	case UpgradeStatusSchema:
+		var wire upgradeStatusWire
+		if err := decodeCanonicalUpgradeJSON(encoded, &wire); err != nil {
+			return upgradeStatusWire{}, err
+		}
+		return wire, nil
+	case UpgradeStatusV2Schema:
+		var wire upgradeStatusWireV2
+		if err := decodeCanonicalUpgradeJSON(encoded, &wire); err != nil {
+			return upgradeStatusWire{}, err
+		}
+		return wire.upgradeStatusWire, nil
+	default:
+		return upgradeStatusWire{}, errors.New("unsupported upgrade status schema")
+	}
+}
+
 func decodeUpgradeStatusRecord(encoded []byte) (UpgradeStatusRecord, error) {
-	var wire upgradeStatusWire
-	if decodeCanonicalUpgradeJSON(encoded, &wire) != nil || wire.Schema != UpgradeStatusSchema ||
-		!canonicalUpgradeUUID(wire.StatusID) || wire.StatusRevision == 0 || !canonicalUpgradeUUID(wire.CommandID) ||
+	wire, decodeErr := decodeUpgradeStatusDocument(encoded)
+	if decodeErr != nil || !canonicalUpgradeUUID(wire.StatusID) || wire.StatusRevision == 0 || !canonicalUpgradeUUID(wire.CommandID) ||
 		!canonicalUpgradeUUID(wire.PlanID) || wire.PlanRevision == 0 || !canonicalUpgradeUUID(wire.InstallationID) ||
 		!canonicalUpgradeUUID(wire.NodeID) || len(wire.CommandSHA256) != 64 || !validUpgradeState(wire.State) ||
 		wire.ObservedAt.IsZero() || wire.ObservedAt.Location() != time.UTC ||
@@ -303,6 +367,39 @@ func stopSessionUpgradeCommands(source *sessionUpgradeCommandSource, pending pen
 	}
 }
 
+// upgradeRefusedRetryDelay spaces redeliveries of a refused upgrade command whose termination failed.
+const upgradeRefusedRetryDelay = 30 * time.Second
+
+type refusableUpgradeDelivery interface {
+	Term(context.Context) error
+	NakWithDelay(context.Context, time.Duration) error
+}
+
+// refuseUpgradeCommand handles a durable upgrade command the Gateway can never forward to this node: it is
+// terminated so JetStream stops redelivering it and the node session keeps serving. Control has no status
+// for a command refused before the node accepted it (the first status must be accepted or claimed, migration
+// 105), so the refusal is logged rather than reported. Only when the termination itself fails is the message
+// redelivered, after upgradeRefusedRetryDelay.
+func refuseUpgradeCommand(delivery refusableUpgradeDelivery, nodeID, reference string, reason error, timeout time.Duration) {
+	cause := strings.ToValidUTF8(reason.Error(), "?")
+	if len(cause) > invalidCommandReasonLimit {
+		cause = cause[:invalidCommandReasonLimit]
+	}
+	log.Printf("agent-gateway: warn: durable upgrade command refused node_id=%s message=%q reason=%q",
+		nodeID, reference, cause)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	err := delivery.Term(ctx)
+	if err == nil {
+		return
+	}
+	log.Printf("agent-gateway: warn: refused upgrade command could not be terminated node_id=%s message=%q error=%q",
+		nodeID, reference, err.Error())
+	nakCtx, nakCancel := context.WithTimeout(context.Background(), timeout)
+	defer nakCancel()
+	_ = delivery.NakWithDelay(nakCtx, upgradeRefusedRetryDelay)
+}
+
 func nakUpgradeCommand(delivery UpgradeCommandDelivery, timeout time.Duration) {
 	if delivery == nil {
 		return
@@ -399,6 +496,12 @@ func (g *Gateway) persistUpgradeStatusAndAckCommand(ctx context.Context, nodeID,
 	if ack == nil {
 		publication, publishErr := g.upgrades.PublishUpgradeStatus(ctx, nodeID, record.Encoded)
 		if publishErr != nil || publication.Stream != UpgradeStatusStream || publication.Sequence == 0 {
+			reason := "publication identity is invalid"
+			if publishErr != nil {
+				reason = publishErr.Error()
+			}
+			log.Printf("agent-gateway: warn: upgrade status not published node_id=%s command_id=%s status_id=%s state=%s reason=%q",
+				nodeID, record.CommandID, record.StatusID, record.State, reason)
 			return nil, status.Error(codes.Unavailable, "upgrade status could not be durably published")
 		}
 		ack = &agentv1.UpgradeStatusAck{
@@ -456,8 +559,8 @@ func (g *Gateway) persistUpgradeStatusAndAckCommand(ctx context.Context, nodeID,
 }
 
 func commandStatusDigest(encoded []byte) string {
-	var wire upgradeStatusWire
-	if decodeCanonicalUpgradeJSON(encoded, &wire) != nil {
+	wire, err := decodeUpgradeStatusDocument(encoded)
+	if err != nil {
 		return ""
 	}
 	return wire.CommandSHA256

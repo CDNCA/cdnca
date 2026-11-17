@@ -101,11 +101,7 @@ func (service *Service) Runtime(ctx context.Context) Runtime {
 		if runtime.Stopped(consumer) {
 			return nil, ErrBudgetStopped
 		}
-		results, err := prober.Run(ctx, consumer, site, target, round, request)
-		if err == nil && consumer == ConsumerEdge {
-			service.observe(ctx, consumer, request, results)
-		}
-		return results, err
+		return prober.Run(ctx, consumer, site, target, round, request)
 	}
 	runtime.Checkpoints = prober.client.Nodes
 	runtime.Account = func(ctx context.Context) (Account, error) {
@@ -143,6 +139,12 @@ func (service *Service) proberFor(value stored) (*Prober, error) {
 	})
 	service.prober.now = service.config.Now
 	service.prober.onCreated = service.meter
+	// Once per job: sites sharing a supply host's job are one observation.
+	service.prober.onResults = func(consumer string, request ProbeRequest, results []Result) {
+		if consumer == ConsumerEdge {
+			service.observe(context.Background(), consumer, request, results)
+		}
+	}
 	service.loaded = revision
 	return service.prober, nil
 }

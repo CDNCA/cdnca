@@ -42,6 +42,18 @@ func TestRetainedArtifactNamesKeepsUnfinishedAndCurrentPlusPrevious(t *testing.T
 	}
 }
 
+// A cancelled plan installed nothing: its forward artifact is dropped and
+// it does not hide the newest finished plan of its cohort.
+func TestRetainedArtifactNamesSkipsCancelledPlans(t *testing.T) {
+	keep := retainedArtifactNames([]planArtifacts{
+		planArtifactsFor(PlanCancelled, 0x06, 0x04, "linux", "amd64"),
+		planArtifactsFor(PlanCompleted, 0x04, 0x03, "linux", "amd64"),
+	})
+	if keep[artifactName(0x06)] || !keep[artifactName(0x04)] || !keep[artifactName(0x03)] {
+		t.Fatalf("retained = %v", keep)
+	}
+}
+
 // The stored snapshot is json.Marshal(RolloutPlan); the narrow view must read it.
 func TestPlanArtifactsDecodesRolloutPlanSnapshot(t *testing.T) {
 	plan := mustRolloutPlan(t)

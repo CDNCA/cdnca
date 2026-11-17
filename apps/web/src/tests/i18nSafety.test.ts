@@ -73,6 +73,8 @@ const allowedVisibleLiterals = new Set([
   'edge-01.cdnca.com', 'https://api.dnspup.com/v1/tools/ip-intel-snapshot', '*.example.com', 'jpg',
   '-----BEGIN CERTIFICATE-----', '$cookie_uid$uri', 'cdnca_route',
   'https://api.dnspup.com', 'control.example.com', 'X-Powered-By', 'ops@example.com',
+  // 证据签发工作负载身份：URI|工作负载 ID 的格式示例
+  'spiffe://control.example/workload/kyc|kyc-issuer',
   // tp-b3c Header 设置：请求头/响应头规则的配置语法示例（动作:头名:值），按原样输入
   'set:X-Request-ID:$request_id', 'set:Cache-Control:no-store',
   // stream-parity 批量修改：四层协议名（与 resources 里 proxyV1 等一致，不翻译）

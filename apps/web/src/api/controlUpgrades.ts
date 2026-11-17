@@ -19,11 +19,12 @@ export const controlUpgradePlanStates = [
   'rolling_back',
   'completed',
   'failed',
+  'cancelled',
 ] as const
 
 export type ControlUpgradeReason = (typeof controlUpgradeReasons)[number]
 export type ControlUpgradePlanState = (typeof controlUpgradePlanStates)[number]
-export type ControlUpgradeRolloutAction = 'start' | 'pause' | 'resume' | 'rollback'
+export type ControlUpgradeRolloutAction = 'start' | 'pause' | 'resume' | 'rollback' | 'cancel'
 export type ControlUpgradeNodeState = 'pending' | 'dispatched' | 'healthy' | 'failed' | 'rolled_back'
 export type ControlUpgradeStatusState =
   | 'accepted'
@@ -145,7 +146,7 @@ export interface ControlUpgradeRolloutEvent {
   revision: string
   from: ControlUpgradePlanState
   to: ControlUpgradePlanState
-  action: 'start' | 'pause' | 'resume' | 'rollback' | 'health_failed' | 'health_succeeded' | 'outcome_uncertain'
+  action: 'start' | 'pause' | 'resume' | 'rollback' | 'cancel' | 'health_failed' | 'health_succeeded' | 'outcome_uncertain'
   reason: string
   batch_id: string
   node_id: string
@@ -305,7 +306,7 @@ const policySources = new Set(['default', 'global', 'installation'])
 const completions = new Set(['', 'upgraded', 'rolled_back'])
 const blockerCodes = new Set(['irreversible_migration', 'rollback_unavailable', 'agent_incompatible', 'protocol_incompatible'])
 const nodeStates = new Set(['pending', 'dispatched', 'healthy', 'failed', 'rolled_back'])
-const eventActions = new Set(['start', 'pause', 'resume', 'rollback', 'health_failed', 'health_succeeded', 'outcome_uncertain'])
+const eventActions = new Set(['start', 'pause', 'resume', 'rollback', 'cancel', 'health_failed', 'health_succeeded', 'outcome_uncertain'])
 const statusSchemas = new Set(['cdnca.edge.upgrade.status/v1', 'cdnca.edge.upgrade.status/v2'])
 const statusActions = new Set(['upgrade', 'rollback'])
 const statusStates = new Set(['accepted', 'claimed', 'installing', 'healthy', 'failed', 'rolling_back', 'rolled_back', 'uncertain'])
@@ -795,4 +796,6 @@ export const controlUpgradesApi = {
     actionRequest(token, id, 'resume', input, meta),
   rollback: (token: string, id: string, input: ControlUpgradeActionInput, meta: ControlUpgradeRequestMetadata) =>
     actionRequest(token, id, 'rollback', input, meta),
+  cancel: (token: string, id: string, input: ControlUpgradeActionInput, meta: ControlUpgradeRequestMetadata) =>
+    actionRequest(token, id, 'cancel', input, meta),
 }

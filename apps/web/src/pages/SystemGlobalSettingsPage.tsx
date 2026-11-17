@@ -18,7 +18,7 @@ import { auditLogCategories } from '../api/auditLogs'
 import { systemCleanupSettingsApi, type PlatformSystemCleanupDocument, type PlatformSystemCleanupSettings } from '../api/systemCleanupSettings'
 import { mailProviderKind, nativeSMSProviders, systemMailSettingsApi, type PlatformSystemMailSettings, type PlatformSystemMailSettingsDocument } from '../api/systemMailSettings'
 import { systemOtherSettingsApi, validCertificateNoticeDays, type PlatformSystemOtherSettings, type PlatformSystemOtherSettingsDocument } from '../api/systemOtherSettings'
-import { kycProviderKeys, systemUserSettingsApi, type CaptchaSecretName, type PlatformSystemUserSettings, type PlatformSystemUserSettingsDocument, type UserSettingsSecretName, type UserSettingsSecrets } from '../api/systemUserSettings'
+import { kycIssuerKeys, kycProviderKeys, systemUserSettingsApi, type CaptchaSecretName, type PlatformSystemUserSettings, type PlatformSystemUserSettingsDocument, type UserSettingsSecretName, type UserSettingsSecrets } from '../api/systemUserSettings'
 import { accountRegistrationApi, registrationReasons, type AccountRegistrationConfig } from '../api/accountRegistration'
 import { RegistrationReadinessReasons } from '../components/RegistrationReadinessReasons'
 import { NotificationChannelOffNotice } from '../components/NotificationChannelSwitch'
@@ -432,7 +432,7 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
 
   const update = <K extends keyof PlatformSystemUserSettings>(key: K, value: PlatformSystemUserSettings[K]) => setDraft((current) => current ? { ...current, [key]: value } : current)
   const captchaSecrets = ['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret'] as const
-  const kycSecrets = ['kyc_api_key', 'kyc_callback_hmac_key', 'kyc_object_access_key_id', 'kyc_object_secret_access_key', 'kyc_object_session_token'] as const
+  const kycSecrets = ['kyc_api_key', 'kyc_callback_hmac_key', 'kyc_object_access_key_id', 'kyc_object_secret_access_key', 'kyc_object_session_token', 'kyc_issuer_server_private_key'] as const
   const accountSecrets = [...captchaSecrets, 'captcha_turnstile_secret'] as const
   const shownSecrets: readonly UserSettingsSecretName[] = mode === 'account' ? accountSecrets : mode === 'payment' ? kycSecrets : [...accountSecrets, ...kycSecrets]
   // clear: the saved secret to clear in this save (the "clear" button).
@@ -450,7 +450,7 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
     'verification_sms_template_id', 'terms_title', 'terms_body', 'email_verification_required', 'phone_verification_required', 'default_phone_country_code',
     'login_failure_limit_per_hour', 'login_captcha_threshold_per_hour', 'email_anti_abuse_mode', 'sms_anti_abuse_mode', 'captcha_provider',
     'captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference', 'captcha_turnstile_site_key', ...accountSecrets]
-  const paymentKeys = ['identity_verification_method', ...kycProviderKeys, ...kycSecrets]
+  const paymentKeys = ['identity_verification_method', ...kycProviderKeys, 'kyc_issuer_enabled', ...kycIssuerKeys, ...kycSecrets]
   const { status: refusedStatus, shown: refusedShown } = refusedFieldStatus(write.error,
     [...(mode === 'payment' ? [] : accountKeys), ...(mode === 'account' ? [] : paymentKeys)], i18n.resolvedLanguage)
   // turning a verification on without its sender is refused: say what is missing
@@ -468,13 +468,17 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
   const toggle = (key: keyof PlatformSystemUserSettings) => <Switch checked={Boolean(draft[key])} disabled={!canManage} onChange={(value) => update(key, value as never)} aria-label={t(`userFields.${key}`)} />
   const text = (key: keyof PlatformSystemUserSettings, placeholder?: string) => <Input value={String(draft[key])} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value as never)} aria-label={t(`userFields.${key}`)} />
   const busy = !canManage || write.uncertain || write.saving
-  const secretField = (name: UserSettingsSecretName, hint?: string) => {
+  // multiline: a PEM secret (line breaks kept, CR dropped, trimmed on blur)
+  const secretField = (name: UserSettingsSecretName, hint?: string, multiline?: boolean) => {
     const configured = Boolean(document[`${name}_configured`])
     return <Form.Item key={name} label={t(`userFields.${name}`)} {...fieldStatus(name)}
       extra={<><div>{configured ? t('secretField.set', { fingerprint: document[`${name}_fingerprint`] }) : t('secretField.unset')}</div>{hint ? <div>{hint}</div> : null}</>}>
       <Space.Compact style={{ width: '100%' }}>
-        <Input.Password value={secrets[name] ?? ''} disabled={!canManage} autoComplete="new-password" placeholder={configured ? t('secretField.keep') : ''}
-          onChange={(event) => setSecrets((current) => ({ ...current, [name]: event.target.value }))} aria-label={t(`userFields.${name}`)} />
+        {multiline ? <Input.TextArea value={secrets[name] ?? ''} disabled={!canManage} autoComplete="off" spellCheck={false} rows={4} placeholder={configured ? t('secretField.keep') : ''}
+          onChange={(event) => setSecrets((current) => ({ ...current, [name]: event.target.value.replace(/\r\n?/g, '\n') }))}
+          onBlur={(event) => setSecrets((current) => ({ ...current, [name]: event.target.value.trim() }))} aria-label={t(`userFields.${name}`)} />
+        : <Input.Password value={secrets[name] ?? ''} disabled={!canManage} autoComplete="new-password" placeholder={configured ? t('secretField.keep') : ''}
+          onChange={(event) => setSecrets((current) => ({ ...current, [name]: event.target.value }))} aria-label={t(`userFields.${name}`)} />}
         {configured ? <Popconfirm title={t('secretField.clearConfirm', { name: t(`userFields.${name}`) })} disabled={busy} onConfirm={() => save(name)}>
           <Button disabled={busy}>{t('secretField.clear')}</Button>
         </Popconfirm> : null}
@@ -491,6 +495,15 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
     <Input value={draft[key]} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value.trim())} aria-label={t(`userFields.${key}`)}
       // the server takes an origin: drop a trailing slash
       onBlur={key === 'kyc_endpoint' || key === 'kyc_object_endpoint' ? (event) => update(key, event.target.value.trim().replace(/\/+$/, '')) : undefined} />
+  </Form.Item>
+  // The evidence issuer; the certificates are PEM text, the workload identities one per line.
+  const kycIssuerText = (key: 'kyc_issuer_listen_address' | 'kyc_issuer_kms_endpoint', placeholder?: string) => <Form.Item key={key} label={t(`userFields.${key}`)} {...fieldStatus(key)} extra={t(`kycEnv.${key}`)}>
+    <Input value={draft[key]} disabled={!canManage} placeholder={placeholder} onChange={(event) => update(key, event.target.value.trim())} aria-label={t(`userFields.${key}`)}
+      onBlur={key === 'kyc_issuer_kms_endpoint' ? (event) => update(key, event.target.value.trim().replace(/\/+$/, '')) : undefined} />
+  </Form.Item>
+  const kycIssuerPEM = (key: 'kyc_issuer_server_certificate' | 'kyc_issuer_client_ca') => <Form.Item key={key} label={t(`userFields.${key}`)} {...fieldStatus(key)} extra={t(`kycEnv.${key}`)}>
+    <Input.TextArea value={draft[key]} disabled={!canManage} rows={4} spellCheck={false} placeholder="-----BEGIN CERTIFICATE-----" aria-label={t(`userFields.${key}`)}
+      onChange={(event) => update(key, event.target.value.replace(/\r\n?/g, '\n'))} onBlur={(event) => update(key, event.target.value.trim())} />
   </Form.Item>
   const kycComplete = (['kyc_provider_name', 'kyc_endpoint', 'kyc_callback_key_id', 'kyc_object_endpoint', 'kyc_object_region', 'kyc_object_bucket', 'kyc_object_kms_key_id'] as const)
     .every((key) => draft[key] !== '') &&
@@ -568,6 +581,19 @@ function UserSettingsPanel({ mode, shared = null, onShared }: {
         {secretField('kyc_object_secret_access_key', t('kycEnv.kyc_object_secret_access_key'))}
         {secretField('kyc_object_session_token', t('kycEnv.kyc_object_session_token'))}
         {kycText('kyc_object_kms_key_id')}
+        <Form.Item label=" "><Typography.Text strong>{t('kycGroups.issuer')}</Typography.Text><div><Typography.Text type="secondary">{t('kycGroups.issuerHint')}</Typography.Text></div></Form.Item>
+        <Form.Item label={t('userFields.kyc_issuer_enabled')} extra={t('kycEnv.kyc_issuer_enabled')}>{toggle('kyc_issuer_enabled')}</Form.Item>
+        {kycIssuerText('kyc_issuer_listen_address', '0.0.0.0:19443')}
+        {kycIssuerPEM('kyc_issuer_server_certificate')}
+        {secretField('kyc_issuer_server_private_key', t('kycEnv.kyc_issuer_server_private_key'), true)}
+        {kycIssuerPEM('kyc_issuer_client_ca')}
+        <Form.Item label={t('userFields.kyc_issuer_workload_identities')} {...fieldStatus('kyc_issuer_workload_identities')} extra={t('kycEnv.kyc_issuer_workload_identities')}>
+          <Input.TextArea value={draft.kyc_issuer_workload_identities.split(',').join('\n')} disabled={!canManage} rows={3} spellCheck={false}
+            placeholder="spiffe://control.example/workload/kyc|kyc-issuer" aria-label={t('userFields.kyc_issuer_workload_identities')}
+            onChange={(event) => update('kyc_issuer_workload_identities', event.target.value.replace(/\r/g, '').split('\n').map((line) => line.trim()).join(','))}
+            onBlur={(event) => update('kyc_issuer_workload_identities', event.target.value.split('\n').map((line) => line.trim()).filter(Boolean).join(','))} />
+        </Form.Item>
+        {kycIssuerText('kyc_issuer_kms_endpoint', 'https://kms.us-east-1.amazonaws.com')}
       </>)}
       {section('enterprise', <>
         <Form.Item label={t('userFields.enterprise_verification_enabled')} extra={t('hints.enterpriseEnabled')}>{toggle('enterprise_verification_enabled')}</Form.Item>

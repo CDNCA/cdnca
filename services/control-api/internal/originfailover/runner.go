@@ -265,8 +265,9 @@ func dnspupTarget(target Target) dnspupprobe.HTTPTarget {
 }
 
 // askDNSPup adds one vote per dnspup checkpoint for the pending origins
-// dnspup's http probe can express (concurrently; each is one charged job per
-// round, the idempotency key is (site, origin, round)).
+// dnspup's http probe can express (concurrently). One charged job per dnspup
+// request (URL, method, type) and round: sites reaching the same origin URL
+// share it (dnspupprobe.Prober), each still gets its votes once per round.
 func (runner *Runner) askDNSPup(ctx context.Context, pool Pool, pending []Origin, plan dnspupprobe.Runtime, round int64,
 	votes map[string][]*Outcome) {
 	var mu sync.Mutex

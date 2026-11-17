@@ -40,7 +40,7 @@ const (
 	controlUpgradeEdgeSigningKeyIDEnv             = "CONTROL_UPGRADE_EDGE_SIGNING_KEY_ID"
 	controlUpgradeEdgeSigningPrivateKeyFileEnv    = "CONTROL_UPGRADE_EDGE_SIGNING_PRIVATE_KEY_FILE"
 	controlUpgradeCommandIssuanceTTLEnv           = "CONTROL_UPGRADE_COMMAND_ISSUANCE_TTL"
-	controlUpgradeExecutionTTLEnv                 = "CONTROL_UPGRADE_EXECUTION_TTL"
+	controlUpgradeExecutionTTLEnv                 = "CONTROL_UPGRADE_EXECUTION_TTL" // accepted, ignored
 	controlUpgradeActivationTimeoutEnv            = "CONTROL_UPGRADE_ACTIVATION_TIMEOUT"
 	controlUpgradeObservationWindowEnv            = "CONTROL_UPGRADE_OBSERVATION_WINDOW"
 	controlUpgradeHealthIntervalEnv               = "CONTROL_UPGRADE_HEALTH_INTERVAL"
@@ -67,6 +67,7 @@ const (
 	controlUpgradeMaxStatusBytes     = 256 << 10
 	controlUpgradeIdlePoll           = 250 * time.Millisecond
 	controlUpgradeTransientBackoff   = 500 * time.Millisecond
+	controlUpgradeRetractInterval    = 2 * time.Second
 	controlUpgradeOutboxClaimLease   = 30 * time.Second
 	controlUpgradeOutboxClaimBatch   = 32
 	controlUpgradeReceiptClaimBatch  = 1
@@ -117,7 +118,9 @@ var (
 		controlUpgradeControlSigningKeyIDEnv,
 		controlUpgradeEdgeSigningKeyIDEnv,
 		controlUpgradeCommandIssuanceTTLEnv,
-		controlUpgradeExecutionTTLEnv,
+		// CONTROL_UPGRADE_EXECUTION_TTL is optional and ignored: a command grant lives for the
+		// protocol maximum License issues (entitlement.MaxUpgradeGrantLifetime). Installed hosts
+		// keep it (10m up to p83) and earlier binaries still require it after a rollback.
 		controlUpgradeActivationTimeoutEnv,
 		controlUpgradeObservationWindowEnv,
 		controlUpgradeHealthIntervalEnv,
@@ -143,7 +146,6 @@ type controlUpgradeRuntimeConfig struct {
 	EdgeSigningKeyID             string
 	EdgeSigningPrivateKeyFile    string
 	CommandIssuanceTTL           time.Duration
-	ExecutionTTL                 time.Duration
 	ActivationTimeout            time.Duration
 	ObservationWindow            time.Duration
 	HealthInterval               time.Duration
@@ -314,10 +316,6 @@ func loadControlUpgradeRuntimeConfigFromEnv(environment []string) (controlUpgrad
 		time.Minute, 7*24*time.Hour); err != nil {
 		return controlUpgradeRuntimeConfig{}, err
 	}
-	if config.ExecutionTTL, err = controlUpgradeDuration(values, controlUpgradeExecutionTTLEnv,
-		time.Minute, 24*time.Hour); err != nil {
-		return controlUpgradeRuntimeConfig{}, err
-	}
 	if config.ActivationTimeout, err = controlUpgradeDuration(values, controlUpgradeActivationTimeoutEnv,
 		time.Second, 30*time.Minute); err != nil {
 		return controlUpgradeRuntimeConfig{}, err
@@ -376,8 +374,7 @@ func loadControlUpgradeRuntimeConfigFromEnv(environment []string) (controlUpgrad
 		}
 		config.DownloadRootCAFile = root
 	}
-	if config.ExecutionTTL > config.CommandIssuanceTTL ||
-		config.HealthInterval > config.ObservationWindow ||
+	if config.HealthInterval > config.ObservationWindow ||
 		config.HealthInterval > config.ActivationTimeout ||
 		config.ProbeTimeout > config.ActivationTimeout ||
 		config.ShutdownTimeout < config.NATSDrainTimeout {
@@ -612,7 +609,7 @@ func openControlUpgradeProductionRuntime(ctx context.Context, cfg config.Config,
 	rolloutRuntime, err := controlupgrade.NewRolloutRuntime(controlupgrade.RolloutRuntimeConfig{
 		License: license, LicenseKeys: commandKeys, CommandGrantKeys: commandKeys, SignerRevocation: trust,
 		ControlSigner: controlSigner, EdgeSigner: edgeSigner, InstallationID: installationID,
-		CommandIssuanceTTL: runtimeConfig.CommandIssuanceTTL, ExecutionTTL: runtimeConfig.ExecutionTTL,
+		CommandIssuanceTTL: runtimeConfig.CommandIssuanceTTL,
 		Profiles: controlupgrade.RolloutProfilePolicy{
 			ActivationTimeout: runtimeConfig.ActivationTimeout, ObservationWindow: runtimeConfig.ObservationWindow,
 			HealthInterval: runtimeConfig.HealthInterval, ProbeTimeout: runtimeConfig.ProbeTimeout,
@@ -801,12 +798,19 @@ func (runtime *controlUpgradeProductionRuntime) runReceiptDispatcher(ctx context
 }
 
 func (runtime *controlUpgradeProductionRuntime) runDispatcher(ctx context.Context) error {
+	var nextRetract time.Time
 	for {
 		count, err := runtime.dispatcher.DispatchOnce(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		runtime.setDispatchError(err)
+		// Cancelled plans' unconfirmed commands leave the stream; failures are logged and retried here
+		// without touching dispatch health.
+		if now := time.Now(); !now.Before(nextRetract) {
+			_, _ = runtime.dispatcher.RetractCancelledOnce(ctx)
+			nextRetract = now.Add(controlUpgradeRetractInterval)
+		}
 		delay := controlUpgradeIdlePoll
 		if err != nil {
 			delay = controlUpgradeTransientBackoff

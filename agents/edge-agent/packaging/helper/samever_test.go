@@ -206,3 +206,37 @@ func TestJournalSameVersionOnlyForV3UpgradeAboveInstalled(t *testing.T) {
 		t.Fatal("same-version legacy record must be corrupt")
 	}
 }
+
+// A node installed by the legacy protocol at release 124, so its current receipt
+// is schema 1 and its sequence is the release sequence. The helper keeps one ratchet
+// across protocols: the first v3 execution_sequence must exceed that legacy sequence.
+// The license service numbered the node's first v3 attempts from 1 (exec 3), and the helper
+// refused the same-version re-release 124 -> 136 without staging anything.
+func TestServiceFirstV3PrepareMustExceedLegacyReceiptSequence(t *testing.T) {
+	fixture, runner := newRereleaseFixture(t)
+	fixture.installRelease(fixture.release(124, "1.0.35"), true)
+	baseline := fixture.current()
+	if baseline.SchemaVersion != 1 || baseline.ReleaseSequence != 124 {
+		t.Fatalf("legacy baseline = %#v", baseline)
+	}
+	rerelease := fixture.release(136, "1.0.35")
+	refused := fixture.prepareV3("txn-node-exec-3", 3, protocol.ActionUpgrade, rerelease, baseline)
+	if refused.OK || refused.ErrorCode != protocol.ErrorTransactionConflict {
+		t.Fatalf("exec 3 over legacy 124 = %#v, want transaction conflict", refused)
+	}
+	entries, err := os.ReadDir(filepath.Join(fixture.paths.StateDirectory, "transactions"))
+	if err != nil || len(entries) != 0 || runner.upgradeCalls != 0 {
+		t.Fatalf("refused prepare left state: entries=%v err=%v upgrades=%d", entries, err, runner.upgradeCalls)
+	}
+	if inspect := fixture.handle(func() protocol.Request {
+		request := fixture.inspectRequest("txn-node-exec-3")
+		request.ProtocolVersion = protocol.JournalV3Version
+		return request
+	}(), nil); !inspect.OK || inspect.TransactionStatus == nil || inspect.TransactionStatus.Phase != "unknown" {
+		t.Fatalf("inspect after refusal = %#v, want phase unknown", inspect)
+	}
+	active := fixture.activateV3("txn-node-exec-125", 125, protocol.ActionUpgrade, rerelease, baseline)
+	if active.ReleaseSequence != 136 || active.CurrentVersion != "1.0.35" {
+		t.Fatalf("exec 125 re-release = %#v", active)
+	}
+}

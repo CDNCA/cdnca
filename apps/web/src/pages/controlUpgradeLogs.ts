@@ -53,7 +53,7 @@ export function masterUpgradeLogLines(status: NativeUpgradeStatus, mt: Translate
 }
 
 const eventKeys: Record<string, MessageKey> = {
-  start: 'logEventStart', pause: 'logEventPause', resume: 'logEventResume', rollback: 'logEventRollback',
+  start: 'logEventStart', pause: 'logEventPause', resume: 'logEventResume', rollback: 'logEventRollback', cancel: 'logEventCancel',
   health_failed: 'logEventHealthFailed', health_succeeded: 'logEventHealthSucceeded', outcome_uncertain: 'logEventOutcomeUncertain',
 }
 const receiptKeys: Record<string, MessageKey> = {

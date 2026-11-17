@@ -505,7 +505,7 @@ func openIdentityVerificationProductionRuntime(
 	}
 	var issuerRuntime *identityVerificationIssuerRuntime
 	issuerRuntime, err = openIdentityVerificationIssuerRuntime(ctx, dependencies.Pool, providerEnvironment,
-		dependencies.Clock, source)
+		dependencies.Clock, source, settings)
 	if err != nil {
 		source.Close()
 		if !nilRuntimeDependency(kycProvider) {

@@ -340,7 +340,7 @@ func TestScanForwardProjectsPublicationFailureCode(t *testing.T) {
 	requestID := uuid.New()
 	internalState, terminal := "failed", "node_artifacts_syncing"
 	item, err := scanForward(valuesScanner{
-		uuid.New(), "1", uuid.New(), nil, nil, nil, nil, uuid.New(), uuid.New(), "edge stream", "", ProtocolTCP, "*", uint16(18080),
+		uuid.New(), "1", uuid.New(), nil, nil, nil, nil, new(uuid.New()), uuid.New(), "edge stream", "", ProtocolTCP, "*", uint16(18080),
 		"192.0.2.10", "", uint16(8080), []byte(`{}`), []byte(`{}`), 1000, 30000, 100, false, false, false, []string(nil), 0, 0, 0, false, false, uint16(0), false, nil,
 		nil, false, ACLActionAllow, nil, AdminStatusNormal, nil, nil, nil, nil, nil,
 		BalanceWayRoundRobin, true, int64(1), now, now, "owner", nil,

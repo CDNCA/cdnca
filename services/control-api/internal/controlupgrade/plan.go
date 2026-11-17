@@ -26,6 +26,10 @@ var (
 	ErrStalePlanRevision       = errors.New("stale control upgrade rollout revision")
 	ErrPlanNodeNotActive       = errors.New("control upgrade rollout node is not active")
 	ErrStaleStatusEvidence     = errors.New("control upgrade rollout status evidence is stale")
+
+	// ErrPlanCancelNodesStarted refuses cancelling a paused plan once a node claimed its command (or
+	// accepted one that has not expired): the node may be installing.
+	ErrPlanCancelNodesStarted = errors.New("control upgrade rollout has nodes that started the upgrade")
 )
 
 var planReasonPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,95}$`)
@@ -47,6 +51,9 @@ const (
 	PlanRollingBack PlanState = "rolling_back"
 	PlanCompleted   PlanState = "completed"
 	PlanFailed      PlanState = "failed"
+	// PlanCancelled ends a queued plan that was never started, or a paused
+	// plan none of whose nodes started installing.
+	PlanCancelled PlanState = "cancelled"
 )
 
 type PlanAction string
@@ -56,6 +63,7 @@ const (
 	PlanPauseAction PlanAction = "pause"
 	PlanResume      PlanAction = "resume"
 	PlanRollback    PlanAction = "rollback"
+	PlanCancel      PlanAction = "cancel"
 )
 
 type PlanNodeState string
@@ -89,6 +97,12 @@ type PlanTarget struct {
 	NodeID          string
 	AgentVersion    string
 	ProtocolVersion uint32
+	// ReceiptSequence (0 = unknown or a plan created before it) is the highest
+	// sequence control knew the node's helper receipt holds when the plan was created: the
+	// installed release_sequence it reports (a schema-1 receipt counts it) or the
+	// execution_sequence of its last v3 command. Frozen in the plan so a retried command
+	// grant request stays byte-identical; License issues the execution_sequence above it.
+	ReceiptSequence uint64 `json:",omitempty"`
 }
 
 type PlanGroup struct {
@@ -484,6 +498,14 @@ func applyPlanCommandTransition(plan *RolloutPlan, command PlanCommand) (PlanEve
 		if err := beginRollback(plan); err != nil {
 			return PlanEvent{}, err
 		}
+	case PlanCancel:
+		// A queued plan has no command yet. A paused one only while no node has claimed its
+		// command: the store checks the node statuses under the plan lock (ErrPlanCancelNodesStarted).
+		if plan.State != PlanQueued && plan.State != PlanPaused {
+			return PlanEvent{}, ErrInvalidPlanTransition
+		}
+		plan.State = PlanCancelled
+		plan.ResumeState = ""
 	}
 	if !CanPlanTransition(from, plan.State) {
 		return PlanEvent{}, ErrInvalidPlanTransition
@@ -512,9 +534,18 @@ func ApplyPlanHealth(current RolloutPlan, health PlanHealthEvent) (PlanApplyResu
 		if current.State == PlanRollingBack {
 			activeArtifact, lastKnownGoodArtifact = lastKnownGoodArtifact, activeArtifact
 		}
-		if !activeProbeArtifactMatches(activeArtifact, health.ActiveEvidence.ActiveArtifactSHA256) ||
-			!activeProbeArtifactMatches(lastKnownGoodArtifact,
-				health.ActiveEvidence.LastKnownGoodArtifactSHA256) {
+		evidence := health.ActiveEvidence
+		// A re-release plan has no rollback artifact: the node's last known good is the
+		// build it replaced (updater healthGate gets the pre-upgrade receipt digest),
+		// which no node capability reports, so it only has to be another build
+		// (migration 674 checks the same).
+		if current.CurrentReleaseSequence != 0 {
+			if !activeProbeArtifactMatches(activeArtifact, evidence.ActiveArtifactSHA256) ||
+				activeProbeArtifactMatches(activeArtifact, evidence.LastKnownGoodArtifactSHA256) {
+				return PlanApplyResult{}, ErrInvalidPlanEvent
+			}
+		} else if !activeProbeArtifactMatches(activeArtifact, evidence.ActiveArtifactSHA256) ||
+			!activeProbeArtifactMatches(lastKnownGoodArtifact, evidence.LastKnownGoodArtifactSHA256) {
 			return PlanApplyResult{}, ErrInvalidPlanEvent
 		}
 	}
@@ -628,14 +659,15 @@ func shouldBeginAutomaticRollback(plan RolloutPlan) bool {
 func CanPlanTransition(from, to PlanState) bool {
 	switch from {
 	case PlanQueued:
-		return to == PlanCanary
+		return to == PlanCanary || to == PlanCancelled
 	case PlanCanary:
 		return to == PlanCanary || to == PlanRunning || to == PlanPaused ||
 			to == PlanRollingBack || to == PlanCompleted
 	case PlanRunning:
 		return to == PlanRunning || to == PlanPaused || to == PlanRollingBack || to == PlanCompleted
 	case PlanPaused:
-		return to == PlanCanary || to == PlanRunning || to == PlanPaused || to == PlanRollingBack
+		return to == PlanCanary || to == PlanRunning || to == PlanPaused || to == PlanRollingBack ||
+			to == PlanCancelled
 	case PlanRollingBack:
 		return to == PlanRollingBack || to == PlanCompleted || to == PlanFailed
 	case PlanCompleted:
@@ -769,7 +801,8 @@ func validPlanDigest(value string) bool {
 }
 
 func validPlanAction(action PlanAction) bool {
-	return action == PlanStart || action == PlanPauseAction || action == PlanResume || action == PlanRollback
+	return action == PlanStart || action == PlanPauseAction || action == PlanResume || action == PlanRollback ||
+		action == PlanCancel
 }
 
 func derivedPlanID(planID, kind, value string) string {
@@ -887,6 +920,17 @@ func validRolloutPlan(plan RolloutPlan) bool {
 				plan.Completion == CompletionRolledBack && validRolledBackCompletion(plan))
 	case PlanFailed:
 		return plan.ResumeState == "" && plan.Completion == CompletionNone && validRollbackProgress(plan, true)
+	case PlanCancelled:
+		if plan.ResumeState != "" || plan.Completion != CompletionNone || len(plan.RollbackBatches) != 0 {
+			return false
+		}
+		// Cancelled while queued: nothing was dispatched. Cancelled while paused: the forward
+		// progress it was paused with.
+		if plan.ActiveBatch == -1 {
+			return allPlanNodesState(plan.NodeStates, NodePending)
+		}
+		return plan.ActiveBatch < len(plan.Batches) &&
+			validForwardProgress(plan, plan.Batches[plan.ActiveBatch].Canary, true)
 	default:
 		return false
 	}

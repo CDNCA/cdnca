@@ -1430,8 +1430,11 @@ describe('PluginWebhooksPage', () => {
     await user.type(screen.getByLabelText('Name'), 'Billing events')
     await user.type(screen.getByLabelText('Target URL'), 'https://hooks.example.com/cdnca')
     await user.click(screen.getAllByRole('button', { name: 'Create subscription' }).at(-1)!)
-    await user.clear(screen.getByLabelText('Target tenant scope'))
-    await user.type(screen.getByLabelText('Target tenant scope'), alternateScopeID)
+    // Change the target draft while the create is unresolved. When the 503 lands mid-typing, the
+    // Unknown outcome dialog opens and takes focus, so the rest of the keystrokes went to the dialog
+    // (draft "0", seen under load). Set the value directly: this case checks the draft, not typing.
+    fireEvent.change(screen.getByLabelText('Target tenant scope'), { target: { value: alternateScopeID } })
+    expect(screen.getByLabelText('Target tenant scope')).toHaveValue(alternateScopeID)
     expect(screen.getByRole('button', { name: 'Apply target' })).toBeDisabled()
     await retryAfterPermissionRoundTrip('create')
     expect(await screen.findByRole('textbox', { name: 'Secret' })).toHaveValue(createSecret)

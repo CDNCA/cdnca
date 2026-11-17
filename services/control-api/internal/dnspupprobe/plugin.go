@@ -400,7 +400,7 @@ func (service *Service) launch(ctx context.Context, pending pendingRequest, cons
 	if ids == nil {
 		checkpoints, err := service.checkpointsFor(ctx, prober)
 		if err != nil {
-			return service.failRequest(ctx, view, "checkpoints_unavailable", prober.fail("", 0, err))
+			return service.failRequest(ctx, view, "checkpoints_unavailable", prober.fail(nil, err))
 		}
 		for _, picked := range Select(checkpoints, pending.pick, 0) {
 			ids = append(ids, picked.ID)
@@ -417,7 +417,7 @@ func (service *Service) launch(ctx context.Context, pending pendingRequest, cons
 		if errors.As(err, &apiErr) {
 			code = apiErr.Code
 		}
-		failure := prober.fail("", 0, err)
+		failure := prober.fail(nil, err)
 		if errors.Is(failure, ErrRefused) && code == "target_restricted" {
 			failure = ErrTargetRestricted
 		}
@@ -540,7 +540,7 @@ func (service *Service) poll(ctx context.Context, view ProbeRequestView, input P
 				WHERE id=$1`, view.ID, apiErr.Code)
 			return view, err
 		}
-		_ = prober.fail("", 0, err)
+		_ = prober.fail(nil, err)
 		return view, nil
 	}
 	if job.Pending() {

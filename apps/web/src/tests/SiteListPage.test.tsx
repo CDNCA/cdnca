@@ -2571,8 +2571,11 @@ describe('SiteListPage', () => {
       '-bad.example.com',
       'bad_.example.com',
     ]) {
+      // Set the invalid value at once, as the origin loop below does. Typing each value key by key made
+      // this case 3.5 s alone, 12 s in a full run and over the 30 s timeout at load 15;
+      // the typed 'x' below still checks that editing clears the error.
       await user.clear(domainInput)
-      await user.type(domainInput, invalid)
+      fireEvent.change(domainInput, { target: { value: invalid } })
       await user.click(submit)
       expect(within(dialog).getByText('请输入有效的网站域名')).toBeInTheDocument()
       await user.type(domainInput, 'x')

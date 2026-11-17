@@ -143,10 +143,13 @@ describe('OriginAuthRulesPage', () => {
     expect(await screen.findByText(rule.endpoint)).toBeInTheDocument()
     await user.type(screen.getByRole('combobox', { name: '站点 ID' }), siteID)
     await chooseOption(user, '存储提供商', 'S3')
-    await user.click(screen.getByRole('button', { name: '查询' }))
+    // The site ID applies by itself 400 ms after typing. Clicking 查询 here raced that
+    // timer (before it: apply; after it: a refresh that used up the next mocked page), so wait for the
+    // live apply instead, then for its response (下一页 is disabled while the list is fetching).
     await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith('old-origin-token', scopeID, {
       siteID, enabled: undefined, limit: 20, cursor: undefined,
     }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '下一页' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: '下一页' }))
     expect(await screen.findByText('第 2 页')).toBeInTheDocument()
 

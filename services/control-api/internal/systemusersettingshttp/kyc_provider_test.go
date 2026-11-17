@@ -36,3 +36,28 @@ func TestHandlerForwardsKYCProviderFieldsAndObjectKeys(t *testing.T) {
 		t.Fatalf("response=%s", body)
 	}
 }
+
+// The issuer fields travel in value, the server
+// private key is a write-only body field; the response never echoes it.
+func TestHandlerForwardsKYCIssuerFieldsAndPrivateKey(t *testing.T) {
+	const privateKey = "-----BEGIN PRIVATE KEY-----\nplain-issuer-key\n-----END PRIVATE KEY-----"
+	document := settingsDocument(5)
+	document.KYCIssuerServerPrivateKeyConfigured, document.KYCIssuerServerPrivateKeyFingerprint = true, "0123456789abcdef"
+	stub := &serviceStub{document: document}
+	value := systemusersettings.DefaultSettings()
+	value.KYCIssuerEnabled, value.KYCIssuerListenAddress = true, "0.0.0.0:19443"
+	response := httptest.NewRecorder()
+	newTestHandler(t, stub).ServeHTTP(response, putRequest(t, map[string]any{"value": value,
+		"kyc_issuer_server_private_key": privateKey}))
+	if response.Code != http.StatusOK || stub.saved == nil || !stub.saved.Value.KYCIssuerEnabled ||
+		stub.saved.Value.KYCIssuerListenAddress != "0.0.0.0:19443" {
+		t.Fatalf("status=%d request=%#v", response.Code, stub.saved)
+	}
+	if secret := stub.saved.Secrets[systemusersettings.SecretKYCIssuerServerPrivateKey]; secret == nil || *secret != privateKey {
+		t.Fatalf("secrets=%#v", stub.saved.Secrets)
+	}
+	if body := response.Body.String(); strings.Contains(body, "plain-issuer-key") ||
+		!strings.Contains(body, `"kyc_issuer_server_private_key_configured":true`) {
+		t.Fatalf("response=%s", body)
+	}
+}

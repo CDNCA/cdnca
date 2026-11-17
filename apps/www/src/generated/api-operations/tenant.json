@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/tenant/member-invitations",
    "summary": "List the caller's tenant member invitations (pending ones past expiry read expired)",
+   "summary_zh": "列出调用者租户的成员邀请（超过有效期的待接受邀请显示为已过期）",
    "auth": [
     "bearer"
    ],
@@ -34,6 +35,7 @@
    "method": "POST",
    "path": "/v1/tenant/member-invitations",
    "summary": "Email a one-time invitation link (72 hours) to become a read-only sub-account",
+   "summary_zh": "发送一次性邀请链接邮件（72 小时有效），受邀者成为只读子账号",
    "auth": [
     "bearer"
    ],
@@ -108,6 +110,7 @@
    "method": "POST",
    "path": "/v1/tenant/member-invitations/{invitation_id}/revoke",
    "summary": "Withdraw a pending invitation",
+   "summary_zh": "撤回待接受的邀请",
    "auth": [
     "bearer"
    ],
@@ -169,6 +172,7 @@
    "method": "POST",
    "path": "/v1/tenant/members",
    "summary": "Add a sub-account to the caller's tenant scope (tenant_viewer role; grant more with /v1/custom-rbac)",
+   "summary_zh": "在调用者租户范围新增子账号（tenant_viewer 角色，更多权限经 /v1/custom-rbac 授予）",
    "auth": [
     "bearer"
    ],
@@ -273,6 +277,7 @@
    "method": "DELETE",
    "path": "/v1/tenant/members/{user_id}",
    "summary": "Delete a sub-account of the caller's tenant scope",
+   "summary_zh": "删除调用者租户范围的子账号",
    "auth": [
     "bearer"
    ],
@@ -315,6 +320,7 @@
    "method": "PUT",
    "path": "/v1/tenant/members/{user_id}/password-change",
    "summary": "Require (or withdraw) a password change at the member's next sign-in",
+   "summary_zh": "要求（或取消）成员下次登录时修改密码",
    "auth": [
     "bearer"
    ],
@@ -406,6 +412,7 @@
    "method": "POST",
    "path": "/v1/tenant/members/{user_id}/password-reset",
    "summary": "Give a sub-account a generated password (revokes its sessions, requires a change at the next sign-in)",
+   "summary_zh": "为子账号生成新密码（撤销其会话，下次登录须修改密码）",
    "auth": [
     "bearer"
    ],
@@ -483,6 +490,7 @@
    "method": "POST",
    "path": "/v1/tenant/members/{user_id}/resume",
    "summary": "Resume a suspended member",
+   "summary_zh": "恢复已停用的成员",
    "auth": [
     "bearer"
    ],
@@ -556,6 +564,7 @@
    "method": "POST",
    "path": "/v1/tenant/members/{user_id}/suspend",
    "summary": "Suspend a member (revokes its sessions; its sites stop serving, see account_suspension)",
+   "summary_zh": "停用成员（撤销其会话，其网站停止服务，见 account_suspension）",
    "auth": [
     "bearer"
    ],

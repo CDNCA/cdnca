@@ -56,6 +56,14 @@ export interface PlatformSystemUserSettings {
   kyc_object_bucket: string
   kyc_object_prefix: string
   kyc_object_kms_key_id: string
+  /** The evidence issuer (mTLS); ''/false = not set here, the runtime uses IDENTITY_VERIFICATION_ISSUER_*. Certificates are PEM text. */
+  kyc_issuer_enabled: boolean
+  kyc_issuer_listen_address: string
+  kyc_issuer_server_certificate: string
+  kyc_issuer_client_ca: string
+  /** "spiffe-uri|workload-id" pairs separated by commas. */
+  kyc_issuer_workload_identities: string
+  kyc_issuer_kms_endpoint: string
   wechat_payment_enabled: boolean
   alipay_payment_enabled: boolean
   bank_transfer_enabled: boolean
@@ -65,9 +73,9 @@ export interface PlatformSystemUserSettings {
   default_phone_country_code: string
 }
 
-/** Write-only secrets typed on the page: the CAPTCHA ones pair with `<name>_reference`; the KYC ones fall back to IDENTITY_VERIFICATION_KYC_* / _OBJECT_*. */
+/** Write-only secrets typed on the page: the CAPTCHA ones pair with `<name>_reference`; the KYC ones fall back to IDENTITY_VERIFICATION_KYC_* / _OBJECT_* / _ISSUER_*. */
 export const userSettingsSecretNames = ['captcha_secret_id', 'captcha_secret_key', 'captcha_app_secret', 'captcha_turnstile_secret', 'kyc_api_key', 'kyc_callback_hmac_key',
-  'kyc_object_access_key_id', 'kyc_object_secret_access_key', 'kyc_object_session_token'] as const
+  'kyc_object_access_key_id', 'kyc_object_secret_access_key', 'kyc_object_session_token', 'kyc_issuer_server_private_key'] as const
 export type UserSettingsSecretName = typeof userSettingsSecretNames[number]
 export type CaptchaSecretName = 'captcha_secret_id' | 'captcha_secret_key' | 'captcha_app_secret'
 /** A secret to send: undefined keeps the stored one, '' clears it. */
@@ -97,6 +105,8 @@ export interface PlatformSystemUserSettingsDocument {
   kyc_object_secret_access_key_fingerprint?: string
   kyc_object_session_token_configured?: boolean
   kyc_object_session_token_fingerprint?: string
+  kyc_issuer_server_private_key_configured?: boolean
+  kyc_issuer_server_private_key_fingerprint?: string
 }
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -109,6 +119,7 @@ const settingKeys = [
   'captcha_provider', 'captcha_secret_id_reference', 'captcha_secret_key_reference', 'captcha_app_id', 'captcha_app_secret_reference',
   'captcha_turnstile_site_key', 'identity_verification_method', 'enterprise_verification_enabled', 'identity_policy_saved',
   'kyc_provider_name', 'kyc_endpoint', 'kyc_callback_key_id', 'kyc_object_endpoint', 'kyc_object_region', 'kyc_object_bucket', 'kyc_object_prefix', 'kyc_object_kms_key_id',
+  'kyc_issuer_enabled', 'kyc_issuer_listen_address', 'kyc_issuer_server_certificate', 'kyc_issuer_client_ca', 'kyc_issuer_workload_identities', 'kyc_issuer_kms_endpoint',
   'wechat_payment_enabled', 'alipay_payment_enabled', 'bank_transfer_enabled', 'default_recharge_method', 'recharge_restriction',
   'default_phone_country_code',
 ] as const
@@ -116,6 +127,10 @@ const settingKeys = [
 /** The KYC provider fields (plain text, checked by the server on save). */
 export const kycProviderKeys = ['kyc_provider_name', 'kyc_endpoint', 'kyc_callback_key_id', 'kyc_object_endpoint', 'kyc_object_region',
   'kyc_object_bucket', 'kyc_object_prefix', 'kyc_object_kms_key_id'] as const
+
+/** The evidence issuer text fields (the certificates are PEM text). */
+export const kycIssuerKeys = ['kyc_issuer_listen_address', 'kyc_issuer_server_certificate', 'kyc_issuer_client_ca',
+  'kyc_issuer_workload_identities', 'kyc_issuer_kms_endpoint'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -154,7 +169,7 @@ function isSettings(value: unknown, saved: readonly UserSettingsSecretName[] = [
     'email_code_login_enabled', 'sms_code_login_enabled', 'registration_enabled', 'username_required', 'email_required',
     'email_verification_required', 'phone_required', 'phone_verification_required', 'qq_required', 'enterprise_verification_enabled',
     'wechat_payment_enabled', 'alipay_payment_enabled', 'bank_transfer_enabled', 'session_region_check',
-    'identity_policy_saved',
+    'identity_policy_saved', 'kyc_issuer_enabled',
   ] as const
   if (!booleanKeys.every((key) => typeof value[key] === 'boolean')) return false
   if (!Number.isSafeInteger(value.session_ttl_seconds) || Number(value.session_ttl_seconds) < 300 || Number(value.session_ttl_seconds) > 31536000 ||
@@ -168,7 +183,7 @@ function isSettings(value: unknown, saved: readonly UserSettingsSecretName[] = [
     !validText(value.terms_title, 1, 256) || !validText(value.terms_body, 1, 65536) || !validText(value.captcha_app_id, 0, 256) ||
     typeof value.captcha_turnstile_site_key !== 'string' || !/^([A-Za-z0-9_-]{1,256})?$/.test(value.captcha_turnstile_site_key) ||
     !validReference(value.captcha_secret_id_reference) || !validReference(value.captcha_secret_key_reference) || !validReference(value.captcha_app_secret_reference) ||
-    !kycProviderKeys.every((key) => validText(value[key], 0, 512))) return false
+    !kycProviderKeys.every((key) => validText(value[key], 0, 512)) || !kycIssuerKeys.every((key) => validText(value[key], 0, 65536))) return false
   if (!member(value.verification_template_channel, ['email', 'sms']) || !member(value.email_anti_abuse_mode, ['none', 'native', 'tencent', 'geetest_v4']) ||
     !member(value.sms_anti_abuse_mode, ['none', 'native', 'tencent', 'geetest_v4']) || !member(value.captcha_provider, ['tencent', 'geetest_v4']) ||
     !member(value.identity_verification_method, ['none', 'alipay', 'wechat_face', 'phone_three_factor']) ||

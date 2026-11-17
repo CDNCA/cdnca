@@ -263,3 +263,92 @@ type featureSet map[string]bool
 func (set featureSet) ReadValidFeatures(context.Context, pgx.Tx) (map[string]bool, error) {
 	return map[string]bool(set), nil
 }
+
+// TestOriginProbeRunnerSharesDNSPupJobsAcrossSites: three sites on the same
+// three origins (73: several sites on example.com:80) cost one dnspup job per
+// origin URL and round, not one per site; every site still gets its verdict
+// and the origin_failover usage counts the shared jobs once.
+func TestOriginProbeRunnerSharesDNSPupJobsAcrossSites(t *testing.T) {
+	value := newFixture(t, "auto")
+	sites := []uuid.UUID{value.site, uuid.New(), uuid.New()}
+	if err := pgx.BeginFunc(t.Context(), value.pool, func(tx pgx.Tx) error {
+		for index, site := range sites[1:] {
+			if _, err := tx.Exec(t.Context(), `INSERT INTO sites(id,display_id,scope_id,owner_user_id,domain,origins,origin_hosts,
+				created_by_user_id,updated_by_user_id) VALUES($1,$2,$3,$4,$5,
+				ARRAY['192.0.2.10','192.0.2.11','192.0.2.12'],ARRAY['192.0.2.10','192.0.2.11','192.0.2.12'],$4,$4)`,
+				site, index+2, value.scope, value.owner, "twin"+string(rune('a'+index))+".example.test"); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(t.Context(), `INSERT INTO site_origin_pools(site_id,failback_mode,health_check_path)
+				VALUES($1,'auto','/healthz')`, site); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(t.Context(), `INSERT INTO site_origins(site_id,position,host,port,level)
+				VALUES($1,1,'192.0.2.10',80,0),($1,2,'192.0.2.11',80,1),($1,3,'192.0.2.12',80,2)`, site); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec(t.Context(), `UPDATE site_origin_pools SET request_host_mode='origin' WHERE site_id=ANY($1)`, sites)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fake, server := dnspuptest.New()
+	defer server.Close()
+	fake.Do(func(s *dnspuptest.Server) {
+		s.PollsUntilDone = 0
+		s.Answer = func(request dnspuptest.ProbeRequest) []dnspuptest.Result {
+			status := 200
+			if strings.Contains(request.Target, "192.0.2.10") {
+				status = 502
+			}
+			return []dnspuptest.Result{{NodeID: "a", Region: "广东", ISP: "电信", Status: "ok", HTTPStatus: status},
+				{NodeID: "b", Region: "北京", ISP: "联通", Status: "ok", HTTPStatus: status}}
+		}
+	})
+	cipher, err := dnsacme.NewAESGCMCredentialCipher("dnspup-probe-runner-kek", bytes.Repeat([]byte{0x21}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := dnspupprobe.New(dnspupprobe.Config{Pool: value.pool, Cipher: cipher,
+		Features: featureSet{dnspupprobe.Feature: true}, Now: func() time.Time { return value.now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealedID, sealed, err := cipher.Encrypt([]byte("cdnca-probe-dnspup-secret/v1\x00" + fake.Secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := value.pool.Exec(t.Context(), `UPDATE probe_dnspup_settings SET enabled=true,base_url=$1,api_key=$2,
+		secret_key_id=$3,secret_ciphertext=$4,secret_fingerprint='0123456789abcdef',revision=1,updated_at=$5`,
+		server.URL, fake.APIKey, sealedID, sealed, value.now); err != nil {
+		t.Fatal(err)
+	}
+	controller := &countingController{}
+	runner := originfailover.NewRunner(value.pool, value.store, controller, nil, nil).WithSources(source.Runtime)
+	for round := range 3 {
+		value.now = value.now.Add(30 * time.Second)
+		if err := runner.RunOnce(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		// 3 origin URLs per round, shared by the 3 sites.
+		if fake.Creates != 3*(round+1) {
+			t.Fatalf("round %d: creates %d, want %d", round, fake.Creates, 3*(round+1))
+		}
+	}
+	if controller.probed != 0 {
+		t.Fatalf("controller probed %d", controller.probed)
+	}
+	for _, site := range sites {
+		status, err := value.service.PoolStatus(t.Context(), site)
+		if err != nil || status.Origins[0].Status != "unhealthy" || status.Origins[0].Reason != "status_5xx" ||
+			status.Origins[1].Status != "healthy" || status.ActiveLevel != 1 {
+			t.Fatalf("site %s status %+v %v", site, status, err)
+		}
+	}
+	var used int
+	if err := value.pool.QueryRow(t.Context(), `SELECT COALESCE(sum(requests),0) FROM probe_dnspup_usage
+		WHERE purpose='origin_failover'`).Scan(&used); err != nil || used != 9 || fake.MonthlyUsed != 9 {
+		t.Fatalf("usage %d (%v) dnspup used %d, want 9", used, err, fake.MonthlyUsed)
+	}
+}

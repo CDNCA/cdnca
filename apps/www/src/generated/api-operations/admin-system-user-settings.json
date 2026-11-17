@@ -119,6 +119,15 @@
       {
        "name": "kyc_object_session_token_fingerprint",
        "type": "string"
+      },
+      {
+       "name": "kyc_issuer_server_private_key_configured",
+       "type": "boolean",
+       "description": "The private key of the evidence issuer's server certificate entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_issuer_server_private_key_fingerprint",
+       "type": "string"
       }
      ]
     },
@@ -236,6 +245,12 @@
       "type": "string",
       "description": "Optional session token of temporary object store credentials, otherwise like WriteOnlySecret; replaces IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN, which stays the fallback.",
       "description_zh": "选填，对象存储临时凭据的 Session Token，其余同 WriteOnlySecret；替换 IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN，未保存时沿用该环境变量。"
+     },
+     {
+      "name": "kyc_issuer_server_private_key",
+      "type": "string",
+      "description": "PEM private key (one PRIVATE KEY, EC PRIVATE KEY or RSA PRIVATE KEY block; line breaks allowed, no carriage returns or surrounding whitespace) of the evidence issuer's server certificate, otherwise like WriteOnlySecret; refused as invalid_format when it does not parse, and as invalid when sent with a value.kyc_issuer_server_certificate it does not match. Replaces the file named by IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_PRIVATE_KEY_FILE, which stays the fallback; a change applies without restarting the control plane.",
+      "description_zh": "证据签发端服务端证书的 PEM 私钥（一个 PRIVATE KEY、EC PRIVATE KEY 或 RSA PRIVATE KEY 块；允许换行，不含回车与首尾空白），其余同 WriteOnlySecret；无法解析时以 invalid_format 拒绝，与同时提交的 value.kyc_issuer_server_certificate 不配对时以 invalid 拒绝。替换 IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_PRIVATE_KEY_FILE 指向的文件，未保存时沿用该文件；修改后无需重启控制面即生效。"
      }
     ]
    },
@@ -343,6 +358,15 @@
       },
       {
        "name": "kyc_object_session_token_fingerprint",
+       "type": "string"
+      },
+      {
+       "name": "kyc_issuer_server_private_key_configured",
+       "type": "boolean",
+       "description": "The private key of the evidence issuer's server certificate entered on the settings page is stored encrypted (never returned)."
+      },
+      {
+       "name": "kyc_issuer_server_private_key_fingerprint",
        "type": "string"
       }
      ]
