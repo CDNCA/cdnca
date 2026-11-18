@@ -18,6 +18,15 @@ func TestEndpointScope(t *testing.T) {
 		{"", "BGP", ""},
 		{"广东", "电信/联通", ""}, // ambiguous carriers stay on the default line only
 		{"", "", ""},
+		// Region text naming a macro area (marketprobe.Region): an area off the
+		// mainland is overseas; global and east_asia also cover the mainland,
+		// so they say nothing and the carrier decides.
+		{"东南亚", "", "overseas"},
+		{"europe", "电信", "overseas"},
+		{"全球", "电信", "telecom"},
+		{"global", "BGP", ""},
+		{"东亚", "", ""},
+		{"east_asia", "移动", "mobile"},
 	} {
 		if got := EndpointScope(item.region, item.carrier); got != item.want {
 			t.Errorf("EndpointScope(%q,%q)=%q, want %q", item.region, item.carrier, got, item.want)
@@ -26,12 +35,12 @@ func TestEndpointScope(t *testing.T) {
 }
 
 func TestPlanGroupsEndpointsByLine(t *testing.T) {
-	sets := Plan([]Endpoint{
+	sets := Plan("aliyun", []Endpoint{
 		{Address: "192.0.2.2", Carrier: "电信"}, {Address: "192.0.2.1", Carrier: "telecom"},
 		{Address: "2001:db8::1", Carrier: "电信"}, {Address: "192.0.2.1", Carrier: "电信"},
 		{Address: "198.51.100.1", Region: "日本"}, {Address: "203.0.113.1", Carrier: "BGP"},
 	})
-	if len(sets) != len(Scopes) {
+	if len(sets) != len(planScopes("aliyun")) {
 		t.Fatalf("every scope must be planned: %v", sets)
 	}
 	if !slices.Equal(sets["telecom"].A, []string{"192.0.2.1", "192.0.2.2"}) ||
@@ -43,7 +52,7 @@ func TestPlanGroupsEndpointsByLine(t *testing.T) {
 	}
 
 	// NET-02：同一 IP 挂在多条运营商线路上，每条线路各写一份，不被合并。
-	shared := Plan([]Endpoint{
+	shared := Plan("aliyun", []Endpoint{
 		{Address: "192.0.2.9", Carrier: "电信"}, {Address: "192.0.2.9", Carrier: "联通"},
 		{Address: "192.0.2.9", Carrier: "移动"}, {Address: "192.0.2.9"},
 	})
@@ -80,13 +89,13 @@ func TestLineWeightsKeepEachCarrier(t *testing.T) {
 		{Carrier: "中国电信", Address: "192.0.2.8"}: 10, {Carrier: "电信", Address: "192.0.2.8"}: 40,
 	}
 	// 同一线路两种写法的运营商指向同一地址时取运营商最小者（"中国电信" < "电信"）。
-	if got := LineWeights(endpoints, "telecom", weights); !maps.Equal(got, map[string]uint32{"192.0.2.9": 70, "192.0.2.8": 10}) {
+	if got := LineWeights("aliyun", endpoints, "telecom", weights); !maps.Equal(got, map[string]uint32{"192.0.2.9": 70, "192.0.2.8": 10}) {
 		t.Fatalf("telecom = %v", got)
 	}
-	if got := LineWeights(endpoints, "unicom", weights); !maps.Equal(got, map[string]uint32{"192.0.2.9": 20}) {
+	if got := LineWeights("aliyun", endpoints, "unicom", weights); !maps.Equal(got, map[string]uint32{"192.0.2.9": 20}) {
 		t.Fatalf("unicom = %v", got)
 	}
-	if got := LineWeights(endpoints, "mobile", weights); len(got) != 0 {
+	if got := LineWeights("aliyun", endpoints, "mobile", weights); len(got) != 0 {
 		t.Fatalf("mobile = %v", got)
 	}
 }

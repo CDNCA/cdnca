@@ -334,6 +334,9 @@ func (s *Service) run(ctx context.Context, siteID uuid.UUID, revision int64, cfg
 			lr.State, lr.Error, ok = "failed", err.Error(), false
 		case !reply.OK:
 			lr.State, lr.Blockers, lr.Error, ok = "blocked", reply.Blockers, reply.Error, false
+			if hint := areaRefusalHint(cfg, reply); hint != nil {
+				lr.Blockers = hint
+			}
 		case reply.Digest != result.Digest:
 			lr.State, lr.Error, ok = "failed", "leaf normalized the config differently", false
 		default:

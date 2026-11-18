@@ -27,8 +27,9 @@ var (
 	ErrPlanNodeNotActive       = errors.New("control upgrade rollout node is not active")
 	ErrStaleStatusEvidence     = errors.New("control upgrade rollout status evidence is stale")
 
-	// ErrPlanCancelNodesStarted refuses cancelling a paused plan once a node claimed its command (or
-	// accepted one that has not expired): the node may be installing.
+	// ErrPlanCancelNodesStarted refuses cancelling a paused plan while a node may be installing: its
+	// command is accepted and unexpired, or claimed and not final within the grace after the grant
+	// expired (pausedPlanNodesStartedTx).
 	ErrPlanCancelNodesStarted = errors.New("control upgrade rollout has nodes that started the upgrade")
 )
 
@@ -499,8 +500,8 @@ func applyPlanCommandTransition(plan *RolloutPlan, command PlanCommand) (PlanEve
 			return PlanEvent{}, err
 		}
 	case PlanCancel:
-		// A queued plan has no command yet. A paused one only while no node has claimed its
-		// command: the store checks the node statuses under the plan lock (ErrPlanCancelNodesStarted).
+		// A queued plan has no command yet. A paused one only while no node may be installing:
+		// the store checks the node statuses under the plan lock (ErrPlanCancelNodesStarted).
 		if plan.State != PlanQueued && plan.State != PlanPaused {
 			return PlanEvent{}, ErrInvalidPlanTransition
 		}

@@ -138,8 +138,10 @@ func TestProvinceCarrierLineFullTable(t *testing.T) {
 			}
 			seen[code] = line
 		}
-		if len(seen) != 5+93 {
-			t.Fatalf("%s has %d codes, want 98", provider, len(seen))
+		// 5 basic + 93 province + macro-area lines (Aliyun 27, Huawei/DNS.LA 6).
+		areas := map[string]int{providerAliyun: 27, providerHuawei: 6, providerDNSLA: 6}[provider]
+		if len(seen) != 5+93+areas {
+			t.Fatalf("%s has %d codes, want %d", provider, len(seen), 5+93+areas)
 		}
 	}
 }

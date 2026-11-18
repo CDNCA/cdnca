@@ -449,6 +449,30 @@ describe('NodeMarketPage', () => {
     expect(within(await row('peak')).getByText('0.80 元 / Mbps / 天')).toBeInTheDocument()
   })
 
+  // A macro area picked from the ten of libs/geoarea goes to the market as area=
+  // (the market filters the serving nodes' countries, before paging).
+  it('filters by macro area on the market', async () => {
+    const fetchMock = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>(async (path) => {
+      if (path === '/v1/admin/market/member') return json({ id: 'm', display_name: 'me', status: 'active', features: [], offers_quota: 3 })
+      if (path.startsWith('/v1/admin/market/offers')) return json({ items: [{ ...offer, node_count: 3, node_regions: ['hk', 'us', 'jp'] }] })
+      return json({ error: 'not_found' }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<NodeMarketPage />)
+    fireEvent.click(await screen.findByRole('tab', { name: '浏览与购买' }))
+    await screen.findByText('HK BGP')
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '大区' }))
+    const options = [...document.querySelectorAll('.ant-select-item-option')].map((o) => o.textContent)
+    // 全球, then each continent as a group (the whole continent, then its regions).
+    expect(options.slice(0, 4)).toEqual(['全球', '亚洲（全部）', '东亚', '东南亚'])
+    expect([...document.querySelectorAll('.ant-select-item-group')].map((g) => g.textContent)[0]).toBe('亚洲')
+    fireEvent.click(await screen.findByTitle('东南亚'))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/v1/admin/market/offers?area=southeast_asia&limit=50', expect.anything()))
+    // Country/text region stays and combines with the area.
+    fireEvent.change(screen.getByLabelText('地区'), { target: { value: 'sg' } })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/v1/admin/market/offers?area=southeast_asia&region=sg&limit=50', expect.anything()))
+  })
+
   // C17: the catalogue pages on the market's keyset cursor; filters restart at page 1.
   it('pages the catalogue with the market cursor and restarts on a new filter', async () => {
     const second = { ...offer, id: '66666666-6666-4666-8666-666666666666', name: 'SG BGP' }

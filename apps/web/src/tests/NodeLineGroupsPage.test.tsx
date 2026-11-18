@@ -149,7 +149,7 @@ describe('NodeLineGroupsPage', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url.startsWith('/v1/regions')) {
-        return Promise.resolve(json({ count: 1, data: [{ id: '1', name: '默认区域', code: 'region-1', country_code: '', province_code: '', description: '', l2_check_port: 80,
+        return Promise.resolve(json({ count: 1, data: [{ id: '1', name: '默认区域', code: 'region-1', area_code: '', country_code: '', province_code: '', description: '', l2_check_port: 80,
           sort: 100, revision: 1, created_at: '2026-10-22T02:41:17Z', updated_at: '2026-10-22T02:41:17Z' }] }))
       }
       if (init?.method === 'POST') {

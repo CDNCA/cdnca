@@ -12,6 +12,7 @@ const region: RegionRecord = {
   id: '1',
   name: '默认',
   code: 'default',
+  area_code: '',
   country_code: '',
   province_code: '',
   description: '默认区域',
@@ -148,7 +149,7 @@ describe('NodeRegionManagement', () => {
 
     const createCall = fetchSpy.mock.calls.find(([url, init]) => String(url) === '/v1/regions' && init?.method === 'POST')!
     expect(createCall[1]).toMatchObject({
-      body: JSON.stringify({ name: '华南', country_code: 'CN', province_code: '440000', description: '华南节点', l2_check_port: 80, sort: 100 }),
+      body: JSON.stringify({ name: '华南', area_code: '', country_code: 'CN', province_code: '440000', description: '华南节点', l2_check_port: 80, sort: 100 }),
       headers: expect.objectContaining({ 'Idempotency-Key': expect.stringMatching(/^create-region-/) }),
     })
 
@@ -175,6 +176,65 @@ describe('NodeRegionManagement', () => {
     expect(deleteCall[1]?.headers).toEqual(expect.objectContaining({
       'If-Match': '"2"', 'Idempotency-Key': expect.stringMatching(/^delete-region-2-/),
     }))
+  })
+
+  it('sets a macro area or a country as the geography, never both', async () => {
+    authenticate(['nodes.read', 'nodes.manage', 'regions.read', 'regions.manage'])
+    let rows: RegionRecord[] = [region]
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url.startsWith('/v1/nodes')) return Promise.resolve(json({ items: [] }))
+      if (url.startsWith('/v1/regions?')) return Promise.resolve(json({ count: rows.length, data: rows }))
+      if (url === '/v1/regions' && method === 'POST') {
+        const created = { ...region, ...JSON.parse(String(init?.body)), id: '2', revision: 1 }
+        rows = [...rows, created]
+        return Promise.resolve(json(created, 201))
+      }
+      if (url === '/v1/regions/2' && method === 'PATCH') {
+        const updated = { ...rows[1]!, ...JSON.parse(String(init?.body)), revision: 2 }
+        rows = [rows[0]!, updated]
+        return Promise.resolve(json(updated))
+      }
+      throw new Error(`unexpected request ${method} ${url}`)
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+    await openRegions(user)
+    await screen.findByText('默认区域')
+
+    await user.click(screen.getByRole('button', { name: '新增区域' }))
+    const createDialog = await screen.findByRole('dialog', { name: '新增区域' })
+    await user.type(within(createDialog).getByPlaceholderText('请输入区域名称'), '东南亚节点')
+    await user.click(within(createDialog).getByRole('radio', { name: '大区' }))
+    expect(within(createDialog).queryByRole('combobox', { name: '国家/地区' })).not.toBeInTheDocument()
+    await user.click(within(createDialog).getByRole('combobox', { name: '大区' }))
+    // 全球, then each continent as a group (the whole continent first, then its regions)
+    await screen.findByTitle('全球')
+    expect([...document.querySelectorAll('.ant-select-item-option')].map((option) => option.getAttribute('title')).slice(0, 4)).toEqual([
+      '全球', '亚洲（全部）', '东亚', '东南亚',
+    ])
+    expect(document.querySelector('.ant-select-item-group')?.textContent).toBe('亚洲')
+    await user.click(await screen.findByTitle('东南亚'))
+    await user.click(within(createDialog).getByRole('button', { name: '确定' }))
+    const southeastRow = (await screen.findByText('东南亚节点')).closest('tr')!
+    expect(within(southeastRow).getByText('亚洲 / 东南亚')).toBeInTheDocument()
+    const createCall = fetchSpy.mock.calls.find(([url, init]) => String(url) === '/v1/regions' && init?.method === 'POST')!
+    expect(JSON.parse(String(createCall[1]?.body))).toMatchObject({ name: '东南亚节点', area_code: 'southeast_asia', country_code: '', province_code: '' })
+
+    // switching to a country clears the area
+    await user.click(within(southeastRow).getByRole('button', { name: '编辑' }))
+    const editDialog = await screen.findByRole('dialog', { name: '编辑区域' })
+    expect(within(editDialog).getByRole('radio', { name: '大区' })).toBeChecked()
+    await user.click(within(editDialog).getByRole('radio', { name: '国家/地区' }))
+    await user.click(within(editDialog).getByRole('combobox', { name: '国家/地区' }))
+    await user.type(within(editDialog).getByRole('combobox', { name: '国家/地区' }), 'SG')
+    await user.click(await screen.findByTitle('新加坡 (SG)'))
+    await user.click(within(editDialog).getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([url, init]) => String(url) === '/v1/regions/2' && init?.method === 'PATCH')).toBe(true))
+    const updateCall = fetchSpy.mock.calls.find(([url, init]) => String(url) === '/v1/regions/2' && init?.method === 'PATCH')!
+    expect(JSON.parse(String(updateCall[1]?.body))).toMatchObject({ area_code: '', country_code: 'SG', province_code: '' })
   })
 
   it('retries an unknown create with the exact same body and idempotency key', async () => {

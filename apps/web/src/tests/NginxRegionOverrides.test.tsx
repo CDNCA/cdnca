@@ -45,7 +45,7 @@ function node(id: string, name: string, ipv4: string, displayID: string, admin_s
 }
 
 function region(id: string, name: string, sort: number): RegionRecord {
-  return { id, name, code: `region-${id}`, country_code: '', province_code: '', description: '', l2_check_port: 80, sort, revision: 1, created_at: '', updated_at: '' }
+  return { id, name, code: `region-${id}`, area_code: '', country_code: '', province_code: '', description: '', l2_check_port: 80, sort, revision: 1, created_at: '', updated_at: '' }
 }
 
 function authenticate() {

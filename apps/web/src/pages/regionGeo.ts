@@ -1,3 +1,4 @@
+import { geoAreas } from '../api/geoAreas'
 import { provinceNames } from './analyticsRankLabels'
 
 // ISO 3166-1 alpha-2 country codes (249, the officially assigned set) and the
@@ -47,10 +48,63 @@ export function provinceOptions(locale: string): GeoOption[] {
   }))
 }
 
-/** "中国 / 广东" style display of a region geography, '' when unset. */
-export function geoLabel(country: string, province: string, locale: string): string {
+const zh = (locale: string) => locale.startsWith('zh')
+
+/** Area (libs/geoarea: global, a continent or a region) display name, '' for an unknown code. */
+export function areaName(code: string, locale: string): string {
+  const area = geoAreas.find((item) => item.code === code)
+  return area ? (zh(locale) ? area.name_zh : area.name_en) : ''
+}
+
+/** "亚洲 / 东南亚" for a region, the name alone for a continent or global, '' for an unknown code. */
+export function areaPath(code: string, locale: string): string {
+  const area = geoAreas.find((item) => item.code === code)
+  if (!area) return ''
+  return area.parent ? `${areaName(area.parent, locale)} / ${areaName(code, locale)}` : areaName(code, locale)
+}
+
+export interface GeoOptionGroup { label: string; options: GeoOption[] }
+
+/**
+ * Two-level area options for a Select: global, then one group per continent
+ * holding the whole continent ("亚洲（全部）") and its regions, in libs/geoarea
+ * order. prefix is put before every value (the node list filter's "area:").
+ */
+export function areaOptions(locale: string, prefix = ''): (GeoOption | GeoOptionGroup)[] {
+  const out: (GeoOption | GeoOptionGroup)[] = []
+  for (const area of geoAreas) {
+    const name = areaName(area.code, locale)
+    if (area.level === 'global') out.push({ value: prefix + area.code, label: name })
+    if (area.level === 'continent') {
+      out.push({ label: name, options: [{ value: prefix + area.code, label: zh(locale) ? `${name}（全部）` : `All of ${name}` }] })
+    }
+    const group = out[out.length - 1]
+    if (area.level === 'region' && group && 'options' in group) group.options.push({ value: prefix + area.code, label: name })
+  }
+  return out
+}
+
+/**
+ * Whether a region lies in the area: its own area is in it (the same area, a
+ * region of that continent, anything for global), or its country is one of
+ * the area's (a continent's countries are its regions' union; global: any).
+ */
+export function regionInArea(area: string, region: { area_code: string; country_code: string }): boolean {
+  const found = geoAreas.find((item) => item.code === area)
+  if (!found) return false
+  if (region.area_code) {
+    const own = geoAreas.find((item) => item.code === region.area_code)
+    return Boolean(own && (own.code === area || area === 'global' || own.parent === area))
+  }
+  if (!region.country_code) return false
+  return found.code === 'global' || found.countries.includes(region.country_code)
+}
+
+/** "亚洲 / 东南亚" or "中国 / 广东" style display of a region geography, '' when unset. */
+export function geoLabel(area: string, country: string, province: string, locale: string): string {
+  if (area) return areaPath(area, locale) || area
   if (!country) return ''
   const name = countryLabel(country, locale)
   const p = provinceNames[province]
-  return p ? `${name} / ${locale.startsWith('zh') ? p.zh : p.en}` : name
+  return p ? `${name} / ${zh(locale) ? p.zh : p.en}` : name
 }

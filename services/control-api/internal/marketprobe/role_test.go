@@ -83,6 +83,7 @@ func TestClassifySaysWhyNodesAreLeftOut(t *testing.T) {
 	capable := capabilities(t, agentv1.CapabilityName_CAPABILITY_NAME_MARKET_PROBE)
 	old := capabilities(t, agentv1.CapabilityName_CAPABILITY_NAME_NODE_MONITORING)
 	ready, legacy, probeOnly, private, noRegion, noCarrier := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	area := uuid.New()
 	addr := netip.MustParseAddr
 	join := role(roleJoinMarket)
 	nodes, excluded := classify([]candidate{
@@ -92,6 +93,8 @@ func TestClassifySaysWhyNodesAreLeftOut(t *testing.T) {
 		{NodeID: private, Address: addr("10.0.0.1"), Region: "CN", Carrier: "电信", Capabilities: capable, Role: join},
 		{NodeID: private, Address: addr("10.0.0.2"), Region: "CN", Carrier: "电信", Capabilities: capable, Role: join},
 		{NodeID: noRegion, Address: addr("8.8.4.4"), Region: "华南", Carrier: "移动", Capabilities: capable, Role: join},
+		// The market takes countries only (market-service region codes), an area is unmapped.
+		{NodeID: area, Address: addr("8.8.4.5"), Region: "东南亚", Carrier: "", Capabilities: capable, Role: join},
 		// A node whose IP 归属 is region CN with no carrier.
 		{NodeID: noCarrier, Address: addr("11.0.0.118"), Region: "CN", Carrier: "", Capabilities: capable, Role: join},
 	})
@@ -103,6 +106,7 @@ func TestClassifySaysWhyNodesAreLeftOut(t *testing.T) {
 		probeOnly: {NodeID: probeOnly, Reason: ReasonNotJoinMarket},
 		private:   {NodeID: private, Reason: ReasonAddressNotPublic, Value: "10.0.0.1"},
 		noRegion:  {NodeID: noRegion, Reason: ReasonRegionUnmapped, Value: "华南"},
+		area:      {NodeID: area, Reason: ReasonRegionUnmapped, Value: "东南亚"},
 		noCarrier: {NodeID: noCarrier, Reason: ReasonCarrierUnmapped, Value: ""},
 	}
 	if len(excluded) != len(want) {

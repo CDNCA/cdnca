@@ -105,18 +105,27 @@ func TestCompileOriginRoutes(t *testing.T) {
 		t.Fatalf("routes = %+v %q", routes, blocked)
 	}
 	// Node regions are carried as their standard geography; a region
-	// without a country (or not in the catalog) refuses.
+	// without a country or an area (or not in the catalog) refuses. A macro
+	// area region goes as NodeGeo.Area, after the countries.
 	geos := map[string]regioncatalog.CodeGeo{
 		"cn-south": {Code: "cn-south", CountryCode: "CN", ProvinceCode: "440000"},
 		"us":       {Code: "us", CountryCode: "US"},
 		"hk-dup":   {Code: "hk-dup", CountryCode: "US"},
 		"bare":     {Code: "bare"},
+		"asia-se":  {Code: "asia-se", AreaCode: "southeast_asia"},
+		"eu":       {Code: "eu", AreaCode: "europe"},
 	}
 	doc.Routes[0].NodeRegions = []string{"us", "cn-south", "hk-dup"}
 	routes, blocked = compileOriginRoutes(doc, geos)
 	if want := []siteconf.NodeGeo{{Country: "CN", Province: "440000"}, {Country: "US"}}; blocked != "" ||
 		!reflect.DeepEqual(routes.Routes[0].NodeGeos, want) {
 		t.Fatalf("geos = %+v %q", routes, blocked)
+	}
+	doc.Routes[0].NodeRegions = []string{"asia-se", "us", "eu", "asia-se"}
+	routes, blocked = compileOriginRoutes(doc, geos)
+	if want := []siteconf.NodeGeo{{Country: "US"}, {Area: "europe"}, {Area: "southeast_asia"}}; blocked != "" ||
+		!reflect.DeepEqual(routes.Routes[0].NodeGeos, want) {
+		t.Fatalf("area geos = %+v %q", routes, blocked)
 	}
 	for _, regions := range [][]string{{"bare"}, {"us", "gone"}} {
 		doc.Routes[0].NodeRegions = regions

@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig/sched302"
+	"github.com/cdnca/cdnca/libs/geoarea"
 	"github.com/cdnca/cdnca/services/control-api/internal/marketprobe"
 	"github.com/google/uuid"
 )
@@ -146,7 +147,7 @@ func Digest(table sched302.Table) [sha256.Size]byte {
 // and, on the mainland, a GB/T 2260 province code (0 when not a province).
 func Region(raw string) (string, uint32) {
 	code, ok := marketprobe.Region(raw)
-	if !ok {
+	if !ok || geoarea.Valid(code) { // an area is no country; the node table carries ISO countries only
 		return "", 0
 	}
 	country := strings.ToUpper(code)

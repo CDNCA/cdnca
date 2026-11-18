@@ -491,7 +491,7 @@ func classify(candidates []candidate) ([]marketclient.PoolNode, []Excluded) {
 		}
 		seen[c.NodeID] = true
 		delete(private, c.NodeID)
-		region, okRegion := Region(c.Region)
+		region, okRegion := MarketRegion(c.Region)
 		carrier, okCarrier := MarketCarrier(region, c.Carrier)
 		if !okRegion {
 			excluded = append(excluded, Excluded{NodeID: c.NodeID, Reason: ReasonRegionUnmapped, Value: c.Region})

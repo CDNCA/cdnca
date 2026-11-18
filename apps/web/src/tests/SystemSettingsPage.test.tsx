@@ -800,7 +800,7 @@ describe('SystemSettingsPage', () => {
     value.overrides = []
     vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(defaultsDocument(2, value))
     // 区域来自区域目录（nginx-region：不再允许手填任意文本）
-    vi.spyOn(regionsApi, 'list').mockResolvedValue({ count: 1, data: [{ id: '7', name: 'east', code: 'east', country_code: '', province_code: '', description: '', l2_check_port: 80, sort: 1, revision: 1, created_at: '', updated_at: '' }] })
+    vi.spyOn(regionsApi, 'list').mockResolvedValue({ count: 1, data: [{ id: '7', name: 'east', code: 'east', area_code: '', country_code: '', province_code: '', description: '', l2_check_port: 80, sort: 1, revision: 1, created_at: '', updated_at: '' }] })
     vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [] })
     const user = userEvent.setup()
 

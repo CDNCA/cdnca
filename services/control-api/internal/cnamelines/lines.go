@@ -3,8 +3,10 @@
 // published node address (cnameallocation); each non-default line holds the
 // published endpoints whose carrier (电信/联通/移动) or region (outside the
 // mainland -> 境外) map to it, so a visitor on a carrier line is answered
-// with that carrier's nodes. A provider without the line, a package-mode
-// owner and a line the aggregated edge schedules are left alone.
+// with that carrier's nodes. An endpoint of a macro-area region (大区,
+// libs/geoarea) holds the line its area resolves to at the provider
+// (AreaScope). A provider without the line, a package-mode owner and a line
+// the aggregated edge schedules are left alone.
 package cnamelines
 
 import (
@@ -20,26 +22,75 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/marketprobe"
 )
 
-// Line scopes (the aggregated edge's names) and their unified DNS line.
+// Line scopes (the aggregated edge's names) and their unified DNS line. The
+// macro-area scopes are the geoarea codes of every continent and region
+// (dnsproviderremote.AreaCodes), each standing for the area's own line.
 var lineScopes = map[string]string{
 	"telecom": dnsproviderremote.LineTelecom, "unicom": dnsproviderremote.LineUnicom,
 	"mobile": dnsproviderremote.LineMobile, "overseas": dnsproviderremote.LineOverseas,
 }
 
-// Scopes lists the non-default line scopes in a fixed order.
+func init() {
+	for _, area := range dnsproviderremote.AreaCodes() {
+		lineScopes[area], _ = dnsproviderremote.AreaOwnLine(area)
+	}
+}
+
+// Scopes lists the non-default carrier/overseas line scopes in a fixed order.
 var Scopes = []string{"telecom", "unicom", "mobile", "overseas"}
 
-// Endpoint is one published line-group endpoint.
+// Endpoint is one published line-group endpoint. Area is the geoarea code of
+// the endpoint's region when the region is a macro area ("" otherwise).
 type Endpoint struct {
-	Address, Region, Carrier string
+	Address, Region, Carrier, Area string
+}
+
+// AreaScope is the line scope that holds the endpoints of a macro area at the
+// provider: the area's own line, its continent or "overseas" when the
+// provider only has a line above it, "" (default line only) for global, a provider
+// without lines and an unknown code.
+func AreaScope(providerType, area string) string {
+	line, ok := dnsproviderremote.AreaLine(providerType, area)
+	if !ok {
+		return ""
+	}
+	for scope, known := range lineScopes {
+		if known == line {
+			return scope
+		}
+	}
+	return ""
+}
+
+// scope is the line an endpoint stands for at the provider: its area's line
+// when it has an area, else EndpointScope.
+func (endpoint Endpoint) scope(providerType string) string {
+	if endpoint.Area != "" {
+		return AreaScope(providerType, endpoint.Area)
+	}
+	return EndpointScope(endpoint.Region, endpoint.Carrier)
+}
+
+// planScopes are Scopes plus every area scope the provider resolves to.
+func planScopes(providerType string) []string {
+	scopes := slices.Clone(Scopes)
+	for _, area := range dnsproviderremote.AreaCodes() {
+		if scope := AreaScope(providerType, area); scope != "" && !slices.Contains(scopes, scope) {
+			scopes = append(scopes, scope)
+		}
+	}
+	return scopes
 }
 
 // EndpointScope is the line an endpoint stands for: its carrier on the
-// mainland (or with no region), overseas for a region outside the mainland,
-// "" for BGP / multi-line / unknown carriers (default line only).
+// mainland (or with no region, or a region naming an area that also covers
+// the mainland: global, east_asia), overseas for a region outside the
+// mainland, "" for BGP / multi-line / unknown carriers (default line only).
 func EndpointScope(region, carrier string) string {
-	if code, ok := marketprobe.Region(region); ok && code != "cn" {
-		return "overseas"
+	if code, ok := marketprobe.Region(region); ok {
+		if overseas, known := marketprobe.Overseas(code); known && overseas {
+			return "overseas"
+		}
 	}
 	code, ok := marketprobe.Carrier(carrier)
 	if !ok || code == "bgp" {
@@ -66,16 +117,17 @@ func (set Set) Digest(ttl uint32, weights map[string]uint32) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Plan groups endpoints by line scope. Every scope of Scopes is present
-// (possibly empty: the line then holds no record and falls back to the
-// default line's answer).
-func Plan(endpoints []Endpoint) map[string]Set {
-	sets := make(map[string]Set, len(Scopes))
-	for _, scope := range Scopes {
+// Plan groups endpoints by line scope at the provider. Every scope of Scopes
+// and every area scope the provider resolves to is present (possibly empty:
+// the line then holds no record and falls back to the default line's answer).
+func Plan(providerType string, endpoints []Endpoint) map[string]Set {
+	scopes := planScopes(providerType)
+	sets := make(map[string]Set, len(scopes))
+	for _, scope := range scopes {
 		sets[scope] = Set{A: []string{}, AAAA: []string{}}
 	}
 	for _, endpoint := range endpoints {
-		scope := EndpointScope(endpoint.Region, endpoint.Carrier)
+		scope := endpoint.scope(providerType)
 		address, err := netip.ParseAddr(endpoint.Address)
 		if scope == "" || err != nil {
 			continue
@@ -104,12 +156,13 @@ func Plan(endpoints []Endpoint) map[string]Set {
 // carrier, so one IP on several carrier lines keeps each line's weight. When
 // several endpoints of the line share an address (carrier spellings that map
 // to the same line), the smallest carrier wins so the result is stable.
-func LineWeights(endpoints []Endpoint, scope string, weights map[cnameallocation.WeightKey]uint32) map[string]uint32 {
+func LineWeights(providerType string, endpoints []Endpoint, scope string,
+	weights map[cnameallocation.WeightKey]uint32) map[string]uint32 {
 	result := map[string]uint32{}
 	chosen := map[string]string{}
 	for _, endpoint := range endpoints {
 		address, err := netip.ParseAddr(endpoint.Address)
-		if err != nil || EndpointScope(endpoint.Region, endpoint.Carrier) != scope {
+		if err != nil || endpoint.scope(providerType) != scope {
 			continue
 		}
 		weight, ok := weights[cnameallocation.WeightKey{Carrier: endpoint.Carrier, Address: endpoint.Address}]

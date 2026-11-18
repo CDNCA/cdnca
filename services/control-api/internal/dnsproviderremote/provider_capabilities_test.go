@@ -88,14 +88,17 @@ func basicLines() []string {
 }
 
 func TestSupportedLinesFollowCapabilityAndMappings(t *testing.T) {
+	// Macro-area lines (area_lines.go): all of them, or the continents only.
+	areas, continents := areaLines(), []string{LineAsia, LineEurope, LineNorthAmerica, LineSouthAmerica, LineAfrica, LineOceania}
+	with := func(lines ...[]string) []string { return slices.Concat(append([][]string{basicLines()}, lines...)...) }
 	want := map[string][]string{
-		providerAliyun:     append(basicLines(), provinceLines()...),
+		providerAliyun:     with(areas, provinceLines()),
 		providerCloudflare: {LineDefault},
-		providerHuawei:     append(basicLines(), provinceLines()...),
-		providerDNSPodCN:   append(basicLines(), provinceLines()...),
+		providerHuawei:     with(continents, provinceLines()),
+		providerDNSPodCN:   with(areas, provinceLines()),
 		// Provider-level; the plan tier narrows it (TestDNSComPlanTierLines).
-		providerDNSCom:     {LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas},
-		providerDNSLA:      append(basicLines(), provinceLines()...),
+		providerDNSCom:     with(continents),
+		providerDNSLA:      with(continents, provinceLines()),
 		providerNameCom:    {LineDefault},
 		providerClouDNS:    {LineDefault},
 		providerNamecheap:  {LineDefault},

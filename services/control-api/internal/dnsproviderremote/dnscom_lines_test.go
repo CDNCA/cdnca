@@ -135,12 +135,12 @@ func TestDNSComPlanTierLines(t *testing.T) {
 			t.Fatalf("DNSComPlanLines(%q) = %d lines, want %d", tier.plan, got, tier.lines)
 		}
 	}
-	// Enterprise lines are DNS.COM's own: no other adapter writes them and
-	// the unified line set (cnamelines, aggregated edge) is unchanged.
+	// Enterprise lines are DNS.COM's own: no other adapter writes them. The
+	// continent lines among them are also the macro-area lines (area_lines.go).
 	if writableLine(providerAliyun, "华南") || writableLine(providerCustomHTTP, "华南") {
 		t.Fatal("an enterprise DNS.COM line is writable on another provider")
 	}
-	if got := SupportedLines(providerDNSCom); len(got) != 5 {
+	if got := SupportedLines(providerDNSCom); len(got) != 11 {
 		t.Fatalf("SupportedLines(dns_com) = %v", got)
 	}
 }

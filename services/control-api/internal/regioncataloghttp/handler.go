@@ -43,6 +43,7 @@ type Handler struct {
 
 type regionBody struct {
 	Name         string `json:"name"`
+	AreaCode     string `json:"area_code"`
 	CountryCode  string `json:"country_code"`
 	ProvinceCode string `json:"province_code"`
 	Description  string `json:"description"`
@@ -127,7 +128,7 @@ func (handler *Handler) collection(
 			return
 		}
 		result, replayed, err := handler.catalog.Create(request.Context(), actor, regioncatalog.CreateRequest{
-			Name: body.Name, CountryCode: body.CountryCode, ProvinceCode: body.ProvinceCode, Description: body.Description,
+			Name: body.Name, AreaCode: body.AreaCode, CountryCode: body.CountryCode, ProvinceCode: body.ProvinceCode, Description: body.Description,
 			L2CheckPort: body.L2CheckPort, Sort: body.Sort, IdempotencyKey: key, RequestID: requestID,
 		})
 		if err != nil {
@@ -182,7 +183,7 @@ func (handler *Handler) item(
 			return
 		}
 		result, replayed, err := handler.catalog.Update(request.Context(), actor, regioncatalog.UpdateRequest{
-			ID: id, ExpectedRevision: revision, Name: body.Name, CountryCode: body.CountryCode,
+			ID: id, ExpectedRevision: revision, Name: body.Name, AreaCode: body.AreaCode, CountryCode: body.CountryCode,
 			ProvinceCode: body.ProvinceCode, Description: body.Description, L2CheckPort: body.L2CheckPort, Sort: body.Sort, IdempotencyKey: key, RequestID: requestID,
 		})
 		if err != nil {

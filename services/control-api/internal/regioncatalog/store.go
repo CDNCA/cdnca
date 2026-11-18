@@ -62,7 +62,7 @@ func (store *Store) List(ctx context.Context, actor Actor, request ListRequest) 
 		limit, offset = request.PageSize, (request.Page-1)*request.PageSize
 	}
 	escapedSearch := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(search)
-	rows, err := store.database.Query(ctx, `SELECT display_id::text,name,code,country_code,province_code,description,l2_check_port,
+	rows, err := store.database.Query(ctx, `SELECT display_id::text,name,code,area_code,country_code,province_code,description,l2_check_port,
 		sort_order,revision,created_at,updated_at,count(*) OVER()
 		FROM region_catalog
 		WHERE platform_scope_id=$1 AND ($2='' OR name ILIKE '%'||$2||'%' ESCAPE '\' OR
@@ -76,7 +76,7 @@ func (store *Store) List(ctx context.Context, actor Actor, request ListRequest) 
 	result := Page{Data: []Region{}}
 	for rows.Next() {
 		var item Region
-		if err := rows.Scan(&item.ID, &item.Name, &item.Code, &item.CountryCode, &item.ProvinceCode, &item.Description, &item.L2CheckPort, &item.Sort,
+		if err := rows.Scan(&item.ID, &item.Name, &item.Code, &item.AreaCode, &item.CountryCode, &item.ProvinceCode, &item.Description, &item.L2CheckPort, &item.Sort,
 			&item.Revision, &item.CreatedAt, &item.UpdatedAt, &result.Count); err != nil {
 			return Page{}, ErrUnavailable
 		}
@@ -99,7 +99,7 @@ func (store *Store) Get(ctx context.Context, actor Actor, id string) (Region, er
 	if store == nil || store.database == nil {
 		return Region{}, ErrUnavailable
 	}
-	rows, err := store.database.Query(ctx, `SELECT display_id::text,name,code,country_code,province_code,description,l2_check_port,
+	rows, err := store.database.Query(ctx, `SELECT display_id::text,name,code,area_code,country_code,province_code,description,l2_check_port,
 		sort_order,revision,created_at,updated_at
 		FROM region_catalog WHERE platform_scope_id=$1 AND display_id=$2`, actor.ScopeID, displayID)
 	if err != nil {
@@ -113,7 +113,7 @@ func (store *Store) Get(ctx context.Context, actor Actor, id string) (Region, er
 		return Region{}, ErrNotFound
 	}
 	var result Region
-	if err := rows.Scan(&result.ID, &result.Name, &result.Code, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort,
+	if err := rows.Scan(&result.ID, &result.Name, &result.Code, &result.AreaCode, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort,
 		&result.Sort, &result.Revision, &result.CreatedAt, &result.UpdatedAt); err != nil {
 		return Region{}, ErrUnavailable
 	}
@@ -130,29 +130,30 @@ func (store *Store) Create(ctx context.Context, actor Actor, request CreateReque
 		return Region{}, false, err
 	}
 	if ctx == nil || !validRegionInput(request.Name, request.Description, request.L2CheckPort, request.Sort) ||
-		!ValidGeo(request.CountryCode, request.ProvinceCode) ||
+		!ValidGeo(request.AreaCode, request.CountryCode, request.ProvinceCode) ||
 		!validMetadata(request.IdempotencyKey) || !validMetadata(request.RequestID) {
 		return Region{}, false, ErrInvalidInput
 	}
 	digest := requestDigest(struct {
 		ScopeID     uuid.UUID `json:"scope_id"`
 		Name        string    `json:"name"`
+		Area        string    `json:"area_code"`
 		Country     string    `json:"country_code"`
 		Province    string    `json:"province_code"`
 		Description string    `json:"description"`
 		Port        int       `json:"l2_check_port"`
 		Sort        int       `json:"sort"`
-	}{actor.ScopeID, request.Name, request.CountryCode, request.ProvinceCode, request.Description, request.L2CheckPort, request.Sort})
+	}{actor.ScopeID, request.Name, request.AreaCode, request.CountryCode, request.ProvinceCode, request.Description, request.L2CheckPort, request.Sort})
 	var result Region
 	replayed, err := store.write(ctx, actor, createOperation, request.IdempotencyKey, digest, func(tx pgx.Tx) error {
 		if err := tx.QueryRow(ctx, `INSERT INTO region_catalog(
-			id,platform_scope_id,name,description,l2_check_port,sort_order,country_code,province_code,
+			id,platform_scope_id,name,description,l2_check_port,sort_order,country_code,province_code,area_code,
 			revision,created_at,updated_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,1,clock_timestamp(),clock_timestamp())
-			RETURNING display_id::text,name,code,country_code,province_code,description,l2_check_port,sort_order,revision,created_at,updated_at`,
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,1,clock_timestamp(),clock_timestamp())
+			RETURNING display_id::text,name,code,area_code,country_code,province_code,description,l2_check_port,sort_order,revision,created_at,updated_at`,
 			uuid.New(), actor.ScopeID, request.Name, request.Description, request.L2CheckPort, request.Sort,
-			request.CountryCode, request.ProvinceCode).Scan(
-			&result.ID, &result.Name, &result.Code, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort, &result.Sort,
+			request.CountryCode, request.ProvinceCode, request.AreaCode).Scan(
+			&result.ID, &result.Name, &result.Code, &result.AreaCode, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort, &result.Sort,
 			&result.Revision, &result.CreatedAt, &result.UpdatedAt); err != nil {
 			return mapDatabaseError(err)
 		}
@@ -170,7 +171,7 @@ func (store *Store) Update(ctx context.Context, actor Actor, request UpdateReque
 	}
 	if ctx == nil || !validID || request.ExpectedRevision < 1 ||
 		!validRegionInput(request.Name, request.Description, request.L2CheckPort, request.Sort) ||
-		!ValidGeo(request.CountryCode, request.ProvinceCode) ||
+		!ValidGeo(request.AreaCode, request.CountryCode, request.ProvinceCode) ||
 		!validMetadata(request.IdempotencyKey) || !validMetadata(request.RequestID) {
 		return Region{}, false, ErrInvalidInput
 	}
@@ -179,12 +180,13 @@ func (store *Store) Update(ctx context.Context, actor Actor, request UpdateReque
 		ID       int64     `json:"id"`
 		Version  int64     `json:"version"`
 		Name     string    `json:"name"`
+		Area     string    `json:"area_code"`
 		Country  string    `json:"country_code"`
 		Province string    `json:"province_code"`
 		Notes    string    `json:"description"`
 		Port     int       `json:"l2_check_port"`
 		Sort     int       `json:"sort"`
-	}{actor.ScopeID, displayID, request.ExpectedRevision, request.Name, request.CountryCode, request.ProvinceCode,
+	}{actor.ScopeID, displayID, request.ExpectedRevision, request.Name, request.AreaCode, request.CountryCode, request.ProvinceCode,
 		request.Description, request.L2CheckPort, request.Sort})
 	var result Region
 	replayed, err := store.write(ctx, actor, updateOperation, request.IdempotencyKey, digest, func(tx pgx.Tx) error {
@@ -196,12 +198,12 @@ func (store *Store) Update(ctx context.Context, actor Actor, request UpdateReque
 			return ErrRevisionConflict
 		}
 		if err := tx.QueryRow(ctx, `UPDATE region_catalog SET name=$3,description=$4,l2_check_port=$5,
-			sort_order=$6,country_code=$7,province_code=$8,revision=revision+1,updated_at=clock_timestamp()
+			sort_order=$6,country_code=$7,province_code=$8,area_code=$9,revision=revision+1,updated_at=clock_timestamp()
 			WHERE platform_scope_id=$1 AND display_id=$2
-			RETURNING display_id::text,name,code,country_code,province_code,description,l2_check_port,sort_order,revision,created_at,updated_at`,
+			RETURNING display_id::text,name,code,area_code,country_code,province_code,description,l2_check_port,sort_order,revision,created_at,updated_at`,
 			actor.ScopeID, displayID, request.Name, request.Description, request.L2CheckPort, request.Sort,
-			request.CountryCode, request.ProvinceCode).Scan(
-			&result.ID, &result.Name, &result.Code, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort, &result.Sort,
+			request.CountryCode, request.ProvinceCode, request.AreaCode).Scan(
+			&result.ID, &result.Name, &result.Code, &result.AreaCode, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort, &result.Sort,
 			&result.Revision, &result.CreatedAt, &result.UpdatedAt); err != nil {
 			return mapDatabaseError(err)
 		}
@@ -350,10 +352,10 @@ func claimWrite(
 
 func lockRegion(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, displayID int64) (Region, error) {
 	var result Region
-	err := tx.QueryRow(ctx, `SELECT display_id::text,name,code,country_code,province_code,description,l2_check_port,sort_order,
+	err := tx.QueryRow(ctx, `SELECT display_id::text,name,code,area_code,country_code,province_code,description,l2_check_port,sort_order,
 		revision,created_at,updated_at FROM region_catalog
 		WHERE platform_scope_id=$1 AND display_id=$2 FOR UPDATE`, scopeID, displayID).Scan(
-		&result.ID, &result.Name, &result.Code, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort, &result.Sort,
+		&result.ID, &result.Name, &result.Code, &result.AreaCode, &result.CountryCode, &result.ProvinceCode, &result.Description, &result.L2CheckPort, &result.Sort,
 		&result.Revision, &result.CreatedAt, &result.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Region{}, ErrNotFound
@@ -375,12 +377,14 @@ func appendAudit(
 	payload := map[string]any{
 		"display_id":    current.ID,
 		"name":          current.Name,
+		"area_code":     current.AreaCode,
 		"country_code":  current.CountryCode,
 		"province_code": current.ProvinceCode,
 		"revision":      current.Revision,
 	}
 	if previous != nil {
 		payload["previous_name"] = previous.Name
+		payload["previous_area_code"] = previous.AreaCode
 		payload["previous_country_code"] = previous.CountryCode
 		payload["previous_province_code"] = previous.ProvinceCode
 		payload["previous_revision"] = previous.Revision

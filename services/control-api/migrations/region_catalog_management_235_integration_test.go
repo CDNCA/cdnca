@@ -32,14 +32,15 @@ func TestRegionCatalogManagement235StoreCRUDIdempotencyAndAudit(t *testing.T) {
 	}
 
 	created, replayed, err := store.Create(t.Context(), actor, regioncatalog.CreateRequest{
-		Name: "华南", Description: "主区域", L2CheckPort: 8080, Sort: 9,
+		Name: "华南", AreaCode: "southeast_asia", Description: "主区域", L2CheckPort: 8080, Sort: 9,
 		IdempotencyKey: "region-create-store", RequestID: "region-create-store-request",
 	})
-	if err != nil || replayed || created.ID == "" || created.Revision != 1 || created.Sort != 9 {
+	if err != nil || replayed || created.ID == "" || created.Revision != 1 || created.Sort != 9 ||
+		created.AreaCode != "southeast_asia" {
 		t.Fatalf("create region=%+v replayed=%v error=%v", created, replayed, err)
 	}
 	replayedCreate, replayed, err := store.Create(t.Context(), actor, regioncatalog.CreateRequest{
-		Name: "华南", Description: "主区域", L2CheckPort: 8080, Sort: 9,
+		Name: "华南", AreaCode: "southeast_asia", Description: "主区域", L2CheckPort: 8080, Sort: 9,
 		IdempotencyKey: "region-create-store", RequestID: "region-create-store-request",
 	})
 	if err != nil || !replayed || !sameRegion235(replayedCreate, created) {
@@ -59,10 +60,11 @@ func TestRegionCatalogManagement235StoreCRUDIdempotencyAndAudit(t *testing.T) {
 		t.Fatalf("stale update error=%v", err)
 	}
 	updated, replayed, err := store.Update(t.Context(), actor, regioncatalog.UpdateRequest{
-		ID: created.ID, ExpectedRevision: 1, Name: "华南二", Description: "更新",
+		ID: created.ID, ExpectedRevision: 1, Name: "华南二", CountryCode: "CN", Description: "更新",
 		L2CheckPort: 443, Sort: 8, IdempotencyKey: "region-update-store", RequestID: "region-update-store-request",
 	})
-	if err != nil || replayed || updated.Revision != 2 || updated.Name != "华南二" || updated.L2CheckPort != 443 {
+	if err != nil || replayed || updated.Revision != 2 || updated.Name != "华南二" || updated.L2CheckPort != 443 ||
+		updated.AreaCode != "" || updated.CountryCode != "CN" {
 		t.Fatalf("update region=%+v replayed=%v error=%v", updated, replayed, err)
 	}
 
@@ -346,9 +348,10 @@ func assertRegionCatalogManagement235Code(t *testing.T, err error, want string) 
 // concern, see TestRegionCatalogCode528).
 func addRegionCatalogCode528Column(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	// The store also reads/writes the geo codes of migration 576.
+	// The store also reads/writes the geo codes of migrations 576 and 678.
 	if _, err := pool.Exec(t.Context(), `ALTER TABLE region_catalog ADD COLUMN code text NOT NULL DEFAULT '',
-		ADD COLUMN country_code text NOT NULL DEFAULT '', ADD COLUMN province_code text NOT NULL DEFAULT ''`); err != nil {
+		ADD COLUMN country_code text NOT NULL DEFAULT '', ADD COLUMN province_code text NOT NULL DEFAULT '',
+		ADD COLUMN area_code text NOT NULL DEFAULT ''`); err != nil {
 		t.Fatal(err)
 	}
 }

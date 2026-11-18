@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cdnca/cdnca/libs/geoarea"
 	"github.com/cdnca/cdnca/libs/marketproto/pluginkind"
 )
 
@@ -49,6 +50,17 @@ var (
 	page       = map[string]*regexp.Regexp{"cursor": cursorValue, "limit": limitValue}
 )
 
+// areaValue accepts exactly the libs/geoarea macro area codes.
+var areaValue = regexp.MustCompile(`^(` + strings.Join(areaCodes(), "|") + `)$`)
+
+func areaCodes() []string {
+	out := make([]string, len(geoarea.Areas))
+	for i, area := range geoarea.Areas {
+		out[i] = area.Code
+	}
+	return out
+}
+
 func with(base map[string]*regexp.Regexp, extra map[string]*regexp.Regexp) map[string]*regexp.Regexp {
 	out := map[string]*regexp.Regexp{}
 	for k, v := range base {
@@ -64,7 +76,7 @@ var memberRoutes = map[string]memberRoute{
 	// Existing node market (docs/marketplace).
 	"GET /v1/admin/market/member": {upstream: "/v1/members/me", access: accessBrowse},
 	"GET /v1/admin/market/offers": {upstream: "/v1/offers", access: accessBrowse, query: map[string]*regexp.Regexp{
-		"mine": oneValue, "region": textValue, "carrier": textValue, "billing_model": tokenValue,
+		"mine": oneValue, "region": textValue, "area": areaValue, "carrier": textValue, "billing_model": tokenValue,
 		"max_price": amountValue, "min_score": scoreValue, "settlement_mode": regexp.MustCompile(`^(direct|escrow)$`),
 		"cursor": cursorValue, "limit": limitValue}},
 	"POST /v1/admin/market/offers": {upstream: "/v1/offers", access: accessSell},

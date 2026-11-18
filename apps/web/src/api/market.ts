@@ -641,7 +641,8 @@ export interface MarketSlaPolicy {
 export interface MarketSelectionLimits { max_unit_price_minor: number | null; min_quality_score: number | null }
 export type RenewalPricePolicy = 'always' | 'if_lesser' | 'if_lesser_or_equal' | 'if_equal' | 'never'
 export interface PluginFilters { q?: string; kind?: MarketPluginKind; price?: 'free' | 'paid'; sort?: 'popular' | 'newest' | 'name'; allVersions?: boolean; cursor?: string; appliesTo?: 'user' | 'site'; limit?: number }
-export interface OfferFilters { region?: string; carrier?: string; billing_model?: string; max_price?: number; min_score?: number; settlement_mode?: 'direct' | 'escrow' }
+// area: a libs/geoarea macro area code; global lists every offer.
+export interface OfferFilters { region?: string; area?: string; carrier?: string; billing_model?: string; max_price?: number; min_score?: number; settlement_mode?: 'direct' | 'escrow' }
 export type OrderInput =
   | { market: 'plugin'; price_plan_id: string; plan_revision: number; trial?: boolean }
   | { market: 'node'; offer_id: string; offer_revision: number; settlement_mode: 'direct' | 'escrow'; quantity?: number }

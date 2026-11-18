@@ -33,15 +33,18 @@ func TestListRejectsInvalidOrNonPlatformActorsBeforeDatabaseAccess(t *testing.T)
 }
 
 func TestValidGeo(t *testing.T) {
-	for _, ok := range [][2]string{{"", ""}, {"CN", ""}, {"CN", "440000"}, {"CN", "810000"}, {"US", ""}, {"HK", ""}} {
-		if !ValidGeo(ok[0], ok[1]) {
-			t.Errorf("%q/%q refused", ok[0], ok[1])
+	for _, ok := range [][3]string{{"", "", ""}, {"", "CN", ""}, {"", "CN", "440000"}, {"", "CN", "810000"}, {"", "US", ""},
+		{"", "HK", ""}, {"southeast_asia", "", ""}, {"global", "", ""}, {"africa", "", ""},
+		{"asia", "", ""}, {"oceania", "", ""}, {"northern_europe", "", ""}, {"caribbean", "", ""}} {
+		if !ValidGeo(ok[0], ok[1], ok[2]) {
+			t.Errorf("%q/%q/%q refused", ok[0], ok[1], ok[2])
 		}
 	}
-	for _, bad := range [][2]string{{"", "440000"}, {"cn", ""}, {"CHN", ""}, {"ZZ", ""}, {"EU", ""}, {"US", "440000"},
-		{"CN", "440300"}, {"CN", "990000"}, {"CN", "44000"}} {
-		if ValidGeo(bad[0], bad[1]) {
-			t.Errorf("%q/%q accepted", bad[0], bad[1])
+	for _, bad := range [][3]string{{"", "", "440000"}, {"", "cn", ""}, {"", "CHN", ""}, {"", "ZZ", ""}, {"", "EU", ""},
+		{"", "US", "440000"}, {"", "CN", "440300"}, {"", "CN", "990000"}, {"", "CN", "44000"},
+		{"antarctica", "", ""}, {"Europe", "", ""}, {"europe", "DE", ""}, {"east_asia", "CN", "440000"}, {"east_asia", "", "440000"}} {
+		if ValidGeo(bad[0], bad[1], bad[2]) {
+			t.Errorf("%q/%q/%q accepted", bad[0], bad[1], bad[2])
 		}
 	}
 }
@@ -57,6 +60,18 @@ func TestWritesRefuseInvalidGeo(t *testing.T) {
 	if _, _, err := NewStore(nil).Update(context.Background(), actor, UpdateRequest{ID: "1", ExpectedRevision: 1, Name: "华南",
 		L2CheckPort: 80, CountryCode: "cn", IdempotencyKey: "k1", RequestID: "r1"}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("update error = %v", err)
+	}
+	if _, _, err := NewStore(nil).Create(context.Background(), actor, CreateRequest{Name: "东南亚", L2CheckPort: 80,
+		AreaCode: "southeast_asia", CountryCode: "SG", IdempotencyKey: "k1", RequestID: "r1"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("area+country create error = %v", err)
+	}
+	if _, _, err := NewStore(nil).Update(context.Background(), actor, UpdateRequest{ID: "1", ExpectedRevision: 1, Name: "大洋洲",
+		L2CheckPort: 80, AreaCode: "antarctica", IdempotencyKey: "k1", RequestID: "r1"}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unknown area update error = %v", err)
+	}
+	if _, _, err := NewStore(nil).Create(context.Background(), actor, CreateRequest{Name: "东南亚", L2CheckPort: 80,
+		AreaCode: "southeast_asia", IdempotencyKey: "k1", RequestID: "r1"}); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("valid area create error = %v (want the database to be reached)", err)
 	}
 	if _, _, err := NewStore(nil).Create(context.Background(), actor, CreateRequest{Name: "华南", L2CheckPort: 80,
 		CountryCode: "CN", ProvinceCode: "440000", IdempotencyKey: "k1", RequestID: "r1"}); !errors.Is(err, ErrUnavailable) {
@@ -80,7 +95,7 @@ func TestValidGeoAcceptsTheWebCountryList(t *testing.T) {
 		t.Fatalf("%d codes", len(codes))
 	}
 	for _, code := range codes {
-		if !ValidGeo(code, "") {
+		if !ValidGeo("", code, "") {
 			t.Errorf("%s refused", code)
 		}
 	}

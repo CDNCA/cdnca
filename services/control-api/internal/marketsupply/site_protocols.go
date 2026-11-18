@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/cdnca/cdnca/libs/geoarea"
 	"github.com/cdnca/cdnca/libs/marketproto/grant"
 	"github.com/cdnca/cdnca/libs/marketproto/siteconf"
 	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
@@ -95,18 +96,59 @@ func originRouteDocument(r *siteconf.OriginRoutes, geos map[string]regioncatalog
 		doc.Pools = append(doc.Pools, pool)
 	}
 	var unmatched []string
+	chunked := map[string]string{} // chunk ID -> rule ID, for rules split below
 	for _, route := range r.Routes {
 		regions := leafRegionsFor(route.NodeGeos, geos)
 		if len(route.NodeGeos) > 0 && len(regions) == 0 {
 			unmatched = append(unmatched, route.ID)
 			continue
 		}
-		doc.Routes = append(doc.Routes, site.ConditionalOriginRoute{ID: route.ID, Priority: route.Priority,
-			PathPrefix: route.PathPrefix, ClientCIDRs: route.ClientCIDRs, Hosts: route.Hosts, NodeRegions: regions,
-			PoolID: route.PoolID, FallbackPoolID: route.FallbackPoolID})
+		// A local rule names at most 32 regions; a geography (an area, a
+		// country) can match more leaf regions, so the rule goes out as
+		// consecutive rules of 32 (a node is in one region, so the chunks
+		// match exactly the nodes the rule does). Buyer IDs have no ".".
+		for index := 0; index == 0 || index*maxRuleRegions < len(regions); index++ {
+			id := route.ID
+			if index > 0 {
+				id = route.ID + "." + strconv.Itoa(index+1)
+				chunked[id] = route.ID
+			}
+			chunk := regions[index*maxRuleRegions : min(len(regions), (index+1)*maxRuleRegions)]
+			doc.Routes = append(doc.Routes, site.ConditionalOriginRoute{ID: id, Priority: route.Priority,
+				PathPrefix: route.PathPrefix, ClientCIDRs: route.ClientCIDRs, Hosts: route.Hosts, NodeRegions: chunk,
+				PoolID: route.PoolID, FallbackPoolID: route.FallbackPoolID})
+		}
 	}
 	doc, err := site.NormalizeConditionalOriginDocument(doc)
+	if err == nil && !chunksKeepOrder(doc.Routes, chunked) {
+		err = site.ErrInvalidInput
+	}
 	return doc, unmatched, err
+}
+
+// maxRuleRegions is the local limit of regions in one conditional origin rule.
+const maxRuleRegions = 32
+
+// chunksKeepOrder: no other rule that sorts between the chunks of a split
+// rule shares a region with a chunk after it (a node there would meet that
+// rule before its own chunk, unlike with the unsplit rule).
+func chunksKeepOrder(routes []site.ConditionalOriginRoute, chunked map[string]string) bool {
+	for index, route := range routes {
+		rule, ok := chunked[route.ID]
+		if !ok {
+			continue
+		}
+		for back := index - 1; back >= 0 && routes[back].ID != rule; back-- {
+			other := routes[back]
+			if chunked[other.ID] == rule {
+				continue
+			}
+			if slices.ContainsFunc(other.NodeRegions, func(code string) bool { return slices.Contains(route.NodeRegions, code) }) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // leafRegionsFor is, sorted, every leaf region code whose geography is one
@@ -118,14 +160,29 @@ func leafRegionsFor(want []siteconf.NodeGeo, geos map[string]regioncatalog.CodeG
 	var out []string
 	for code, geo := range geos {
 		for _, g := range want {
-			if geo.CountryCode == g.Country && (g.Province == "" || geo.ProvinceCode == g.Province) {
+			if geoMatches(g, geo) {
 				out = append(out, code)
 				break
 			}
 		}
 	}
-	slices.Sort(out) // more than a rule may name (32) is refused by the local rules
+	slices.Sort(out) // more than a local rule may name (32) is split by originRouteDocument
 	return out
+}
+
+// geoMatches: a country geography matches leaf regions of that country (and
+// province); an area geography matches leaf country regions
+// geoarea.Contains puts in it and leaf area regions geoarea.Includes puts in
+// it (the same area, a region of a continent, every area for global). A leaf area region is never taken as one country, and a leaf
+// region without a geography matches nothing.
+func geoMatches(g siteconf.NodeGeo, geo regioncatalog.CodeGeo) bool {
+	switch {
+	case g.Area != "" && geo.AreaCode != "":
+		return geoarea.Includes(g.Area, geo.AreaCode)
+	case g.Area != "":
+		return geoarea.Contains(g.Area, geo.CountryCode)
+	}
+	return geo.CountryCode != "" && geo.CountryCode == g.Country && (g.Province == "" || geo.ProvinceCode == g.Province)
 }
 
 // originRouteAdvisory lists the rules the leaf leaves out

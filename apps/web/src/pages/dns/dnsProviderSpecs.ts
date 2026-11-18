@@ -15,9 +15,11 @@ export interface ProviderSpec {
   maxTTL: number
   supported: boolean
   // DNS lines the adapter writes (dnsproviderremote.SupportedLines):
-  // all = 默认/电信/联通/移动/境外, none = 默认 only, plan = by the
-  // DNS.COM plan tier (dnsproviderremote.DNSComPlanLines).
-  lines: 'all' | 'none' | 'plan'
+  // all = 默认/电信/联通/移动/境外, areas = all + every continent and region
+  // line, continents = all + 亚洲/欧洲/北美洲/南美洲/非洲/大洋洲 (area_lines.go),
+  // none = 默认 only, plan = by the DNS.COM plan tier
+  // (dnsproviderremote.DNSComPlanLines).
+  lines: 'all' | 'areas' | 'continents' | 'none' | 'plan'
 }
 
 export const providerChoices: ProviderChoice[] = ['aliyun', 'huawei', 'dns_la', 'dnspod_cn', 'dnspod_com', 'dns_com', 'cloudflare', 'namecom', 'custom_http',
@@ -40,10 +42,10 @@ export function dnsComPlanLineHint(plan: DNSComPlan): string {
 // non-automatic TTL is 60 seconds. Paid-plan minimums are enforced by the
 // provider itself when records are written.
 export const providerSpecs: Record<ProviderChoice, ProviderSpec> = {
-  aliyun: { labels: ['AccessKey ID', 'AccessKey Secret'], identifier: 'access_key_id', secret: 'access_key_secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
-  huawei: { labels: ['Access Key Id', 'Secret Access Key'], identifier: 'access_key', secret: 'secret_key', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
-  dns_la: { labels: ['APIID', 'API密钥'], identifier: 'api_id', secret: 'api_secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
-  dnspod_cn: { labels: ['ID', 'Token'], identifier: 'dp_id', secret: 'dp_key', minTTL: 1, maxTTL: 86400, supported: true, lines: 'all' },
+  aliyun: { labels: ['AccessKey ID', 'AccessKey Secret'], identifier: 'access_key_id', secret: 'access_key_secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'areas' },
+  huawei: { labels: ['Access Key Id', 'Secret Access Key'], identifier: 'access_key', secret: 'secret_key', minTTL: 1, maxTTL: 86400, supported: true, lines: 'continents' },
+  dns_la: { labels: ['APIID', 'API密钥'], identifier: 'api_id', secret: 'api_secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'continents' },
+  dnspod_cn: { labels: ['ID', 'Token'], identifier: 'dp_id', secret: 'dp_key', minTTL: 1, maxTTL: 86400, supported: true, lines: 'areas' },
   // DNSPod.com legacy API (api.dnspod.com, ID,Token); Free plan TTL floor 600; carrier lines are Enterprise-only and not written.
   dnspod_com: { labels: ['ID', 'Token'], identifier: 'dp_id', secret: 'dp_key', minTTL: 600, maxTTL: 86400, supported: true, lines: 'none' },
   dns_com: { labels: ['API Key', 'API Secret'], identifier: 'api_key', secret: 'api_secret', minTTL: 1, maxTTL: 86400, supported: true, lines: 'plan' },

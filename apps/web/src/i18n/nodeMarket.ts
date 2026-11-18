@@ -12,6 +12,7 @@ const zhCN = {
   tabs: { member: '市场身份', browse: '浏览与购买', sell: '我的上架', supplies: '已购供给与站点', statements: '用量确认单', disputes: '争议', ledger: '收款与余额', balances: '我的供货方余额' },
   filters: {
     region: '地区', carrier: '线路', model: '计费方式', anyModel: '全部计费方式', maxPrice: '单价上限（元）', minScore: '质量分下限',
+    area: '大区', anyArea: '全部大区',
     pickModelFirst: '先选计费方式再填价格',
     maxPriceIn: { daily_bundle: '日价上限（元 / 天）', traffic: '流量单价上限（元 / GB）', bandwidth_95: '95 带宽单价上限（元 / Mbps / 月）', bandwidth_daily_peak: '日峰值单价上限（元 / Mbps / 天）' },
     settlement: '结算方式', anySettlement: '全部结算方式', apply: '筛选', reset: '重置',
@@ -387,6 +388,7 @@ const enUS: typeof zhCN = {
   tabs: { member: 'Membership', browse: 'Browse & buy', sell: 'My listings', supplies: 'Supplies & sites', statements: 'Usage statements', disputes: 'Disputes', ledger: 'Payments & balance', balances: 'Supplier balances' },
   filters: {
     region: 'Region', carrier: 'Carrier', model: 'Billing model', anyModel: 'Any billing model', maxPrice: 'Max unit price (CNY)', minScore: 'Min quality score',
+    area: 'Area', anyArea: 'Any area',
     pickModelFirst: 'Pick a billing model before a price',
     maxPriceIn: { daily_bundle: 'Max daily price (CNY/day)', traffic: 'Max traffic price (CNY/GB)', bandwidth_95: 'Max 95th price (CNY/Mbps·month)', bandwidth_daily_peak: 'Max daily peak price (CNY/Mbps·day)' },
     settlement: 'Settlement', anySettlement: 'Any settlement', apply: 'Filter', reset: 'Reset',

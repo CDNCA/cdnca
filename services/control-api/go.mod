@@ -13,6 +13,7 @@ require (
 	github.com/cdnca/cdnca/libs/dbpoolmon v0.0.0
 	github.com/cdnca/cdnca/libs/edgeconfig v0.0.0
 	github.com/cdnca/cdnca/libs/entitlement v0.0.0
+	github.com/cdnca/cdnca/libs/geoarea v0.0.0
 	github.com/cdnca/cdnca/libs/mail v0.0.0
 	github.com/cdnca/cdnca/libs/marketproto v0.0.0
 	github.com/cdnca/cdnca/libs/mtlstunnel v0.0.0
@@ -47,6 +48,8 @@ replace github.com/cdnca/cdnca/libs/dbpoolmon => ../../libs/dbpoolmon
 replace github.com/cdnca/cdnca/libs/edgeconfig => ../../libs/edgeconfig
 
 replace github.com/cdnca/cdnca/libs/entitlement => ../../libs/entitlement
+
+replace github.com/cdnca/cdnca/libs/geoarea => ../../libs/geoarea
 
 replace github.com/cdnca/cdnca/libs/rulepack => ../../libs/rulepack
 

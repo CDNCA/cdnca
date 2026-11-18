@@ -59,7 +59,7 @@ type UnmappedNode struct {
 
 // LocationUnmappedError: the supply group copies each
 // node's IP 归属 into its endpoints, and the market reports only nodes whose
-// region and carrier map (marketprobe.Region/Carrier). A node without them
+// region and carrier map (marketprobe.MarketRegion/MarketCarrier). A node without them
 // would never be reported, so it is refused here instead of being sold as
 // an empty pool; the seller corrects it under 节点管理 → 编辑节点 → IP 归属.
 type LocationUnmappedError struct{ Nodes []UnmappedNode }
@@ -76,7 +76,7 @@ func unmappedNodes(nodes []SupplyGroupNode, fresh func(uuid.UUID) bool) []Unmapp
 			continue
 		}
 		var fields []string
-		region, ok := marketprobe.Region(node.Region)
+		region, ok := marketprobe.MarketRegion(node.Region)
 		if !ok {
 			fields = append(fields, "region")
 		} else if _, ok := marketprobe.MarketCarrier(region, node.Carrier); !ok {

@@ -4,12 +4,15 @@ import (
 	"context"
 	"regexp"
 
+	"github.com/cdnca/cdnca/libs/geoarea"
 	"golang.org/x/text/language"
 )
 
 // Standard geography of a region (migration 576): what a market leaf maps a
 // subscriber's conditional origin node region onto. CountryCode is ISO
 // 3166-1 alpha-2; ProvinceCode a GB/T 2260 province-level code, CN only.
+// AreaCode (migration 678) is a libs/geoarea macro area instead of a country:
+// a region has an area or a country (+ province), never both.
 
 var countryCodePattern = regexp.MustCompile(`^[A-Z]{2}$`)
 
@@ -22,8 +25,12 @@ var ProvinceCodes = []string{
 	"610000", "620000", "630000", "640000", "650000", "710000", "810000", "820000",
 }
 
-// ValidGeo: both empty, a country alone, or CN with one of ProvinceCodes.
-func ValidGeo(country, province string) bool {
+// ValidGeo: all empty, a libs/geoarea area alone, a country alone, or CN with
+// one of ProvinceCodes.
+func ValidGeo(area, country, province string) bool {
+	if area != "" {
+		return geoarea.Valid(area) && country == "" && province == ""
+	}
 	if country == "" {
 		return province == ""
 	}
@@ -48,9 +55,10 @@ func ValidGeo(country, province string) bool {
 }
 
 // CodeGeo is a region's code (what nodes and node_regions match on) with
-// its standard geography.
+// its standard geography (AreaCode or CountryCode/ProvinceCode, ValidGeo).
 type CodeGeo struct {
 	Code         string
+	AreaCode     string
 	CountryCode  string
 	ProvinceCode string
 }
@@ -62,7 +70,7 @@ func LoadCodeGeos(ctx context.Context, database queryer) (map[string]CodeGeo, er
 	if database == nil {
 		return nil, ErrUnavailable
 	}
-	rows, err := database.Query(ctx, `SELECT catalog.code,catalog.country_code,catalog.province_code
+	rows, err := database.Query(ctx, `SELECT catalog.code,catalog.area_code,catalog.country_code,catalog.province_code
 		FROM region_catalog catalog JOIN access_scopes platform ON platform.id=catalog.platform_scope_id AND platform.kind='platform'
 		ORDER BY catalog.display_id`)
 	if err != nil {
@@ -72,7 +80,7 @@ func LoadCodeGeos(ctx context.Context, database queryer) (map[string]CodeGeo, er
 	out := map[string]CodeGeo{}
 	for rows.Next() {
 		var item CodeGeo
-		if err := rows.Scan(&item.Code, &item.CountryCode, &item.ProvinceCode); err != nil {
+		if err := rows.Scan(&item.Code, &item.AreaCode, &item.CountryCode, &item.ProvinceCode); err != nil {
 			return nil, ErrUnavailable
 		}
 		if _, seen := out[item.Code]; !seen {

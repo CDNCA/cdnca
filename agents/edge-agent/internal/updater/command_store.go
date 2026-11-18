@@ -950,18 +950,25 @@ func (r *UpgradeRuntime) processCommand(ctx context.Context, command AcceptedUpg
 	if errors.Is(err, ErrUpgradeCommandNotClaimed) {
 		claimed, err = r.store.ClaimCommand(ctx, command.Command.CommandID, options)
 	}
-	if errors.Is(err, ErrUpgradeExecutionExpired) && found && last.State != EdgeUpgradeStateAccepted {
-		// The signed envelope of a claimed command expired mid-upgrade. Finish it from the
-		// plan the manager journalled at claim time; re-verifying the envelope can never
-		// succeed again and ended every gateway session of the node.
-		plan, transactionID, pending, pendingErr := r.manager.pendingTransaction(ctx)
-		if pendingErr != nil {
-			return pendingErr
+	if code := refusedExecutionCode(err); code != "" {
+		if found && last.State != EdgeUpgradeStateAccepted {
+			plan, transactionID, pending, pendingErr := r.manager.pendingTransaction(ctx)
+			if pendingErr != nil {
+				return pendingErr
+			}
+			if pending && plan.PlanID == command.Command.PlanID && plan.Revision == command.Command.PlanRevision {
+				if errors.Is(err, ErrUpgradeExecutionExpired) {
+					// The signed envelope of a claimed command expired mid-upgrade. Finish it from
+					// the plan the manager journalled at claim time; re-verifying the envelope can
+					// never succeed again and ended every gateway session of the node.
+					return r.finishClaimed(ctx, command, last, plan, transactionID)
+				}
+				// A refused (not expired) envelope must not drive the transaction further.
+				return err
+			}
 		}
-		if !pending || plan.PlanID != command.Command.PlanID || plan.Revision != command.Command.PlanRevision {
-			return err
-		}
-		return r.finishClaimed(ctx, command, last, plan, transactionID)
+		// The manager holds no transaction for this plan: nothing ran for it.
+		return r.closeUnstarted(ctx, command, last, found, code)
 	}
 	if err != nil {
 		return err
@@ -973,6 +980,9 @@ func (r *UpgradeRuntime) processCommand(ctx context.Context, command AcceptedUpg
 		last.State = EdgeUpgradeStateClaimed
 	}
 	prepared, prepareErr := r.manager.prepare(ctx, claimed.Plan)
+	if code := refusedPlanCode(prepareErr); code != "" {
+		return r.closeUnstarted(ctx, command, last, true, code)
+	}
 	if prepareErr != nil {
 		return prepareErr
 	}
@@ -1191,6 +1201,95 @@ func sameActiveProbeEvidence(left, right *ActiveProbeEvidence) bool {
 
 func terminalUpgradeState(state EdgeUpgradeState) bool {
 	return state == EdgeUpgradeStateHealthy || state == EdgeUpgradeStateFailed || state == EdgeUpgradeStateRolledBack
+}
+
+// executionRejectedCode: the signed envelope no longer verifies (key, signature,
+// target or replay); upgradeInProgressCode: another upgrade holds the manager;
+// planInvalidCode: the plan built from the envelope is refused.
+const (
+	executionRejectedCode = "EXECUTION_REJECTED"
+	upgradeInProgressCode = "UPGRADE_IN_PROGRESS"
+	planInvalidCode       = "PLAN_INVALID"
+)
+
+// refusedExecutionCode names a claim or resume refusal that retrying cannot change.
+func refusedExecutionCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrUpgradeExecutionExpired):
+		return "PLAN_EXPIRED"
+	case errors.Is(err, ErrInvalidUpgradeExecutionEnvelope), errors.Is(err, ErrUnknownUpgradeExecutionControlKey),
+		errors.Is(err, ErrUnknownUpgradeExecutionEdgeKey), errors.Is(err, ErrInvalidUpgradeExecutionControlSignature),
+		errors.Is(err, ErrInvalidUpgradeExecutionEdgeSignature), errors.Is(err, ErrUpgradeExecutionTargetMismatch),
+		errors.Is(err, ErrUpgradeExecutionReplay):
+		return executionRejectedCode
+	default:
+		return ""
+	}
+}
+
+// refusedPlanCode names a Manager.prepare refusal made before it journalled anything for
+// the plan.
+func refusedPlanCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, errUpgradeInProgress):
+		return upgradeInProgressCode
+	case errors.Is(err, errPlanReplayed):
+		return executionReplayedCode
+	case errors.Is(err, ErrExpired):
+		return "PLAN_EXPIRED"
+	case errors.Is(err, ErrInvalidPlan):
+		return planInvalidCode
+	default:
+		return ""
+	}
+}
+
+// unstartedTransactionID names the installer transaction of a command closed without a
+// manager transaction. It is derived from the command so a resumed close reuses it.
+func unstartedTransactionID(commandID string) string {
+	digest := sha256.Sum256([]byte("cdnca-upgrade-unstarted/v1:" + commandID))
+	return "txn-" + hex.EncodeToString(digest[:12])
+}
+
+// closeUnstarted reports a command that cannot run and for which the manager holds no
+// transaction, without touching the manager journal. Returning the refusal instead
+// ended every gateway session ("upgrade execution is expired" about every 0.5 s).
+// Claimed moves to installing -> failed (control's state machine); a command already
+// reported installing may have changed the node, so it becomes uncertain. An accepted
+// command cannot be claimed any more and control only moves accepted to claimed, so
+// nothing is reported: a paused plan whose node is accepted and expired can be cancelled.
+func (r *UpgradeRuntime) closeUnstarted(ctx context.Context, command AcceptedUpgradeCommand,
+	last EdgeUpgradeStatus, found bool, code string) error {
+	if !found {
+		return nil
+	}
+	transactionID := unstartedTransactionID(command.Command.CommandID)
+	switch {
+	case last.State == EdgeUpgradeStateClaimed ||
+		last.State == EdgeUpgradeStateInstalling && last.InstallerTransactionID == transactionID:
+		envelope, err := decodeUpgradeExecution(command.Command.SignedExecution)
+		if err != nil {
+			return err
+		}
+		if last.State == EdgeUpgradeStateClaimed {
+			if err := r.emitStatus(ctx, command, EdgeUpgradeStateInstalling,
+				Result{InstallerTransactionID: transactionID}, ""); err != nil {
+				return err
+			}
+		}
+		return r.emitStatus(ctx, command, EdgeUpgradeStateFailed, Result{
+			CurrentVersion: envelope.Execution.CurrentVersion, InstallerTransactionID: transactionID, AlertRequired: true,
+		}, code)
+	case last.State == EdgeUpgradeStateInstalling || last.State == EdgeUpgradeStateRollingBack:
+		return r.emitStatus(ctx, command, EdgeUpgradeStateUncertain,
+			Result{InstallerTransactionID: last.InstallerTransactionID, AlertRequired: true}, code)
+	default:
+		return nil
+	}
 }
 
 func upgradeErrorCode(err error) string {

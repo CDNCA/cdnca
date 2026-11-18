@@ -16,6 +16,12 @@ func TestProberGroups(t *testing.T) {
 		{"北京", "BGP", []string{GroupDomestic}},
 		{"香港", "电信", []string{GroupOverseas}},
 		{"", "", nil},
+		// An area outside the mainland is overseas; global / east_asia cover the mainland too and
+		// say nothing, so the carrier decides as with no region.
+		{"东南亚", "", []string{GroupOverseas}},
+		{"Europe", "电信", []string{GroupOverseas}},
+		{"东亚", "电信", []string{GroupDomestic, GroupTelecom}},
+		{"全球", "", nil},
 	} {
 		if got := ProberGroups(item.region, item.carrier); !slices.Equal(got, item.want) {
 			t.Errorf("ProberGroups(%q,%q)=%v, want %v", item.region, item.carrier, got, item.want)

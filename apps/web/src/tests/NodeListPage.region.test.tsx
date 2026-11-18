@@ -43,7 +43,7 @@ const base: NodeInventoryItem = {
 const second: NodeInventoryItem = { ...base, id: '018f0000-0000-7000-8000-000000000002', display_id: '2', name: 'edge-78', ipv4: '192.0.2.78' }
 
 function region(id: string, name: string) {
-  return { id, name, code: `region-${id}`, country_code: '', province_code: '', description: '', l2_check_port: 80, sort: 100, revision: 1, created_at: '2026-10-22T08:00:00Z', updated_at: '2026-10-22T08:00:00Z' }
+  return { id, name, code: `region-${id}`, area_code: '', country_code: '', province_code: '', description: '', l2_check_port: 80, sort: 100, revision: 1, created_at: '2026-10-22T08:00:00Z', updated_at: '2026-10-22T08:00:00Z' }
 }
 
 function json(body: unknown, status = 200): Response {
@@ -198,6 +198,45 @@ describe('node region (D8)', () => {
     await waitFor(() => expect(backend.patches).toEqual([
       { id: pending.id, body: { admin_state: 'active', region: '华南' }, ifMatch: '"3"' },
     ]))
+  })
+
+  it('filters nodes by macro area: area regions and regions of a country in the area', async () => {
+    authenticate()
+    const third: NodeInventoryItem = { ...base, id: '018f0000-0000-7000-8000-000000000003', display_id: '3', name: 'edge-90', ipv4: '192.0.2.90' }
+    serve([{ ...base, region: '新加坡机房' }, { ...second, region: '东京机房' }, { ...third, region: '东南亚池' }], [
+      { ...region('1', '新加坡机房'), country_code: 'SG' },
+      { ...region('2', '东京机房'), country_code: 'JP' },
+      { ...region('3', '东南亚池'), area_code: 'southeast_asia' },
+    ])
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+    expect(await screen.findByRole('button', { name: second.name })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: '筛选节点区域' }))
+    await user.click(await screen.findByTitle('东南亚'))
+    await waitFor(() => expect(screen.queryByRole('button', { name: second.name })).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: base.name })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: third.name })).toBeInTheDocument()
+  })
+
+  // A continent holds its regions' countries and the regions set to one of its regions.
+  it('filters nodes by a whole continent', async () => {
+    authenticate()
+    const third: NodeInventoryItem = { ...base, id: '018f0000-0000-7000-8000-000000000003', display_id: '3', name: 'edge-90', ipv4: '192.0.2.90' }
+    serve([{ ...base, region: '法兰克福' }, { ...second, region: '东京机房' }, { ...third, region: '东南亚池' }], [
+      { ...region('1', '法兰克福'), country_code: 'DE' },
+      { ...region('2', '东京机房'), country_code: 'JP' },
+      { ...region('3', '东南亚池'), area_code: 'southeast_asia' },
+    ])
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+    expect(await screen.findByRole('button', { name: second.name })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: '筛选节点区域' }))
+    await user.click(await screen.findByTitle('亚洲（全部）'))
+    await waitFor(() => expect(screen.queryByRole('button', { name: base.name })).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: second.name })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: third.name })).toBeInTheDocument()
   })
 
   it('opens the list filtered to nodes without a region from the line-resolution link', async () => {

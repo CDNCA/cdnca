@@ -57,8 +57,11 @@ func PlaceOf(region, location, isp string) Place {
 		place.Province = province
 	case code == "hk" || code == "mo" || code == "tw":
 		place.Area, place.Province = AreaHKMOTW, code
-	case code != "":
-		place.Area, place.Province = AreaOverseas, code
+	default:
+		// An area covering the mainland too (global, east_asia) leaves the area unknown.
+		if overseas, _ := marketprobe.Overseas(code); overseas {
+			place.Area, place.Province = AreaOverseas, code
+		}
 	}
 	lower := strings.ToLower(isp)
 	for _, word := range eduWords {

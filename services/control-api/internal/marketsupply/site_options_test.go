@@ -163,6 +163,59 @@ func TestOriginRouteDocumentMapsNodeGeos(t *testing.T) {
 	}
 }
 
+// An area geography matches, by geoarea.Contains, every leaf region whose country is in it,
+// and a leaf area region of the same area (global: every region with a country or an area). A country
+// geography never matches a leaf area region: a node there is not known to be in that country.
+func TestOriginRouteDocumentMapsNodeAreas(t *testing.T) {
+	cfg := optionsConfig()
+	route := func(id string, geos ...siteconf.NodeGeo) siteconf.Route {
+		return siteconf.Route{ID: id, Priority: 1, NodeGeos: geos, PoolID: "default"}
+	}
+	cfg.OriginRoutes = &siteconf.OriginRoutes{
+		Pools:         []siteconf.RoutePool{{ID: "default", Endpoints: []siteconf.RouteEndpoint{{ID: "o1", Host: "203.0.113.9", Port: 80, Weight: 1}}}},
+		DefaultPoolID: "default",
+		Routes: []siteconf.Route{
+			route("sea", siteconf.NodeGeo{Area: "southeast_asia"}),
+			route("everywhere", siteconf.NodeGeo{Area: "global"}),
+			route("mixed", siteconf.NodeGeo{Country: "DE"}, siteconf.NodeGeo{Area: "east_asia"}),
+			route("sg", siteconf.NodeGeo{Country: "SG"}),
+			route("africa", siteconf.NodeGeo{Area: "africa"}),
+		},
+		Retry: siteconf.RouteRetry{Methods: []string{"GET"}, MaxAttempts: 1, ConnectTimeoutMS: 3000, ReadTimeoutMS: 30000, TotalBudgetMS: 33000},
+	}
+	if err := cfg.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	leaf := map[string]regioncatalog.CodeGeo{
+		"sg":   {Code: "sg", CountryCode: "SG"},
+		"jp":   {Code: "jp", CountryCode: "JP"},
+		"de":   {Code: "de", CountryCode: "DE"},
+		"gd":   {Code: "gd", CountryCode: "CN", ProvinceCode: "440000"},
+		"sea":  {Code: "sea", AreaCode: "southeast_asia"},
+		"glob": {Code: "glob", AreaCode: "global"},
+		"bare": {Code: "bare"},
+	}
+	doc, unmatched, err := originRouteDocument(cfg.OriginRoutes, leaf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	regions := map[string][]string{}
+	for _, r := range doc.Routes {
+		regions[r.ID] = r.NodeRegions
+	}
+	want := map[string][]string{
+		"sea": {"sea", "sg"}, "everywhere": {"de", "gd", "glob", "jp", "sea", "sg"}, "mixed": {"de", "gd", "jp"}, "sg": {"sg"},
+	}
+	if len(regions) != len(want) || !slices.Equal(unmatched, []string{"africa"}) {
+		t.Fatalf("routes = %+v unmatched = %v", regions, unmatched)
+	}
+	for id, w := range want {
+		if !slices.Equal(regions[id], w) {
+			t.Errorf("%s: %v, want %v", id, regions[id], w)
+		}
+	}
+}
+
 func TestCacheDocumentCarriesMatchesAndExtensions(t *testing.T) {
 	cfg := optionsConfig()
 	cfg.Cache = json.RawMessage(`{"mode":"override","stale_if_error":true,"rules":[

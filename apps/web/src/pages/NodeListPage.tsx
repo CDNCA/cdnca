@@ -68,7 +68,8 @@ import './NodeListEditModal.locale'
 import './NodeListPage.locale'
 import './NodeListPage.css'
 import RegionManagementPanel from './NodeRegionManagement'
-import { NodeRegionSelect, useRegionCatalogNames } from './NodeRegionSelect'
+import { NodeRegionSelect, useRegionCatalog, useRegionCatalogNames } from './NodeRegionSelect'
+import { areaOptions, regionInArea } from './regionGeo'
 import NodeInstallCommand, { buildNodeReinstallCommand, type InstallRuntime } from './NodeInstallCommand'
 import NodeSSHInstall from './NodeSSHInstall'
 import NodeSSHPanel from './NodeSSHPanel'
@@ -174,6 +175,8 @@ const reinstallTokenTTLSeconds = 3600
 const staleNodeRead = new Error('Node inventory session owner changed during read')
 // Region filter value for nodes without a region (no region name is empty).
 const unsetRegionFilter = '\u0000unset'
+// Region filter values for a macro area (libs/geoarea): the prefix and the area code.
+const areaRegionFilter = '\u0000area:'
 
 const staleNodeWrite = new Error('Node inventory session owner changed during write')
 const pageSizes = [10, 30, 100, 300] as const
@@ -1936,6 +1939,12 @@ function NodeListContent({
     (query.data?.items ?? []).some((item) => !item.region.trim())
   const regionCatalog = useRegionCatalogNames(ownerKey, canManage && !terminalForbidden && needsRegionCatalog)
   const regionNames = useMemo(() => regionCatalog.data ?? [], [regionCatalog.data])
+  const areaFilter = region.startsWith(areaRegionFilter) ? region.slice(areaRegionFilter.length) : ''
+  // A macro area filter matches nodes by their region's geography, so it reads the catalog.
+  const areaCatalog = useRegionCatalog(ownerKey, Boolean(areaFilter) && !terminalForbidden)
+  const regionAreaNames = useMemo(() => areaFilter
+    ? new Set((areaCatalog.data ?? []).filter((item) => regionInArea(areaFilter, item)).map((item) => item.name))
+    : null, [areaCatalog.data, areaFilter])
   const regions = useMemo(() => [...new Set((query.data?.items ?? [])
     .map((item) => item.region.trim())
     .filter(Boolean))].sort((left, right) => left.localeCompare(right)), [query.data?.items])
@@ -1967,11 +1976,13 @@ function NodeListContent({
   const visibleItems = useMemo(() => {
     const items = query.data?.items ?? []
     const needle = search.trim().toLocaleLowerCase()
-    return items.filter((item) => (!region || item.region.trim() === (region === unsetRegionFilter ? '' : region)) && (
+    return items.filter((item) => (!region || (regionAreaNames
+      ? regionAreaNames.has(item.region.trim())
+      : item.region.trim() === (region === unsetRegionFilter ? '' : region))) && (
       !needle || [item.name, item.description, item.region, item.ipv4, item.ipv6, item.presence.agent_version]
         .some((value) => value?.toLocaleLowerCase().includes(needle))
     ))
-  }, [query.data?.items, region, search])
+  }, [query.data?.items, region, regionAreaNames, search])
 
   const bandwidthIDs = useMemo(() => (query.data?.items ?? []).map((item) => item.id), [query.data?.items])
   const bandwidthKey = useMemo(() => [...bandwidthPrefix, queryIdentity, bandwidthIDs] as const, [bandwidthIDs, bandwidthPrefix, queryIdentity])
@@ -2984,7 +2995,13 @@ function NodeListContent({
             popupMatchSelectWidth
             placeholder={t('filters.allRegions')}
             value={region || undefined}
-            options={[{ value: unsetRegionFilter, label: t('region.filterUnset') }, ...regions.map((value) => ({ value, label: value }))]}
+            options={[
+              { value: unsetRegionFilter, label: t('region.filterUnset') },
+              // 全球, then one group per continent (the whole continent and its regions).
+              ...areaOptions(i18n.resolvedLanguage ?? i18n.language, areaRegionFilter)
+                .map((option) => ('options' in option ? { ...option, label: `${t('region.filterAreas')} · ${option.label}` } : option)),
+              { label: t('region.filterRegions'), options: regions.map((value) => ({ value, label: value })) },
+            ]}
             onChange={(value) => { setRegion(value ?? ''); resetPagination() }}
           />
           <Select

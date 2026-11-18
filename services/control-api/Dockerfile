@@ -8,6 +8,7 @@ COPY services/control-api/go.mod services/control-api/go.sum ./
 COPY libs/dbpoolmon /src/libs/dbpoolmon
 COPY libs/edgeconfig /src/libs/edgeconfig
 COPY libs/entitlement /src/libs/entitlement
+COPY libs/geoarea /src/libs/geoarea
 COPY libs/rulepack /src/libs/rulepack
 COPY libs/themepack /src/libs/themepack
 COPY libs/sitetheme /src/libs/sitetheme

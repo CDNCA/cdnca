@@ -69,7 +69,7 @@ func managementRequest(method, path, body string) *http.Request {
 
 func TestHandlerCreatesAndReplaysPlatformRegions(t *testing.T) {
 	stub := &managementCatalogStub{region: regionFixture("7", "华南"), replayed: true}
-	request := managementRequest(http.MethodPost, Route, `{"name":" 华南 ","description":" 主区域 ","l2_check_port":8080,"sort":9}`)
+	request := managementRequest(http.MethodPost, Route, `{"name":" 华南 ","area_code":"southeast_asia","description":" 主区域 ","l2_check_port":8080,"sort":9}`)
 	request.Header.Set("Idempotency-Key", "region-create-1")
 	response := httptest.NewRecorder()
 
@@ -79,7 +79,7 @@ func TestHandlerCreatesAndReplaysPlatformRegions(t *testing.T) {
 		response.Header().Get("ETag") != `"1"` || response.Header().Get("Idempotent-Replay") != "true" {
 		t.Fatalf("status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
 	}
-	if stub.createRequest.Name != " 华南 " || stub.createRequest.Description != " 主区域 " ||
+	if stub.createRequest.Name != " 华南 " || stub.createRequest.AreaCode != "southeast_asia" || stub.createRequest.Description != " 主区域 " ||
 		stub.createRequest.L2CheckPort != 8080 || stub.createRequest.Sort != 9 ||
 		stub.createRequest.IdempotencyKey != "region-create-1" || stub.createRequest.RequestID != "region-request-1" {
 		t.Fatalf("create request=%+v", stub.createRequest)
@@ -99,7 +99,7 @@ func TestHandlerGetsAndUpdatesRegionWithStrongRevision(t *testing.T) {
 		t.Fatalf("get status=%d id=%q headers=%v", getResponse.Code, stub.getID, getResponse.Header())
 	}
 
-	updateRequest := managementRequest(http.MethodPatch, Route+"/7", `{"name":"华南二","country_code":"CN","province_code":"440000","description":"备注","l2_check_port":443,"sort":8}`)
+	updateRequest := managementRequest(http.MethodPatch, Route+"/7", `{"name":"华南二","area_code":"","country_code":"CN","province_code":"440000","description":"备注","l2_check_port":443,"sort":8}`)
 	updateRequest.Header.Set("Idempotency-Key", "region-update-1")
 	updateRequest.Header.Set("If-Match", `"3"`)
 	updateResponse := httptest.NewRecorder()

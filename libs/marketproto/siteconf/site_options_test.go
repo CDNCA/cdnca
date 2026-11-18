@@ -74,6 +74,36 @@ func TestRouteNodeGeosCanonical(t *testing.T) {
 	}
 }
 
+// A node geography is a country (+ CN province) or a libs/geoarea area, not both; areas
+// sort after countries. An area geography carries country "", which a leaf without the area field refuses
+// (its canonicalGeos needs a country code), so an old seller never applies the route to every node.
+func TestRouteNodeGeoArea(t *testing.T) {
+	c := withOptions()
+	c.OriginRoutes.Routes[0].NodeGeos = []NodeGeo{{Area: "southeast_asia"}, {Country: "US"}, {Area: "europe"}, {Area: "southeast_asia"}}
+	if err := c.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	want := []NodeGeo{{Country: "US"}, {Area: "europe"}, {Area: "southeast_asia"}}
+	if got := c.OriginRoutes.Routes[0].NodeGeos; !reflect.DeepEqual(got, want) {
+		t.Fatalf("geos = %+v", got)
+	}
+	raw, err := json.Marshal(NodeGeo{Area: "europe"})
+	if err != nil || string(raw) != `{"country":"","area":"europe"}` {
+		t.Fatalf("area geo json %s %v", raw, err)
+	}
+	var legacy struct {
+		Country  string `json:"country"`
+		Province string `json:"province,omitempty"`
+	}
+	if json.Unmarshal(raw, &legacy) != nil || geoCountryPattern.MatchString(legacy.Country) {
+		t.Fatalf("a leaf without the area field would accept %+v", legacy)
+	}
+	// Country-only geographies keep their bytes (no digest change for routes already sent).
+	if raw, _ := json.Marshal(NodeGeo{Country: "CN", Province: "440000"}); string(raw) != `{"country":"CN","province":"440000"}` {
+		t.Fatalf("country geo json %s", raw)
+	}
+}
+
 // An all-default forwarding block is the same revision as none.
 func TestEmptyForwardingIsNone(t *testing.T) {
 	a, b := sample(), sample()
@@ -108,6 +138,13 @@ func TestSiteOptionsRejects(t *testing.T) {
 		"geo province us":    func(c *Config) { c.OriginRoutes.Routes[0].NodeGeos = []NodeGeo{{Country: "US", Province: "440000"}} },
 		"geo city":           func(c *Config) { c.OriginRoutes.Routes[0].NodeGeos = []NodeGeo{{Country: "CN", Province: "440300"}} },
 		"geo too many":       func(c *Config) { c.OriginRoutes.Routes[0].NodeGeos = make([]NodeGeo, 33) },
+		"geo area unknown":   func(c *Config) { c.OriginRoutes.Routes[0].NodeGeos = []NodeGeo{{Area: "antarctica"}} },
+		"geo area and country": func(c *Config) {
+			c.OriginRoutes.Routes[0].NodeGeos = []NodeGeo{{Country: "SG", Area: "southeast_asia"}}
+		},
+		"geo area province": func(c *Config) {
+			c.OriginRoutes.Routes[0].NodeGeos = []NodeGeo{{Area: "east_asia", Province: "440000"}}
+		},
 	} {
 		c := withOptions()
 		mutate(&c)

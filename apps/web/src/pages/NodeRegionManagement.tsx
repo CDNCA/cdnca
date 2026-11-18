@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Form, Input, InputNumber, Modal, Result, Select, Table, Tooltip, type TableColumnsType } from 'antd'
+import { Alert, Button, Form, Input, InputNumber, Modal, Radio, Result, Select, Table, Tooltip, type TableColumnsType } from 'antd'
 import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { ChevronLeft, ChevronRight, Plus, Search, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
@@ -11,11 +11,14 @@ import { regionsApi, type RegionInput, type RegionRecord } from '../api/nodes'
 import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import { localizedUnknownApiError } from '../i18n/apiError'
-import { countryOptions, geoLabel, provinceOptions } from './regionGeo'
+import { areaOptions, countryOptions, geoLabel, provinceOptions } from './regionGeo'
 import './NodeListPage.locale'
 
 interface RegionFormValues {
   name: string
+  /** The geography is a macro area or a country (+ province), never both. */
+  geo_kind: 'area' | 'country'
+  area_code?: string
   country_code?: string
   province_code?: string
   description: string
@@ -98,13 +101,17 @@ function RegionEditorModal({
   const locale = i18n.resolvedLanguage ?? i18n.language
   const countries = useMemo(() => countryOptions(locale), [locale])
   const provinces = useMemo(() => provinceOptions(locale), [locale])
+  const areas = useMemo(() => areaOptions(locale), [locale])
   const country = Form.useWatch('country_code', form)
+  const geoKind = Form.useWatch('geo_kind', form)
 
   useEffect(() => {
     if (!open) return
     form.resetFields()
     form.setFieldsValue({
       name: item?.name ?? '',
+      geo_kind: item?.area_code ? 'area' : 'country',
+      area_code: item?.area_code || undefined,
       country_code: item?.country_code || undefined,
       province_code: item?.province_code || undefined,
       description: item?.description ?? '',
@@ -141,28 +148,49 @@ function RegionEditorModal({
         <Form.Item name="name" label={t('regions.name')} rules={[{ required: true, whitespace: true, max: 128 }]}>
           <Input autoFocus placeholder={t('regions.namePlaceholder')} />
         </Form.Item>
-        <Form.Item name="country_code" label={t('regions.country')} extra={t('regions.countryHelp')}>
-          <Select
-            aria-label={t('regions.country')}
-            allowClear
-            showSearch
-            optionFilterProp="label"
-            placeholder={t('regions.countryPlaceholder')}
-            options={countries}
-            onChange={(value?: string) => { if (value !== 'CN') form.setFieldValue('province_code', undefined) }}
+        <Form.Item name="geo_kind" label={t('regions.geo')}>
+          <Radio.Group
+            options={[
+              { value: 'area', label: t('regions.area') },
+              { value: 'country', label: t('regions.country') },
+            ]}
           />
         </Form.Item>
-        <Form.Item name="province_code" label={t('regions.province')}>
-          <Select
-            aria-label={t('regions.province')}
-            allowClear
-            showSearch
-            optionFilterProp="label"
-            disabled={country !== 'CN'}
-            placeholder={t('regions.provincePlaceholder')}
-            options={provinces}
-          />
-        </Form.Item>
+        {geoKind === 'area' ? (
+          <Form.Item name="area_code" label={t('regions.area')} extra={t('regions.areaHelp')}>
+            <Select
+              aria-label={t('regions.area')}
+              allowClear
+              placeholder={t('regions.areaPlaceholder')}
+              options={areas}
+            />
+          </Form.Item>
+        ) : (
+          <>
+            <Form.Item name="country_code" label={t('regions.country')} extra={t('regions.countryHelp')}>
+              <Select
+                aria-label={t('regions.country')}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder={t('regions.countryPlaceholder')}
+                options={countries}
+                onChange={(value?: string) => { if (value !== 'CN') form.setFieldValue('province_code', undefined) }}
+              />
+            </Form.Item>
+            <Form.Item name="province_code" label={t('regions.province')}>
+              <Select
+                aria-label={t('regions.province')}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                disabled={country !== 'CN'}
+                placeholder={t('regions.provincePlaceholder')}
+                options={provinces}
+              />
+            </Form.Item>
+          </>
+        )}
         <Form.Item name="description" label={t('regions.description')} rules={[{ max: 1024 }]}>
           <Input placeholder={t('regions.descriptionPlaceholder')} />
         </Form.Item>
@@ -351,8 +379,9 @@ export default function RegionManagementPanel() {
     if (!token || !ownerKey || !canManage || writeLocked) return
     const input: RegionInput = {
       name: values.name.trim(),
-      country_code: values.country_code ?? '',
-      province_code: values.country_code === 'CN' ? values.province_code ?? '' : '',
+      area_code: values.geo_kind === 'area' ? values.area_code ?? '' : '',
+      country_code: values.geo_kind === 'area' ? '' : values.country_code ?? '',
+      province_code: values.geo_kind !== 'area' && values.country_code === 'CN' ? values.province_code ?? '' : '',
       description: values.description.trim(),
       l2_check_port: values.l2_check_port,
       sort: values.sort,
@@ -398,7 +427,7 @@ export default function RegionManagementPanel() {
     { title: <span title={t('regions.codeHelp')}>{t('regions.code')}</span>, dataIndex: 'code', width: 120 },
     {
       title: t('regions.geo'), key: 'geo', width: 150, ellipsis: true,
-      render: (_, item) => geoLabel(item.country_code, item.province_code, i18n.resolvedLanguage ?? i18n.language) ||
+      render: (_, item) => geoLabel(item.area_code, item.country_code, item.province_code, i18n.resolvedLanguage ?? i18n.language) ||
         <span className="node-region-geo-unset">{t('regions.geoUnset')}</span>,
     },
     { title: t('regions.description'), dataIndex: 'description', ellipsis: true, render: (value: string) => value || '—' },

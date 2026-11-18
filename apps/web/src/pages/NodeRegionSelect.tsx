@@ -2,30 +2,43 @@ import { useQuery } from '@tanstack/react-query'
 import { Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 
-import { regionsApi } from '../api/nodes'
+import { regionsApi, type RegionRecord } from '../api/nodes'
 import { useSessionStore } from '../auth/session'
 
 // The node region picker. Line groups and packages only take catalogued
 // regions (/v1/regions), so the node forms offer the same catalog instead of
 // free text (D8).
 
+const regionNames = (items: RegionRecord[]) => items.map((item) => item.name)
+const regionRecords = (items: RegionRecord[]) => items
+
 /** Region catalog names, in catalog order; [] without regions.read. */
 export function useRegionCatalogNames(ownerKey: string, enabled = true) {
+  return useRegionCatalogQuery(ownerKey, enabled, regionNames)
+}
+
+/** Region catalog records (with geography), in catalog order. */
+export function useRegionCatalog(ownerKey: string, enabled = true) {
+  return useRegionCatalogQuery(ownerKey, enabled, regionRecords)
+}
+
+function useRegionCatalogQuery<T>(ownerKey: string, enabled: boolean, select: (items: RegionRecord[]) => T) {
   const principal = useSessionStore((state) => state.principal)
   const canRead = Boolean(principal && (principal.permissions.includes('platform.admin') ||
     principal.permissions.includes('regions.read')))
   return useQuery({
     queryKey: ['node-region-catalog', ownerKey],
     queryFn: async () => {
-      const names: string[] = []
+      const items: RegionRecord[] = []
       for (let page = 1; ; page += 1) {
         const token = useSessionStore.getState().accessToken
         if (!token) throw new Error('Region catalog session ended during read')
         const result = await regionsApi.list(token, { page, page_size: 300 })
-        names.push(...result.data.map((item) => item.name))
-        if (page * 300 >= result.count) return names
+        items.push(...result.data)
+        if (page * 300 >= result.count) return items
       }
     },
+    select,
     enabled: enabled && canRead,
     retry: false,
     refetchOnReconnect: false,

@@ -28,6 +28,13 @@ type Manager struct {
 
 var ErrInstallerLegacyActivated = errors.New("installer activated through legacy protocol")
 
+// errUpgradeInProgress: another plan's transaction is not done. errPlanReplayed: the plan is
+// not newer than the journalled one. Both are ErrReplay for Process callers.
+var (
+	errUpgradeInProgress = fmt.Errorf("%w: another upgrade transaction is in progress", ErrReplay)
+	errPlanReplayed      = fmt.Errorf("%w: plan is not newer than the journalled transaction", ErrReplay)
+)
+
 type preparedUpgrade struct {
 	InstallerTransactionID string
 	Complete               bool
@@ -126,6 +133,10 @@ func (m *Manager) prepare(ctx context.Context, plan Plan) (preparedUpgrade, erro
 		}
 	}()
 	prepared, value, err := m.prepareLocked(ctx, plan)
+	var precondition *preconditionFailure
+	if errors.As(err, &precondition) && m.installerV2 != nil {
+		prepared, value, err = m.failPrecondition(plan, precondition.code)
+	}
 	if err == nil && !prepared.Complete && m.installerV2 != nil && value != nil && value.Phase == phaseDownload {
 		// The download runs without the state file lock: the gateway session reads the
 		// upgrade status queue under the same flock, and a 60 s download
@@ -154,6 +165,38 @@ func (m *Manager) prepare(ctx context.Context, plan Plan) (preparedUpgrade, erro
 		}
 	}
 	return prepared, err
+}
+
+// preconditionFailure is a plan refused before any helper transaction exists (helper
+// Current, receipt, installed version, sequence). Process keeps returning the cause;
+// prepare records the plan as failed with code instead.
+type preconditionFailure struct {
+	code  string
+	cause error
+}
+
+func (f *preconditionFailure) Error() string { return f.cause.Error() }
+func (f *preconditionFailure) Unwrap() error { return f.cause }
+
+// failPrecondition journals the plan as failed so the claimed command closes as
+// installing -> failed. Returning the error instead ended every gateway session and the
+// next session retried the same Current call. prepareLocked has
+// already checked that the plan is newer than any journalled transaction, so replacing
+// a done transaction keeps the replay floor rising.
+func (m *Manager) failPrecondition(plan Plan, code string) (preparedUpgrade, *transaction, error) {
+	digest, err := planDigest(plan)
+	if err != nil {
+		return preparedUpgrade{}, nil, ErrInvalidPlan
+	}
+	value := &transaction{
+		Version: stateVersion, Plan: plan, Digest: digest, Phase: phaseDownload,
+		InstallerTransactionID: "txn-" + randomSuffix(),
+	}
+	result, err := m.fail(value, code, nil)
+	if err != nil {
+		return preparedUpgrade{}, nil, err
+	}
+	return preparedUpgrade{InstallerTransactionID: value.InstallerTransactionID, Complete: true, Result: result}, value, nil
 }
 
 func downloadFailureCode(err error) string {
@@ -203,33 +246,33 @@ func (m *Manager) prepareLocked(ctx context.Context, plan Plan) (preparedUpgrade
 			return prepared, existing, nil
 		}
 		if existing.Phase != phaseDone {
-			return preparedUpgrade{}, nil, ErrReplay
+			return preparedUpgrade{}, nil, errUpgradeInProgress
 		}
 		if existing.Plan.SchemaVersion == planSchemaVersionV3 {
 			if plan.SchemaVersion != planSchemaVersionV3 || plan.ExecutionSequence <= existing.Plan.ExecutionSequence {
-				return preparedUpgrade{}, nil, ErrReplay
+				return preparedUpgrade{}, nil, errPlanReplayed
 			}
 		} else if plan.SchemaVersion != planSchemaVersionV3 &&
 			(plan.Revision <= existing.Plan.Revision || plan.ReleaseSequence <= existing.Plan.ReleaseSequence) {
-			return preparedUpgrade{}, nil, ErrReplay
+			return preparedUpgrade{}, nil, errPlanReplayed
 		}
 	}
 	current, err := m.installer.Current(ctx)
 	if err != nil {
-		return preparedUpgrade{}, nil, ErrInstaller
+		return preparedUpgrade{}, nil, &preconditionFailure{code: installerCurrentUnavailableCode, cause: ErrInstaller}
 	}
 	if err := validateReceipt(current, m.config.ReceiptKeys, m.clock.Now().UTC()); err != nil || current.Status != ReceiptStatusActive {
-		return preparedUpgrade{}, nil, ErrInvalidReceipt
+		return preparedUpgrade{}, nil, &preconditionFailure{code: installerReceiptInvalidCode, cause: ErrInvalidReceipt}
 	}
 	if current.CurrentVersion != plan.CurrentVersion {
-		return preparedUpgrade{}, nil, ErrReplay
+		return preparedUpgrade{}, nil, &preconditionFailure{code: currentVersionMismatchCode, cause: ErrReplay}
 	}
 	if plan.SchemaVersion == planSchemaVersionV3 {
 		if current.SchemaVersion == receiptSchemaVersionV2 && plan.ExecutionSequence <= current.ExecutionSequence {
-			return preparedUpgrade{}, nil, ErrReplay
+			return preparedUpgrade{}, nil, &preconditionFailure{code: executionReplayedCode, cause: ErrReplay}
 		}
 	} else if current.SchemaVersion == receiptSchemaVersionV2 || plan.ReleaseSequence <= current.ReleaseSequence {
-		return preparedUpgrade{}, nil, ErrReplay
+		return preparedUpgrade{}, nil, &preconditionFailure{code: executionReplayedCode, cause: ErrReplay}
 	}
 	value := &transaction{
 		Version: stateVersion, Plan: plan, Digest: digest, Phase: phaseDownload,
@@ -1238,6 +1281,18 @@ const stateIncompatibleCode = "L4_STATE_INCOMPATIBLE"
 // installerRefusedCode: the privileged helper refused to prepare the release and
 // staged nothing; the installed release is unchanged.
 const installerRefusedCode = "INSTALLER_REFUSED"
+
+// Codes for a plan refused before any helper transaction exists; nothing on the node
+// changed. installerCurrentUnavailableCode: the helper could not report the installed
+// release. installerReceiptInvalidCode: its receipt failed verification.
+// currentVersionMismatchCode: the installed version is not the plan's current version.
+// executionReplayedCode: the plan's sequence is not above the installed receipt's.
+const (
+	installerCurrentUnavailableCode = "INSTALLER_CURRENT_UNAVAILABLE"
+	installerReceiptInvalidCode     = "INSTALLER_RECEIPT_INVALID"
+	currentVersionMismatchCode      = "CURRENT_VERSION_MISMATCH"
+	executionReplayedCode           = "EXECUTION_REPLAYED"
+)
 
 func (m *Manager) beforeActivating(ctx context.Context, version string) error {
 	if m.config.BeforeActivating == nil {

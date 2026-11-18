@@ -42,8 +42,9 @@ const ControllerProberID = "controller"
 // plus their carrier (BGP: domestic only), nodes outside the mainland vote
 // overseas.
 func ProberGroups(region, carrier string) []string {
-	regionCode, regionKnown := marketprobe.Region(region)
-	if regionKnown && regionCode != "cn" {
+	regionCode, _ := marketprobe.Region(region)
+	overseas, regionKnown := marketprobe.Overseas(regionCode)
+	if overseas {
 		return []string{GroupOverseas}
 	}
 	groups := []string{GroupDomestic}

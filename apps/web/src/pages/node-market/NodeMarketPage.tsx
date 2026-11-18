@@ -35,6 +35,7 @@ import { LifecycleTag, OfferLifecycleActions } from './OfferLifecycle'
 import { OfferTermsModal } from './OfferTermsModal'
 import { OfferPoolReportDrawer, PoolReportCell } from './OfferPoolReport'
 import { PurchaseConfirm } from './PurchaseConfirm'
+import { areaOptions } from '../regionGeo'
 import { SubscriptionUsagePanel } from './SubscriptionUsagePanel'
 import { BoundSupplies, ClampedReason, SitePicker, SiteRollout, type PickedSite } from './SiteRolloutPanel'
 import { ReasonText } from './ReasonText'
@@ -95,7 +96,7 @@ function Unavailable() {
 interface BuyAttempt { offer: MarketOfferListing; days: number; trial: boolean; key: string; changed?: boolean }
 
 function BrowseTab() {
-  const { t } = useTranslation('nodeMarket')
+  const { t, i18n } = useTranslation('nodeMarket')
   const token = useToken()
   const access = marketAccess(useSessionStore((state) => state.principal))
   const [draft, setDraft] = useState<OfferFilters>({})
@@ -224,6 +225,10 @@ function BrowseTab() {
         primary={<>
           <Input style={{ width: 120 }} placeholder={t('filters.region')} aria-label={t('filters.region')} value={draft.region ?? ''}
             onChange={(e) => setDraft({ ...draft, region: e.target.value.trim() || undefined })} onPressEnter={() => applyFilters(draft)} />
+          {/* A macro area, filtered by the market over the serving nodes' countries; 全球 lists every offer. */}
+          <Select style={{ width: 160 }} allowClear placeholder={t('filters.anyArea')} aria-label={t('filters.area')} value={draft.area}
+            onChange={(area?: string) => setDraft({ ...draft, area })}
+            options={areaOptions(i18n.resolvedLanguage ?? 'zh-CN')} />
           <Input style={{ width: 120 }} placeholder={t('filters.carrier')} aria-label={t('filters.carrier')} value={draft.carrier ?? ''}
             onChange={(e) => setDraft({ ...draft, carrier: e.target.value.trim() || undefined })} onPressEnter={() => applyFilters(draft)} />
           <Select style={{ width: 180 }} allowClear placeholder={t('filters.anyModel')} aria-label={t('filters.model')} value={draft.billing_model}

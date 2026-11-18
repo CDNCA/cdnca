@@ -677,7 +677,9 @@ func TestRunSessionBindsBaseUpgradeCapabilitiesToSentHello(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			runtime := &upgradeNegotiationProbeRuntime{}
 			client := newUpgradeCapabilityClient(t, runtime, true)
-			established, runErr, offered := runUpgradeNegotiationSession(t, context.Background(), client, test.enabled, test.mutate)
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+			established, runErr, offered := runUpgradeNegotiationSession(t, ctx, client, test.enabled, test.mutate)
 			if got := hasCapability(offered.GetCapabilities(), agentv1.CapabilityName_CAPABILITY_NAME_EDGE_UPGRADE); got != test.wantOfferUpgrade {
 				t.Fatalf("sent edge upgrade offer = %t, want %t", got, test.wantOfferUpgrade)
 			}
@@ -691,8 +693,9 @@ func TestRunSessionBindsBaseUpgradeCapabilitiesToSentHello(t *testing.T) {
 				}
 				return
 			}
-			if !established || !errors.Is(runErr, errUpgradeNegotiationProbeRecover) || runtime.recoveryCount() != 1 {
-				t.Fatalf("valid negotiation = (established=%t err=%v recoveries=%d), want (true, probe error, 1)",
+			// The probe's recovery error keeps the session; it ends with the context.
+			if !established || !errors.Is(runErr, context.DeadlineExceeded) || runtime.recoveryCount() != 1 {
+				t.Fatalf("valid negotiation = (established=%t err=%v recoveries=%d), want (true, deadline, 1)",
 					established, runErr, runtime.recoveryCount())
 			}
 		})

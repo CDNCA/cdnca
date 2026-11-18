@@ -182,7 +182,7 @@ func (worker *Worker) site(ctx context.Context, item site) (bool, error) {
 	if err := rows.Err(); err != nil {
 		return false, err
 	}
-	sets := Plan(endpoints)
+	sets := Plan(item.ProviderType, endpoints)
 	// Smart scheduling (migration 609): lines with a fresh latency/fallback
 	// selection take the selected addresses with equal weights; province
 	// lines we wrote earlier and no longer select are retired. Without an
@@ -214,7 +214,7 @@ func (worker *Worker) site(ctx context.Context, item site) (bool, error) {
 		}
 		weights := map[string]uint32{}
 		if !equal[scope] {
-			weights = LineWeights(endpoints, scope, settings.Weights)
+			weights = LineWeights(item.ProviderType, endpoints, scope, settings.Weights)
 		}
 		digest := set.Digest(settings.TTL, weights)
 		// Nothing wanted and nothing of ours on the line: never touch it.
@@ -252,13 +252,20 @@ func containsScope(scopes []string, scope string) bool {
 
 // endpoints are the published endpoints of the site's line group, minus the
 // nodes the ACME HTTP-01 serving gate keeps off the site (migration 342),
-// with the region/carrier of the endpoint.
+// with the region/carrier of the endpoint and the macro area (migration 678)
+// of the platform region it names (by name or id, as line group regions are
+// matched; the first by display order).
 func (worker *Worker) endpoints(ctx context.Context, item site) ([]Endpoint, error) {
-	rows, err := worker.pool.Query(ctx, `SELECT host(published.address),endpoint.region,endpoint.carrier
+	rows, err := worker.pool.Query(ctx, `SELECT host(published.address),endpoint.region,endpoint.carrier,
+			COALESCE(area.area_code,'')
 		FROM node_line_endpoint_published published
 		JOIN node_line_endpoints endpoint ON endpoint.tenant_scope_id=published.tenant_scope_id
 		 AND endpoint.line_group_id=published.line_group_id AND endpoint.config_revision=published.config_revision
 		 AND endpoint.id=published.endpoint_id
+		LEFT JOIN LATERAL (SELECT catalog.area_code FROM region_catalog catalog
+			JOIN access_scopes platform ON platform.id=catalog.platform_scope_id AND platform.kind='platform'
+			WHERE endpoint.region<>'' AND (catalog.name=endpoint.region OR catalog.id::text=endpoint.region)
+			ORDER BY catalog.display_id LIMIT 1) area ON true
 		WHERE published.tenant_scope_id=$1 AND published.line_group_id=$2 AND published.config_revision=$3 AND published.published
 		  AND (published.node_id IS NULL OR acme_http01_site_node_serving_blocked($4,$5,published.node_id) IS NULL)
 		ORDER BY published.address`, item.GroupScopeID, item.GroupID, item.GroupRevision, item.ScopeID, item.SiteID)
@@ -267,7 +274,7 @@ func (worker *Worker) endpoints(ctx context.Context, item site) ([]Endpoint, err
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Endpoint, error) {
 		var value Endpoint
-		return value, row.Scan(&value.Address, &value.Region, &value.Carrier)
+		return value, row.Scan(&value.Address, &value.Region, &value.Carrier, &value.Area)
 	})
 }
 

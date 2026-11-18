@@ -517,8 +517,9 @@ test("current YAML and external refs include all required operations", async () 
 	// 插件安装恢复（平台与租户 resume）2 条：契约补上已实现的路由。
 	// 平台插件安装另 7 条（列表/详情/confirm/upgrade/disable/uninstall/targets）原只在子文件，汇总补引用。
 	// 通知运行时健康 GET /v1/notification-runtime-health 1 条。
-	assert.equal(result.operations.length, 960);
-	assert.equal(result.distinctTupleCount, 934);
+	// 取消升级计划 POST cancelControlUpgradeRollout 1 条。
+	assert.equal(result.operations.length, 961);
+	assert.equal(result.distinctTupleCount, 935);
 	assert.equal(result.overlaps.length, 26);
 	assert.equal(result.overlaps.length, 26);
   const operationIDs = new Set(result.operations.map(({operationId}) => operationId));

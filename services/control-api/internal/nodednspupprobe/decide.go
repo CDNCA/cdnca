@@ -142,8 +142,9 @@ func (round RoundResult) RoundFailed() bool {
 // on the mainland, overseas outside it, domestic for a mainland checkpoint
 // without a known carrier.
 func CheckpointGroup(vote dnspupprobe.Vote) string {
+	overseas, _ := marketprobe.Overseas(vote.Region)
 	switch {
-	case vote.Region != "" && vote.Region != "cn":
+	case overseas:
 		return GroupOverseas
 	case vote.Carrier == GroupTelecom || vote.Carrier == GroupUnicom || vote.Carrier == GroupMobile:
 		return vote.Carrier

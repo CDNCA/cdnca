@@ -142,3 +142,23 @@ func TestValidateSettings(t *testing.T) {
 		}
 	}
 }
+
+// A checkpoint tagged with an area outside the mainland votes overseas; global / east_asia say
+// nothing about the side, so the carrier decides as with no region.
+func TestCheckpointGroupAreas(t *testing.T) {
+	for _, item := range []struct {
+		vote dnspupprobe.Vote
+		want string
+	}{
+		{dnspupprobe.Vote{Region: "southeast_asia"}, GroupOverseas},
+		{dnspupprobe.Vote{Region: "europe", Carrier: GroupTelecom}, GroupOverseas},
+		{dnspupprobe.Vote{Region: "east_asia", Carrier: GroupTelecom}, GroupTelecom},
+		{dnspupprobe.Vote{Region: "global"}, ""},
+		{dnspupprobe.Vote{Region: "us"}, GroupOverseas},
+		{dnspupprobe.Vote{Region: "cn"}, GroupDomestic},
+	} {
+		if got := CheckpointGroup(item.vote); got != item.want {
+			t.Errorf("CheckpointGroup(%+v) = %q, want %q", item.vote, got, item.want)
+		}
+	}
+}

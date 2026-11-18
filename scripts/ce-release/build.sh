@@ -82,7 +82,7 @@ jq -n --arg id "$BOOT_ID" --rawfile pem "$BK/public.pem" '{version:1,keys:[{key_
 [ "$BOOT_ID" != cdnca-edge-artifact-bootstrap-v1 ] || die '社区版不得使用商业版节点 bootstrap 钥'
 # 换提交后，带源码身份的产物全部重建；运行时载荷只依赖 edge/openresty 输入，验收会逐项核对，可复用。
 if [ -s "$OUT/BUILD" ] && [ "$(sed -n 's/^commit=//p' "$OUT/BUILD")" != "$COMMIT" ]; then
-  rm -rf "$OUT/edge" "$OUT/edge-payload" "$OUT/node" "$OUT/bundle" "$OUT/runtime-evidence" "$OUT/upgrade" "$OUT/upgrade-signed" "$OUT/install"
+  rm -rf "$OUT/edge" "$OUT/edge-payload" "$OUT/node" "$OUT/bundle" "$OUT/bundle-v1" "$OUT/runtime-evidence" "$OUT/upgrade" "$OUT/upgrade-signed" "$OUT/install"
 fi
 printf 'commit=%s\ntree=%s\nversion=%s\nkey_id=%s\nremote_ref=%s\n' "$COMMIT" "$TREE" "$VERSION" "$KEY_ID" "$REMOTE_REF" >"$OUT/BUILD"
 log "commit $COMMIT version $VERSION key $KEY_ID → $OUT"
@@ -131,7 +131,7 @@ MODCACHE=$(go env GOMODCACHE)
 # ---- 节点：agent + helper（stage1）、载荷 + helper bundle + 运行时冒烟 + 验收 + 节点包（stage2/stage3）
 E=$OUT/edge; P=$OUT/edge-payload; N=$OUT/node
 if ! skip edge && [ ! -s "$N/SHA256SUMS" ]; then
-  rm -rf "$E" "$P" "$N" "$OUT/bundle" "$OUT/runtime-evidence"; mkdir -p "$E/source" "$E/helper"
+  rm -rf "$E" "$P" "$N" "$OUT/bundle" "$OUT/bundle-v1" "$OUT/runtime-evidence"; mkdir -p "$E/source" "$E/helper"
   git -C "$ROOT" archive "$COMMIT" | tar -x -C "$E/source"
   TS=$(git -C "$ROOT" log -1 --format=%ct "$COMMIT")
   step edge-agent bash -c "cd '$E/source' && bash scripts/edge-agent-release-build.sh --output-dir '$E/output' --arch amd64 \
@@ -184,6 +184,20 @@ if ! skip edge && [ ! -s "$N/SHA256SUMS" ]; then
     --version '$VERSION' --key-id '$KEY_ID' --payload-dir '$P' --output-dir '$N'"
   sign "$N/release.signing-data" "$OUT/node.sig"
   step node-finalize bash -c "cd '$ROOT' && node scripts/native-node-package.mjs finalize --build-dir '$N' --signature '$OUT/node.sig' --public-key '$K/public.pem'"
+  # 控制台登记的 edge-agent 升级包用 v2：同一份已签名段 + 本次签名节点包（native.tar.gz）。原生节点升级后
+  # Agent 从 versions/<版本>/native.tar.gz 切换运行时；v1 包不带它，同版本重出时找不到签名运行时
+  # （RUNTIME_NOT_PACKAGED）而回滚。manifest 与签名不变，不需要再签；v1 包留在 bundle-v1/。
+  mv "$OUT/bundle" "$OUT/bundle-v1"
+  NODE_AGENT=$(tar -xOzf "$N/cdnca-edge-agent.tar.gz" release.manifest.json | jq -er '.files[] | select(.path == "bin/edge-agent") | .sha256')
+  [ "$NODE_AGENT" = "$(shasum -a 256 "$OUT/bundle-v1/edge-agent" | cut -d' ' -f1)" ] || die "节点包 Agent $NODE_AGENT 与升级包 Agent 不一致"
+  mkdir -m 0700 "$OUT/bundle"
+  cp -p "$OUT/bundle-v1/"{prepare.json,manifest,manifest.signing-data,edge-agent,edge-agent.spdx.json,edge-agent.provenance.json} "$OUT/bundle/"
+  step edge-bundle-native env GOWORK=off go -C "$ROOT/agents/edge-agent" run ./packaging/helper/cmd/cdnca-edge-release-bundle finalize \
+    --prepared-dir "$OUT/bundle" --signature "$OUT/manifest.sig.raw" --public-key "$K/public.pem" --download-base-url "$DOWNLOAD_BASE" \
+    --native "$N/cdnca-edge-agent.tar.gz"
+  [ "$(jq -r .manifest_sha256 "$OUT/bundle/bundle.json")" = "$(jq -r .manifest_sha256 "$OUT/bundle-v1/bundle.json")" ] &&
+    [ "$(head -c 29 "$OUT/bundle/$(jq -r .bundle_file "$OUT/bundle/bundle.json")" | tr -d '\0')" = cdnca-edge-release-bundle/v2 ] ||
+    die 'v2 升级包没有沿用 v1 的 manifest'
 fi
 
 # ---- 主控：基线内包（upgrade-package --baseline）→ 签名 finalize → 外包 prepare/签名/finalize（stage3、finalize-install）

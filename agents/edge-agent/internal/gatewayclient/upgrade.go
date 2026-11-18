@@ -19,6 +19,13 @@ import (
 
 const edgeUpgradeStatusStream = "AGENT_DEPLOYMENT_STATUS"
 
+// A failed upgrade recovery keeps the gateway session and is retried after a delay that
+// doubles up to the maximum (ending the session made the node retry about every 0.5 s).
+var (
+	upgradeRetryInitialDelay = 5 * time.Second
+	upgradeRetryMaximumDelay = 5 * time.Minute
+)
+
 type UpgradeRuntime interface {
 	Ready() bool
 	Recover(context.Context) error
@@ -78,8 +85,9 @@ type upgradeWorkItem struct {
 }
 
 type upgradeWorkResult struct {
-	item upgradeWorkItem
-	err  error
+	item  upgradeWorkItem
+	err   error
+	lease bool
 }
 
 func validateUpgradeCommandEnvelope(command *agentv1.UpgradeCommand) ([]byte, error) {
@@ -408,7 +416,29 @@ func (c *Client) persistUpgradeStatusAcknowledgement(ctx context.Context, ack *a
 		}
 		return accepted, receipt, nil
 	}
-	return false, nil, fmt.Errorf("%w: upgrade status acknowledgement does not match the durable outbox", ErrInvalidMessage)
+	return persistReplayedUpgradeStatusAcknowledgement(ctx, runtime, ack)
+}
+
+// persistReplayedUpgradeStatusAcknowledgement accepts an ACK for a status that already
+// left the pending outbox. The Gateway replays every ACK whose receipt it has not
+// confirmed when a session starts (agent-gateway listUpgradeStatusAcks), so a session
+// that ended between persisting an ACK and its confirmation always meets it again, and
+// that used to stop the agent. The durable store accepts only the exact
+// ACK it holds. No receipt is sent: the session start already sent the receipt of every
+// unconfirmed ACK, and a second one would draw a second confirmation that no longer
+// matches a pending ACK.
+func persistReplayedUpgradeStatusAcknowledgement(ctx context.Context, runtime upgradeStatusAcknowledgementRuntime,
+	ack *agentv1.UpgradeStatusAck,
+) (bool, *agentv1.UpgradeStatusAckReceipt, error) {
+	acknowledgement, _, err := upgradeStatusAcknowledgement(ack)
+	if err != nil {
+		return false, nil, err
+	}
+	accepted, err := runtime.PersistStatusAcknowledgement(ctx, acknowledgement)
+	if err != nil {
+		return false, nil, fmt.Errorf("%w: upgrade status acknowledgement does not match the durable outbox", ErrInvalidMessage)
+	}
+	return accepted, nil, nil
 }
 
 func (c *Client) pendingUpgradeStatusAcknowledgements(ctx context.Context) ([]*agentv1.UpgradeStatusAckReceipt, error) {

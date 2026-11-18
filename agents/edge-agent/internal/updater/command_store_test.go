@@ -695,6 +695,15 @@ func TestDurableUpgradeStatusAcknowledgementReceiptReplaysExactlyUntilConfirmed(
 	if _, err := os.Stat(restarted.statusPath(status.StatusID)); err != nil {
 		t.Fatalf("status ledger was not retained after confirmation: %v", err)
 	}
+	// The Gateway replays unconfirmed ACKs at session start; one may arrive after the
+	// confirmation (gatewayclient persistReplayedUpgradeStatusAcknowledgement).
+	if replayed, err := restarted.PersistStatusAcknowledgement(context.Background(), acknowledgement); err != nil || !replayed {
+		t.Fatalf("exact ACK replayed after confirmation = (%t, %v)", replayed, err)
+	}
+	receipts, err = restarted.PendingStatusAcknowledgements(context.Background())
+	if err != nil || len(receipts) != 0 {
+		t.Fatalf("replayed ACK reopened its receipt = (%#v, %v)", receipts, err)
+	}
 }
 
 func TestDurableUpgradeStatusAcknowledgementRejectsWrongExactReplay(t *testing.T) {

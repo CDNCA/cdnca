@@ -46,8 +46,10 @@ type Region struct {
 	// what nodes, error page region overrides and origin routes'
 	// node_regions match on. Generated, never changes.
 	Code string `json:"code"`
-	// CountryCode / ProvinceCode (migration 576): the region's standard
-	// geography, "" = not set (ValidGeo).
+	// AreaCode (migration 678, libs/geoarea) or CountryCode / ProvinceCode
+	// (migration 576): the region's standard geography, "" = not set
+	// (ValidGeo: an area excludes a country).
+	AreaCode     string    `json:"area_code"`
 	CountryCode  string    `json:"country_code"`
 	ProvinceCode string    `json:"province_code"`
 	Description  string    `json:"description"`
@@ -65,6 +67,7 @@ type Page struct {
 
 type CreateRequest struct {
 	Name           string
+	AreaCode       string
 	CountryCode    string
 	ProvinceCode   string
 	Description    string
@@ -78,6 +81,7 @@ type UpdateRequest struct {
 	ID               string
 	ExpectedRevision int64
 	Name             string
+	AreaCode         string
 	CountryCode      string
 	ProvinceCode     string
 	Description      string

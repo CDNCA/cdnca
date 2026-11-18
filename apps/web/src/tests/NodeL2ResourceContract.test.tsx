@@ -12,7 +12,7 @@ const OUTCOME_BAR = { selector: '.cdnca-outcome-bar .ant-alert-message' }
 
 const scopeID = '22222222-2222-4222-8222-222222222222'
 const regionPage = { count: 1, data: [{
-  id: '1', name: 'cn-east', code: 'cn-east', country_code: '', province_code: '', description: '', l2_check_port: 443, sort: 1, revision: 1,
+  id: '1', name: 'cn-east', code: 'cn-east', area_code: '', country_code: '', province_code: '', description: '', l2_check_port: 443, sort: 1, revision: 1,
   created_at: '2026-10-09T00:00:00Z', updated_at: '2026-10-09T00:00:00Z',
 }] }
 

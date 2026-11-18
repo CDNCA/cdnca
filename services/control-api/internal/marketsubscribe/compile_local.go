@@ -83,7 +83,9 @@ func compileACL(p securitypolicy.Policy) (*siteconf.Access, string) {
 // compileOriginRoutes is the site's conditional origin document. Node
 // regions name the subscriber's own node regions: each is carried as its
 // region catalog geography (geos, by code; the leaf matches its own regions'
-// geography), and a region without a country refuses (node_region_geo).
+// geography): a country (+ province), or a macro area as NodeGeo.Area
+// (a seller controller without Area refuses the config). A
+// region with neither refuses (node_region_geo).
 // The ingress source address is a subscriber node fact and refuses.
 func compileOriginRoutes(doc site.ConditionalOriginDocument, geos map[string]regioncatalog.CodeGeo) (*siteconf.OriginRoutes, string) {
 	if doc.IngressSourceEnabled {
@@ -104,12 +106,20 @@ func compileOriginRoutes(doc site.ConditionalOriginDocument, geos map[string]reg
 		var nodeGeos []siteconf.NodeGeo
 		for _, code := range r.NodeRegions {
 			geo, ok := geos[code]
-			if !ok || geo.CountryCode == "" {
+			switch {
+			case ok && geo.AreaCode != "":
+				nodeGeos = append(nodeGeos, siteconf.NodeGeo{Area: geo.AreaCode})
+			case ok && geo.CountryCode != "":
+				nodeGeos = append(nodeGeos, siteconf.NodeGeo{Country: geo.CountryCode, Province: geo.ProvinceCode})
+			default:
 				return nil, "node_region_geo"
 			}
-			nodeGeos = append(nodeGeos, siteconf.NodeGeo{Country: geo.CountryCode, Province: geo.ProvinceCode})
 		}
+		// siteconf canonicalGeos order: countries, then areas.
 		slices.SortFunc(nodeGeos, func(a, b siteconf.NodeGeo) int {
+			if a.Area != b.Area {
+				return strings.Compare(a.Area, b.Area)
+			}
 			if a.Country != b.Country {
 				return strings.Compare(a.Country, b.Country)
 			}

@@ -202,18 +202,24 @@ func (s *Store) PrepareRolloutAction(ctx context.Context, actor Actor,
 	return prepared, replay, nil
 }
 
-// pausedPlanNodesStartedTx reports whether a node of the plan may be installing: one of its commands has
-// a status past accepted, or an accepted one that has not expired (the node runs it as soon as it is
-// accepted). A command not yet published, published without a status, or accepted and expired cannot
-// start. Migration 675 refuses the same paused -> cancelled update. The caller holds the plan row lock,
-// which every status write takes first.
+// pausedPlanNodesStartedTx reports whether a node of the plan may be installing. Only the last status
+// of each command counts. Healthy, failed and rolled_back are final. An accepted command can start until
+// its grant expires (the node runs it as soon as it is accepted). Claimed, installing, rolling_back and
+// uncertain block until the grant expired more than the protocol's maximum grant lifetime ago
+// (entitlement.MaxUpgradeGrantLifetime, 15 minutes): the agent starts nothing on an expired envelope and
+// ends an upgrade begun before it within that window, so a node that never reports again (state cleared,
+// reinstalled) no longer holds the plan forever. A command not yet
+// published or published without a status cannot start. Migration 677 refuses the same paused ->
+// cancelled update. The caller holds the plan row lock, which every status write takes first.
 func pausedPlanNodesStartedTx(ctx context.Context, tx pgx.Tx, planID string) (bool, error) {
 	var started bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS (
 		SELECT 1 FROM control_upgrade_node_commands command
-		JOIN control_upgrade_status_receipts status ON status.command_id=command.command_id
-		WHERE command.plan_id=$1 AND (status.state<>'accepted' OR
-			coalesce(command.command_grant_expires_at>transaction_timestamp(), true)))`, planID).Scan(&started)
+		JOIN LATERAL (SELECT status.state FROM control_upgrade_status_receipts status
+			WHERE status.command_id=command.command_id ORDER BY status.status_revision DESC LIMIT 1) latest ON true
+		WHERE command.plan_id=$1 AND latest.state NOT IN ('healthy','failed','rolled_back') AND
+			coalesce(command.command_grant_expires_at+CASE WHEN latest.state='accepted' THEN interval '0 seconds'
+				ELSE interval '15 minutes' END>transaction_timestamp(), true))`, planID).Scan(&started)
 	return started, err
 }
 

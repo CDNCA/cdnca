@@ -88,6 +88,41 @@
 - 获取所有线路 `GET https://api.dns.la/api/allLineList`（无需认证，2026-10-17 取回）：顶级线路 电信 `tele`、联通 `unic`、移动 `mobi`、国内 `dom`、海外 `abr`、搜索引擎 `spi`、其它 `min`。
 - 差异：DNSLA 把“港澳台”放在“国内”下，“海外”只含六大洲。所以 DNSLA 的 `境外` 不覆盖港澳台，这部分访客走默认线路（市场每个节点都写默认线路，仍能解析）。
 
+## 大区线路（2026-11-18 查询，两级大区 2026-11-19 复核）
+
+大区代码与所含国家只看 `libs/geoarea`：全球 + 两级“大洲 → 区域”（亚洲：东亚/东南亚/南亚/西亚/中亚；欧洲：北欧/西欧/南欧/东欧；非洲：北非/西非/东非/中非/南部非洲；北美洲：北美/中美洲/加勒比；南美洲；大洋洲：澳新/美拉尼西亚/密克罗尼西亚/波利尼西亚）。统一值仍用 DNSPod 线路名（大洲、地理亚区），映射在 `dnsproviderremote/area_lines.go`，`AreaLine(服务商, 大区代码)` 给出实际写入的统一线路。
+
+- 全球 → `默认`：默认线路本来就含全部已发布节点，全球节点不另写线路，也不写进 `境外`。
+- 服务商没有该区域自己的线路时，按上级回退：区域 → 所属大洲线路 → `境外` → `默认`。回退后多个大区落在同一条线路上时合成一组记录。
+- `SupportedLines` 只列服务商自己有的大区线路（回退目标不重复列）。
+- 线路记录的 `line_scope` 即大区代码（全球除外），见 `cnamelines/lines.go`。
+
+| 大区 | 统一值 | 阿里云 | DNSPod | 华为云 | DNSLA | DNS.COM（企业版起） | 京东云 / custom_http / plugin | 其余（Cloudflare 等无线路） |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 全球 | `默认` | default | 默认 | default_view | 空 | 默认 | 默认 | 默认 |
+| 亚洲 | `亚洲` | os_asia | 亚洲 | AP | asiabr 84613318538699776 | 亚洲 | 回退 `境外` | 默认 |
+| 东亚 / 东南亚 / 南亚 / 西亚 / 中亚 | `东亚地区` `东南亚地区` `南亚地区` `西亚地区` `中亚地区` | os_eastern_asia / os_south_eastern_asia / os_southern_asia / os_western_asia / os_central_asia | 同统一值 | 回退 `亚洲` AP | 回退 `亚洲` | 回退 `亚洲` | 回退 `境外` | 默认 |
+| 欧洲 | `欧洲` | os_euro | 欧洲 | EU | eurabr 84613318593225728 | 欧洲 | 回退 `境外` | 默认 |
+| 北欧 / 西欧 / 南欧 / 东欧 | `北欧地区` `西欧地区` `南欧地区` `东欧地区` | os_northern_europe / os_western_europe / os_southern_europe / os_eastern_europe | 同统一值 | 回退 `欧洲` EU | 回退 `欧洲` | 回退 `欧洲` | 回退 `境外` | 默认 |
+| 北美洲 | `北美洲` | os_namerica | 北美洲 | NA | namabr 84613318853272576 | 北美洲 | 回退 `境外` | 默认 |
+| 北美 / 中美洲 / 加勒比 | `北美地区` `中美地区` `加勒比地区` | os_northern_america / os_sentral_america / os_caribbean | 同统一值 | 回退 `北美洲` NA | 回退 `北美洲` | 回退 `北美洲` | 回退 `境外` | 默认 |
+| 南美洲 | `南美洲` | os_samerica | 南美洲 | LA | samabr 84613318790358016 | 南美洲 | 回退 `境外` | 默认 |
+| 非洲 | `非洲` | os_africa | 非洲 | AF | afrabr 84613318651945984 | 非洲 | 回退 `境外` | 默认 |
+| 北非 / 西非 / 东非 / 中非 / 南部非洲 | `北非地区` `西非地区` `东非地区` `中非地区` `南非地区` | os_northern_africa / os_western_africa / os_eastern_africa / os_middle_africa / os_southern_africa | 同统一值 | 回退 `非洲` AF | 回退 `非洲` | 回退 `非洲` | 回退 `境外` | 默认 |
+| 大洋洲 | `大洋洲` | os_oceanica | 大洋洲 | OA | oceabr 84613318937158656 | 大洋洲 | 回退 `境外` | 默认 |
+| 澳新 / 美拉尼西亚 / 密克罗尼西亚 / 波利尼西亚 | `澳大利亚和新西兰地区` `美拉尼西亚地区` `密克罗尼西亚地区` `波利尼西亚地区` | os_australia_newzaland / os_melanesia / os_micronesia / os_polynesia | 同统一值 | 回退 `大洋洲` OA | 回退 `大洋洲` | 回退 `大洋洲` | 回退 `境外` | 默认 |
+
+依据与差异：
+
+- 阿里云 [地域线路-境外](https://help.aliyun.com/zh/dns/pubz-regional-route-outside-china)（“亚区线路”表，英文版 [Alibaba Cloud](https://www.alibabacloud.com/help/en/dns/pubz-regional-route-outside-china) 相同）：大洲 6 条（含大洋洲 `os_oceanica`）与 21 个区域全有，成员与 M49 一致（东亚含中国内地与港澳台，南亚含伊朗，俄罗斯在东欧，墨西哥在中美）。`os_sentral_america`、`os_australia_newzaland` 按官方文档原文拼写。线路优先级运营商线路高于地域线路，内地三网访客仍先命中运营商线路。
+- DNSPod [解析线路说明](https://docs.dnspod.cn/dns/dns-record-line/)：“大洲”（含大洋洲）与 21 个“地理亚区”适用于专业版、企业版、尊享版；免费版写入由接口拒绝（与省份线路同样以写入时接口结果为准）。
+- 华为云：官方线路表仍被人机验证拦截，按 [dnsmgr huawei_line.json](https://github.com/netcccyun/dnsmgr/blob/main/app/data/huawei_line.json) 与 [GoEdge](https://github.com/TeaOSLab/EdgeAPI/blob/master/internal/dnsclients/provider_huawei_dns.go) 两份实现核对（一致）：`Abroad` 下 `AP` 全球_亚太地区、`OA` 大洋洲、`EU`、`NA`、`LA` 南美洲、`AF`。`AP` 含港澳台与多数太平洋岛国（巴布亚新几内亚、关岛、萨摩亚等），`OA` 只含澳大利亚、新西兰、斐济、瓦利斯和富图纳、纽埃；没有区域级线路。所以华为云上美拉尼西亚/密克罗尼西亚/波利尼西亚节点写进 `OA`，这些岛国的访客按 `AP` 解析。
+- DNSLA `GET https://api.dns.la/api/allLineList`：海外下六大洲（大洋洲 `oceabr` 84613318937158656），大洲下直接是国家，没有区域；港澳台在“国内”下，不在亚洲线路里。
+- DNS.COM [产品页](https://www.dns.com/zh/cdns.html)：企业版“大洲线路”，名称沿用 `dnsComEnterpriseLines`（view_id 运行时按名称匹配）；免费版写入前返回 `line_not_in_plan`。含大洋洲，无区域。
+- 京东云 [解析线路](https://docs.jdcloud.com/cn/jd-cloud-dns/parsed-route) 列出海外六大洲二级线路（企业版起），但 viewValue 不公开，不猜 ID，回退 `境外`（免费版无境外，写入报 `line_not_in_plan`）。
+- custom_http / plugin：协议只有五条统一线路，不扩协议，回退 `境外`。
+- Cloudflare：普通记录仍无地域字段，只有付费 [Load Balancing Geo steering](https://developers.cloudflare.com/load-balancing/understand-basics/traffic-steering/steering-policies/geo-steering/)。ClouDNS GeoDNS（`geodns-location`，[add-record](https://www.cloudns.net/wiki/article/58/)）适配器未接，仍只写默认线路。
+
 ## 适配器实现（`services/control-api/internal/dnsproviderremote`）
 
 - 统一枚举与映射：`lines.go`（`providerLineCodes`、`SupportedLines`）。能力矩阵：`model.go` 的 `ProviderCapabilityMatrix`。

@@ -3,6 +3,9 @@ package marketprobe
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/cdnca/cdnca/libs/geoarea"
 )
 
 // Line endpoints carry free-text region and carrier ("广东", "中国电信", ...).
@@ -110,13 +113,41 @@ func Province(raw string) (string, bool) {
 
 var isoAlpha2 = regexp.MustCompile(`^[a-z]{2}$`)
 
-// Region maps a free-text region to a lowercase ISO 3166 alpha-2 code.
+// areaKey folds spaces, hyphens and underscores so "Southeast Asia",
+// "south-east asia" and "southeast_asia" are one name.
+var areaKey = strings.NewReplacer(" ", "", "-", "", "_", "")
+
+// areaNames: every libs/geoarea area (continents and regions) by its code,
+// Chinese and English name (areaKey folded), and the Chinese name without 洲
+// when two characters stay (北美, 南美, 大洋) unless that is another area's name.
+var areaNames = func() map[string]string {
+	out := map[string]string{}
+	for _, area := range geoarea.Areas {
+		out[areaKey.Replace(area.Code)] = area.Code
+		out[area.NameZH] = area.Code
+		out[areaKey.Replace(strings.ToLower(area.NameEN))] = area.Code
+	}
+	for _, area := range geoarea.Areas {
+		short := strings.TrimSuffix(area.NameZH, "洲")
+		if _, taken := out[short]; !taken && short != area.NameZH && utf8.RuneCountInString(short) >= 2 {
+			out[short] = area.Code
+		}
+	}
+	return out
+}()
+
+// Region maps a free-text region to a lowercase ISO 3166 alpha-2 code, or to
+// a libs/geoarea area code (southeast_asia, global, ...) when it names an area.
+// Callers that need one side of the mainland use Overseas.
 func Region(raw string) (string, bool) {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	if value == "" {
 		return "", false
 	}
 	if code, ok := regionNames[value]; ok {
+		return code, true
+	}
+	if code, ok := areaNames[areaKey.Replace(value)]; ok {
 		return code, true
 	}
 	if isoAlpha2.MatchString(value) {
@@ -138,6 +169,34 @@ func Region(raw string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// Overseas reports whether a Region code is outside the mainland. known is
+// false for "" and for the areas that also cover the mainland (global, asia,
+// east_asia): they say nothing about which side a node is on.
+func Overseas(code string) (overseas, known bool) {
+	switch {
+	case code == "":
+		return false, false
+	case code == "cn":
+		return false, true
+	case geoarea.Valid(code) && geoarea.Contains(code, "CN"):
+		return false, false
+	}
+	return true, true
+}
+
+// MarketRegion is the region a node is reported to the market with: a
+// country code (Region) from its IP location, never a libs/geoarea area
+// (market-service region codes are countries; its region and area filters
+// and DNS lines go by country). Pool reports (classify) and supply group
+// writes (marketsupply) use this one rule.
+func MarketRegion(raw string) (string, bool) {
+	code, ok := Region(raw)
+	if !ok || geoarea.Valid(code) {
+		return "", false
+	}
+	return code, true
 }
 
 // MarketCarrier is the carrier the market gets for a node of this region:

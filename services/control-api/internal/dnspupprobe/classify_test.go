@@ -18,6 +18,10 @@ func TestPlaceOfCheckpoint(t *testing.T) {
 		{"香港", "", "PCCW", Place{AreaHKMOTW, CarrierOther, "hk"}},
 		{"美国", "洛杉矶", "", Place{AreaOverseas, CarrierOther, "us"}},
 		{"", "浙江移动", "移动", Place{AreaMainland, CarrierMobile, "浙江"}},
+		// An area outside the mainland is overseas (the area code stands as the place); an area
+		// covering the mainland too leaves the area unknown.
+		{"东南亚", "", "", Place{AreaOverseas, CarrierOther, "southeast_asia"}},
+		{"east asia", "", "电信", Place{"", CarrierTelecom, ""}},
 	} {
 		if got := PlaceOf(item.region, item.location, item.isp); got != item.want {
 			t.Errorf("PlaceOf(%q,%q,%q) = %+v, want %+v", item.region, item.location, item.isp, got, item.want)

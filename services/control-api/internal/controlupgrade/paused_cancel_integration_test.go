@@ -126,8 +126,8 @@ func TestCancelPausedRolloutPostgres(t *testing.T) {
 			if next.ID == created.ID {
 				t.Fatal("create after cancel returned the cancelled plan")
 			}
-			// Down to 674 would leave a cancelled plan the 674 trigger cannot have produced. 676 is undone
-			// first, as the migrator does (down SQL, then its schema_migrations row).
+			// Down to 674 would leave a cancelled plan the 674 trigger cannot have produced. 680 down to 676
+			// are undone first, as the migrator does (down SQL, then its schema_migrations row).
 			readDown := func(name string) string {
 				t.Helper()
 				down, err := os.ReadFile(filepath.Join("..", "..", "migrations", name+".down.sql"))
@@ -141,11 +141,20 @@ func TestCancelPausedRolloutPostgres(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = tx.Rollback(t.Context()) }()
-			if _, err := tx.Exec(t.Context(), readDown("676_upgrade_status_observed_skew")); err != nil {
-				t.Fatalf("676 down: %v", err)
-			}
-			if _, err := tx.Exec(t.Context(), `DELETE FROM schema_migrations WHERE version=676`); err != nil {
-				t.Fatal(err)
+			for _, step := range []struct {
+				version int
+				name    string
+			}{
+				{680, "680_geoarea_v2_codes"}, {679, "679_cname_line_area_scopes"},
+				{678, "678_region_catalog_area_code"}, {677, "677_upgrade_cancel_expired_nodes"},
+				{676, "676_upgrade_status_observed_skew"},
+			} {
+				if _, err := tx.Exec(t.Context(), readDown(step.name)); err != nil {
+					t.Fatalf("%d down: %v", step.version, err)
+				}
+				if _, err := tx.Exec(t.Context(), `DELETE FROM schema_migrations WHERE version=$1`, step.version); err != nil {
+					t.Fatal(err)
+				}
 			}
 			_, err = tx.Exec(t.Context(), readDown("675_upgrade_paused_cancel"))
 			var pgErr *pgconn.PgError

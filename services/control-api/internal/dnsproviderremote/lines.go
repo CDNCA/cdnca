@@ -38,7 +38,8 @@ var providerLineCodes = map[string]map[string]string{
 }
 
 // SupportedLines returns the unified lines the provider adapter writes, in a
-// fixed order: the five basic lines, then the province+carrier lines when
+// fixed order: the five basic lines, then the macro-area lines it maps
+// (area_lines.go), then the province+carrier lines when
 // SupportsProvinceLines (province_lines.go). Providers without line support
 // return only 默认, which is what ADR 0008 §6.4 degrades to (global
 // primary/backup).
@@ -51,7 +52,7 @@ func SupportedLines(providerType string) []string {
 		return []string{LineDefault}
 	}
 	lines := make([]string, 0, 5)
-	for _, line := range []string{LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas} {
+	for _, line := range append([]string{LineDefault, LineTelecom, LineUnicom, LineMobile, LineOverseas}, areaLines()...) {
 		if _, ok := providerLineCode(providerType, line); ok {
 			lines = append(lines, line)
 		}

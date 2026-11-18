@@ -206,15 +206,19 @@ func (service *Service) ensureCurrentLocked(blockUnresolved bool) (protocol.Rece
 		return protocol.Receipt{}, protocol.ErrorCurrentUnavailable
 	}
 	records, err := service.journals.recordsLocked()
+	if err == nil {
+		records, err = service.abandonOutOfBandPreparedLocked(records, facts)
+	}
 	if err != nil || blockUnresolved && unresolvedInstallBlocksCurrent(records, facts) {
 		return protocol.Receipt{}, protocol.ErrorStateUncertain
 	}
-	hasV3 := containsV3Journal(records)
+	hasV3 := containsLiveV3Journal(records)
 	highWater, err := service.journals.highWaterMarkLocked()
 	if err != nil {
 		return protocol.Receipt{}, protocol.ErrorStateUncertain
 	}
 	if !hasV3 {
+		highWater = max(highWater, legacyHighWater(records))
 		if facts.AcceptedSequence > highWater {
 			highWater = facts.AcceptedSequence
 		}
@@ -832,6 +836,58 @@ func installedTargetMatches(record JournalRecord, facts InstalledFacts) bool {
 	return facts.Version == record.TargetVersion && facts.ReleaseSequence == record.ReleaseSequence && facts.AcceptedSequence == record.ReleaseSequence &&
 		facts.ManifestSHA256 == record.ManifestSHA256 && facts.ExecutableSHA256 == record.ExecutableSHA256 &&
 		facts.OuterArtifactSHA256 == record.OuterArtifactSHA256
+}
+
+// abandonOutOfBandPreparedLocked aborts prepared transactions whose previous release is
+// no longer installed and whose target is not installed either. A prepared transaction
+// has not touched the installation, and completeInstallLocked refuses it once the
+// installed release moved, so it can never finish. It is left behind when the node is
+// upgraded out of band (node-rerelease-upgrade.sh, upgrade.sh --native) and made
+// Current answer STATE_UNCERTAIN forever.
+func (service *Service) abandonOutOfBandPreparedLocked(records []JournalRecord, facts InstalledFacts) ([]JournalRecord, error) {
+	for index := range records {
+		record := &records[index]
+		if record.Phase != JournalPrepared || installedPreviousMatches(*record, facts) || installedTargetMatches(*record, facts) {
+			continue
+		}
+		record.Phase = JournalAborted
+		if err := service.journals.saveLocked(*record); err != nil {
+			return nil, err
+		}
+		if err := service.cleanupTransactionDirectoryLocked(record.TransactionID); err != nil {
+			return nil, err
+		}
+	}
+	return records, nil
+}
+
+// containsLiveV3Journal reports a v3 journal other than an aborted one. Aborted
+// transactions never touched the installation, so they do not make the installed
+// facts unusable for Current.
+func containsLiveV3Journal(records []JournalRecord) bool {
+	for _, record := range records {
+		if record.SchemaVersion == journalSchemaVersionV3 && record.Phase != JournalAborted {
+			return true
+		}
+	}
+	return false
+}
+
+// legacyHighWater is the high water of the non-v3 journals, which highWaterMarkLocked
+// skips as soon as any v3 journal exists.
+func legacyHighWater(records []JournalRecord) uint64 {
+	var highWater uint64
+	for _, record := range records {
+		if record.SchemaVersion == journalSchemaVersionV3 {
+			continue
+		}
+		sequence := journalSequence(record)
+		if (record.Phase == JournalInstalling || record.Phase == JournalActive || record.Phase == JournalRollbacking ||
+			record.Phase == JournalRolledBack) && sequence > highWater {
+			highWater = sequence
+		}
+	}
+	return highWater
 }
 
 func unresolvedInstallBlocksCurrent(records []JournalRecord, facts InstalledFacts) bool {

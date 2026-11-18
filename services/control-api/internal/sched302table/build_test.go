@@ -82,6 +82,8 @@ func TestRegion(t *testing.T) {
 	}{
 		"广东": {"CN", 440000}, "中国广东省深圳": {"CN", 440000}, "内蒙古": {"CN", 150000}, "cn": {"CN", 0},
 		"中国香港": {"HK", 0}, "US": {"US", 0}, "": {"", 0}, "火星": {"", 0},
+		// An area is no country (the node table carries ISO countries only).
+		"东南亚": {"", 0}, "Europe": {"", 0}, "全球": {"", 0},
 	} {
 		if country, province := Region(raw); country != want.country || province != want.province {
 			t.Errorf("%q: %s %d", raw, country, province)

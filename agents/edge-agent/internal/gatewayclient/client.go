@@ -1904,11 +1904,12 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				return
 			case item := <-upgradeWork:
 				err := c.verifyJournalLease()
+				lease := err != nil
 				if err == nil {
 					err = c.runUpgradeWork(ctx, item)
 				}
 				select {
-				case upgradeWorkResults <- upgradeWorkResult{item: item, err: err}:
+				case upgradeWorkResults <- upgradeWorkResult{item: item, err: err, lease: lease}:
 				case <-ctx.Done():
 					return
 				}
@@ -1935,6 +1936,8 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 	cacheCancelWaiting := make(map[string][]*agentv1.CacheControlCancel)
 	upgradePending := make([]upgradeWorkItem, 0, c.config.CommandQueueSize)
 	upgradeInFlight := make(map[[sha256.Size]byte]bool)
+	var upgradeRetry <-chan time.Time
+	upgradeRetryDelay := upgradeRetryInitialDelay
 	if upgradeEnabled && c.upgrades != nil {
 		upgradePending = append(upgradePending, upgradeWorkItem{recover: true})
 	}
@@ -2124,8 +2127,23 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				}
 			}
 			if result.err != nil {
-				return true, result.err
+				if result.lease || ctx.Err() != nil {
+					return true, result.err
+				}
+				// Upgrade errors end only this attempt: the command journal is durable and
+				// a new session would recover the same command and fail the same way.
+				slog.Warn("upgrade work failed; gateway session kept", "recover", result.item.recover,
+					"retry_in", upgradeRetryDelay.String(), "error", result.err)
+				if upgradeRetry == nil {
+					upgradeRetry = time.After(upgradeRetryDelay)
+					upgradeRetryDelay = min(upgradeRetryDelay*2, upgradeRetryMaximumDelay)
+				}
+			} else if result.item.recover {
+				upgradeRetryDelay = upgradeRetryInitialDelay
 			}
+		case <-upgradeRetry:
+			upgradeRetry = nil
+			upgradePending = append(upgradePending, upgradeWorkItem{recover: true})
 		case incoming := <-receive:
 			if incoming.err != nil {
 				return true, incoming.err
@@ -2545,7 +2563,7 @@ func (c *Client) runSession(parent context.Context, gateway agentv1.AgentGateway
 				if upgradeStatusAckReceiptEnabled {
 					var receipt *agentv1.UpgradeStatusAckReceipt
 					accepted, receipt, err = c.persistUpgradeStatusAcknowledgement(ctx, payload.UpgradeStatusAck)
-					if err == nil {
+					if err == nil && receipt != nil {
 						sendSequence++
 						err = sendUpgradeStatusAckReceipt(stream, sendSequence, receipt, c.now())
 					}

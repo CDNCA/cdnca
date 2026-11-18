@@ -124,21 +124,24 @@ describe('节点管理 DNS配置 tab', () => {
     expect(screen.getByText(/拒绝内网地址/)).toBeInTheDocument()
   })
 
-  it('shows per provider whether DNS lines (三网/境外) are supported', async () => {
+  it('shows per provider whether DNS lines (三网/境外/大区) are supported', async () => {
     authenticate()
     mockAPI({ config: emptyConfig })
     const user = userEvent.setup()
     renderWithProviders(<NodeDnsPage />, ['/node/dns'])
-    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外')).toBeInTheDocument()
+    // Macro-area lines follow dnsproviderremote.SupportedLines (area_lines.go).
+    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外；大区：亚洲（东亚、东南亚、南亚、西亚、中亚）、欧洲（北欧、西欧、南欧、东欧）、北美洲（北美、中美洲、加勒比）、南美洲、非洲（北非、西非、东非、中非、南部非洲）、大洋洲（澳新、美拉尼西亚、密克罗尼西亚、波利尼西亚）')).toBeInTheDocument()
     const pick = async (label: string) => {
       await user.click(screen.getByRole('combobox', { name: 'DNS提供商' }))
       await user.click(screen.getByText(label, { selector: '.ant-select-item-option-content' }))
     }
     await pick('华为云 (huaweicloud.com)')
-    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外')).toBeInTheDocument()
+    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外；大洲：亚洲、欧洲、北美洲、南美洲、非洲、大洋洲（各区域按所属大洲线路解析）')).toBeInTheDocument()
     await pick('DNSLA (dns.la)')
-    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外')).toBeInTheDocument()
+    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外；大洲：亚洲、欧洲、北美洲、南美洲、非洲、大洋洲（各区域按所属大洲线路解析）')).toBeInTheDocument()
     await pick('DNSPod (dnspod.cn)')
+    expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外；大区：亚洲（东亚、东南亚、南亚、西亚、中亚）、欧洲（北欧、西欧、南欧、东欧）、北美洲（北美、中美洲、加勒比）、南美洲、非洲（北非、西非、东非、中非、南部非洲）、大洋洲（澳新、美拉尼西亚、密克罗尼西亚、波利尼西亚）')).toBeInTheDocument()
+    await pick('自定义 HTTP 接口')
     expect(await screen.findByText('支持分线路：默认、电信、联通、移动、境外')).toBeInTheDocument()
     // Cloudflare writes the default line only (dnsproviderremote matrix, NET-03).
     await pick('Cloudflare (cloudflare.com)')
@@ -149,7 +152,7 @@ describe('节点管理 DNS配置 tab', () => {
     expect(screen.getByText(/该线路标为“套餐不支持”，访客按默认线路解析/)).toBeInTheDocument()
     await user.click(screen.getByRole('combobox', { name: '套餐档位' }))
     await user.click(screen.getByText('旗舰版', { selector: '.ant-select-item-option-content' }))
-    expect(await screen.findByText('按套餐开放线路：旗舰版支持默认、电信、联通、移动、境外')).toBeInTheDocument()
+    expect(await screen.findByText('按套餐开放线路：旗舰版支持默认、电信、联通、移动、境外，以及企业版的拓展、区域、大洲线路')).toBeInTheDocument()
     await user.click(screen.getByRole('combobox', { name: '套餐档位' }))
     await user.click(screen.getByText('企业版', { selector: '.ant-select-item-option-content' }))
     expect(await screen.findByText(/企业版支持默认、电信、联通、移动，另有拓展（教育网等）、区域（华南等）、大洲线路/)).toBeInTheDocument()

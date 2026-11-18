@@ -6,6 +6,7 @@ const region: RegionRecord = {
   id: '7',
   name: '华东',
   code: 'region-7',
+  area_code: '',
   country_code: 'CN',
   province_code: '310000',
   description: '主区域',
@@ -39,7 +40,7 @@ describe('regionsApi', () => {
       .mockResolvedValueOnce(json({ ...region, id: '8', revision: 1 }, 201))
       .mockResolvedValueOnce(json({ ...region, revision: 4 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
-    const input = { name: '华东', country_code: 'CN', province_code: '310000', description: '主区域', l2_check_port: 80, sort: 100 }
+    const input = { name: '华东', area_code: '', country_code: 'CN', province_code: '310000', description: '主区域', l2_check_port: 80, sort: 100 }
 
     await regionsApi.create('token', input, 'create-region-1')
     await regionsApi.update('token', region, input, 'update-region-1')
@@ -63,6 +64,8 @@ describe('regionsApi', () => {
       .mockResolvedValueOnce(json({ count: 1, data: [{ ...region, private_field: true }] }))
       .mockResolvedValueOnce(json({ count: 2, data: [{ ...region, id: '9', sort: 101 }, { ...region, id: '8', sort: 100 }] }))
       .mockResolvedValueOnce(json({ count: 1, data: [{ ...region, country_code: 'US', province_code: '310000' }] }))
+      .mockResolvedValueOnce(json({ count: 1, data: [{ ...region, area_code: 'atlantis', country_code: '', province_code: '' }] }))
+      .mockResolvedValueOnce(json({ count: 1, data: [{ ...region, area_code: 'east_asia' }] }))
       .mockResolvedValueOnce(json(region))
       .mockResolvedValueOnce(json({ unexpected: true }))
 
@@ -70,11 +73,20 @@ describe('regionsApi', () => {
     await expect(regionsApi.list('token', { page: 1, page_size: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
     // a province outside CN
     await expect(regionsApi.list('token', { page: 1, page_size: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
+    // an unknown area; an area together with a country
+    await expect(regionsApi.list('token', { page: 1, page_size: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
+    await expect(regionsApi.list('token', { page: 1, page_size: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
     await expect(regionsApi.update('token', region, {
-      name: region.name, country_code: '', province_code: '', description: region.description, l2_check_port: region.l2_check_port, sort: region.sort,
+      name: region.name, area_code: '', country_code: '', province_code: '', description: region.description, l2_check_port: region.l2_check_port, sort: region.sort,
     }, 'update-stale')).rejects.toMatchObject({ code: 'invalid_response' })
     await expect(regionsApi.delete('token', region, 'delete-body')).rejects.toMatchObject({ code: 'invalid_response' })
-    expect(fetchSpy).toHaveBeenCalledTimes(5)
+    expect(fetchSpy).toHaveBeenCalledTimes(7)
+  })
+
+  it('accepts a region whose geography is a macro area', async () => {
+    const area = { ...region, area_code: 'southeast_asia', country_code: '', province_code: '' }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ count: 1, data: [area] }))
+    await expect(regionsApi.list('token', { page: 1, page_size: 10 })).resolves.toEqual({ count: 1, data: [area] })
   })
 
   it('preserves stable API error status and code', async () => {
@@ -83,7 +95,7 @@ describe('regionsApi', () => {
     }, 412))
 
     await expect(regionsApi.update('token', region, {
-      name: region.name, country_code: '', province_code: '', description: region.description, l2_check_port: region.l2_check_port, sort: region.sort,
+      name: region.name, area_code: '', country_code: '', province_code: '', description: region.description, l2_check_port: region.l2_check_port, sort: region.sort,
     }, 'update-conflict')).rejects.toMatchObject({ status: 412, code: 'regions_revision_conflict' })
   })
 })

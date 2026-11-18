@@ -200,3 +200,63 @@ func TestValidPreparedInstallAcceptsV3SameVersionRerelease(t *testing.T) {
 		t.Fatal("legacy same-version prepared ack accepted")
 	}
 }
+
+// currentWireTransport answers Current the way a node's helper did: the
+// stale prepared transaction left by an out-of-band upgrade made it STATE_UNCERTAIN.
+type currentWireTransport struct{ currents int }
+
+func (t *currentWireTransport) RoundTrip(_ context.Context, request protocol.Request, _ *os.File) (protocol.Response, error) {
+	if request.Operation == protocol.OperationCurrent {
+		t.currents++
+		return protocol.FailureForVersion(request.ProtocolVersion, protocol.ErrorStateUncertain), nil
+	}
+	return protocol.FailureForVersion(request.ProtocolVersion, protocol.ErrorBadRequest), nil
+}
+
+type currentWireInstaller struct {
+	*v2SandboxInstaller
+	wire *PackagingInstaller
+}
+
+func (i *currentWireInstaller) Current(ctx context.Context) (ActivationReceipt, error) {
+	return i.wire.Current(ctx)
+}
+
+// After claimed, Manager.prepare called helper Current, got
+// "installer operation failed" and returned it, ending the gateway session about every
+// 2 s; no helper transaction existed, so the INSTALLER_REFUSED close never ran.
+func TestUpgradeRuntimeClosesUnavailableInstallerCurrentAsFailed(t *testing.T) {
+	fixture, environment, _ := newJournalOrderEnvironment(t)
+	transport := &currentWireTransport{}
+	installer := &currentWireInstaller{v2SandboxInstaller: newV2SandboxInstaller(environment.installer),
+		wire: &PackagingInstaller{transport: transport}}
+	store, runtime := newJournalOrderRuntime(t, environment, fixture, environment.root, installer)
+	accepted := acceptAndAcknowledgeRuntimeCommand(t, runtime, fixture)
+
+	if err := runtime.Recover(context.Background()); err != nil {
+		t.Fatalf("Recover() with helper Current unavailable = %v, want nil so the gateway session stays up", err)
+	}
+	statuses, err := runtime.PendingStatuses(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var states []EdgeUpgradeState
+	for _, queued := range statuses {
+		states = append(states, queued.Status.State)
+	}
+	want := []EdgeUpgradeState{EdgeUpgradeStateClaimed, EdgeUpgradeStateInstalling, EdgeUpgradeStateFailed}
+	if len(states) != len(want) || states[0] != want[0] || states[1] != want[1] || states[2] != want[2] {
+		t.Fatalf("queued states = %v, want %v", states, want)
+	}
+	last, found, err := store.LastStatus(context.Background(), accepted.Status.CommandID)
+	if err != nil || !found || last.State != EdgeUpgradeStateFailed || last.ErrorCode != installerCurrentUnavailableCode ||
+		last.InstallerTransactionID == "" || !last.AlertRequired || last.CurrentVersion != fixture.execution.CurrentVersion {
+		t.Fatalf("terminal status = (%+v, %t, %v)", last, found, err)
+	}
+	if statuses[1].Status.InstallerTransactionID != last.InstallerTransactionID {
+		t.Fatalf("installing transaction %q != failed transaction %q", statuses[1].Status.InstallerTransactionID, last.InstallerTransactionID)
+	}
+	if err := runtime.Recover(context.Background()); err != nil || transport.currents != 1 || installer.prepareCalls != 0 {
+		t.Fatalf("second Recover() = %v with %d Current and %d Prepare calls, want nil, 1, 0", err, transport.currents, installer.prepareCalls)
+	}
+}

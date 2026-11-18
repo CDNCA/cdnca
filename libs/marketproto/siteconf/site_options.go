@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/cdnca/cdnca/libs/geoarea"
 )
 
 // Site options a subscriber's site carries to the leaf (fix-mktsiteconf,
@@ -108,17 +110,23 @@ type Route struct {
 	Hosts       []string `json:"hosts,omitempty"`
 	// NodeGeos: the route applies on nodes whose region has one of these
 	// standard geographies (the subscriber's node regions mapped by their
-	// region catalog country/province codes; each side matches its own).
+	// region catalog country/province codes or macro area; each side matches
+	// its own).
 	NodeGeos       []NodeGeo `json:"node_geos,omitempty"`
 	PoolID         string    `json:"pool_id"`
 	FallbackPoolID string    `json:"fallback_pool_id,omitempty"`
 }
 
 // NodeGeo is a standard geography: Country ISO 3166-1 alpha-2 and, for CN
-// only, Province a GB/T 2260 province-level code ("" = the whole country).
+// only, Province a GB/T 2260 province-level code ("" = the whole country);
+// or, instead of a country, Area a libs/geoarea macro area (
+// the leaf matches it with geoarea.Contains). An area geography goes out
+// with country "": a leaf that predates Area refuses the whole config
+// (country pattern) instead of ignoring it and routing every node.
 type NodeGeo struct {
 	Country  string `json:"country"`
 	Province string `json:"province,omitempty"`
+	Area     string `json:"area,omitempty"`
 }
 
 var (
@@ -134,12 +142,22 @@ func canonicalGeos(values []NodeGeo) ([]NodeGeo, bool) {
 	}
 	out := slices.Clone(values)
 	for _, g := range out {
+		if g.Area != "" {
+			if g.Country != "" || g.Province != "" || !geoarea.Valid(g.Area) {
+				return nil, false
+			}
+			continue
+		}
 		if !geoCountryPattern.MatchString(g.Country) ||
 			g.Province != "" && (g.Country != "CN" || !geoProvincePattern.MatchString(g.Province)) {
 			return nil, false
 		}
 	}
+	// Countries first (as before areas existed), then areas.
 	compare := func(a, b NodeGeo) int {
+		if c := strings.Compare(a.Area, b.Area); c != 0 {
+			return c
+		}
 		if c := strings.Compare(a.Country, b.Country); c != 0 {
 			return c
 		}

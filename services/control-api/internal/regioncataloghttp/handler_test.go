@@ -82,7 +82,7 @@ func TestHandlerListsPlatformRegionsWithoutTenantInput(t *testing.T) {
 		t.Fatalf("request=%+v", stub.request)
 	}
 	if got := response.Body.String(); !strings.Contains(got, `"count":2`) ||
-		!strings.Contains(got, `"id":"1","name":"默认","code":"r1","country_code":"","province_code":"","description":"","l2_check_port":80,"sort":100,"revision":1`) ||
+		!strings.Contains(got, `"id":"1","name":"默认","code":"r1","area_code":"","country_code":"","province_code":"","description":"","l2_check_port":80,"sort":100,"revision":1`) ||
 		!strings.Contains(got, `"id":"2","name":"华东"`) {
 		t.Fatalf("body=%s", got)
 	}

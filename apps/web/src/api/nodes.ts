@@ -1,4 +1,5 @@
 import { ApiError, networkApiError, responseApiError } from './auth'
+import { geoAreas } from './geoAreas'
 
 export type NodeAdminState = 'pending' | 'active' | 'draining' | 'disabled' | 'retired'
 export type ManagedNodeAdminState = Exclude<NodeAdminState, 'pending'>
@@ -227,6 +228,8 @@ export interface RegionRecord {
   name: string
   /** Stable lower-case ASCII code: what nodes and origin routes' node_regions match on. */
   code: string
+  /** libs/geoarea macro area (api/geoAreas.ts), '' = not set; excludes country_code. */
+  area_code: string
   /** ISO 3166-1 alpha-2, '' = not set. */
   country_code: string
   /** GB/T 2260 province-level code (CN only), '' = whole country / not set. */
@@ -252,6 +255,7 @@ export interface RegionListResponse {
 
 export interface RegionInput {
   name: string
+  area_code: string
   country_code: string
   province_code: string
   description: string
@@ -1302,8 +1306,10 @@ function invalidRegionResponse(): ApiError {
 
 function regionRecord(value: unknown): value is RegionRecord {
   return record(value) && exactKeys(value, [
-    'id', 'name', 'code', 'country_code', 'province_code', 'description', 'l2_check_port', 'sort', 'revision', 'created_at', 'updated_at',
+    'id', 'name', 'code', 'area_code', 'country_code', 'province_code', 'description', 'l2_check_port', 'sort', 'revision', 'created_at', 'updated_at',
   ]) && typeof value.id === 'string' && /^[1-9][0-9]{0,18}$/.test(value.id) &&
+    typeof value.area_code === 'string' && (value.area_code === '' ||
+      geoAreas.some((area) => area.code === value.area_code) && value.country_code === '') &&
     typeof value.country_code === 'string' && /^(?:[A-Z]{2})?$/.test(value.country_code) &&
     typeof value.province_code === 'string' && (value.province_code === '' || value.country_code === 'CN' && /^[1-8][0-9]0000$/.test(value.province_code)) &&
     boundedUnicodeString(value.name, 1, 128) && typeof value.code === 'string' && /^[a-z0-9][a-z0-9-]{0,62}$/.test(value.code) && boundedUnicodeString(value.description, 0, 1024) &&

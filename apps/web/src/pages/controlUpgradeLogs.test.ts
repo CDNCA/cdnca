@@ -20,6 +20,18 @@ describe('upgrade log lines', () => {
     }
   })
 
+  // The edge agent closes an upgrade it could not start with these codes.
+  it.each([
+    'INSTALLER_REFUSED', 'INSTALLER_CURRENT_UNAVAILABLE', 'INSTALLER_RECEIPT_INVALID', 'CURRENT_VERSION_MISMATCH',
+    'EXECUTION_REPLAYED', 'EXECUTION_REJECTED', 'UPGRADE_IN_PROGRESS', 'PLAN_INVALID',
+  ])('explains the edge agent refusal %s in both languages', (code) => {
+    for (const language of ['zh-CN', 'en-US']) {
+      const text = nodeErrorText(code, language)
+      expect(text).toContain(code)
+      expect(text).not.toMatch(/^(错误码|error code) /)
+    }
+  })
+
   it('renders the master runner journal oldest first with levels and error codes', () => {
     const status = { ...nativeStatusFixture(), publication_revision: 1, publication: nativePublicationFixture(),
       execution: { state: 'running' as const, phase: 'rolling_back' as const, receipt: null, history: [
