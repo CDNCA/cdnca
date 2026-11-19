@@ -401,7 +401,18 @@ local benchmark_chunk = string.rep("cdnca-market-benchmark\n", 2731):sub(1, 6553
 -- not ready -> 503 inside route(); unknown -> node location or 421; ok ->
 -- the TLS decisions of the Host's site; CC (D7) follows here.
 function _M.server_rewrite()
-    local site = cdnca_site.route()
+    local site, defaulted = cdnca_site.route()
+    if defaulted and ngx.var.https ~= "on" then
+        -- a node path of a Host no site names (the market prober and the
+        -- 302 landing send the node's IP) on a plain port with a default
+        -- site: the node's, as without that site (contract §1.1), before
+        -- the site's CC. The landing is rendered only where the L4
+        -- dispatcher does not front the port (no PROXY header).
+        local node = ngx.var.cdnca_node_location
+        if node == "probe" or node == "1" and (ngx.var.proxy_protocol_addr or "") == "" then
+            site = cdnca_site.release()
+        end
+    end
     if not site then
         local node = ngx.var.cdnca_node_location
         if node == "" then

@@ -370,13 +370,19 @@ func testPool(t *testing.T) *pgxpool.Pool {
 // singleLeaf binds a site to a one-leaf market supply.
 func singleLeaf(t *testing.T, pool *pgxpool.Pool) (*Service, *fakeLeaf, uuid.UUID, uuid.UUID) {
 	t.Helper()
+	return singleLeafPool(t, pool, "p1")
+}
+
+// singleLeafPool is singleLeaf with the leaf's node pool ref.
+func singleLeafPool(t *testing.T, pool *pgxpool.Pool, nodePoolRef string) (*Service, *fakeLeaf, uuid.UUID, uuid.UUID) {
+	t.Helper()
 	platform, site := seedSite(t, pool)
 	sub, member, grant := uuid.New(), uuid.New(), uuid.New()
 	leaves := &fakeLeaf{applied: map[uuid.UUID]siteconf.Config{}, sites: map[uuid.UUID]uuid.UUID{},
 		block: map[uuid.UUID]bool{}, failCom: map[uuid.UUID]bool{}}
 	svc := New(pool, fakeMarket{targets: []marketclient.SupplyTarget{
 		{SubscriptionID: sub, Aggregate: true, FQDN: "one.supply.example"},
-		{SubscriptionID: sub, LeafMemberID: member, NodePoolRef: "p1", GrantID: &grant},
+		{SubscriptionID: sub, LeafMemberID: member, NodePoolRef: nodePoolRef, GrantID: &grant},
 	}}, leaves)
 	if _, err := svc.SyncTargets(t.Context(), platform); err != nil {
 		t.Fatal(err)

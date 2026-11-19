@@ -354,7 +354,7 @@ func mapKeys[V any](values map[uuid.UUID]V) []uuid.UUID {
 }
 
 // banCIDRNodes: the nodes whose latest session declares BAN_CIDR v1
-//.
+// .
 func banCIDRNodes(ctx context.Context, tx pgx.Tx, nodeIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	rows, err := tx.Query(ctx, `SELECT node.id,(SELECT facts.capabilities_snapshot FROM node_session_capabilities facts
 		WHERE facts.node_id=node.id ORDER BY facts.session_epoch DESC LIMIT 1) FROM unnest($1::uuid[]) AS node(id)`, nodeIDs)
@@ -441,18 +441,19 @@ func (distributor *Distributor) states(ctx context.Context) (map[uuid.UUID]nodeS
 }
 
 func (distributor *Distributor) consumeReceipts(ctx context.Context) {
+	receiptWait := natsready.NewWaiter("security ban receipts unavailable", distributor.config.Interval)
 	for ctx.Err() == nil {
 		delivery, err := distributor.config.Transport.NextReceipt(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				natsready.LogUnbound(distributor.config.Logger, "security ban receipts unavailable", err)
 				select {
 				case <-ctx.Done():
-				case <-time.After(distributor.config.Interval):
+				case <-time.After(receiptWait.Next(distributor.config.Logger, err)):
 				}
 			}
 			continue
 		}
+		receiptWait.Reset()
 		if delivery != nil {
 			distributor.HandleReceipt(ctx, delivery)
 		}

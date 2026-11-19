@@ -216,13 +216,17 @@ function MaintenanceOverview({
       retry: false,
     })),
   })
-  // Node upgrade progress comes from the real rollout plans: recent plans that
-  // are still active or recorded a failed/rolled-back node are read in detail.
+  // Node upgrade progress comes from the real rollout plans. A node is described
+  // by its newest plan, so every recent plan up to the oldest one still active
+  // or with a failed/rolled-back node is read in detail (a newer completed plan
+  // hides an older failure); older plans cannot change any node's status.
   const rolloutQuery = useQuery({
     queryKey: ['maintenance-node-rollouts', ownerKey],
     queryFn: async () => {
       const list = await controlUpgradesApi.list(accessToken, { page: 1, pageSize: rolloutFactsPageSize })
-      const relevant = list.data.filter((plan) => activeRolloutStates.has(plan.state) || plan.failed_nodes > 0 || plan.rolled_back_nodes > 0)
+      const shown = list.data.map((plan, index) =>
+        activeRolloutStates.has(plan.state) || plan.failed_nodes > 0 || plan.rolled_back_nodes > 0 ? index : -1)
+      const relevant = list.data.slice(0, Math.max(-1, ...shown) + 1)
       return Promise.all(relevant.map(async (plan) => (await controlUpgradesApi.detail(accessToken, plan.id)).data))
     },
     enabled: canNodeRead,

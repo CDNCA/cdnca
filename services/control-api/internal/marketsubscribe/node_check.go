@@ -3,6 +3,7 @@ package marketsubscribe
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -158,6 +159,7 @@ func (s *Service) CheckNodeDelivery(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	settled := 0
+	var failed []error
 	for _, c := range due {
 		// A fresh relay message per attempt; supply.site_status changes nothing.
 		key := fmt.Sprintf("nodes-%s-%d-%s-%s-%d", c.siteID, c.revision, c.leaf.LeafMemberID, c.leaf.NodePoolRef, c.attempts+1)
@@ -168,13 +170,35 @@ func (s *Service) CheckNodeDelivery(ctx context.Context) (int, error) {
 		}
 		done, err := s.saveNodeCheck(ctx, c, nodeCheckDecision(c, reply, callErr, now, policy), now)
 		if err != nil {
-			return settled, err
+			// A leaf whose check cannot be saved (its audit or notice refused)
+			// rolled back as it was: it would be first again every pass. It is
+			// put off by MaxBackoff instead and the pass goes on.
+			if ctx.Err() != nil {
+				return settled, ctx.Err()
+			}
+			failed = append(failed, fmt.Errorf("site %s leaf %s: %w", c.siteID, c.leaf.LeafMemberID, err))
+			if err := s.putOffNodeCheck(ctx, c, now.Add(policy.MaxBackoff)); err != nil {
+				return settled, errors.Join(append(failed, err)...)
+			}
+			continue
 		}
 		if done {
 			settled++
 		}
 	}
-	return settled, nil
+	return settled, errors.Join(failed...)
+}
+
+// putOffNodeCheck moves the next check of c to next, while the leaf still
+// runs the revision this pass read and is still delivering.
+func (s *Service) putOffNodeCheck(ctx context.Context, c nodeCheck, next time.Time) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE site_supply_leaf_sites SET next_node_check_at=$6
+		WHERE site_id=$1 AND supply_id=$2 AND leaf_member_id=$3 AND node_pool_ref=$4 AND state='applied'
+		  AND applied_revision=$5 AND node_state='delivering'`,
+		c.siteID, c.supplyID, c.leaf.LeafMemberID, c.leaf.NodePoolRef, c.revision, next); err != nil {
+		return fmt.Errorf("put off node delivery check: %w", err)
+	}
+	return nil
 }
 
 // dueNodeChecks lists applied leaves still delivering, due at now, oldest first.

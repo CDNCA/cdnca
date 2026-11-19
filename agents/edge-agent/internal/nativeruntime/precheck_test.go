@@ -61,8 +61,90 @@ stream { server { listen 7000; proxy_pass origin; } }
 	}
 }
 
+// A bare ${var} argument (the live dynamic routing map lines) ends at the
+// next space or ;, like nginx: its } neither ends the word nor the block.
+// This conf made stripForInitLoad loop forever.
+func TestStripForInitLoadVariableBraces(t *testing.T) {
+	conf := `http {
+  map $upstream_connect_time $cdnca_origin_connect_ms {
+    ~^0\.00(?<cdnca_origin_connect_1>[1-9])$ ${cdnca_origin_connect_1}000;
+    "~^(?<s>[1-9][0-9]{0,5})\.(?<f>[0-9]{3})$" ${s}${f}000;
+    default -;
+  }
+  server { set $x ${host}y; listen 80; }
+}
+`
+	done := make(chan error, 1)
+	var got []byte
+	go func() {
+		var err error
+		got, err = stripForInitLoad([]byte(conf))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stripForInitLoad did not return in 5s")
+	}
+	text := string(got)
+	for _, kept := range []string{"${cdnca_origin_connect_1}000;", "${s}${f}000;", "default -;"} {
+		if !strings.Contains(text, kept) {
+			t.Errorf("%q missing from:\n%s", kept, text)
+		}
+	}
+	if strings.Contains(text, "listen") {
+		t.Errorf("server{} left in:\n%s", text)
+	}
+}
+
+// A variable only a server{} defines (set, set_by_lua*, auth_request_set,
+// a named regex capture) that the http block itself still uses (a map, a
+// log_format) stays declared once the servers are gone (the init load used to fail
+// with `unknown "cdnca_security_block_page" variable`).
+func TestStripForInitLoadKeepsVariablesOfDroppedServers(t *testing.T) {
+	conf := `http {
+  map $cdnca_security_block_page $cdnca_security_block_page_log { "1" true; default false; }
+  log_format j '$cdnca_site_id ${cdnca_cap}x $cdnca_lua';
+  server {
+    listen 80;
+    set $cdnca_security_block_page "";
+    set $cdnca_site_id 1;
+    set $cdnca_unused 1;
+    set_by_lua_block $cdnca_lua { return "1" }
+    location ~ ^/(?<cdnca_cap>[a-z]+)$ { return 200; }
+  }
+}
+stream { server { listen 7000; set $cdnca_stream 1; } }
+`
+	got, err := stripForInitLoad([]byte(conf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	for _, name := range []string{"cdnca_security_block_page", "cdnca_site_id", "cdnca_cap", "cdnca_lua"} {
+		if !strings.Contains(text, "map $pid $"+name+` { default ""; }`) {
+			t.Errorf("$%s not declared in:\n%s", name, text)
+		}
+	}
+	for _, name := range []string{"cdnca_unused", "cdnca_stream", "cdnca_security_block_page_log"} {
+		if strings.Contains(text, "$pid $"+name+" ") {
+			t.Errorf("$%s declared although nothing kept uses it (or a kept map defines it):\n%s", name, text)
+		}
+	}
+	if strings.Contains(text, "listen") {
+		t.Errorf("server{} left in:\n%s", text)
+	}
+	if again, err := stripForInitLoad(got); err != nil || string(again) != text {
+		t.Errorf("stripping again: %v\n%s", err, again)
+	}
+}
+
 func TestStripForInitLoadRefusesBrokenConf(t *testing.T) {
-	for _, conf := range []string{"http {", "http { } }", "http { init_by_lua_block { x = 1 }", `http { a "b; }`, "worker_processes 1"} {
+	for _, conf := range []string{"http {", "http { } }", "http { init_by_lua_block { x = 1 }", `http { a "b; }`, "worker_processes 1",
+		"http { a b }", "http { a ${b} }"} {
 		if _, err := stripForInitLoad([]byte(conf)); err == nil {
 			t.Errorf("%q: no error", conf)
 		}
@@ -83,13 +165,17 @@ func TestPrecheckOpenRestyReal(t *testing.T) {
 	}
 	defer held.Close()
 	port := held.Addr().(*net.TCPAddr).Port
+	// Every case's server{} sets $cdnca_page that an http-level map uses
+	// (the dynamic routing conf's shape); "undefined" uses one nothing
+	// defines, which a real nginx refuses.
 	for _, test := range []struct {
-		name, module, want string
+		name, module, http, want string
 	}{
-		{"good", `return { marker = "ok" }`, ""},
-		{"syntax", `return { marker = `, "unexpected symbol"},
-		{"error", `error("cdnca precheck boom")`, "cdnca precheck boom"},
-		{"missing", "", "module 'cdnca_precheck_probe' not found"},
+		{"good", `return { marker = "ok" }`, "", ""},
+		{"syntax", `return { marker = `, "", "unexpected symbol"},
+		{"error", `error("cdnca precheck boom")`, "", "cdnca precheck boom"},
+		{"missing", "", "", "module 'cdnca_precheck_probe' not found"},
+		{"undefined", `return { marker = "ok" }`, "map $cdnca_undefined $cdnca_undefined_log { default 0; }", `unknown "cdnca_undefined" variable`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			prefix := t.TempDir()
@@ -115,9 +201,12 @@ http {
   lua_shared_dict state 1m;
   init_by_lua_block { probe = require("cdnca_precheck_probe") }
   init_worker_by_lua_block { ngx.log(ngx.ERR, "worker started") }
-  server { listen 127.0.0.1:%[3]d; location / { return 200; } }
+  map $cdnca_page $cdnca_page_log { "1" true; default false; }
+  log_format j '$cdnca_page_log';
+  %[4]s
+  server { listen 127.0.0.1:%[3]d; set $cdnca_page ""; location / { return 200; } }
 }
-`, prefix, lua, port)), 0o644); err != nil {
+`, prefix, lua, port, test.http)), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			start := time.Now()

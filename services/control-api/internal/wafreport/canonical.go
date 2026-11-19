@@ -83,6 +83,119 @@ func canonicalPolicies(policies []json.RawMessage) ([]json.RawMessage, [32]byte,
 	return result, sha256.Sum256(encoded), nil
 }
 
+// skippedPolicy is a policy left out of a report: the license service would
+// refuse the whole report for it, and the sequence would never be sent.
+type skippedPolicy struct {
+	ID     string
+	Reason string
+}
+
+// reportablePolicies keeps the policies the license service accepts. The
+// checks follow services/license-service internal/licensing
+// validWAFCustomPolicy and must change with it.
+func reportablePolicies(policies []json.RawMessage) ([]json.RawMessage, []skippedPolicy) {
+	kept := make([]json.RawMessage, 0, len(policies))
+	var skipped []skippedPolicy
+	for _, raw := range policies {
+		var policy map[string]any
+		if err := json.Unmarshal(raw, &policy); err != nil {
+			skipped = append(skipped, skippedPolicy{Reason: "policy is not a JSON object"})
+			continue
+		}
+		if reason := policyRefusal(policy); reason != "" {
+			id, _ := policy["id"].(string)
+			skipped = append(skipped, skippedPolicy{ID: id, Reason: reason})
+			continue
+		}
+		kept = append(kept, raw)
+	}
+	return kept, skipped
+}
+
+func policyRefusal(policy map[string]any) string {
+	for key := range policy {
+		switch key {
+		case "id", "scope_id", "owner", "kind", "name", "description", "enabled", "default_action", "rules", "version", "schema_version":
+		default:
+			return "unsupported policy field " + key
+		}
+	}
+	if policy["kind"] != "waf" {
+		return "kind is not waf"
+	}
+	rules, ok := policy["rules"].([]any)
+	if !ok || len(rules) == 0 || len(rules) > maxItems {
+		return "rules must be 1-256 items"
+	}
+	for index, raw := range rules {
+		rule, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Sprintf("rules[%d] is not an object", index)
+		}
+		if reason := ruleRefusal(rule); reason != "" {
+			return fmt.Sprintf("rules[%d]: %s", index, reason)
+		}
+	}
+	return ""
+}
+
+func ruleRefusal(rule map[string]any) string {
+	for key := range rule {
+		switch key {
+		case "id", "name", "priority", "enabled", "comment", "expires_at", "conditions", "action", "flow", "action_config":
+		default:
+			return "unsupported rule field " + key
+		}
+	}
+	// managed_waf has no conditions; every other action needs one.
+	conditions, ok := rule["conditions"].([]any)
+	if rule["conditions"] == nil && rule["action"] == "managed_waf" {
+		conditions, ok = nil, true
+	}
+	if !ok || len(conditions) == 0 && rule["action"] != "managed_waf" || len(conditions) > maxItems {
+		return "conditions must be 1-256 items"
+	}
+	for index, raw := range conditions {
+		condition, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Sprintf("conditions[%d] is not an object", index)
+		}
+		for key := range condition {
+			switch key {
+			case "field", "operator", "key", "values", "filters", "body_overflow":
+			default:
+				return fmt.Sprintf("conditions[%d]: unsupported field %s", index, key)
+			}
+		}
+		if value, present := condition["body_overflow"]; present {
+			if _, ok := value.(string); !ok {
+				return fmt.Sprintf("conditions[%d]: body_overflow is not a string", index)
+			}
+		}
+		if value, present := condition["filters"]; present && !stringItems(value, false) {
+			return fmt.Sprintf("conditions[%d]: filters must be 1-256 strings", index)
+		}
+		noValues := condition["field"] == "jwt_claim" && condition["operator"] == "exists"
+		if !stringItems(condition["values"], noValues) {
+			return fmt.Sprintf("conditions[%d]: values must be 1-256 strings", index)
+		}
+	}
+	return ""
+}
+
+func stringItems(value any, allowEmpty bool) bool {
+	items, ok := value.([]any)
+	if !ok || len(items) == 0 && !allowEmpty || len(items) > maxItems {
+		return false
+	}
+	for _, item := range items {
+		if _, ok := item.(string); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func validJSON(value any, depth int) bool {
 	if depth > maxDepth {
 		return false

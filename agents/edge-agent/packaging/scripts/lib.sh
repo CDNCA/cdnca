@@ -1057,6 +1057,29 @@ asset-agent-env:/usr/libexec/cdnca-edge-agent/assets/config/agent.env:0644
 asset-config-example:/usr/libexec/cdnca-edge-agent/assets/config/config.example.json:0644
 asset-readme:/usr/libexec/cdnca-edge-agent/assets/README.md:0644'
 
+# install_logrotate_metadata TEMPLATE DESTINATION MODE: the packaged stanza
+# rotates as cdnca-edge (its log directory is cdnca-edge 0750). In root mode
+# the directory is root:root 0700 and logrotate's su to cdnca-edge cannot
+# stat it, so the installed stanza rotates as root; every install and
+# upgrade rewrites it, which corrects a node installed before.
+install_logrotate_metadata() {
+  if [ "${PACKAGE_RUNTIME_IDENTITY}" != root ]; then
+    install_atomic_metadata "$1" "$2" "$3"
+    return
+  fi
+  logrotate_render=$(mktemp -d "$(root_path /var/lib/cdnca-edge-agent-packaging)/.logrotate-render.XXXXXX")
+  sed -e 's/^    su cdnca-edge cdnca-edge$/    su root root/' \
+    -e 's/^    create 0640 cdnca-edge cdnca-edge$/    create 0600 root root/' "$1" >"${logrotate_render}/cdnca-edge-agent"
+  if ! grep -Fx '    su root root' "${logrotate_render}/cdnca-edge-agent" >/dev/null ||
+    ! grep -Fx '    create 0600 root root' "${logrotate_render}/cdnca-edge-agent" >/dev/null ||
+    grep -E '^ +(su|create) .*cdnca-edge' "${logrotate_render}/cdnca-edge-agent" >/dev/null; then
+    die "packaged logrotate template cannot be rendered for the root identity"
+  fi
+  install_atomic_metadata "${logrotate_render}/cdnca-edge-agent" "$2" "$3"
+  rm -f -- "${logrotate_render}/cdnca-edge-agent"
+  rmdir -- "${logrotate_render}"
+}
+
 install_atomic_metadata() {
   metadata_source=$1
   metadata_destination=$2

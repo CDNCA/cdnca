@@ -3,10 +3,16 @@
 package marketsubscribe
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func leafNodeRow(t *testing.T, svc *Service, site, member any) (state, reason, detail string, attempts int) {
@@ -118,5 +124,136 @@ func TestNodeDeliveryCheckSavesFailures(t *testing.T) {
 	if state, reason, detail, _ := leafNodeRow(t, svc, site, member); state != NodeFailed || reason != NodeReasonTimeout ||
 		detail != "security_activating:cc" {
 		t.Fatalf("after the limit = %s %s %s", state, reason, detail)
+	}
+}
+
+// seedPlatformBuyer adds an active platform member holding
+// marketplace.purchase (the recipients of notifyPurchasers), as the probe
+// alert fixture does.
+func seedPlatformBuyer(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := t.Context()
+	var platform uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT id FROM access_scopes WHERE kind='platform' AND tenant_id IS NULL`).Scan(&platform); err != nil {
+		t.Fatal(err)
+	}
+	var role uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT id FROM roles WHERE scope_id=$1 AND name='platform_owner'`, platform).Scan(&role); err != nil {
+		role = uuid.New()
+		if _, err := pool.Exec(ctx, `INSERT INTO roles(id,scope_id,name,system_role) VALUES($1,$2,'platform_owner',true)`, role, platform); err != nil {
+			t.Fatal(err)
+		}
+	}
+	buyer := uuid.New()
+	if err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		for _, st := range []struct {
+			q    string
+			args []any
+		}{
+			{`INSERT INTO users(id,username,display_name,password_hash) VALUES($1,$2,'node buyer','hash')`,
+				[]any{buyer, "nb" + strings.ReplaceAll(buyer.String(), "-", "")[:20]}},
+			{`INSERT INTO memberships(scope_id,user_id) VALUES($1,$2)`, []any{platform, buyer}},
+			{`INSERT INTO role_permissions(role_id,permission_name) VALUES($1,'marketplace.purchase') ON CONFLICT DO NOTHING`, []any{role}},
+			{`UPDATE notification_channel_settings SET email_enabled=true, sms_enabled=true WHERE singleton`, nil},
+			{`INSERT INTO role_assignments(scope_id,user_id,role_id) VALUES($1,$2,$3)`, []any{platform, buyer, role}},
+		} {
+			if _, err := tx.Exec(ctx, st.q, st.args...); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A leaf whose node pool ref
+// is long fails its node delivery; the failure notice used to carry the
+// 160-odd byte source as its audit request ID, the store refused it (128
+// max), the whole save rolled back and the leaf was asked again every pass.
+// It now settles failed, audited and notified once, and stays settled.
+func TestNodeDeliveryFailureWithALongNodePoolNotifies(t *testing.T) {
+	pool := testPool(t)
+	svc, leaves, site, member := singleLeafPool(t, pool, strings.Repeat("n", 128))
+	seedPlatformBuyer(t, pool)
+	notices, err := notification.NewStore(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := &fakeClock{at: time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)}
+	policy := DefaultReconcilePolicy()
+	svc.WithReconcile(clock.now, policy, notices)
+	leaves.nodes = map[uuid.UUID]map[string]string{member: {"state": "failed", "reason": "security_failed"}}
+	if _, err := svc.Apply(t.Context(), site, 1, config("203.0.113.60")); err != nil {
+		t.Fatal(err)
+	}
+	clock.at = clock.at.Add(policy.Backoff + time.Second)
+	if n, err := svc.CheckNodeDelivery(t.Context()); err != nil || n < 1 {
+		t.Fatalf("failed check = %d %v", n, err)
+	}
+	if state, reason, _, _ := leafNodeRow(t, svc, site, member); state != NodeFailed || reason != "security_failed" {
+		t.Fatalf("after failure = %s %s", state, reason)
+	}
+	var events int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM notification_events WHERE event_type=$1 AND source_event_id LIKE $2`,
+		NodeDeliveryFailedEvent, "market-nodes/"+site.String()+"/%").Scan(&events); err != nil || events < 1 {
+		t.Fatalf("failure notifications = %d %v", events, err)
+	}
+}
+
+// failingNotices refuses every notice of one site (the source names it).
+type failingNotices struct{ site uuid.UUID }
+
+func (f failingNotices) EnqueueTx(_ context.Context, _ pgx.Tx, request notification.EnqueueRequest) (notification.EnqueueResult, error) {
+	if strings.Contains(request.SourceEventID, f.site.String()) {
+		return notification.EnqueueResult{}, notification.ErrInvalidEnqueue
+	}
+	return notification.EnqueueResult{}, nil
+}
+
+// A leaf whose settled check cannot be saved does not hold
+// the pass up nor get asked again every pass: the pass reports it, puts it
+// off by MaxBackoff and the leaf is asked again only then.
+func TestNodeDeliveryCheckPutsOffALeafItCannotSave(t *testing.T) {
+	pool := testPool(t)
+	svc, leaves, site, member := singleLeaf(t, pool)
+	seedPlatformBuyer(t, pool)
+	clock := &fakeClock{at: time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)}
+	policy := DefaultReconcilePolicy()
+	svc.WithReconcile(clock.now, policy, failingNotices{site: site})
+	leaves.nodes = map[uuid.UUID]map[string]string{member: {"state": "failed", "reason": "security_failed"}}
+	if _, err := svc.Apply(t.Context(), site, 1, config("203.0.113.61")); err != nil {
+		t.Fatal(err)
+	}
+	statusCalls := func() int {
+		leaves.mu.Lock()
+		defer leaves.mu.Unlock()
+		n := 0
+		for _, call := range leaves.calls {
+			if call == "supply.site_status:"+member.String()[:4] {
+				n++
+			}
+		}
+		return n
+	}
+	clock.at = clock.at.Add(policy.Backoff + time.Second)
+	if _, err := svc.CheckNodeDelivery(t.Context()); !errors.Is(err, notification.ErrInvalidEnqueue) {
+		t.Fatalf("unsavable check = %v", err)
+	}
+	if state, _, _, _ := leafNodeRow(t, svc, site, member); state != NodeDelivering {
+		t.Fatalf("an unsaved check keeps delivering, got %s", state)
+	}
+	var next time.Time
+	if err := pool.QueryRow(t.Context(), `SELECT next_node_check_at FROM site_supply_leaf_sites WHERE site_id=$1 AND leaf_member_id=$2`,
+		site, member).Scan(&next); err != nil || !next.Equal(clock.at.Add(policy.MaxBackoff)) {
+		t.Fatalf("next_node_check_at = %s %v, want %s", next, err, clock.at.Add(policy.MaxBackoff))
+	}
+	asked := statusCalls()
+	clock.at = clock.at.Add(2 * time.Minute)
+	if _, err := svc.CheckNodeDelivery(t.Context()); err != nil {
+		t.Fatalf("pass before the put-off = %v", err)
+	}
+	if statusCalls() != asked {
+		t.Fatal("the leaf was asked again before its put-off")
 	}
 }

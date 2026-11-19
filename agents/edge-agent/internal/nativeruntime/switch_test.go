@@ -13,7 +13,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -448,5 +450,100 @@ func TestAgentRolledBackAfterFailedSwitchKeepsReportingRollback(t *testing.T) {
 	}
 	if status, _ := ReadStatus(f.status); status.State != StateSwitched || status.RolledBack != nil {
 		t.Fatalf("status after switch: %+v", status)
+	}
+}
+
+// killedPrepare is an Agent killed inside Prepare at the precheck (after the
+// current link moved, before config.json and the masters): runtime.Goexit
+// runs no more of Prepare than a SIGKILL would.
+func killedPrepare(t *testing.T, config Config) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = Prepare(context.Background(), config, func(context.Context) error { runtime.Goexit(); return nil })
+	}()
+	<-done
+}
+
+func securityPath(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		SecurityRuntime struct {
+			WAF struct {
+				Path string `json:"path"`
+			} `json:"waf"`
+		} `json:"security_runtime"`
+	}
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	return document.SecurityRuntime.WAF.Path
+}
+
+// The precheck hung, the upgrade killed the Agent, and the next start
+// found current already on the new release and took it as unchanged: the
+// masters kept the old binary, config.json the old Lua, the status said the
+// new runtime was active. The next start must put the previous runtime back
+// and switch again (precheck, config.json, binary upgrade).
+func TestSwitchKilledDuringPrecheckIsRedone(t *testing.T) {
+	for _, test := range []string{"status of the killed run", "status written by a start before the fix"} {
+		t.Run(test, func(t *testing.T) {
+			f := newFixture(t)
+			newSHA := f.buildPackage(t, f.packagePath, "1.0.1", "1.31.1.1", nil)
+			config := f.runAgent(t, "1.0.1")
+			killedPrepare(t, config)
+			if f.current(t) != "releases/"+newSHA || !strings.HasPrefix(securityPath(t, f.config), f.oldRelease+"/") {
+				t.Fatalf("the kill did not leave the half switch: current=%s waf=%s", f.current(t), securityPath(t, f.config))
+			}
+			if test != "status of the killed run" { // what such a node has now
+				digest, _ := fileSHA256(f.agent)
+				if err := writeStatus(f.status, Status{Schema: StatusSchema, State: StateUnchanged, AgentVersion: "1.0.1",
+					AgentSHA256: digest, Version: "1.0.1", Release: newSHA}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			prechecked := ""
+			pending, err := Prepare(context.Background(), config, func(context.Context) error { prechecked = f.current(t); return nil })
+			if err != nil || !pending.Switched() || prechecked != "releases/"+newSHA {
+				t.Fatalf("restart: %v switched=%v prechecked=%q", err, pending.Switched(), prechecked)
+			}
+			if !strings.HasPrefix(securityPath(t, f.config), filepath.Join(f.root, "releases", newSHA)+"/") {
+				t.Fatalf("config.json not switched: %s", securityPath(t, f.config))
+			}
+			http := &fakeHTTP{}
+			if err := pending.Commit(context.Background(), http); err != nil || http.calls != 1 {
+				t.Fatalf("commit: %v calls=%d", err, http.calls)
+			}
+			if status, _ := ReadStatus(f.status); status.State != StateSwitched || status.PreviousRelease != filepath.Base(f.oldRelease) {
+				t.Fatalf("status: %+v", status)
+			}
+		})
+	}
+}
+
+// Killed after Prepare switched, before Commit upgraded the masters: the
+// next start switches again instead of taking the runtime as unchanged.
+func TestSwitchNotCommittedIsRedone(t *testing.T) {
+	f := newFixture(t)
+	newSHA := f.buildPackage(t, f.packagePath, "1.0.1", "1.31.1.1", nil)
+	pending, err := Prepare(context.Background(), f.runAgent(t, "1.0.1"), nil)
+	if err != nil || !pending.Switched() {
+		t.Fatalf("prepare: %v", err)
+	}
+	if status, _ := ReadStatus(f.status); HealthError(status, "1.0.1") == nil {
+		t.Fatalf("an uncommitted switch reports healthy: %+v", status)
+	}
+	pending, err = Prepare(context.Background(), f.runAgent(t, "1.0.1"), nil)
+	if err != nil || !pending.Switched() || f.current(t) != "releases/"+newSHA {
+		t.Fatalf("restart: %v switched=%v current=%s", err, pending.Switched(), f.current(t))
+	}
+	http := &fakeHTTP{}
+	if err := pending.Commit(context.Background(), http); err != nil || http.calls != 1 {
+		t.Fatalf("commit: %v calls=%d", err, http.calls)
 	}
 }

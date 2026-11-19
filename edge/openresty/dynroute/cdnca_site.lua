@@ -325,18 +325,19 @@ local function unknown()
 end
 
 -- unknown_or_default(port, g): the port's default site (默认站点, index
--- name "", SITE_EDGE_OPTIONS) for a Host no site serves, else unknown.
+-- name "", SITE_EDGE_OPTIONS) for a Host no site serves (fourth value true:
+-- the fallback, no name of it matched), else unknown.
 local function unknown_or_default(port, g)
     local entry, err = probe(port, DEFAULT_NAME, g)
     if entry then
-        return entry, "ok", entry.site.hosts.primary
+        return entry, "ok", entry.site.hosts.primary, true
     elseif entry == false then
         return nil, "not_ready", err
     end
     return unknown()
 end
 
--- find_site(port, host, g): entry, state, matched name.
+-- find_site(port, host, g): entry, state, matched name, default fallback.
 local function find_site(port, host, g)
     if not port or not port_ready(port, g) then
         return nil, "not_ready"
@@ -417,7 +418,9 @@ end
 
 -- route(): contract §2. Returns the site object for "ok", nil for "unknown"
 -- (the caller decides between a node location and reject_unknown());
--- "not_ready" ends the request with 503.
+-- "not_ready" ends the request with 503. The second value is true when the
+-- site is the port's default site answering a Host it does not name (the
+-- caller may still give a node location back to the node: release()).
 function _M.route()
     -- A declared but never assigned variable reads as nil; an undeclared one
     -- fails on the first write below (contract §6.2 declares them).
@@ -429,12 +432,18 @@ function _M.route()
     end
     local g = _M.generation()
     local port = public_port()
-    local entry, state, matched = find_site(port, ngx_var.host, g)
+    local entry, state, matched, defaulted = find_site(port, ngx_var.host, g)
     write_vars(entry, state, matched, port, g)
     if state == "not_ready" then
         return exit_not_ready()
     end
-    return entry and entry.site
+    return entry and entry.site, defaulted
+end
+
+-- release(): undo a default site fallback of route(): the request is an
+-- unknown Host's (no site variables, state "unknown", same generation).
+function _M.release()
+    write_vars(nil, "unknown", nil, nil, ngx_var.cdnca_site_generation)
 end
 
 -- reject_unknown(): a Host no site serves gets the node's unknown_site page

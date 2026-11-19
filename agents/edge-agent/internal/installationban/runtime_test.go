@@ -1,12 +1,16 @@
 package installationban
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
+	transport "github.com/cdnca/cdnca/libs/edgeconfig/installationban"
 	contract "github.com/cdnca/cdnca/libs/entitlement/installationban"
 )
 
@@ -287,5 +291,63 @@ func TestForgedNoticeDoesNotStopValidBanStopsLiftResumes(t *testing.T) {
 		f.ticket(5, contract.DefaultNodeOfflineTolerance)); !result.Applied || result.Status != contract.StatusServing ||
 		f.serving.stopped || f.serving.resumes != resumes+1 {
 		t.Fatalf("lift: %+v %+v", result, f.serving)
+	}
+}
+
+// TestClockBehindIsNotAnInvalidDocument: a node resumed
+// from a 4 h freeze with its clock 4h09m behind and received revision 19
+// (issued at the license service's now) 2.5 minutes before NTP stepped the
+// clock. The refusal must be retryable (not_yet_valid) and logged with the
+// verification error; the same revision applies once the clock is right.
+// Only bytes that are themselves invalid stay invalid_document.
+func TestClockBehindIsNotAnInvalidDocument(t *testing.T) {
+	f := newFixture(t)
+	var logs bytes.Buffer
+	runtime, err := New(Config{Dir: f.dir, InstallationID: testInstallation, Serving: f.serving,
+		Now: func() time.Time { return f.now }, Logger: slog.New(slog.NewTextHandler(&logs, nil)),
+		Keys: func() map[string]ed25519.PublicKey {
+			return map[string]ed25519.PublicKey{f.trusted.KeyID(): f.trusted.private.Public().(ed25519.PublicKey)}
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Restore(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if result := runtime.Apply(t.Context(), nil, f.ticket(18, 30*24*time.Hour)); !result.Applied {
+		t.Fatalf("revision 18: %+v", result)
+	}
+	issued := f.now.Add(28 * time.Hour)
+	f.now = issued
+	next := f.ticket(19, 30*24*time.Hour)
+	f.now = issued.Add(-(4*time.Hour + 9*time.Minute))
+	result := runtime.Apply(t.Context(), nil, next)
+	if result.Applied || result.Reason != ReasonNotYetValid || transport.PermanentReason(result.Reason) {
+		t.Fatalf("clock behind: %+v, want retryable %s", result, ReasonNotYetValid)
+	}
+	if !strings.Contains(logs.String(), "level=WARN") || !strings.Contains(logs.String(), contract.ErrNotYetValid.Error()) ||
+		!strings.Contains(logs.String(), "revision=19") {
+		t.Fatalf("refusal not logged with its cause:\n%s", logs.String())
+	}
+	f.now = issued.Add(3 * time.Minute)
+	if result := runtime.Apply(t.Context(), nil, next); !result.Applied || runtime.Ticket().Revision != 19 {
+		t.Fatalf("same revision after the clock step: %+v", result)
+	}
+	if result := runtime.Apply(t.Context(), nil, []byte(`{"not":"a ticket"}`)); result.Reason != ReasonInvalid ||
+		!transport.PermanentReason(result.Reason) {
+		t.Fatalf("malformed bytes: %+v, want %s", result, ReasonInvalid)
+	}
+}
+
+// TestVerifierNotReadyIsNotAnInvalidDocument: a node whose clock reads zero
+// (not ready) cannot judge a document; the refusal is retryable.
+func TestVerifierNotReadyIsNotAnInvalidDocument(t *testing.T) {
+	f := newFixture(t)
+	runtime := f.runtime()
+	ticket := f.ticket(1, 30*24*time.Hour)
+	f.now = time.Time{}
+	if result := runtime.Apply(t.Context(), nil, ticket); result.Applied || result.Reason != ReasonNodeNotReady ||
+		transport.PermanentReason(result.Reason) {
+		t.Fatalf("zero clock: %+v, want retryable %s", result, ReasonNodeNotReady)
 	}
 }

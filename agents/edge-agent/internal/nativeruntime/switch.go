@@ -23,6 +23,7 @@ const (
 	StateUnchanged = "unchanged"  // the active runtime already is the package's
 	StateFailed    = "failed"     // the previous runtime stays active
 	StateNoPackage = "no_package" // native node, but this Agent release carries no runtime
+	StateSwitching = "switching"  // a switch began and has not finished; found at start = the Agent was killed in it
 )
 
 // Error codes (upgrade status error_code; ^[A-Z][A-Z0-9_]*$).
@@ -195,7 +196,8 @@ func (p *Pending) Abort(cause error) error {
 }
 
 func (p *Pending) restore(cause error) error {
-	return errors.Join(cause, switchLink(p.config.Root, p.previousTarget), writeConfig(p.config.ConfigPath, p.previousConfig))
+	// config.json first: killed in between, current alone is off and the next start finds it (interrupted).
+	return errors.Join(cause, writeConfig(p.config.ConfigPath, p.previousConfig), switchLink(p.config.Root, p.previousTarget))
 }
 
 func (p *Pending) finish(err error) error {
@@ -225,6 +227,16 @@ func (p *Pending) prepare(ctx context.Context, precheck Prechecker) error {
 	// A restart of the same Agent on the runtime it switched to last time:
 	// nothing to verify again.
 	last, readErr := ReadStatus(config.StatusPath)
+	// An Agent killed inside a switch (after the link moved, before Commit)
+	// left current on a release config.json and the running masters are not
+	// on: put the previous runtime back, then switch again as usual.
+	if interrupted := p.interrupted(last, readErr, previousTarget); interrupted != "" {
+		if err := p.undo(interrupted); err != nil {
+			return coded(CodeSwitch, fmt.Errorf("undo the interrupted switch to %s: %w", previousTarget, err))
+		}
+		previousTarget, readErr = interrupted, errors.New("interrupted switch undone")
+		p.previousTarget, p.status.PreviousRelease = previousTarget, strings.TrimPrefix(previousTarget, "releases/")
+	}
 	if readErr == nil && last.AgentSHA256 == agentDigest &&
 		last.AgentVersion == config.AgentVersion && (last.State == StateSwitched || last.State == StateUnchanged) &&
 		"releases/"+last.Release == previousTarget {
@@ -263,6 +275,11 @@ func (p *Pending) prepare(ctx context.Context, precheck Prechecker) error {
 	if p.previousConfig, err = os.ReadFile(config.ConfigPath); err != nil {
 		return coded(CodeSwitch, err)
 	}
+	marker := p.status
+	marker.State, marker.At = StateSwitching, config.Clock().UTC()
+	if err := writeStatus(config.StatusPath, marker); err != nil {
+		return coded(CodeSwitch, err)
+	}
 	// Switch first, then precheck through the link, so it checks the new Lua
 	// with the new binary. `openresty -t` alone never runs init_by_lua; the
 	// precheck (PrecheckOpenResty) adds an init-only load that does.
@@ -284,6 +301,66 @@ func (p *Pending) prepare(ctx context.Context, precheck Prechecker) error {
 	}
 	p.switched = true
 	return nil
+}
+
+// interrupted is the release to put back when a switch was cut short: the
+// previous release of a switching status whose target current is on, else
+// (no marker: an Agent before it was killed) the release config.json's
+// security Lua is in when current is on another one. "" = nothing to undo.
+func (p *Pending) interrupted(last Status, readErr error, current string) string {
+	if readErr == nil && last.State == StateSwitching && "releases/"+last.Release == current &&
+		validReleaseTarget("releases/"+last.PreviousRelease) {
+		return "releases/" + last.PreviousRelease
+	}
+	raw, err := os.ReadFile(p.config.ConfigPath)
+	if err != nil {
+		return ""
+	}
+	var document struct {
+		SecurityRuntime struct {
+			WAF struct {
+				Path string `json:"path"`
+			} `json:"waf"`
+		} `json:"security_runtime"`
+	}
+	if json.Unmarshal(raw, &document) != nil || document.SecurityRuntime.WAF.Path == "" {
+		return ""
+	}
+	relative, err := filepath.Rel(filepath.Join(p.config.Root, "releases"), document.SecurityRuntime.WAF.Path)
+	if err != nil {
+		return ""
+	}
+	name, _, _ := strings.Cut(filepath.ToSlash(relative), "/")
+	target := "releases/" + name
+	if target == current || !validReleaseTarget(target) {
+		return ""
+	}
+	if info, err := os.Stat(filepath.Join(p.config.Root, target)); err != nil || !info.IsDir() {
+		return ""
+	}
+	return target
+}
+
+// undo puts config.json (from the signed inventory of the release) and then
+// the current link back on previous.
+func (p *Pending) undo(previous string) error {
+	release := filepath.Join(p.config.Root, previous)
+	pkg, err := VerifyInstalledRelease(release, p.config.Keys)
+	if err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(p.config.ConfigPath)
+	if err != nil {
+		return err
+	}
+	updated, err := rewriteConfig(raw, pkg, release)
+	if err == nil {
+		err = writeConfig(p.config.ConfigPath, updated)
+	}
+	if err != nil {
+		return err
+	}
+	return switchLink(p.config.Root, previous)
 }
 
 // source is the runtime this Agent runs with: the signed package of its

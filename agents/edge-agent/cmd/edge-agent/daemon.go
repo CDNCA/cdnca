@@ -887,7 +887,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 			MaximumSendBytes: config.Telemetry.MaxBatchBytes + (64 << 10),
 			Transport:        config.Gateway.Transport, TunnelHost: config.Gateway.TunnelHost,
 			TunnelAudience: config.tunnelAudience(),
-		})
+		}, dialer)
 		if err != nil {
 			return nil, fmt.Errorf("configure telemetry gateway mTLS: %w", err)
 		}
@@ -1008,6 +1008,11 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 type switchingTelemetryDialer struct {
 	store gatewayclient.GatewayEndpointStateStore
 	base  telemetryclient.MTLSDialerConfig
+	// session: the control session's endpoint (FailoverDialer); nil or
+	// unknown = the active gateway address with the configured transport
+	session interface {
+		SessionEndpoint() (gatewayclient.GatewayEndpoint, bool)
+	}
 }
 
 // assembleTelemetryPipeline is the node telemetry pipeline (config.telemetry):
@@ -1103,23 +1108,38 @@ func assembleTelemetryPipeline(config fileConfig, timeouts parsedTimeouts, nodeI
 	return pipeline, nil
 }
 
-func newSwitchingTelemetryDialer(store gatewayclient.GatewayEndpointStateStore, base telemetryclient.MTLSDialerConfig) (telemetryclient.Dialer, error) {
+func newSwitchingTelemetryDialer(store gatewayclient.GatewayEndpointStateStore, base telemetryclient.MTLSDialerConfig,
+	session *gatewayclient.FailoverDialer) (telemetryclient.Dialer, error) {
 	if store == nil {
 		return nil, errors.New("gateway endpoint state is required")
 	}
 	dialer := &switchingTelemetryDialer{store: store, base: base}
+	if session != nil {
+		dialer.session = session
+	}
 	if _, err := dialer.current(); err != nil {
 		return nil, err
 	}
 	return dialer, nil
 }
 
-func (d *switchingTelemetryDialer) current() (telemetryclient.Dialer, error) {
-	state := d.store.Active()
+func (d *switchingTelemetryDialer) config() telemetryclient.MTLSDialerConfig {
 	config := d.base
+	if d.session != nil {
+		if endpoint, ok := d.session.SessionEndpoint(); ok {
+			config.Address, config.ServerName = endpoint.Address, endpoint.ServerName
+			config.Transport, config.TunnelHost = endpoint.Transport, endpoint.TunnelHost
+			return config
+		}
+	}
+	state := d.store.Active()
 	config.Address = state.Address
 	config.ServerName = state.ServerName
-	return telemetryclient.NewMTLSDialer(config)
+	return config
+}
+
+func (d *switchingTelemetryDialer) current() (telemetryclient.Dialer, error) {
+	return telemetryclient.NewMTLSDialer(d.config())
 }
 
 func (d *switchingTelemetryDialer) Dial(ctx context.Context) (telemetryclient.Connection, error) {

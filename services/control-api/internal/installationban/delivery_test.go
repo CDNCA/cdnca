@@ -203,7 +203,9 @@ func TestRetryBackoffIsCapped(t *testing.T) {
 func TestReasonClasses(t *testing.T) {
 	for reason, permanent := range map[string]bool{transport.ReasonInvalid: true, transport.ReasonInstallation: true,
 		transport.ReasonStale: true, transport.ReasonConflict: true, transport.ReasonExpired: true,
-		transport.ReasonPersistence: false, transport.ReasonEnforce: false, transport.ReasonUntrusted: false, "future_reason": false} {
+		transport.ReasonPersistence: false, transport.ReasonEnforce: false, transport.ReasonUntrusted: false, "future_reason": false,
+		// a node clock behind the issue time, a node not ready to verify
+		transport.ReasonNotYetValid: false, transport.ReasonNodeNotReady: false} {
 		if transport.PermanentReason(reason) != permanent {
 			t.Errorf("%s permanent = %v", reason, !permanent)
 		}

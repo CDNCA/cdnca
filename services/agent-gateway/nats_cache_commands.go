@@ -26,8 +26,8 @@ const (
 	CacheMessageKindHeader        = "CDNCA-Cache-Message"
 	CacheMessageKindCancel        = "cancel"
 	CacheMessageKindCancelReceipt = "cancel-receipt"
-	cacheConsumerPrefix          = "node_cache"
-	cacheMaximumDeliveries       = 20
+	cacheConsumerPrefix           = "node_cache"
+	cacheMaximumDeliveries        = 20
 )
 
 type NATSCacheCommandBus struct {
@@ -159,6 +159,12 @@ func (s *natsCacheCommandSubscription) Next(ctx context.Context) (CacheCommandDe
 				return nil, ctx.Err()
 			}
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
+				continue
+			}
+			if pullStillPending(err) {
+				if err := waitPendingPull(ctx); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			return nil, err

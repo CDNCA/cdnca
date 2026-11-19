@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -31,6 +32,12 @@ type Config struct {
 	OpenResty string // the node's OpenResty binary
 	Dir       string // scratch directory (recreated)
 	Probe     *dynwaf.Probe
+	// Globals are passed with -g before the probe's configuration, as on
+	// every other OpenResty of the node (native profile: "user cdnca-runtime
+	// cdnca-runtime;"). Without it the compiled-in "user nobody nobody"
+	// stops OpenResty at getgrnam("nobody") on hosts whose nobody group is
+	// named nogroup (Ubuntu 24.04).
+	Globals string
 	// Exclusions on /b (default 256), Rounds interleaved rounds (default
 	// 7) of Requests requests a variant (default 300) from Clients
 	// concurrent clients (default 4).
@@ -124,18 +131,37 @@ func Measure(ctx context.Context, cfg Config) (Result, error) {
 	if err := os.WriteFile(filepath.Join(cfg.Dir, "nginx.conf"), []byte(renderConfig(cfg, bucketFile)), 0o600); err != nil {
 		return Result{}, err
 	}
-	command := exec.CommandContext(ctx, cfg.OpenResty, "-p", cfg.Dir+"/", "-c", "nginx.conf")
+	// -e stderr: what OpenResty logs before it reads error_log goes to the
+	// captured stderr, not to the prefix's logs/error.log (none in Dir)
+	args := []string{"-e", "stderr", "-p", cfg.Dir + "/", "-c", "nginx.conf"}
+	if cfg.Globals != "" {
+		args = append(args, "-g", cfg.Globals)
+	}
+	command := exec.CommandContext(ctx, cfg.OpenResty, args...)
 	command.Cancel = func() error { return command.Process.Signal(syscall.SIGQUIT) }
 	command.WaitDelay = 5 * time.Second
+	stderr := &tailBuffer{}
+	command.Stderr = stderr
 	if err := command.Start(); err != nil {
 		return Result{}, fmt.Errorf("wafprobe: start OpenResty: %w", err)
 	}
 	// below the business workers (best effort)
 	_ = syscall.Setpriority(syscall.PRIO_PROCESS, command.Process.Pid, 10)
+	exited := make(chan struct{})
+	var exitErr error
+	go func() {
+		exitErr = command.Wait()
+		close(exited)
+	}()
 	defer func() {
 		_ = command.Process.Signal(syscall.SIGQUIT)
-		_ = command.Wait()
+		<-exited
 	}()
+	// failed adds what OpenResty said (stderr, error.log) to an error
+	failed := func(err error) error {
+		raw, _ := os.ReadFile(filepath.Join(cfg.Dir, "error.log"))
+		return fmt.Errorf("%w; OpenResty %s; stderr: %s; error.log: %s", err, strings.Join(args, " "), strings.TrimSpace(stderr.tail()), strings.TrimSpace(tail(raw)))
+	}
 	socket := filepath.Join(cfg.Dir, "probe.sock")
 	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{MaxIdleConnsPerHost: cfg.Clients,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -158,12 +184,18 @@ func Measure(ctx context.Context, cfg Config) (Result, error) {
 		}
 		return nil
 	}
-	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(50 * time.Millisecond) {
-		if err := get("/a"); err == nil {
+	for deadline := time.Now().Add(15 * time.Second); ; {
+		err := get("/a")
+		if err == nil {
 			break
-		} else if time.Now().After(deadline) || ctx.Err() != nil {
-			raw, _ := os.ReadFile(filepath.Join(cfg.Dir, "error.log"))
-			return Result{}, fmt.Errorf("wafprobe: OpenResty not ready: %v %s", err, tail(raw))
+		}
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			return Result{}, failed(fmt.Errorf("wafprobe: OpenResty not ready: %v", err))
+		}
+		select {
+		case <-exited: // it stopped: no point waiting for the socket
+			return Result{}, failed(fmt.Errorf("wafprobe: OpenResty exited before ready: %v", exitErr))
+		case <-time.After(50 * time.Millisecond):
 		}
 	}
 	// batch: requests from clients, the worker time a request (wall time
@@ -203,7 +235,7 @@ func Measure(ctx context.Context, cfg Config) (Result, error) {
 	for _, location := range []string{"/a", "/b"} {
 		value, err := batch(location, warmRequests)
 		if err != nil {
-			return Result{}, err
+			return Result{}, failed(err)
 		}
 		slowest = max(slowest, value)
 	}
@@ -218,7 +250,7 @@ func Measure(ctx context.Context, cfg Config) (Result, error) {
 		for _, location := range order {
 			value, err := batch(location, requests)
 			if err != nil {
-				return Result{}, err
+				return Result{}, failed(err)
 			}
 			values[location] = value
 		}
@@ -252,4 +284,26 @@ func tail(raw []byte) string {
 		raw = raw[len(raw)-512:]
 	}
 	return string(raw)
+}
+
+// tailBuffer keeps the last 2 KiB written to it (OpenResty's stderr).
+type tailBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (b *tailBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf = append(b.buf, p...)
+	if len(b.buf) > 2048 {
+		b.buf = b.buf[len(b.buf)-2048:]
+	}
+	return len(p), nil
+}
+
+func (b *tailBuffer) tail() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return tail(b.buf)
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -411,6 +412,9 @@ func (s *Spool) AppendBatch(ctx context.Context, envelopes []Envelope) ([]Append
 		return nil, err
 	}
 	if err := s.rebuildLocked(true); err != nil {
+		return nil, err
+	}
+	if err := s.expireAgedBacklogLocked(); err != nil {
 		return nil, err
 	}
 
@@ -985,6 +989,38 @@ func (s *Spool) loadAlertLocked() {
 		s.lastAlertCode = alert.Code
 		s.expiredEvents = alert.ExpiredEvents
 	}
+}
+
+// expireAgedBacklogLocked drops the backlog up to its oldest event while that
+// event is past the hard age limit: such a backlog was never acknowledged
+// (the Gateway unreachable or refusing it for a week) and otherwise refused
+// every later append for good, stopping the node's telemetry. The dropped
+// events are acknowledged locally (the next session's hello carries the new
+// cursor, so the Gateway expects the sequence after them), counted as
+// expired and alerted as SPOOL_AGE_EXPIRED.
+func (s *Spool) expireAgedBacklogLocked() error {
+	cutoff := s.config.Now().UTC().Add(-s.config.HardAgeLimit)
+	first := s.ack.Sequence
+	for len(s.oldest) > 0 {
+		index, found := s.pendingIndexLocked(s.oldest[0])
+		if !found {
+			return ErrCorruptState
+		}
+		record := s.pending[index]
+		if record.occurredAt.After(cutoff) {
+			break
+		}
+		if err := s.ackThroughLocked(record.sequence, record.eventID); err != nil {
+			return err
+		}
+	}
+	if dropped := s.ack.Sequence - first; dropped > 0 {
+		s.expiredEvents += dropped
+		s.recordAlertLocked("SPOOL_AGE_EXPIRED")
+		slog.Warn("event spool dropped a backlog past the hard age limit", "events", dropped,
+			"through_sequence", s.ack.Sequence, "hard_age_limit", s.config.HardAgeLimit.String())
+	}
+	return nil
 }
 
 func (s *Spool) recordAlertLocked(code string) {

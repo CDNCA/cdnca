@@ -125,12 +125,6 @@ type natsNodeMonitoringSubscription struct {
 	config       NATSNodeMonitoringBusConfig
 }
 
-const nodeMonitoringPendingPullBackoff = 50 * time.Millisecond
-
-func nodeMonitoringPullStillPending(err error) bool {
-	return err != nil && strings.Contains(strings.ToLower(err.Error()), "exceeded maxwaiting")
-}
-
 func (subscription *natsNodeMonitoringSubscription) Next(ctx context.Context) (NodeMonitoringDelivery, error) {
 	if subscription == nil || subscription.subscription == nil || ctx == nil {
 		return nil, fmt.Errorf("invalid node monitoring subscription")
@@ -151,11 +145,9 @@ func (subscription *natsNodeMonitoringSubscription) Next(ctx context.Context) (N
 			// for a moment, so an immediate re-pull is answered with 409 "Exceeded
 			// MaxWaiting". That is transient; returning it would make the gateway
 			// end the whole node session as "monitoring delivery failed".
-			if nodeMonitoringPullStillPending(err) {
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(nodeMonitoringPendingPullBackoff):
+			if pullStillPending(err) {
+				if err := waitPendingPull(ctx); err != nil {
+					return nil, err
 				}
 				continue
 			}

@@ -51,7 +51,7 @@ func (t *Tailer) quarantineLine(code string, source sourceIdentity, generation u
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return ErrUnsafePath
 	}
-	used, err := quarantineBytes(t.quarantineDir, t.stateDevice)
+	used, err := quarantineBytes(t.quarantineDir, t.stateDevice, t.config.Now().Add(-quarantineRetention))
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,15 @@ func (t *Tailer) quarantineLine(code string, source sourceIdentity, generation u
 	return writeStateJSON(t.quarantineDir, destination, record)
 }
 
-func quarantineBytes(directory string, device uint64) (int64, error) {
+// quarantineRetention: a quarantine record (metadata only, the line stays in
+// its source) is kept this long, the default spool hard age limit: past it
+// the line could no longer be appended anyway.
+const quarantineRetention = 7 * 24 * time.Hour
+
+// quarantineBytes is the size of the records written since expiry; older
+// records are removed (the directory is otherwise unbounded until the limit
+// stops the tail).
+func quarantineBytes(directory string, device uint64, expiry time.Time) (int64, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return 0, err
@@ -81,6 +89,12 @@ func quarantineBytes(directory string, device uint64) (int64, error) {
 		_ = file.Close()
 		if statErr != nil || !ok || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 || stat.Nlink != 1 || uint64(stat.Dev) != device {
 			return 0, ErrUnsafePath
+		}
+		if info.ModTime().Before(expiry) {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return 0, err
+			}
+			continue
 		}
 		total += info.Size()
 	}

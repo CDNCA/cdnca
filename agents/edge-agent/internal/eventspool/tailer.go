@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -338,13 +339,15 @@ func (t *Tailer) processSource(ctx context.Context, file *os.File, identity sour
 					return false, err
 				}
 				result.QuarantinedLines++
-				result.Issues = append(result.Issues, Issue{Code: "TAIL_ATTRIBUTION_MISSING", Generation: checkpoint.Generation, Offset: lineOffset})
+				result.Issues = append(result.Issues, Issue{Code: "TAIL_ATTRIBUTION_MISSING", Generation: checkpoint.Generation, Offset: lineOffset,
+					Reason: quarantineReason(line, parseErr)})
 			} else if parseErr != nil {
 				if err := t.quarantineLine("TAIL_INVALID_JSON", identity, checkpoint.Generation, lineOffset, consumed, line); err != nil {
 					return false, err
 				}
 				result.QuarantinedLines++
-				result.Issues = append(result.Issues, Issue{Code: "TAIL_INVALID_JSON", Generation: checkpoint.Generation, Offset: lineOffset})
+				result.Issues = append(result.Issues, Issue{Code: "TAIL_INVALID_JSON", Generation: checkpoint.Generation, Offset: lineOffset,
+					Reason: quarantineReason(line, parseErr)})
 			} else {
 				envelope.EventID = deterministicEventID(identity, checkpoint.Generation, lineOffset, t.config.Identity.EnrollmentNodeID, line)
 				if envelope.Type == EventSecurity && envelope.Count > 0 {
@@ -373,7 +376,7 @@ func (t *Tailer) parseSourceLine(line []byte) (Envelope, error) {
 			if errors.Is(err, ErrLineNotReady) || errors.Is(err, ErrLineSkipped) || errors.Is(err, ErrLineUnattributable) {
 				return Envelope{}, err
 			}
-			return Envelope{}, ErrInvalidEvent
+			return Envelope{}, fmt.Errorf("%w: %v", ErrInvalidEvent, err)
 		}
 		identity := resolved.Identity
 		identity.EnrollmentNodeID = t.config.Identity.EnrollmentNodeID
@@ -387,6 +390,23 @@ func (t *Tailer) parseSourceLine(line []byte) (Envelope, error) {
 		return ParseL4SourceLineBound(line, t.config.Identity)
 	}
 	return ParseSourceLineBound(line, t.config.CapturePolicy, t.config.Identity)
+}
+
+// maxQuarantineReasonBytes bounds Issue.Reason (it goes to the Agent log).
+const maxQuarantineReasonBytes = 256
+
+// quarantineReason: JSON syntax apart from a valid line refused by its
+// field checks or attribution (the parse error: it names fields, sites,
+// hosts and generations, never captured headers or bodies).
+func quarantineReason(line []byte, err error) string {
+	reason := err.Error()
+	if !json.Valid(line) {
+		reason = "line is not valid JSON"
+	}
+	if len(reason) > maxQuarantineReasonBytes {
+		reason = strings.ToValidUTF8(reason[:maxQuarantineReasonBytes], "")
+	}
+	return reason
 }
 
 func sortBySiteDimension(envelopes []Envelope) {

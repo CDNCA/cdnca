@@ -2,10 +2,14 @@ package marketsubscribe
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cdnca/cdnca/libs/marketproto/siteconf"
@@ -172,10 +176,31 @@ func (s *Service) ReconcileReceipts(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	settled := 0
+	var failed []error
+	// A receipt that cannot be read or saved (its audit or notice refused)
+	// rolled back as it was: it would be first again every pass. It is put
+	// off by MaxBackoff instead and the pass goes on (as CheckNodeDelivery).
+	putOff := func(p pendingReceipt, err error) error {
+		failed = append(failed, fmt.Errorf("site %s leaf %s: %w", p.siteID, p.leaf.LeafMemberID, err))
+		if _, err := s.pool.Exec(ctx, `UPDATE site_supply_leaf_sites SET next_reconcile_at=$7
+			WHERE site_id=$1 AND supply_id=$2 AND leaf_member_id=$3 AND node_pool_ref=$4 AND state='committing'
+			  AND pending_revision=$5 AND pending_digest=$6`,
+			p.siteID, p.supplyID, p.leaf.LeafMemberID, p.leaf.NodePoolRef, p.revision, p.digest,
+			now.Add(policy.MaxBackoff)); err != nil {
+			return errors.Join(append(failed, fmt.Errorf("put off receipt reconcile: %w", err))...)
+		}
+		return nil
+	}
 	for _, p := range due {
 		cfg, err := s.revisionConfig(ctx, p.siteID, p.revision)
 		if err != nil {
-			return settled, err
+			if ctx.Err() != nil {
+				return settled, ctx.Err()
+			}
+			if err := putOff(p, err); err != nil {
+				return settled, err
+			}
+			continue
 		}
 		// A fresh relay message per attempt (the relay derives the message ID
 		// from the key); the leaf's commit itself is idempotent per site and
@@ -189,13 +214,19 @@ func (s *Service) ReconcileReceipts(ctx context.Context) (int, error) {
 		outcome := reconcileDecision(p, reply, callErr, now, policy)
 		done, err := s.saveReconciled(ctx, p, outcome, now)
 		if err != nil {
-			return settled, err
+			if ctx.Err() != nil {
+				return settled, ctx.Err()
+			}
+			if err := putOff(p, err); err != nil {
+				return settled, err
+			}
+			continue
 		}
 		if done {
 			settled++
 		}
 	}
-	return settled, nil
+	return settled, errors.Join(failed...)
 }
 
 func (s *Service) reconcilePolicy() ReconcilePolicy {
@@ -341,6 +372,27 @@ func (s *Service) auditReconciled(ctx context.Context, tx pgx.Tx, p pendingRecei
 			"reason": notification.PublicValue(outcome.reason)})
 }
 
+// noticeIDs are the notification's source event and audit request IDs for
+// source. The source names the site, supply, leaf, node pool (up to 128
+// bytes) and revision, so it can pass the store's limits (256 and 128 bytes,
+// notification validateEnqueueRequest): an ID over its limit is the source's
+// kind and the SHA-256 of the whole source instead. Derived from source
+// alone, a retry gets the same IDs (dedup unchanged); a source within the
+// limits is kept as is.
+func noticeIDs(source string) (eventID, auditID string) {
+	kind, _, _ := strings.Cut(source, "/")
+	sum := sha256.Sum256([]byte(source))
+	digest := kind + "/" + hex.EncodeToString(sum[:])
+	eventID, auditID = source, source
+	if len(source) > 256 {
+		eventID = digest
+	}
+	if len(source) > 128 {
+		auditID = digest
+	}
+	return eventID, auditID
+}
+
 func platformScope(ctx context.Context, tx pgx.Tx) (uuid.UUID, error) {
 	var scope uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT id FROM access_scopes WHERE kind='platform' AND tenant_id IS NULL`).Scan(&scope); err != nil {
@@ -371,10 +423,11 @@ func (s *Service) notifyPurchasers(ctx context.Context, tx pgx.Tx, scope uuid.UU
 		notification.ChannelEmail: {ID: template, Version: version, Channel: notification.ChannelEmail},
 	}
 	site := siteID
+	eventID, auditID := noticeIDs(source)
 	for _, recipient := range recipients {
 		if _, err := s.notices.EnqueueTx(ctx, tx, notification.EnqueueRequest{ScopeID: scope, RecipientID: recipient,
-			SourceEventID: source, EventType: event, Policy: notification.DeliveryTenantSubscribed,
-			Templates: templates, AuditRequestID: source, SubjectSiteID: &site,
+			SourceEventID: eventID, EventType: event, Policy: notification.DeliveryTenantSubscribed,
+			Templates: templates, AuditRequestID: auditID, SubjectSiteID: &site,
 			Contexts: map[notification.Channel]notification.TemplateContext{notification.ChannelSMS: values, notification.ChannelEmail: values},
 		}); err != nil {
 			return fmt.Errorf("enqueue %s: %w", event, err)

@@ -159,6 +159,12 @@ func (subscription *natsSignerTrustSubscription) Next(ctx context.Context) (Sign
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
 				continue
 			}
+			if pullStillPending(err) {
+				if err := waitPendingPull(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			return nil, err
 		}
 		if len(messages) != 1 {

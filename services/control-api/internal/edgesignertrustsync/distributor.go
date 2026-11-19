@@ -212,18 +212,19 @@ func (distributor *Distributor) bundle(ctx context.Context, nodeID string, docum
 }
 
 func (distributor *Distributor) consumeReceipts(ctx context.Context) {
+	receiptWait := natsready.NewWaiter("edge signer trust receipts unavailable", distributor.config.Interval)
 	for ctx.Err() == nil {
 		delivery, err := distributor.config.Transport.NextReceipt(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				natsready.LogUnbound(distributor.config.Logger, "edge signer trust receipts unavailable", err)
 				select {
 				case <-ctx.Done():
-				case <-time.After(distributor.config.Interval):
+				case <-time.After(receiptWait.Next(distributor.config.Logger, err)):
 				}
 			}
 			continue
 		}
+		receiptWait.Reset()
 		if delivery != nil {
 			distributor.HandleReceipt(ctx, delivery)
 		}

@@ -336,7 +336,11 @@ func TestDrainUsesBoundedExponentialBackoff(t *testing.T) {
 	}
 }
 
-func TestSpoolAgeWatermarksFailClosed(t *testing.T) {
+// Soft age pushes back; past the hard age limit the never-acknowledged head
+// is dropped (counted as expired, SPOOL_AGE_EXPIRED) and the append goes on,
+// so one backlog the Gateway never took cannot stop the node's telemetry for
+// good (a node stalled for days behind one segment).
+func TestSpoolAgeWatermarks(t *testing.T) {
 	base := time.Unix(1_700_000_000, 0).UTC()
 	now := base.Add(time.Hour)
 	config := testConfig(t.TempDir())
@@ -358,11 +362,15 @@ func TestSpoolAgeWatermarksFailClosed(t *testing.T) {
 	now = base.Add(8 * 24 * time.Hour)
 	newer.EventID = "evt-hard"
 	newer.OccurredAt = now
-	if _, err := spool.AppendBatch(context.Background(), []Envelope{newer}); !errors.Is(err, ErrAgeLimit) {
-		t.Fatalf("hard age error = %v", err)
+	if results, err := spool.AppendBatch(context.Background(), []Envelope{newer}); err != nil || len(results) != 1 || results[0].Expired {
+		t.Fatalf("append past the hard age = %#v, %v", results, err)
 	}
 	stats, _ = spool.Stats()
-	if stats.AgePressure != "hard" || stats.LastAlertCode != "SPOOL_AGE_HARD_WATERMARK" || stats.PendingEvents != 1 {
+	if stats.AgePressure != "normal" || stats.LastAlertCode != "SPOOL_AGE_EXPIRED" || stats.PendingEvents != 1 || stats.ExpiredEvents != 1 {
 		t.Fatalf("hard age stats = %#v", stats)
+	}
+	records, err := spool.nextBatch(context.Background(), 10)
+	if err != nil || len(records) != 1 || records[0].EventID != "evt-hard" || records[0].Sequence != 2 {
+		t.Fatalf("pending after expiry = %#v, %v", records, err)
 	}
 }

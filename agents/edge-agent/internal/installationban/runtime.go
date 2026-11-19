@@ -41,6 +41,8 @@ const (
 	ReasonExpired      = transport.ReasonExpired
 	ReasonPersistence  = transport.ReasonPersistence
 	ReasonEnforce      = transport.ReasonEnforce
+	ReasonNotYetValid  = transport.ReasonNotYetValid
+	ReasonNodeNotReady = transport.ReasonNodeNotReady
 )
 
 // Serving is what the runtime asks the node to do.
@@ -162,11 +164,14 @@ func (runtime *Runtime) Apply(ctx context.Context, notice, ticket []byte) Result
 	now := runtime.config.Now()
 	options := contract.VerifyOptions{Now: now, ExpectedInstallationID: runtime.config.InstallationID,
 		Keys: runtime.config.Keys()}
+	// the checks a document cannot fail by itself (contract checkCommon
+	// reports them as an invalid document)
+	ready := !now.IsZero() && runtime.config.InstallationID != ""
 	reason := ""
 	next := runtime.state
 	nextNotice, nextTicket := runtime.notice, runtime.ticket
 	if notice != nil {
-		body, why := accept(notice, runtime.state.Notice, func() (uint64, error) {
+		body, why, err := accept(notice, runtime.state.Notice, ready, func() (uint64, error) {
 			verified, err := contract.VerifyNotice(notice, options)
 			return verified.Revision, err
 		})
@@ -175,18 +180,22 @@ func (runtime *Runtime) Apply(ctx context.Context, notice, ticket []byte) Result
 			next.Notice, nextNotice = body, &signed.Body
 		} else {
 			reason = why
+			runtime.refused("ban_notice", notice, why, err, now)
 		}
 	}
 	if ticket != nil {
-		body, why := accept(ticket, runtime.state.Ticket, func() (uint64, error) {
+		body, why, err := accept(ticket, runtime.state.Ticket, ready, func() (uint64, error) {
 			verified, err := contract.VerifyTicket(ticket, options)
 			return verified.Revision, err
 		})
 		if why == "" {
 			signed, _ := contract.DecodeTicket(ticket)
 			next.Ticket, nextTicket = body, &signed.Body
-		} else if reason == "" {
-			reason = why
+		} else {
+			if reason == "" {
+				reason = why
+			}
+			runtime.refused("service_ticket", ticket, why, err, now)
 		}
 	}
 	if !bytes.Equal(next.Notice, runtime.state.Notice) || !bytes.Equal(next.Ticket, runtime.state.Ticket) {
@@ -206,36 +215,61 @@ func (runtime *Runtime) Apply(ctx context.Context, notice, ticket []byte) Result
 	return Result{Applied: reason == "", Status: status, Reason: reason}
 }
 
-// accept checks one document against the kept bytes of its kind.
-func accept(encoded, kept []byte, verify func() (uint64, error)) ([]byte, string) {
+// errNotReady: the node cannot verify yet (ready false).
+var errNotReady = errors.New("installation ban: node clock or installation ID not ready")
+
+// accept checks one document against the kept bytes of its kind; a refusal
+// returns its reason and the error behind it. Only a document that is itself
+// invalid is invalid_document (permanent): a node clock behind the issue time
+// (ErrNotYetValid) or a node not ready to verify is retryable.
+func accept(encoded, kept []byte, ready bool, verify func() (uint64, error)) ([]byte, string, error) {
+	if !ready {
+		return nil, ReasonNodeNotReady, errNotReady
+	}
 	revision, err := verify()
 	switch {
 	case errors.Is(err, contract.ErrUntrusted):
-		return nil, ReasonUntrusted
+		return nil, ReasonUntrusted, err
 	case errors.Is(err, contract.ErrInstallationMatch):
-		return nil, ReasonInstallation
+		return nil, ReasonInstallation, err
 	case errors.Is(err, contract.ErrTicketExpired):
-		return nil, ReasonExpired
+		return nil, ReasonExpired, err
+	case errors.Is(err, contract.ErrNotYetValid):
+		return nil, ReasonNotYetValid, err
 	case err != nil:
-		return nil, ReasonInvalid
+		return nil, ReasonInvalid, err
 	}
-	var keptRevision uint64
 	var keptDigest [32]byte
 	if kept != nil {
 		keptDigest = contract.Digest(kept)
-		if signed, err := contract.DecodeNotice(kept); err == nil {
-			keptRevision = signed.Body.Revision
-		} else if signed, err := contract.DecodeTicket(kept); err == nil {
-			keptRevision = signed.Body.Revision
-		}
 	}
-	switch contract.CheckRevision(keptRevision, keptDigest, revision, contract.Digest(encoded)) {
+	switch err := contract.CheckRevision(revisionOf(kept), keptDigest, revision, contract.Digest(encoded)); err {
 	case contract.ErrRevisionRollback:
-		return nil, ReasonStale
+		return nil, ReasonStale, err
 	case contract.ErrRevisionConflict:
-		return nil, ReasonConflict
+		return nil, ReasonConflict, err
 	}
-	return append([]byte(nil), encoded...), ""
+	return append([]byte(nil), encoded...), "", nil
+}
+
+// revisionOf is the revision of notice or ticket bytes (0: none or unreadable).
+func revisionOf(encoded []byte) uint64 {
+	if encoded == nil {
+		return 0
+	}
+	if signed, err := contract.DecodeNotice(encoded); err == nil {
+		return signed.Body.Revision
+	} else if signed, err := contract.DecodeTicket(encoded); err == nil {
+		return signed.Body.Revision
+	}
+	return 0
+}
+
+// refused logs a refused document with the node clock and the error behind
+// the reason (the receipt carries the reason only).
+func (runtime *Runtime) refused(kind string, encoded []byte, reason string, err error, now time.Time) {
+	runtime.config.Logger.Warn("installation ban: document refused", "kind", kind, "revision", revisionOf(encoded),
+		"reason", reason, "permanent", transport.PermanentReason(reason), "node_clock", now.UTC(), "error", err)
 }
 
 // Tick re-evaluates the status (ticket expiry, a ban's until); the daemon

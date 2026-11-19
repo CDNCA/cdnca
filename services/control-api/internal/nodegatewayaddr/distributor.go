@@ -159,18 +159,19 @@ func (d *Distributor) publish(ctx context.Context, document PendingDocument, now
 }
 
 func (d *Distributor) consumeReceipts(ctx context.Context) {
+	receiptWait := natsready.NewWaiter("gateway address change receipts unavailable", d.config.Interval)
 	for ctx.Err() == nil {
 		delivery, err := d.config.Transport.NextReceipt(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				natsready.LogUnbound(d.config.Logger, "gateway address change receipts unavailable", err)
 				select {
 				case <-ctx.Done():
-				case <-time.After(d.config.Interval):
+				case <-time.After(receiptWait.Next(d.config.Logger, err)):
 				}
 			}
 			continue
 		}
+		receiptWait.Reset()
 		if delivery != nil {
 			d.HandleReceipt(ctx, delivery)
 		}

@@ -87,7 +87,7 @@ var (
 	official    = flag.String("official", "", "official rule pack sources (scripts/security/datasets/rulepacks; \"\" = skip)")
 	workers     = flag.Int("workers", 2, "worker_processes")
 	binary      = flag.String("openresty", "/usr/local/openresty/bin/openresty", "OpenResty binary")
-	suite       = flag.String("suite", "", "\"\" = every check; node-storage = only the node storage checks (nodestorage.go)")
+	suite       = flag.String("suite", "", "\"\" = every check; node-storage = only the node storage checks (nodestorage.go); node-locations = only the node location checks (nodelocations.go)")
 )
 
 const (
@@ -494,6 +494,14 @@ func main() {
 	}
 	h := &harness{ctx: ctx, config: config, runtime: runtime, input: dynroute.Input{CRSText: crs, Profiles: profiles,
 		ScopeVersions: map[string]string{scope: "0d130000-0000-4000-8000-0000000000a1"}}}
+	if *suite == "node-locations" {
+		_ = checkNodeLocations(h, config, runtime).Stop(ctx)
+		fmt.Printf("RESULT failures=%d\n", failures)
+		if failures != 0 {
+			os.Exit(1)
+		}
+		return
+	}
 
 	// -------------------------------------------------------- cold start
 	shop := withCache(makeSite(1, "shop.d13.test", 1, portPlain), 64<<20)

@@ -685,6 +685,36 @@ describe('ControlUpgradesPage', () => {
     expect(screen.queryByText('private')).not.toBeInTheDocument()
   })
 
+  // 最近的计划成功完成（无失败节点），更早一次计划里该节点失败；节点按最新计划显示，不再显示升级失败。
+  it('describes a node by its newest plan even when that plan completed without failures', async () => {
+    authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
+    const nodes = [inventoryNode(1)]
+    const succeeded = rolloutDetail([nodes[0].id], { id: '00000000-0000-4000-8000-000000000018', state: 'completed', completion: 'upgraded', nodes: [
+      { node_id: nodes[0].id, agent_version: '2.0.0', protocol_version: 1, state: 'healthy', dispatch_revision: '4' },
+    ] })
+    const failed = rolloutDetail([nodes[0].id], { id: '00000000-0000-4000-8000-000000000019', state: 'completed', completion: 'rolled_back', nodes: [
+      { node_id: nodes[0].id, agent_version: '2.0.0', protocol_version: 1, state: 'failed', dispatch_revision: '3' },
+    ] })
+    const older = rolloutDetail([nodes[0].id], { id: '00000000-0000-4000-8000-000000000017', state: 'completed', completion: 'upgraded', nodes: [
+      { node_id: nodes[0].id, agent_version: '2.0.0', protocol_version: 1, state: 'healthy', dispatch_revision: '1' },
+    ] })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = new URL(String(input), 'https://test.invalid')
+      if (url.pathname === '/v1/nodes') return Promise.resolve(json({ items: nodes }))
+      if (url.pathname.endsWith('/maintenance-upgrade-status')) return Promise.resolve(json({ data: maintenanceStatus({ nodes: url.searchParams.getAll('node_id').map((id) => nodeUpgrade(id)) }) }))
+      for (const plan of [succeeded, failed, older]) if (url.pathname.endsWith(plan.id)) return Promise.resolve(json({ data: plan }))
+      return Promise.resolve(json(listResponse(succeeded, failed, older)))
+    })
+    renderWithProviders(<ControlUpgradesPage />, ['/sys/op'])
+    const row = (await screen.findByText('Node 1')).closest('tr')!
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([input]) => String(input).endsWith(failed.id))).toBe(true))
+    await waitFor(() => expect(within(row).getByRole('button', { name: '升级' })).toBeEnabled())
+    expect(within(row).queryByText('升级失败，已回滚')).not.toBeInTheDocument()
+    expect(within(row).queryByText('升级失败')).not.toBeInTheDocument()
+    // Plans older than the oldest one with a failure cannot change a node's state: not read.
+    expect(fetchSpy.mock.calls.some(([input]) => String(input).endsWith(older.id))).toBe(false)
+  })
+
   it('shows the node and master upgrade logs as plain chronological text', async () => {
     authenticate(['control.upgrades.read', 'control.upgrades.manage', 'nodes.read'])
     const nodes = [inventoryNode(1)]

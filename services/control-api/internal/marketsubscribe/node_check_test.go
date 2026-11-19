@@ -91,3 +91,34 @@ func TestNodeCheckDecision(t *testing.T) {
 		}
 	})
 }
+
+// A check's source names the site,
+// the supply, the leaf, its node pool (up to 128 bytes) and the revision, so
+// it can pass the notification store's 128-byte audit request ID (and the
+// 256-byte source event ID). The IDs derived from it stay within both and
+// are the same for the same source (a retry dedups as before); a short
+// source is kept as is.
+func TestNoticeIDsStayWithinTheStoreLimits(t *testing.T) {
+	short := "market-nodes/a/b/c/p1/1"
+	if event, audit := noticeIDs(short); event != short || audit != short {
+		t.Fatalf("short source = %q %q", event, audit)
+	}
+	pool := strings.Repeat("p", 128)
+	long := "market-nodes/0f4b6a2e-6a59-4d39-9d6b-1c0a3c2d4e5f/7c9e6679-7425-40de-944b-e07fc1f90ae7/" +
+		"1b4e28ba-2fa1-11d2-883f-0016d3cca427/" + pool + "/9223372036854775807"
+	event, audit := noticeIDs(long)
+	if len(event) > 256 || len(audit) > 128 || !strings.HasPrefix(audit, "market-nodes/") || audit == long {
+		t.Fatalf("long source = %q (%d) %q (%d)", event, len(event), audit, len(audit))
+	}
+	if again, auditAgain := noticeIDs(long); again != event || auditAgain != audit {
+		t.Fatal("the same source must derive the same IDs")
+	}
+	if _, other := noticeIDs(long[:len(long)-1] + "6"); other == audit {
+		t.Fatal("another revision must derive another audit request ID")
+	}
+	// Within 256 the source event ID is kept (dedup unchanged), only the audit ID is digested.
+	mid := "market-receipt/" + strings.Repeat("x", 150)
+	if event, audit := noticeIDs(mid); event != mid || len(audit) > 128 || audit == mid {
+		t.Fatalf("mid source = %q %q", event, audit)
+	}
+}

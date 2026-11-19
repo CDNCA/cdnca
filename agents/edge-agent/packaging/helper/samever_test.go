@@ -167,6 +167,29 @@ func TestServiceSameVersionRollbackRestoresKeptBuild(t *testing.T) {
 	}
 }
 
+// 同版本重出 158→161 激活后回滚。Current 是回滚后已装的构建
+// （previous 的外层制品、已装 manifest），release_sequence 是本次尝试的防重放高水位 161
+// （PROTOCOL.md current：已装、accepted 与 helper 高水位的最大值），不是已装 manifest 的 158；
+// 节点上报的已装序号读 manifest 文件。下一次更高序号的重出照常可装。
+func TestServiceSameVersionRollbackCurrentIsInstalledBuildAtAttemptFence(t *testing.T) {
+	fixture, _ := newRereleaseFixture(t)
+	baseline := fixture.current()
+	rerelease := fixture.release(5, "1.0.0")
+	active := fixture.activateV3("txn-samever-fence", 20, protocol.ActionUpgrade, rerelease, baseline)
+	if response := fixture.handle(fixture.rollbackRequest("txn-samever-fence", rerelease, active, baseline), nil); !response.OK {
+		t.Fatalf("rollback = %#v", response)
+	}
+	current := fixture.current()
+	if current.Status != "active" || current.CurrentVersion != "1.0.0" || current.ArtifactSHA256 != baseline.ArtifactSHA256 ||
+		current.ReleaseSequence != 5 || current.ExecutionSequence != 20 || installedSequence(t, fixture, "1.0.0") != 1 {
+		t.Fatalf("current after same-version rollback = %#v (installed %d)", current, installedSequence(t, fixture, "1.0.0"))
+	}
+	next := fixture.activateV3("txn-samever-next", 21, protocol.ActionUpgrade, fixture.release(6, "1.0.0"), current)
+	if next.ReleaseSequence != 6 || installedSequence(t, fixture, "1.0.0") != 6 {
+		t.Fatalf("next re-release = %#v", next)
+	}
+}
+
 func TestServiceSameVersionRollbackWithoutRestorerFails(t *testing.T) {
 	fixture := newServiceFixture(t)
 	baseline := fixture.current()

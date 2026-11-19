@@ -200,6 +200,26 @@ func (distributor *Distributor) Wake() {
 	}
 }
 
+func (distributor *Distributor) consumeReceipts(ctx context.Context) {
+	receiptWait := natsready.NewWaiter("installation ban receipts unavailable", distributor.Interval)
+	for ctx.Err() == nil {
+		delivery, err := distributor.Commands.NextReceipt(ctx)
+		if err != nil {
+			if ctx.Err() == nil {
+				select {
+				case <-ctx.Done():
+				case <-time.After(receiptWait.Next(distributor.Logger, err)):
+				}
+			}
+			continue
+		}
+		receiptWait.Reset()
+		if delivery != nil {
+			distributor.HandleReceipt(ctx, delivery)
+		}
+	}
+}
+
 func (distributor *Distributor) Run(ctx context.Context) error {
 	distributor.init()
 	if distributor.Store == nil || distributor.Nodes == nil || distributor.Commands == nil || distributor.Interval <= 0 {
@@ -208,22 +228,7 @@ func (distributor *Distributor) Run(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for ctx.Err() == nil {
-			delivery, err := distributor.Commands.NextReceipt(ctx)
-			if err != nil {
-				if ctx.Err() == nil {
-					natsready.LogUnbound(distributor.Logger, "installation ban receipts unavailable", err)
-					select {
-					case <-ctx.Done():
-					case <-time.After(distributor.Interval):
-					}
-				}
-				continue
-			}
-			if delivery != nil {
-				distributor.HandleReceipt(ctx, delivery)
-			}
-		}
+		distributor.consumeReceipts(ctx)
 	}()
 	ticker := time.NewTicker(distributor.Interval)
 	defer ticker.Stop()

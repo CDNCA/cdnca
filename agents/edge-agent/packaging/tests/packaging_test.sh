@@ -567,6 +567,8 @@ grep -Fx 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' "${root}/usr/lib/systemd/s
 grep -Fx 'AmbientCapabilities=CAP_NET_BIND_SERVICE' "${root}/usr/lib/systemd/system/cdnca-edge-agent.service" >/dev/null || fail "unit lacks low-port precheck ambient capability"
 grep -F '/usr/sbin/nologin' "${root}/usr/lib/sysusers.d/cdnca-edge-agent.conf" >/dev/null || fail "sysuser is not non-login"
 grep -q '^cdnca-edge:' "${root}/etc/passwd" || fail "sysusers did not create the staged account"
+cmp -s "${root}/etc/logrotate.d/cdnca-edge-agent" "${packaging_root}/logrotate/cdnca-edge-agent" ||
+  fail "service-account logrotate is not the packaged stanza"
 staged_uid=$(awk -F: '$1 == "cdnca-edge" { print $3 }' "${root}/etc/passwd")
 staged_gid=$(awk -F: '$1 == "cdnca-edge" { print $4 }' "${root}/etc/passwd")
 [ "$(stat -c '%u:%g' "${root}/etc/cdnca-edge-agent/identity")" = "${staged_uid}:${staged_gid}" ] || fail "identity directory ownership"

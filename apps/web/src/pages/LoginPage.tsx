@@ -25,6 +25,27 @@ import { useBrandName, useThemeRuntime } from '../theme/runtime'
 import { useAuthStyle } from '../theme/authStyle'
 import { FeedbackWhen } from '@cdnca/ui'
 
+// The page abandons its requests (unmount, a new session,
+// changed credentials) with a reason of its own. The app handles every
+// rejection; a fetch wrapper outside it (a browser extension chaining .then()
+// on window.fetch) may leave its copy unhandled, and the browser would report
+// "Uncaught (in promise) AbortError: signal is aborted without reason" with
+// the stack at the abort. Only these reasons are kept out of that report.
+const abandonedReasons = new WeakSet<object>()
+let ignoringAbandoned = false
+function abandon(controller: AbortController | undefined) {
+  if (!controller) return
+  const reason = new DOMException('Login page request abandoned', 'AbortError')
+  abandonedReasons.add(reason)
+  if (!ignoringAbandoned && typeof window !== 'undefined') {
+    ignoringAbandoned = true
+    window.addEventListener('unhandledrejection', (event) => {
+      if (typeof event.reason === 'object' && event.reason !== null && abandonedReasons.has(event.reason)) event.preventDefault()
+    })
+  }
+  controller.abort(reason)
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -65,14 +86,14 @@ export function LoginPage() {
   useEffect(() => {
     const controller = new AbortController()
     void registrationAvailable(controller.signal).then(value => { if (!controller.signal.aborted) setCanRegister(value) })
-    return () => controller.abort()
+    return () => abandon(controller)
   }, [])
   // 登录页匿名读系统配置的系统名称；主题设了名称仍以主题为准（useBrandName）。
   const [systemName, setSystemName] = useState<string>()
   useEffect(() => {
     const controller = new AbortController()
     void publicBranding(controller.signal).then(value => { if (!controller.signal.aborted && value) setSystemName(value.systemName) })
-    return () => controller.abort()
+    return () => abandon(controller)
   }, [])
 
   useEffect(() => {
@@ -83,8 +104,8 @@ export function LoginPage() {
     return () => {
       active.current = false
       version.current += 1
-      sendAttempt.current?.controller.abort()
-      loginAttempt.current?.controller.abort()
+      abandon(sendAttempt.current?.controller)
+      abandon(loginAttempt.current?.controller)
       sendAttempt.current = null
       loginAttempt.current = null
     }
@@ -92,8 +113,8 @@ export function LoginPage() {
   useEffect(() => {
     form.resetFields()
     inFlight.current = false
-    sendAttempt.current?.controller.abort()
-    loginAttempt.current?.controller.abort()
+    abandon(sendAttempt.current?.controller)
+    abandon(loginAttempt.current?.controller)
     sendAttempt.current = null
     loginAttempt.current = null
     setRequirement(null)
@@ -127,8 +148,8 @@ export function LoginPage() {
   const resetChallenge = () => {
     version.current += 1
     inFlight.current = false
-    sendAttempt.current?.controller.abort()
-    loginAttempt.current?.controller.abort()
+    abandon(sendAttempt.current?.controller)
+    abandon(loginAttempt.current?.controller)
     sendAttempt.current = null
     loginAttempt.current = null
     setRequirement(null)

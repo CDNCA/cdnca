@@ -35,6 +35,13 @@ const (
 	ReasonExpired      = "ticket_expired"
 	ReasonPersistence  = "persistence_failed"
 	ReasonEnforce      = "enforce_failed"
+	// ReasonNotYetValid: the document is issued later than the node clock
+	// allows (MaxClockSkew); the node clock is behind (after a VM freeze)
+	// and the same bytes pass once it is right.
+	ReasonNotYetValid = "not_yet_valid"
+	// ReasonNodeNotReady: the node cannot judge the document yet (no clock,
+	// no installation ID).
+	ReasonNodeNotReady = "node_not_ready"
 )
 
 // permanentReasons are refusals the same command bytes always get again: the
@@ -42,8 +49,9 @@ const (
 // conflicting with what the node keeps, or an already ended ticket. Only a new
 // revision can change them. Every other reason (the node could not write its
 // state, could not stop/resume serving, does not yet hold the installation-ban
-// key that a later signer trust push brings, or a reason this version does not
-// know) may pass when the same revision is delivered again.
+// key that a later signer trust push brings, its clock is behind the issue
+// time or it is not ready to verify, or a reason this version does not know)
+// may pass when the same revision is delivered again.
 var permanentReasons = map[string]bool{ReasonInvalid: true, ReasonInstallation: true, ReasonStale: true,
 	ReasonConflict: true, ReasonExpired: true}
 

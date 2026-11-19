@@ -263,6 +263,23 @@ type telemetrySourceRunner struct {
 	// tailState: each source's last reported outcome (reportTail); used by
 	// the Run goroutine only.
 	tailState map[string]string
+	// quarantine: each source's quarantined lines not logged yet
+	// (reportQuarantine); Run goroutine only.
+	quarantine map[string]*quarantineReport
+	now        func() time.Time // nil = time.Now
+}
+
+// quarantineLogInterval: a source's quarantined lines are logged as one
+// summary at most this often.
+const quarantineLogInterval = 10 * time.Minute
+
+// quarantineCodes are the tail issues of a quarantined line.
+var quarantineCodes = map[string]bool{"TAIL_INVALID_JSON": true, "TAIL_ATTRIBUTION_MISSING": true, "TAIL_LINE_TOO_LARGE": true}
+
+type quarantineReport struct {
+	logged time.Time
+	counts map[string]int // issue code -> lines since logged
+	sample eventspool.Issue
 }
 
 func newTelemetrySourceRunner(config telemetrySourceConfig, sink eventspool.BatchSink) (*telemetrySourceRunner, error) {
@@ -523,12 +540,24 @@ func (r *telemetrySourceRunner) ErrorCode() string {
 // (quarantined, not ready, rotation) with its offset, and the recovery.
 func (r *telemetrySourceRunner) reportTail(tailer *eventspool.Tailer, result eventspool.TailResult, err error) {
 	path := tailer.SourcePath()
+	// Quarantined lines are summed, not each logged as an issue and its
+	// recovery (a source refusing every line logged twice a line).
+	others := make([]eventspool.Issue, 0, len(result.Issues))
+	quarantined := make([]eventspool.Issue, 0, len(result.Issues))
+	for _, issue := range result.Issues {
+		if quarantineCodes[issue.Code] {
+			quarantined = append(quarantined, issue)
+		} else {
+			others = append(others, issue)
+		}
+	}
+	r.reportQuarantine(path, quarantined)
 	state := ""
 	switch {
 	case err != nil:
 		state = "error:" + err.Error()
-	case len(result.Issues) > 0:
-		state = fmt.Sprintf("%s@%d", result.Issues[0].Code, result.Issues[0].Offset)
+	case len(others) > 0:
+		state = fmt.Sprintf("%s@%d", others[0].Code, others[0].Offset)
 	}
 	previous := r.tailState[path]
 	if state == previous {
@@ -541,7 +570,7 @@ func (r *telemetrySourceRunner) reportTail(tailer *eventspool.Tailer, result eve
 		slog.Error("telemetry source stalled", "source", path, "generation", generation, "offset", offset,
 			"appended", result.AppendedEvents, "error", err)
 	case state != "":
-		issue := result.Issues[0]
+		issue := others[0]
 		slog.Warn("telemetry source issue", "source", path, "generation", generation, "offset", offset,
 			"issue", issue.Code, "issue_offset", issue.Offset, "issues", len(result.Issues),
 			"quarantined", result.QuarantinedLines, "appended", result.AppendedEvents)
@@ -549,6 +578,46 @@ func (r *telemetrySourceRunner) reportTail(tailer *eventspool.Tailer, result eve
 		slog.Info("telemetry source recovered", "source", path, "generation", generation, "offset", offset,
 			"appended", result.AppendedEvents, "previous", previous)
 	}
+}
+
+// reportQuarantine adds a round's quarantined lines to the source's counts
+// and logs them, with the last line's reason as a sample, on the first
+// quarantine and then at most every quarantineLogInterval.
+func (r *telemetrySourceRunner) reportQuarantine(path string, issues []eventspool.Issue) {
+	report := r.quarantine[path]
+	if report == nil {
+		if len(issues) == 0 {
+			return
+		}
+		if r.quarantine == nil {
+			r.quarantine = make(map[string]*quarantineReport)
+		}
+		report = &quarantineReport{counts: make(map[string]int)}
+		r.quarantine[path] = report
+	}
+	for _, issue := range issues {
+		report.counts[issue.Code]++
+		report.sample = issue
+	}
+	now := time.Now()
+	if r.now != nil {
+		now = r.now()
+	}
+	if len(report.counts) == 0 || !report.logged.IsZero() && now.Sub(report.logged) < quarantineLogInterval {
+		return
+	}
+	codes := make([]string, 0, len(report.counts))
+	lines := 0
+	for code, count := range report.counts {
+		codes = append(codes, fmt.Sprintf("%s=%d", code, count))
+		lines += count
+	}
+	sort.Strings(codes)
+	slog.Warn("telemetry lines quarantined", "source", path, "lines", lines, "counts", strings.Join(codes, ","),
+		"sample_issue", report.sample.Code, "sample_generation", report.sample.Generation, "sample_offset", report.sample.Offset,
+		"sample_reason", report.sample.Reason)
+	report.logged = now
+	clear(report.counts)
 }
 
 // reportSource logs a registered source whose tailer cannot be built.

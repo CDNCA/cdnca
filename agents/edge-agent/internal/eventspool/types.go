@@ -328,6 +328,8 @@ type Issue struct {
 	Code       string `json:"code"`
 	Generation uint64 `json:"generation"`
 	Offset     int64  `json:"offset"`
+	// Reason: why a quarantined line was refused (bounded, no line content)
+	Reason string `json:"reason,omitempty"`
 }
 
 type TailResult struct {

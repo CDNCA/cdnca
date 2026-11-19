@@ -142,6 +142,12 @@ func (subscription *natsSSHAccessSubscription) Next(ctx context.Context) (*agent
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
 				continue
 			}
+			if pullStillPending(err) {
+				if err := waitPendingPull(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			return nil, err
 		}
 		if len(messages) != 1 {

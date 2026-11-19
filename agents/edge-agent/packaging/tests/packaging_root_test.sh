@@ -176,6 +176,38 @@ for asset in systemd/cdnca-edge-agent.service systemd/cdnca-edge-agent-root.serv
   cmp -s "${root}/usr/libexec/cdnca-edge-agent/assets/${asset}" "${packaging_root}/${asset}" || fail "asset ${asset}"
 done
 grep -q '^cdnca-edge:' "${root}/etc/passwd" || fail "helper socket account was not created"
+# Root-mode logs are root:root 0700: logrotate must rotate them as root, not
+# su to cdnca-edge (otherwise stat fails every day).
+assert_root_logrotate() {
+  logrotate_conf=${root}/etc/logrotate.d/cdnca-edge-agent
+  [ "$(stat -c '%u:%g:%a' "${logrotate_conf}")" = 0:0:644 ] || fail "root logrotate policy"
+  grep -Fx '    su root root' "${logrotate_conf}" >/dev/null || fail "root logrotate does not rotate as root"
+  grep -Fx '    create 0600 root root' "${logrotate_conf}" >/dev/null || fail "root logrotate create policy"
+  if grep -F cdnca-edge "${logrotate_conf}" | grep -v '^/var/log/cdnca-edge-agent/' >/dev/null; then
+    fail "root logrotate still names cdnca-edge"
+  fi
+  cmp -s "${root}/usr/libexec/cdnca-edge-agent/assets/logrotate/cdnca-edge-agent" "${packaging_root}/logrotate/cdnca-edge-agent" ||
+    fail "logrotate asset is not the packaged template"
+  if command -v logrotate >/dev/null 2>&1; then
+    logrotate_check=${workdir}/logrotate-check
+    rm -rf -- "${logrotate_check}"
+    install -d -m 0700 "${logrotate_check}"
+    sed "s#^/var/log/cdnca-edge-agent/#${root}/var/log/cdnca-edge-agent/#" "${logrotate_conf}" >"${logrotate_check}/conf"
+    printf 'line\n' >"${root}/var/log/cdnca-edge-agent/agent.log"
+    chmod 0600 "${root}/var/log/cdnca-edge-agent/agent.log"
+    logrotate -d -s "${logrotate_check}/state" "${logrotate_check}/conf" >"${logrotate_check}/debug.log" 2>&1 ||
+      { sed -n '1,40p' "${logrotate_check}/debug.log" >&2; fail "logrotate -d rejected the root configuration"; }
+    if grep -E '^error:' "${logrotate_check}/debug.log" >/dev/null; then
+      sed -n '1,40p' "${logrotate_check}/debug.log" >&2
+      fail "logrotate -d reported an error for the root configuration"
+    fi
+    logrotate -f -s "${logrotate_check}/state" "${logrotate_check}/conf" >"${logrotate_check}/run.log" 2>&1 ||
+      { sed -n '1,40p' "${logrotate_check}/run.log" >&2; fail "logrotate could not rotate root-mode logs"; }
+    [ -z "$(find "${root}/var/log/cdnca-edge-agent" -mindepth 1 ! -user 0 -print -quit)" ] || fail "rotated logs are not root-owned"
+    find "${root}/var/log/cdnca-edge-agent" -mindepth 1 -delete
+  fi
+}
+assert_root_logrotate
 assert_absent "${root}/etc/cdnca-edge-agent/identity"
 [ "$(policy "${root}/etc/cdnca-edge-agent")" = 0:0:700 ] || fail "config directory policy"
 [ "$(policy "${root}/etc/cdnca-edge-agent/tls")" = 0:0:700 ] || fail "tls directory policy"
@@ -227,11 +259,15 @@ chown 0:0 "${config}"
 : >"${workdir}/service-active"
 
 # Upgrade v1 -> v2: root probes, state backup, current switch, root unit kept.
+# A node installed before the fix holds the cdnca-edge stanza; the upgrade
+# rewrites it for the root identity.
+install -m 0644 "${packaging_root}/logrotate/cdnca-edge-agent" "${root}/etc/logrotate.d/cdnca-edge-agent"
 upgrade_bundle "${workdir}/v2" >/dev/null
 [ "$(readlink "${root}/usr/lib/cdnca-edge-agent/current")" = versions/v2 ] || fail "upgrade did not select v2"
 cmp -s "${unit}" "${packaging_root}/systemd/cdnca-edge-agent-root.service" || fail "upgrade replaced the root unit"
 cmp -s "${root}/usr/lib/tmpfiles.d/cdnca-edge-agent.conf" "${packaging_root}/tmpfiles/cdnca-edge-agent-root.conf" || \
   fail "upgrade replaced the root tmpfiles"
+assert_root_logrotate
 last_backup=$(readlink "${root}/var/lib/cdnca-edge-agent-backups/last-upgrade")
 [ "$(sed -n '1p' "${root}/var/lib/cdnca-edge-agent-backups/${last_backup}/state/state.txt")" = original-state ] || \
   fail "upgrade state backup content"

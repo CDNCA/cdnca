@@ -34,7 +34,7 @@
 | `unknown` | **421**，nginx 默认 421 页（`ngx.exit(421)`，与 v7 默认 server 的 `return 421` 逐字节相同；明文与 TLS 端口相同）；节点发布了全局 `unknown_site` 页时按该页状态（403/404/410/421）回页（`edgeskeleton.Input.UnknownSite`） | 索引已就绪而端口上无此 Host（含 IP Host、空 Host）；与 v7 默认 server 相同（`default_server.go`）。**SNI 与 Host 不一致不触发 421**：按 Host 选站（BATCH-PLUGIN 第 12 条），SNI 只用于证书（D4） |
 | `ok` | 继续流水线 | |
 
-节点级 location（健康、ACME overlay、市场探测、基准对象）由骨架在选站之前截走**仅当**选站结果为 `unknown`（ADR 0009 §3.3：路由先于探测路径）；`ok` 的请求走站点，`not_ready` 一律 503（D2 实现顺序见 §6.1）。
+节点级 location（健康、ACME overlay、市场探测、基准对象）由骨架在选站之前截走**仅当**选站结果为 `unknown`（ADR 0009 §3.3：路由先于探测路径）；`ok` 的请求走站点，`not_ready` 一律 503（D2 实现顺序见 §6.1）。例外：明文端口上的市场探测与基准对象路径、302 调度落地路径（只在渲染了落地的非四层转发端口），若 `ok` 只是端口默认站点（默认站点）对未命名 Host 的回落（拨测与落地都用节点 IP 作 Host），`cdnca_site.release()` 把它改回 `unknown` 交给节点，不进默认站点的 CC/WAF/回源；默认站点自己的域名照常走站点。
 
 ### 1.2 `$cdnca_site_max_body`
 

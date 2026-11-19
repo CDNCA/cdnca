@@ -152,7 +152,9 @@ func attribute(line []byte, registry *Registry, sites SiteResolver, nodeID strin
 		return Result{}, nil, fmt.Errorf("%w: line identity is not its site object's", ErrInvalid)
 	case *fields.ConfigVersionID != "":
 		return Result{}, nil, fmt.Errorf("%w: config_version_id is the Agent's to fill", ErrInvalid)
-	case !servesPort(site, attribution.Port) || !servesHost(site, *fields.Host):
+	case !servesPort(site, attribution.Port) || !site.Default && !servesHost(site, *fields.Host):
+		// the port's default site serves any Host no site names
+		// (cdnca_site.lua unknown_or_default)
 		return Result{}, nil, fmt.Errorf("%w: site %s does not serve %s:%d", ErrInvalid, site.SiteID, *fields.Host, attribution.Port)
 	case fields.Type == string(eventspool.EventSecurity) && (fields.ListenPort == nil || *fields.ListenPort != attribution.Port):
 		return Result{}, nil, fmt.Errorf("%w: security listen_port", ErrInvalid)

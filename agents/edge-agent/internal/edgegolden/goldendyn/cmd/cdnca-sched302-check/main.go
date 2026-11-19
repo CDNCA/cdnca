@@ -45,6 +45,7 @@ const (
 	siteID     = "0d302000-0000-4000-8000-000000000101"
 	sizedID    = "0d302000-0000-4000-8000-000000000102"
 	plainID    = "0d302000-0000-4000-8000-000000000103"
+	fallbackID = "0d302000-0000-4000-8000-000000000104"
 	self       = "0d302000-0000-4000-8000-0000000000a0"
 	nodeTel    = "0d302000-0000-4000-8000-0000000000b1"
 	nodeUni    = "0d302000-0000-4000-8000-0000000000c2"
@@ -376,6 +377,49 @@ func functional(origins *origin) {
 	check("small-file-served", first.status == http.StatusOK && second.status == http.StatusOK, "%d %d", first.status, second.status)
 }
 
+// withDefaultSite: the landing names a node by IP, so on a port
+// with a default site (默认站点) its Host is no site's name and the default
+// site would take it as its own: its server rewrite (package expired page,
+// traffic cap, CC), ACL/WAF and access phases. The landing path stays the
+// node's there; any other path of such a Host is still the default site's.
+// The default site's package ended: it answers 403 to everything.
+func withDefaultSite(sites []edgesite.Site) {
+	fallback := listener(fallbackID, "fallback.example.test", nil)
+	fallback.Default = true
+	fallback.PackageExpired = true
+	if err := startNode(append(append([]edgesite.Site(nil), sites...), fallback)); err != nil {
+		check("default-site-start", false, "%v", err)
+		return
+	}
+	var err2 error
+	if runtime, err2 = sched302runtime.New(*state, self); err2 != nil { // the state root was recreated
+		check("default-site-runtime", false, "%v", err2)
+		return
+	}
+	writeTable(candidates(), time.Now())
+	location, ok := redirected(telecom, domain, "/v/a.mp4?k=1", "127.0.0.2")
+	check("default-site-redirected", ok, "%s", location)
+	if !ok {
+		return
+	}
+	target := strings.TrimPrefix(location, "http://")
+	host := target[:strings.Index(target, "/")]
+	for i := range 3 {
+		landed := send(http.MethodGet, telecom, "http://"+target, host, nil)
+		check(fmt.Sprintf("default-site-landing-served-%d", i), landed.status == http.StatusOK && len(landed.body) == 5000,
+			"%d %d %.80q", landed.status, len(landed.body), landed.body)
+	}
+	tampered := strings.Replace(target, "/v/a.mp4", "/v/b.mp4", 1)
+	got := send(http.MethodGet, telecom, "http://"+tampered, host, nil)
+	check("default-site-landing-tampered-403", got.status == http.StatusForbidden && got.header.Get("X-Cdnca-S302-Reject") == "signature",
+		"%d %v", got.status, got.header)
+	got = send(http.MethodGet, telecom, fmt.Sprintf("http://%s/index.html", host), host, nil)
+	check("default-site-ip-host-other-path-is-site", got.status == http.StatusForbidden && got.header.Get("X-Cdnca-S302-Reject") == "",
+		"%d %v", got.status, got.header)
+	got = send(http.MethodGet, telecom, entry("/v/a.mp4"), "fallback.example.test", nil)
+	check("default-site-name-is-site", got.status == http.StatusForbidden, "%d", got.status)
+}
+
 func main() {
 	flag.Parse()
 	if err := installLibrary(); err != nil {
@@ -404,6 +448,7 @@ func main() {
 	}
 	writeTable(candidates(), time.Now())
 	functional(origins)
+	withDefaultSite(sites)
 	if failures != 0 {
 		raw, _ := os.ReadFile(filepath.Join(*state, goldendyn.SharedDirectory, "error.log"))
 		lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")

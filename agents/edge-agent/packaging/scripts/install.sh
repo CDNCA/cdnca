@@ -386,6 +386,8 @@ for relative in ${metadata_files}; do
   fi
   if [ "${relative}" = config/agent.env ] && { [ -e "${destination}" ] || [ -L "${destination}" ]; }; then
     assert_regular_file "${destination}" "existing environment file"
+  elif [ "${relative}" = logrotate/cdnca-edge-agent ]; then
+    install_logrotate_metadata "${source}" "${destination}" "${mode}"
   else
     install_atomic_metadata "${source}" "${destination}" "${mode}"
   fi

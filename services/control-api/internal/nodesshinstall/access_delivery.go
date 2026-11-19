@@ -299,18 +299,19 @@ func AccessCommand(target AccessTarget, operation string, now time.Time) *agentv
 }
 
 func (d *AccessDelivery) consumeReceipts(ctx context.Context) {
+	receiptWait := natsready.NewWaiter("SSH access receipts unavailable", d.config.Interval)
 	for ctx.Err() == nil {
 		delivery, err := d.config.Transport.NextReceipt(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				natsready.LogUnbound(d.config.Logger, "SSH access receipts unavailable", err)
 				select {
 				case <-ctx.Done():
-				case <-time.After(d.config.Interval):
+				case <-time.After(receiptWait.Next(d.config.Logger, err)):
 				}
 			}
 			continue
 		}
+		receiptWait.Reset()
 		if delivery != nil {
 			d.HandleReceipt(ctx, delivery)
 		}

@@ -65,6 +65,11 @@ type FailoverDialer struct {
 	// transport) skipped by the fallback probe until a new list names them.
 	dialed  int
 	avoided map[string]bool
+	// session is the endpoint the last successful dial used (address,
+	// server name, transport and tunnel host as dialed); sessionKnown is
+	// false before one.
+	session      GatewayEndpoint
+	sessionKnown bool
 	// preferred is the endpointID of a ws entry reached after the direct
 	// dial failed; persisted in learnedFile, reconnects and restarts start
 	// there and the fallback probe leaves it alone until it fails.
@@ -496,6 +501,9 @@ func (d *FailoverDialer) dialIndex(ctx context.Context, index int) (Connection, 
 		}
 	}
 	connection, err := dialer.Dial(ctx)
+	if err == nil {
+		d.recordSession(config)
+	}
 	if err == nil || config.Transport == gatewaytunnel.TransportWS || config.TunnelAudience == "" || ctx.Err() != nil {
 		return connection, err
 	}
@@ -510,7 +518,24 @@ func (d *FailoverDialer) dialIndex(ctx context.Context, index int) (Connection, 
 	if tunnelErr != nil {
 		return nil, errors.Join(err, tunnelErr)
 	}
+	d.recordSession(config)
 	return connection, nil
+}
+
+func (d *FailoverDialer) recordSession(config MTLSDialerConfig) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.session = GatewayEndpoint{Address: config.Address, ServerName: config.ServerName, Transport: config.Transport, TunnelHost: config.TunnelHost}
+	d.sessionKnown = true
+}
+
+// SessionEndpoint is the endpoint of the last successful dial, the one the
+// control session runs on: the telemetry stream dials the same Gateway path
+// (a node that reaches it only through a ws entry otherwise never uploads).
+func (d *FailoverDialer) SessionEndpoint() (GatewayEndpoint, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.session, d.sessionKnown
 }
 
 // endpointMigrator is a dialer that follows a disabled Gateway's migration

@@ -147,6 +147,9 @@ type Client struct {
 	runDone                  chan struct{}
 	now                      func() time.Time
 	jitter                   func(time.Duration) time.Duration
+	// stableSession: how long an established session must stay up before
+	// its end resets the reconnect backoff (defaultStableSession)
+	stableSession time.Duration
 
 	// siteObjects is the object store of site_runtime 9 deployments.
 	siteObjects       *objectstore.Store
@@ -271,6 +274,7 @@ func New(config Config, dialer Dialer, manager DeploymentManager, trust *TrustSt
 		jitter: func(duration time.Duration) time.Duration {
 			return time.Duration(float64(duration) * (0.8 + rand.Float64()*0.4))
 		},
+		stableSession: defaultStableSession,
 	}
 	for _, option := range options {
 		if option == nil {
@@ -1415,8 +1419,11 @@ func (c *Client) Run(ctx context.Context) error {
 		if err == nil && connection == nil {
 			err = fmt.Errorf("dialer returned a nil connection")
 		}
+		var sessionLife time.Duration
 		if err == nil {
+			sessionStart := time.Now()
 			established, err = c.runSession(ctx, connection.Client())
+			sessionLife = time.Since(sessionStart)
 			_ = connection.Close()
 			if !established && err != nil {
 				if migrator, ok := c.dialer.(endpointMigrator); ok {
@@ -1453,9 +1460,10 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		// 会话曾经建立过（网关可达）就把退避复位，只有握手前的连续失败才翻倍，
-		// 避免一次短暂断线后要等到 30 秒才重连、主控误判节点离线。
-		stableSession := established
+		// 会话建立后稳定运行满 stableSession 才把退避复位，避免一次短暂断线后
+		// 要等到 30 秒才重连、主控误判节点离线；建立后很快又被网关断开的会话
+		// （如上报被 InvalidArgument 拒绝）与握手前失败一样翻倍，不再毫秒级重连。
+		stableSession := established && sessionLife >= c.stableSession
 		if stableSession {
 			backoff = c.config.InitialBackoff
 		}
@@ -1482,6 +1490,10 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}
 }
+
+// defaultStableSession: a session up this long ended for a reason other than
+// what it sent (the next wait is InitialBackoff again).
+const defaultStableSession = 30 * time.Second
 
 func waitOrDone(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)

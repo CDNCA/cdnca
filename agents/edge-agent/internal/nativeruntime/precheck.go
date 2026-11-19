@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -100,7 +102,10 @@ var initLoadDropped = map[string]bool{"pid": true, "daemon": true, "master_proce
 // stripForInitLoad is conf without any server{} block (a plain `server x;`
 // of an upstream stays), init_worker_by_lua* and the main-level
 // initLoadDropped directives. *_by_lua_block bodies are Lua: their braces are
-// matched skipping Lua strings and comments.
+// matched skipping Lua strings and comments. A variable only a dropped
+// server{} defined that the rest of its block still uses (a map, a
+// log_format) is declared there by an empty map, as nginx needs every used
+// variable defined; `openresty -t` already checked the real configuration.
 func stripForInitLoad(conf []byte) ([]byte, error) {
 	var output bytes.Buffer
 	if end, err := stripBlock(conf, 0, &output, true); err != nil {
@@ -114,6 +119,7 @@ func stripForInitLoad(conf []byte) ([]byte, error) {
 // stripBlock copies the directives from i up to the } closing the block (or
 // the end at main level) and returns the position of that }.
 func stripBlock(conf []byte, i int, output *bytes.Buffer, main bool) (int, error) {
+	var dropped map[string]bool // variables the dropped server{} blocks define
 	for {
 		start := i
 		i = skipSpace(conf, i)
@@ -129,6 +135,7 @@ func stripBlock(conf []byte, i int, output *bytes.Buffer, main bool) (int, error
 				return i, errors.New("unbalanced }")
 			}
 			output.Write(conf[start:i])
+			declareDropped(output, dropped)
 			return i, nil
 		}
 		name := ""
@@ -139,6 +146,9 @@ func stripBlock(conf []byte, i int, output *bytes.Buffer, main bool) (int, error
 			}
 			if conf[i] == ';' || conf[i] == '{' {
 				break
+			}
+			if conf[i] == '}' { // nginx: unexpected "}"
+				return i, errors.New("unexpected }")
 			}
 			word, next, err := token(conf, i)
 			if err != nil {
@@ -178,8 +188,45 @@ func stripBlock(conf []byte, i int, output *bytes.Buffer, main bool) (int, error
 			output.Write(conf[start : i+1])
 			output.Write(body.Bytes())
 			output.WriteByte('}')
+		} else if name == "server" {
+			if dropped == nil {
+				dropped = map[string]bool{}
+			}
+			for _, pattern := range serverVariablePatterns {
+				for _, match := range pattern.FindAllSubmatch(conf[i:end], -1) {
+					dropped[string(match[1])] = true
+				}
+			}
 		}
 		i = end + 1
+	}
+}
+
+// serverVariablePatterns find the variables a server{} defines: set (and
+// set_by_lua*, set-misc's set_*), auth_request_set and named regex captures.
+// A match in a comment or Lua string only declares one more variable.
+var serverVariablePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?:^|[\s;{}])(?:set\w*|auth_request_set)\s+\$(\w+)`),
+	regexp.MustCompile(`\(\?P?<(\w+)>`),
+	regexp.MustCompile(`\(\?'(\w+)'`),
+}
+
+// declareDropped appends to a block's kept text an empty map for each
+// dropped variable the text uses and does not define itself.
+func declareDropped(output *bytes.Buffer, dropped map[string]bool) {
+	names := make([]string, 0, len(dropped))
+	for name := range dropped {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		quoted := regexp.QuoteMeta(name)
+		uses := regexp.MustCompile(`\$(?:` + quoted + `\b|\{` + quoted + `\})`)
+		defines := regexp.MustCompile(`\b(?:(?:map|geo|split_clients)\s+(?:(?:"[^"]*"|'[^']*'|[^\s{;]+)\s+)?\$` + quoted +
+			`\s*\{|(?:js_set|perl_set)\s+\$` + quoted + `\b)`)
+		if text := output.Bytes(); uses.Match(text) && !defines.Match(text) {
+			fmt.Fprintf(output, "map $pid $%s { default \"\"; }\n", name)
+		}
 	}
 }
 
@@ -200,8 +247,9 @@ func skipSpace(conf []byte, i int) int {
 	return i
 }
 
-// token reads one quoted or bare argument at i (a bare one stops at
-// whitespace, ; and {, except the { of ${var}).
+// token reads one quoted or bare argument at i. A bare one stops at
+// whitespace, ; and { (not the { of ${var}) like nginx's: } does not end it
+// (the } of ${var}), \ escapes the next byte.
 func token(conf []byte, i int) (string, int, error) {
 	if quote := conf[i]; quote == '"' || quote == '\'' {
 		for j := i + 1; j < len(conf); j++ {
@@ -216,10 +264,14 @@ func token(conf []byte, i int) (string, int, error) {
 	j := i
 	for ; j < len(conf); j++ {
 		c := conf[j]
+		if c == '\\' && j+1 < len(conf) {
+			j++
+			continue
+		}
 		if c == '{' && j > i && conf[j-1] == '$' {
 			continue
 		}
-		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ';' || c == '{' || c == '}' {
+		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ';' || c == '{' {
 			break
 		}
 	}

@@ -4,9 +4,12 @@ package marketsubscribe
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/notification"
 	"github.com/google/uuid"
 )
 
@@ -136,5 +139,57 @@ func TestReconcileGivesUpWithReason(t *testing.T) {
 		WHERE site_id=$1 AND leaf_member_id=$2`, site, member).Scan(&state, &lastError); err != nil ||
 		state != "inconsistent" || lastError != "receipt unconfirmed: leaf offline" {
 		t.Fatalf("after giving up = %s %q %v", state, lastError, err)
+	}
+}
+
+// As for node checks: a receipt whose settlement cannot
+// be saved (its notice refused) does not hold the pass up nor get resent
+// every pass: the pass reports it, puts it off by MaxBackoff and the leaf is
+// sent the revision again only then.
+func TestReconcilePutsOffAReceiptItCannotSave(t *testing.T) {
+	pool := testPool(t)
+	svc, leaves, site, member := singleLeaf(t, pool)
+	seedPlatformBuyer(t, pool)
+	clock := &fakeClock{at: time.Date(2026, 11, 19, 14, 0, 0, 0, time.UTC)}
+	policy := DefaultReconcilePolicy()
+	policy.MaxAttempts = 1
+	svc.WithReconcile(clock.now, policy, failingNotices{site: site})
+	drop := injectReceiptCheck(t, pool, site, "state = 'applied'")
+	if _, err := svc.Apply(t.Context(), site, 1, config("203.0.113.62")); err == nil {
+		t.Fatal("apply with an unsavable receipt succeeded")
+	}
+	drop()
+	leaves.mu.Lock()
+	leaves.failCom[member] = true
+	leaves.mu.Unlock()
+	sent := func() int {
+		leaves.mu.Lock()
+		defer leaves.mu.Unlock()
+		n := 0
+		for _, call := range leaves.calls {
+			if strings.HasSuffix(call, ":"+member.String()[:4]) {
+				n++
+			}
+		}
+		return n
+	}
+	clock.at = clock.at.Add(policy.Grace + time.Second)
+	if _, err := svc.ReconcileReceipts(t.Context()); !errors.Is(err, notification.ErrInvalidEnqueue) {
+		t.Fatalf("unsavable reconcile = %v", err)
+	}
+	var state string
+	var next time.Time
+	if err := pool.QueryRow(t.Context(), `SELECT state,next_reconcile_at FROM site_supply_leaf_sites
+		WHERE site_id=$1 AND leaf_member_id=$2`, site, member).Scan(&state, &next); err != nil ||
+		state != "committing" || !next.Equal(clock.at.Add(policy.MaxBackoff)) {
+		t.Fatalf("after an unsaved settlement = %s %s %v, want committing %s", state, next, err, clock.at.Add(policy.MaxBackoff))
+	}
+	before := sent()
+	clock.at = clock.at.Add(2 * time.Minute)
+	if _, err := svc.ReconcileReceipts(t.Context()); err != nil {
+		t.Fatalf("pass before the put-off = %v", err)
+	}
+	if sent() != before {
+		t.Fatal("the leaf was sent the revision again before its put-off")
 	}
 }

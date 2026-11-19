@@ -89,6 +89,10 @@ func (reporter *Reporter) reportOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	policies, skipped := reportablePolicies(policies)
+	for _, item := range skipped {
+		reporter.logger.Warn("custom WAF policy left out of report", "policy_id", item.ID, "reason", item.Reason)
+	}
 	canonical, digest, err := CanonicalPolicies(policies)
 	if err != nil {
 		return err
