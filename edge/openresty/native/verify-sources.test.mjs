@@ -96,12 +96,13 @@ test('rejects a dangling symlink preimage', () => {
 
 test('locked patches retain immutable upstream hashes and explicit port provenance', () => {
   const lock = JSON.parse(readFileSync(new URL('./sources.lock.json', import.meta.url)));
-  assert.equal(lock.patches.length, 29);
+  assert.equal(lock.patches.length, 40);
+  const ported = [7, 15, 16, 29, 37];
   for (const [index, entry] of lock.patches.entries()) {
     assert.equal(sha256(readFileSync(new URL(entry.file, import.meta.url))), entry.sha256);
     assert.ok(entry.files.every((file) => /^[0-9a-f]{64}$/.test(file.after)));
-    if ((index < 15 || index >= 17) && index !== 7 && entry.upstream) assert.equal(entry.sha256, entry.upstream.sha256);
-    if ([7, 15, 16].includes(index) || entry.origin?.kind === 'cdnca-local-module' || entry.origin?.kind === 'vendored-module') assert.ok(entry.adaptation);
+    if (!ported.includes(index) && entry.upstream) assert.equal(entry.sha256, entry.upstream.sha256);
+    if (ported.includes(index) || entry.origin?.kind === 'cdnca-local-module' || entry.origin?.kind === 'vendored-module') assert.ok(entry.adaptation);
   }
   assert.equal(lock.source.signer.fingerprint, '25451EB088460026195BD62CB550E09EA0E98066');
   assert.equal(lock.source.sha256, '65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42');
@@ -167,6 +168,32 @@ test('the upstream host check patch is step 29 and continues the upstream chain'
   assert.equal(entry.files[1].before, lock.patches[23].files.find((file) => file.path === 'src/http/ngx_http_upstream.c').after);
   assert.ok(lock.patches.slice(0, 28).every((step) => step.files.every((other) => other.path !== 'src/http/ngx_http_upstream.h')));
   assert.match(readFileSync(new URL(entry.file, import.meta.url), 'utf8'), /ngx_http_cdnca_upstream_set_ssl_host_check/);
+});
+
+test('steps 30-40 are the NGINX 1.31.9 security commits, chained on steps 01-29', () => {
+  const lock = JSON.parse(readFileSync(new URL('./sources.lock.json', import.meta.url)));
+  const commits = ['2df48a501d0f', '30b8bf67e21f', 'd9fd14eb3eb4', '6f9fceed8dd7', '2b129b9363f0', 'c51ffa2d1a6b',
+    '8492a8b8a92a', 'e39708edc69a', 'e27f5fa84fe6', 'b5252dae1ca0', 'd1ffe6fa89fe'];
+  const latest = new Map();
+  for (const [index, step] of lock.patches.entries()) {
+    for (const file of step.files) {
+      if (index >= 29 && latest.has(file.path)) assert.equal(file.before, latest.get(file.path), `${step.file} ${file.path}`);
+      latest.set(file.path, file.after);
+    }
+  }
+  for (const [offset, commit] of commits.entries()) {
+    const entry = lock.patches[29 + offset];
+    assert.equal(entry.directory, 'bundle/nginx-1.31.1');
+    assert.ok(entry.file.startsWith(`patches/${30 + offset}-${commit}`));
+    assert.ok(entry.upstream.commit.startsWith(commit));
+    assert.equal(entry.upstream.url, `https://api.github.com/repos/nginx/nginx/commits/${entry.upstream.commit}`);
+    assert.equal(entry.upstream.accept, 'application/vnd.github.patch');
+  }
+  // The two context-only ports change exactly the upstream lines.
+  const added = (index) => readFileSync(new URL(lock.patches[index].file, import.meta.url), 'utf8')
+    .split('\n').filter((line) => /^\+[^+]/.test(line));
+  assert.deepEqual(added(29), ['+    ngx_reusable_connection(h2c->connection, 0);']);
+  assert.equal(added(37).filter((line) => /send_queued/.test(line)).length, 6);
 });
 
 test('the body size patch is a local, core-only step', () => {
@@ -242,7 +269,7 @@ test('signed upstream archive replays the complete source-only patch chain', {
   try {
     const output = join(dir, 'verified');
     const result = verifySources(process.env.CDNCA_OPENRESTY_SOURCE, output);
-    assert.equal(result.patches, 29);
+    assert.equal(result.patches, 40);
     assert.equal(result.evidence, 'source-only');
     assert.throws(() => verifySources(process.env.CDNCA_OPENRESTY_SOURCE, output), /must not exist/);
     const core = (file) => readFileSync(join(output, 'bundle/nginx-1.31.1', file), 'utf8');
@@ -292,6 +319,12 @@ test('signed upstream archive replays the complete source-only patch chain', {
     assert.match(readFileSync(join(output, 'bundle/ngx_brotli/config'), 'utf8'), /ngx_module_libs="-lbrotlienc -lbrotlicommon -lm"/);
     assert.match(readFileSync(join(output, 'bundle/ngx_brotli/filter/ngx_http_brotli_filter_module.c'), 'utf8'), /ngx_http_brotli_quality\(r, conf\)/);
     assert.match(core('src/http/modules/ngx_http_gzip_filter_module.c'), /ctx->level = \(int\) ngx_http_gzip_level\(r, conf\);/);
+    // 30-40: NGINX 1.31.9 security fixes on the 1.31.1 core.
+    assert.match(core('src/http/v2/ngx_http_v2.c'), /h2c->processing\+\+;\n\n    ngx_reusable_connection\(h2c->connection, 0\);/);
+    assert.match(core('src/http/v2/ngx_http_v2.c'), /NGX_HTTP_V2_MAX_WINDOW - h2c->send_window - h2c->send_queued/);
+    assert.equal((core('src/http/v2/ngx_http_v2_filter_module.c').match(/h2c->send_queued [+-]= /g) ?? []).length, 3);
+    assert.match(core('src/http/ngx_http_request_body.c'), /if \(n == NGX_AGAIN \|\| !c->read->ready \|\| rb->rest == 0\)/);
+    assert.match(core('src/stream/ngx_stream_ssl_preread_module.c'), /duplicate/i);
     assert.equal(sha256(core('src/event/quic/ngx_event_quic_bpf_code.c')),
       '1748f472b22a737cd9c89d59258eeca26f64b8f46c60b466d2c3377699f142ac');
   } finally {

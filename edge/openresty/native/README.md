@@ -84,6 +84,28 @@ applied with exact context after step 17.
 | CVE-2026-97629 TLS session ticket forgery | Not affected | Rotation needs nginx-managed shared keys: `ssl_session_cache shared:` without `ssl_session_ticket_key`. No edge renderer emits `ssl_session_cache` (OpenSSL's internal ticket keys are used where tickets stay on); HTTP/3 and certificate-store listeners set `ssl_session_tickets off`. Re-evaluate if a shared session cache is ever rendered. |
 | CVE-2026-97205 AIO use-after-free | Not affected | Needs `aio` (off by default) and SSI `include virtual`; no renderer emits `aio`, `ssi` or `thread_pool`. |
 
+### NGINX 1.31.9 / 1.30.7 advisories (rechecked 2026-11-19)
+
+Steps 30–40 are the release-1.31.9 commits in upstream order, applied with exact
+context after step 29. All are byte for byte except 30 and 38, whose context
+differs only because 1.31.1 still has `priority_limit` and
+`ngx_http_v2_queue_frame(h2c, frame)` (RFC 9218 priorities, b74b5c96, and
+61031503 came later); the added lines are upstream's. OpenResty 1.31.8.1, the
+newest OpenResty release, contains NGINX 1.31.8 and none of these fixes.
+
+| CVE | Status for this build | Steps |
+| --- | --- | --- |
+| CVE-2026-123007 HTTP/2 flow control memory corruption | Affected: `http2 on` on edge TLS ports | 38 (e27f5fa84fe6) |
+| CVE-2026-123633 HTTP/2 use-after-free | Affected: idle-connection reuse (76672e650, 1.19.7) is in 1.31.1 | 30 (2df48a501d0f) |
+| CVE-2026-121810 HTTP/3 use-after-free | Affected: `http3 on` / `quic reuseport` listeners | 39 (b5252dae1ca0) |
+| CVE-2026-118899 TLS 1.3 request body infinite loop | Affected: `ssl_protocols TLSv1.2 TLSv1.3` | 34 (2b129b9363f0), 35 (c51ffa2d1a6b, HTTP/3 follow-up) |
+| CVE-2026-123634 resolver use-after-free | Code affected: the system `resolver` directive and static-certificate `ssl_stapling` are rendered | 36 (8492a8b8a92a), 37 (e39708edc69a) |
+| CVE-2026-123640 stream ssl_preread validation | Affected: L4 v2 renders `ssl_preread on` | 31 (30b8bf67e21f), 32 (d9fd14eb3eb4) |
+| CVE-2026-120967 stream client-certificate SNI bypass | Code affected (`--with-stream_ssl_module`); no renderer emits stream TLS termination | 33 (6f9fceed8dd7) |
+| CVE-2026-125283 alias + try_files overflow | Code affected (core); the only rendered `try_files` (ACME) uses no `alias` | 40 (d1ffe6fa89fe) |
+| CVE-2026-120993 PROXY protocol v2 NULL dereference | Not affected | Not ported: upstream PROXY v2 write support (cfb1d173) is 1.31.4+; OpenResty's own v2 writer in 1.31.1 already checks `SSL_get_certificate()` for NULL. |
+| CVE-2026-113425 mail proxy use-after-free | Not reachable | Not ported: `--with-mail` is built with POP3, IMAP and SMTP all disabled, so no `mail` server can be configured (`nginx -t` rejects it), and no renderer emits `mail`. Port e505109a, 754fe68c, a22ab710, 013ce187, 1d1d861a (they apply cleanly) if a mail protocol is ever enabled. |
+
 Every release accepts the runtime freshly built from its own commit
 (`scripts/native-node-runtime-acceptance.mjs`, below): a full native build,
 smoke and signing, with no dependency on an earlier signed runtime.

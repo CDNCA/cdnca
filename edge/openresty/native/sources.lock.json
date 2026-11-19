@@ -1,6 +1,6 @@
 {
   "schema": "cdnca.native-openresty.sources/v1",
-  "reviewed_at": "2026-10-16",
+  "reviewed_at": "2026-11-19",
   "validation_scope": "source-only; no runtime or release eligibility claim",
   "source": {
     "version": "1.31.1.1",
@@ -856,6 +856,216 @@
         "local": "CDNCA original (AUDIT-FINAL C7: 回源 HTTPS 不校验源站证书); no upstream equivalent"
       },
       "adaptation": "ngx_http_cdnca_upstream_set_ssl_host_check(r, enable) marks the request's upstream (ngx_http_upstream_t.cdnca_no_ssl_host_check); ngx_http_upstream_ssl_handshake then skips ngx_ssl_check_host for it while proxy_ssl_verify stays on (the chain verdict is proxy_ssl_verify_by_lua's). cdnca_origintls.peer calls it through LuaJIT FFI for every attempt (0 only for trust anchor \"none\"). Unmarked attempts keep the stock check."
+    },
+    {
+      "file": "patches/30-2df48a501d0f-1.31.1.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "6eddbbe83d203494e1841886b82d07bf7d13dfaab9d524717482b08c13d16e10",
+      "files": [
+        {
+          "path": "src/http/v2/ngx_http_v2.c",
+          "before": "a91155fdce48f446783665bc5d063a922819fffbe796b381cd8e0ad56b94d15d",
+          "after": "213ae0063be25318571b3698f80a973b9449962e9ede8529d4cddd17953c08b1"
+        }
+      ],
+      "upstream": {
+        "commit": "2df48a501d0fb8212b7d39dffeeff5876332ba59",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/2df48a501d0fb8212b7d39dffeeff5876332ba59",
+        "accept": "application/vnd.github.patch",
+        "sha256": "e28b6463fb3a9d6807d64c5db327138e4e382bb551f02318726356930dda28d7"
+      },
+      "adaptation": "Context-only port: 1.31.1 still has the priority_limit update after h2c->processing++ (removed upstream by b74b5c96, RFC 9218 priorities); the added ngx_reusable_connection(h2c->connection, 0) line is placed right after h2c->processing++, as upstream."
+    },
+    {
+      "file": "patches/31-30b8bf67e21f.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "c3b0d60f260cc6d2cfd5bdb320568e5d21cff80127e7118c3f4c9eeb7ec57594",
+      "files": [
+        {
+          "path": "src/stream/ngx_stream_ssl_preread_module.c",
+          "before": "da20a95e8e2085aa357f79e272402515bf1972069bd43b70b9daa5501d11c419",
+          "after": "6fda5eb19a3c906b2a0b64a4ec6fbefd902ebc5692668094f50923e31465a27d"
+        }
+      ],
+      "upstream": {
+        "commit": "30b8bf67e21f41fb81c9905c202bc4b7b8b1179b",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/30b8bf67e21f41fb81c9905c202bc4b7b8b1179b",
+        "accept": "application/vnd.github.patch",
+        "sha256": "c3b0d60f260cc6d2cfd5bdb320568e5d21cff80127e7118c3f4c9eeb7ec57594"
+      }
+    },
+    {
+      "file": "patches/32-d9fd14eb3eb4.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "04368e36d7f10e3f1986446fa996d48e5e80030ad4cce51a2b4f392ce7de85cc",
+      "files": [
+        {
+          "path": "src/stream/ngx_stream_ssl_preread_module.c",
+          "before": "6fda5eb19a3c906b2a0b64a4ec6fbefd902ebc5692668094f50923e31465a27d",
+          "after": "e055e52e4590f32b28981e82b19699fcdc6b994fd724c6cb67177f6abdb91173"
+        }
+      ],
+      "upstream": {
+        "commit": "d9fd14eb3eb4fc08a43b8ac7462ba9ed23caf958",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/d9fd14eb3eb4fc08a43b8ac7462ba9ed23caf958",
+        "accept": "application/vnd.github.patch",
+        "sha256": "04368e36d7f10e3f1986446fa996d48e5e80030ad4cce51a2b4f392ce7de85cc"
+      }
+    },
+    {
+      "file": "patches/33-6f9fceed8dd7.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "64c77e1995da21cb09c22a71537507df69fd692d3b87ebdcae3ffa74163c3819",
+      "files": [
+        {
+          "path": "src/stream/ngx_stream_ssl_module.c",
+          "before": "8e61515918d0f485532322ccc1e90adf725be20d44deff2ab2472f105643ac96",
+          "after": "cda7fb8b9a4db184e9061b2a880e7e0841b124d3390b19f4d64103e52f7c960f"
+        }
+      ],
+      "upstream": {
+        "commit": "6f9fceed8dd7eb7d39b3930dc4f6824ecfe88559",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/6f9fceed8dd7eb7d39b3930dc4f6824ecfe88559",
+        "accept": "application/vnd.github.patch",
+        "sha256": "64c77e1995da21cb09c22a71537507df69fd692d3b87ebdcae3ffa74163c3819"
+      }
+    },
+    {
+      "file": "patches/34-2b129b9363f0.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "31e6c658beccbf4923dc59b49ac2201195e6e8dc6ce69347328cdebbddae4927",
+      "files": [
+        {
+          "path": "src/http/ngx_http_request_body.c",
+          "before": "4d134e0de2e6e3682f53e063b2200355f50d50b9038a94d6d97880300bff2086",
+          "after": "8cfdab91aa97c9a4b153e0b9ad40d8f74bf30b0034b835b18170a30fca684977"
+        }
+      ],
+      "upstream": {
+        "commit": "2b129b9363f07d7642bf7203c9c4d8796d19c8fa",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/2b129b9363f07d7642bf7203c9c4d8796d19c8fa",
+        "accept": "application/vnd.github.patch",
+        "sha256": "31e6c658beccbf4923dc59b49ac2201195e6e8dc6ce69347328cdebbddae4927"
+      }
+    },
+    {
+      "file": "patches/35-c51ffa2d1a6b.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "604bfc8ba5c021e2e8fd2c333c45c7bc0cfc59ab27e63fc1e1a90b93b8ea7bae",
+      "files": [
+        {
+          "path": "src/http/v3/ngx_http_v3_request.c",
+          "before": "c4470de6974630617c697e7af999dede50a85560c612ec7769a6cd44eef1a58c",
+          "after": "f182caf9ba312e0130baf3cd32fea991202c1f3447dfc1407dc8b061679c6809"
+        }
+      ],
+      "upstream": {
+        "commit": "c51ffa2d1a6b9f16b2a384fd2e23157e80621ad7",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/c51ffa2d1a6b9f16b2a384fd2e23157e80621ad7",
+        "accept": "application/vnd.github.patch",
+        "sha256": "604bfc8ba5c021e2e8fd2c333c45c7bc0cfc59ab27e63fc1e1a90b93b8ea7bae"
+      }
+    },
+    {
+      "file": "patches/36-8492a8b8a92a.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "3d3dba9a7c280a2e35e9a2d0d36931c833bd0fb67785d890bf075b641d9105ce",
+      "files": [
+        {
+          "path": "src/core/ngx_resolver.c",
+          "before": "88cb7d57e27594f28f6085521a22a3e637a8576c7117bb35953b16492a77c3d5",
+          "after": "fd8c8addf27760d71d24c14e4921a016deb608ac48eb035b4b217d8a25362844"
+        }
+      ],
+      "upstream": {
+        "commit": "8492a8b8a92acb345e1a34a6789f9ebb93f86e22",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/8492a8b8a92acb345e1a34a6789f9ebb93f86e22",
+        "accept": "application/vnd.github.patch",
+        "sha256": "3d3dba9a7c280a2e35e9a2d0d36931c833bd0fb67785d890bf075b641d9105ce"
+      }
+    },
+    {
+      "file": "patches/37-e39708edc69a.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "2eba2dff5042d7823f6076c1358acc18b222557df8e1d0a1208a45d051917276",
+      "files": [
+        {
+          "path": "src/core/ngx_resolver.c",
+          "before": "fd8c8addf27760d71d24c14e4921a016deb608ac48eb035b4b217d8a25362844",
+          "after": "52b23471127248ff82701762d58371a99e23674ea52b42046278ff48744f7a03"
+        }
+      ],
+      "upstream": {
+        "commit": "e39708edc69a9c0c992b6af075db761946969534",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/e39708edc69a9c0c992b6af075db761946969534",
+        "accept": "application/vnd.github.patch",
+        "sha256": "2eba2dff5042d7823f6076c1358acc18b222557df8e1d0a1208a45d051917276"
+      }
+    },
+    {
+      "file": "patches/38-e27f5fa84fe6-1.31.1.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "dd23a398b3bea10e9ebdf3d00ff9c028c0e4e021a53141ea49461287842669b3",
+      "files": [
+        {
+          "path": "src/http/v2/ngx_http_v2.c",
+          "before": "213ae0063be25318571b3698f80a973b9449962e9ede8529d4cddd17953c08b1",
+          "after": "f7ef0f2b111b9c8d326c8a9521778dd23e84f4cf68788e16aa8af2381543028e"
+        },
+        {
+          "path": "src/http/v2/ngx_http_v2.h",
+          "before": "653e6aa373d6eb040c55b0d35ba631cb58c6065d9b5298ba04d1dcb146f8d71c",
+          "after": "bc4520b5becbe5b8854532b23f503e10a15dc738d8d3b462f34686d956bb2a26"
+        },
+        {
+          "path": "src/http/v2/ngx_http_v2_filter_module.c",
+          "before": "5dbfc5eb043722ee7a6a59a0d58038eaa3059b4f66a8688df338aeb67df79011",
+          "after": "a8979b5fd16890c6b25d0d5a6c1a56cd6d8027464ed553ca413ac7df99a157fd"
+        }
+      ],
+      "upstream": {
+        "commit": "e27f5fa84fe6e98505e70bc543b748747dad0a3b",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/e27f5fa84fe6e98505e70bc543b748747dad0a3b",
+        "accept": "application/vnd.github.patch",
+        "sha256": "897726fb203e1a91675d11b29db74dd3545f731daa05cf25e2214de83a32e32c"
+      },
+      "adaptation": "Context-only port: 1.31.1 has priority_limit in ngx_http_v2_connection_s and queues DATA frames with ngx_http_v2_queue_frame(h2c, frame) (61031503 not present). The same send_queued accounting points are kept: +frame_size where send_window is charged in ngx_http_v2_send_chain(), -frame->length in ngx_http_v2_data_frame_handler(), -window in ngx_http_v2_filter_cleanup() (both functions are identical to 1.31.8), and the WINDOW_UPDATE bound subtracts send_queued."
+    },
+    {
+      "file": "patches/39-b5252dae1ca0.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "324c7910e3251aaf4d7eb518aa597dbacbf98bc00277532b3f7c5e1150cd49cd",
+      "files": [
+        {
+          "path": "src/event/quic/ngx_event_quic_streams.c",
+          "before": "8f78f5fa133a84f96d96119bb5a61793a8c1e9ef7fe8ff459c56c93a9e62c1ab",
+          "after": "1a84cda444207484e4bc3557ac1c58d88a09bafd6a4530acf68fea4f71fa36a5"
+        }
+      ],
+      "upstream": {
+        "commit": "b5252dae1ca0d4c516b8bcffd9fa7fd967b73075",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/b5252dae1ca0d4c516b8bcffd9fa7fd967b73075",
+        "accept": "application/vnd.github.patch",
+        "sha256": "324c7910e3251aaf4d7eb518aa597dbacbf98bc00277532b3f7c5e1150cd49cd"
+      }
+    },
+    {
+      "file": "patches/40-d1ffe6fa89fe.patch",
+      "directory": "bundle/nginx-1.31.1",
+      "sha256": "8979bb82c9c3e1eace38dfebcdd92717c538c927103c3f7f1e7aa5edf113bcb0",
+      "files": [
+        {
+          "path": "src/http/modules/ngx_http_try_files_module.c",
+          "before": "ce55715286e051d59192032566d03695f3e9d90e9b2d11072eb1ca66e25237d4",
+          "after": "1dc71440c36f74f6b31567ca7067bf6c372344de246fb45eb76993d284b04f01"
+        }
+      ],
+      "upstream": {
+        "commit": "d1ffe6fa89fee120411dd4d37206c1482d869480",
+        "url": "https://api.github.com/repos/nginx/nginx/commits/d1ffe6fa89fee120411dd4d37206c1482d869480",
+        "accept": "application/vnd.github.patch",
+        "sha256": "8979bb82c9c3e1eace38dfebcdd92717c538c927103c3f7f1e7aa5edf113bcb0"
+      }
     }
   ]
 }

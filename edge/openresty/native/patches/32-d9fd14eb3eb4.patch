@@ -1,0 +1,53 @@
+From d9fd14eb3eb4fc08a43b8ac7462ba9ed23caf958 Mon Sep 17 00:00:00 2001
+From: Aleksei Bavshin <a.bavshin@nginx.com>
+Date: Tue, 29 Sep 2026 09:19:30 -0700
+Subject: [PATCH] Stream ssl_preread: forbid duplicate SNI and ALPN
+
+As stated in the TLS Extensions specification (RFC 3546) and all
+subsequent TLS specification updates,
+
+: There MUST NOT be more than one extension of the same type.
+
+Such a ClientHello is now treated as malformed, as with other parsing
+errors.
+---
+ src/stream/ngx_stream_ssl_preread_module.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/src/stream/ngx_stream_ssl_preread_module.c b/src/stream/ngx_stream_ssl_preread_module.c
+index 8f2d333d9f..7aa86699de 100644
+--- a/src/stream/ngx_stream_ssl_preread_module.c
++++ b/src/stream/ngx_stream_ssl_preread_module.c
+@@ -358,16 +358,30 @@ ngx_stream_ssl_preread_parse_record(ngx_stream_ssl_preread_ctx_t *ctx,
+         case sw_ext_header:
+             ext = (p[2] << 8) + p[3];
+ 
+-            if (p[0] == 0 && p[1] == 0 && ctx->host.data == NULL) {
++            if (p[0] == 0 && p[1] == 0) {
+                 /* SNI extension */
++
++                if (ctx->host.data != NULL) {
++                    ngx_log_debug0(NGX_LOG_DEBUG_STREAM, ctx->log, 0,
++                                   "ssl preread: duplicate SNI");
++                    return NGX_DECLINED;
++                }
++
+                 state = sw_sni_len;
+                 dst = p;
+                 size = 2;
+                 break;
+             }
+ 
+-            if (p[0] == 0 && p[1] == 16 && ctx->alpn.data == NULL) {
++            if (p[0] == 0 && p[1] == 16) {
+                 /* ALPN extension */
++
++                if (ctx->alpn.data != NULL) {
++                    ngx_log_debug0(NGX_LOG_DEBUG_STREAM, ctx->log, 0,
++                                   "ssl preread: duplicate ALPN");
++                    return NGX_DECLINED;
++                }
++
+                 state = sw_alpn_len;
+                 dst = p;
+                 size = 2;
