@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Descriptions, Form, Input, Result, Select, Space, Switch, Tag, Typography } from 'antd'
+import { Alert, App, Button, Checkbox, Descriptions, Form, Input, Result, Select, Skeleton, Space, Switch, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -14,7 +14,8 @@ import { PurchaseModuleLink } from '../../components/PurchaseModuleLink'
 import '../../i18n/probeDNSPup'
 import { NodeProbeCard } from './NodeProbeCard'
 import { MatrixCard, OverridesCard, PurposesCard } from './UnifiedCards'
-import { useFeedback, FeedbackWhen, PageSection, useFormSubmitError } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, PageHeader, PageSection, useFormSubmitError } from '@cdnca/ui'
+import './ProbeDNSPupPage.css'
 
 interface FormValues {
   enabled: boolean
@@ -86,66 +87,70 @@ export default function ProbeDNSPupPage() {
   const licensed = Boolean(data?.licensed)
   const sourceOptions = (values: string[]) => values.map((value) => ({ value, label: t(`sources.${value}`) }))
 
-  return <PageSection><Space direction="vertical" size="large" style={{ width: '100%' }}>
-    <Typography.Title level={3}>{t('title')}</Typography.Title>
-    <Typography.Paragraph type="secondary" className="density-note">{t('intro')}</Typography.Paragraph>
-    {data && !licensed ? <Alert type="warning" showIcon message={t('notLicensed')} action={<PurchaseModuleLink size="small" featureCode={probeDNSPupModule} />} /> : null}
-    {data?.paused_until ? <Alert type="error" showIcon message={`${t('state.pausedUntil')} ${formatTime(data.paused_until)}`}
-      description={`${t(`state.reasons.${data.pause_reason}`, { defaultValue: data.pause_reason })} (${data.pause_code})`} /> : null}
-    <Alert className="density-note" type="info" showIcon message={t('limits')} />
-    <Card loading={status.isLoading}>
-      <Form form={form} layout="vertical" disabled={!data} requiredMark={false}>
-        <div className="density-form-grid">
-        <Form.Item className="density-span-all" name="enabled" label={t('form.enabled')} valuePropName="checked">
-          <Switch disabled={!licensed} />
-        </Form.Item>
-        <Form.Item name="base_url" label={t('form.baseURL')} rules={[{ required: true, type: 'url' }]}>
-          <Input placeholder="https://api.dnspup.com" autoComplete="off" />
-        </Form.Item>
-        <Form.Item name="api_key" label={t('form.apiKey')} rules={[{ required: true, min: 8 }]}>
-          <Input autoComplete="off" />
-        </Form.Item>
-        <Form.Item name="api_secret" label={t('form.apiSecret')}
-          extra={data?.secret_configured ? t('form.secretKeep', { fingerprint: data.secret_fingerprint }) : t('form.secretUnset')}
-          rules={[{ min: 16 }]}>
-          <Input.Password autoComplete="new-password" />
-        </Form.Item>
-        {data?.secret_configured ? <Form.Item>
-          <Switch checked={clearSecret} onChange={setClearSecret} aria-label={t('form.clearSecret')} /> {t('form.clearSecret')}
-        </Form.Item> : null}
-        <Form.Item name="source_domain" label={t('form.sourceDomain')} extra={t('form.sourceDomainExtra')}>
-          <Input autoComplete="off" placeholder="control.example.com" />
-        </Form.Item>
-        <Form.Item name="origin_sources" label={t('form.originSources')} extra={t('form.sourcesExtra')}
-          rules={[{ required: true, type: 'array', min: 1 }]}>
-          <Select mode="multiple" options={sourceOptions(originSources)} aria-label={t('form.originSources')} />
-        </Form.Item>
-        <Form.Item name="edge_sources" label={t('form.edgeSources')} rules={[{ required: true, type: 'array', min: 1 }]}>
-          <Select mode="multiple" options={sourceOptions(edgeSources)} aria-label={t('form.edgeSources')} />
-        </Form.Item>
-        </div>
-        <Space wrap>
-          <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>{t('form.save')}</Button>
-          <Button loading={test.isPending} disabled={!licensed} onClick={() => test.mutate()}>{t('form.test')}</Button>
-        </Space>
-      </Form>
-    </Card>
-    {data ? <Card title={t('state.title')}>
-      <Descriptions column={2} size="small">
-        <Descriptions.Item label={t('state.active')}>
-          <Tag color={data.active ? 'green' : undefined}>{data.active ? t('state.activeYes') : t('state.activeNo')}</Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label={t('state.accountChecked')}>{formatTime(data.account_checked_at)}</Descriptions.Item>
-        <Descriptions.Item label={t('state.async')}>{data.account_checked_at ? (data.async_capable ? t('state.asyncYes') : t('state.asyncNo')) : '—'}</Descriptions.Item>
-        <Descriptions.Item label={t('state.quota')}>{data.account_checked_at ? `${data.monthly_used} / ${data.monthly_limit}` : '—'}</Descriptions.Item>
-        {data.account_error_code ? <Descriptions.Item label={t('state.accountError')} span={2}>
-          <Typography.Text type="danger">{t(`errors.${data.account_error_code}`, { defaultValue: data.account_error_code })}</Typography.Text>
-        </Descriptions.Item> : null}
-      </Descriptions>
-    </Card> : null}
-    {data ? <PurposesCard token={token} /> : null}
-    {data ? <NodeProbeCard token={token} /> : null}
-    {data ? <OverridesCard token={token} /> : null}
-    {data ? <MatrixCard token={token} initialNode={new URLSearchParams(window.location.search).get('node') ?? undefined} /> : null}
-  </Space></PageSection>
+  // One page card; every block below is a titled section of it (thin border, no nested cards).
+  // The connection section opens with the account state as a one-row strip, then the fields on the density grid.
+  return <PageSection className="probe-dnspup-page">
+    <PageHeader title={t('title')} description={t('intro')} />
+    <div className="probe-dnspup-sections">
+      {data && !licensed ? <Alert type="warning" showIcon message={t('notLicensed')} action={<PurchaseModuleLink size="small" featureCode={probeDNSPupModule} />} /> : null}
+      {data?.paused_until ? <Alert type="error" showIcon message={`${t('state.pausedUntil')} ${formatTime(data.paused_until)}`}
+        description={`${t(`state.reasons.${data.pause_reason}`, { defaultValue: data.pause_reason })} (${data.pause_code})`} /> : null}
+      <PageSection title={t('form.title')}>
+        {status.isLoading ? <Skeleton active /> : <>
+          {data ? <Descriptions className="probe-dnspup-strip" title={t('state.title')} bordered size="small" column={{ xs: 1, sm: 2, xl: 4 }}>
+            <Descriptions.Item label={t('state.active')}>
+              <Tag color={data.active ? 'green' : undefined}>{data.active ? t('state.activeYes') : t('state.activeNo')}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label={t('state.accountChecked')}>{formatTime(data.account_checked_at)}</Descriptions.Item>
+            <Descriptions.Item label={t('state.async')}>{data.account_checked_at ? (data.async_capable ? t('state.asyncYes') : t('state.asyncNo')) : '—'}</Descriptions.Item>
+            <Descriptions.Item label={t('state.quota')}>{data.account_checked_at ? `${data.monthly_used} / ${data.monthly_limit}` : '—'}</Descriptions.Item>
+            {data.account_error_code ? <Descriptions.Item label={t('state.accountError')} span="filled">
+              <Typography.Text type="danger">{t(`errors.${data.account_error_code}`, { defaultValue: data.account_error_code })}</Typography.Text>
+            </Descriptions.Item> : null}
+          </Descriptions> : null}
+          <Form form={form} layout="vertical" disabled={!data} requiredMark={false}>
+            <div className="density-form-grid">
+              <Form.Item name="base_url" label={t('form.baseURL')} rules={[{ required: true, type: 'url' }]}>
+                <Input placeholder="https://api.dnspup.com" autoComplete="off" />
+              </Form.Item>
+              <Form.Item name="api_key" label={t('form.apiKey')} rules={[{ required: true, min: 8 }]}>
+                <Input autoComplete="off" />
+              </Form.Item>
+              <Form.Item name="api_secret" label={t('form.apiSecret')} rules={[{ min: 16 }]}
+                extra={data?.secret_configured ? <Space size={[12, 0]} wrap>
+                  <span>{t('form.secretKeep', { fingerprint: data.secret_fingerprint })}</span>
+                  <Checkbox checked={clearSecret} onChange={(event) => setClearSecret(event.target.checked)}>{t('form.clearSecret')}</Checkbox>
+                </Space> : t('form.secretUnset')}>
+                <Input.Password autoComplete="new-password" />
+              </Form.Item>
+              <Form.Item name="source_domain" label={t('form.sourceDomain')} extra={t('form.sourceDomainExtra')}>
+                <Input autoComplete="off" placeholder="control.example.com" />
+              </Form.Item>
+              <Form.Item name="origin_sources" label={t('form.originSources')} extra={t('form.sourcesExtra')}
+                rules={[{ required: true, type: 'array', min: 1 }]}>
+                <Select mode="multiple" options={sourceOptions(originSources)} aria-label={t('form.originSources')} />
+              </Form.Item>
+              <Form.Item name="edge_sources" label={t('form.edgeSources')} rules={[{ required: true, type: 'array', min: 1 }]}>
+                <Select mode="multiple" options={sourceOptions(edgeSources)} aria-label={t('form.edgeSources')} />
+              </Form.Item>
+            </div>
+            <div className="probe-dnspup-actions">
+              <span className="probe-dnspup-enabled">
+                <Form.Item name="enabled" valuePropName="checked" noStyle><Switch id="probe-dnspup-enabled" disabled={!licensed} /></Form.Item>
+                <label htmlFor="probe-dnspup-enabled">{t('form.enabled')}</label>
+              </span>
+              <Space wrap>
+                <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>{t('form.save')}</Button>
+                <Button loading={test.isPending} disabled={!licensed} onClick={() => test.mutate()}>{t('form.test')}</Button>
+              </Space>
+            </div>
+          </Form>
+        </>}
+      </PageSection>
+      {data ? <PurposesCard token={token} /> : null}
+      {data ? <NodeProbeCard token={token} /> : null}
+      {data ? <OverridesCard token={token} /> : null}
+      {data ? <MatrixCard token={token} initialNode={new URLSearchParams(window.location.search).get('node') ?? undefined} /> : null}
+    </div>
+  </PageSection>
 }

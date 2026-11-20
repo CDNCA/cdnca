@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Checkbox, Descriptions, Form, InputNumber, Select, Space, Switch, Typography } from 'antd'
+import { Alert, App, Button, Checkbox, Descriptions, Form, InputNumber, Select, Skeleton, Switch, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -11,7 +11,7 @@ import {
 } from '../../api/probeDNSPup'
 import { SelectionFields, selectionOf, valuesOf, type SelectionValues } from './SelectionFields'
 import '../../i18n/probeDNSPup'
-import { useFeedback, FeedbackWhen, useFormSubmitError } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, PageSection, useFormSubmitError } from '@cdnca/ui'
 
 const queryKey = ['probe-dnspup-node-monitoring'] as const
 
@@ -55,7 +55,7 @@ export function NodeProbeCard({ token }: { token: string }) {
     onError: (error) => { markSubmitError(error, () => void feedback.error(reason(error))) },
   })
 
-  if (status.error) return <Card title={t('node.title')}><FeedbackWhen title={reason(status.error)} /></Card>
+  if (status.error) return <PageSection title={t('node.title')}><FeedbackWhen title={reason(status.error)} /></PageSection>
   const data = status.data
   const addresses = data?.estimate.addresses ?? 0
   const estimate = estimateDNSPupNodeRequests({ interval_seconds: interval ?? data?.interval_seconds ?? 0 }, addresses)
@@ -66,36 +66,44 @@ export function NodeProbeCard({ token }: { token: string }) {
   const intervalOptions = dnspupNodeIntervals.map((value) => ({ value,
     label: value === 0 ? t('node.intervals.off') : t('node.intervals.every', { minutes: value / 60 }) }))
 
-  return <Card title={t('node.title')} loading={status.isLoading}>
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Typography.Paragraph type="secondary">{t('node.intro')}</Typography.Paragraph>
+  // Estimate and balance side by side as one strip, every setting on the density grid
+  // (numbers stay narrow), the selection fields join the same grid, save right under the last row.
+  return <PageSection title={t('node.title')}>
+    {status.isLoading ? <Skeleton active /> : <div className="probe-dnspup-section-body">
+      <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('node.intro')}</Typography.Paragraph>
       {data && !data.plugin_active ? <Alert type="warning" showIcon message={t('node.inactive')} /> : null}
       {data?.budget_state === 'low' ? <Alert type="warning" showIcon
         message={t('node.budgetLow', { minutes: data.effective_interval_seconds / 60 })} /> : null}
       {data?.budget_state === 'exhausted' ? <Alert type="error" showIcon message={t('node.budgetExhausted')} /> : null}
-      <Descriptions column={1} size="small" bordered>
-        <Descriptions.Item label={t('node.estimate')}>
-          <Typography.Text strong>{t('node.estimateValue', { day: number(estimate.perDay), month: number(estimate.perMonth) })}</Typography.Text>
-        </Descriptions.Item>
-        <Descriptions.Item label={t('node.balance')}>{balance}</Descriptions.Item>
-      </Descriptions>
-      <Typography.Text type="secondary">
-        {t('node.estimateExtra', { addresses: number(addresses), points: number(data?.estimate.checkpoints_per_round ?? 0) })}
-        {data && addresses > data.max_addresses_per_round ? ` ${t('node.rotate', { max: data.max_addresses_per_round })}` : ''}
-      </Typography.Text>
+      <div>
+        <Descriptions className="probe-dnspup-strip" column={{ xs: 1, md: 2 }} size="small" bordered>
+          <Descriptions.Item label={t('node.estimate')}>
+            <Typography.Text strong>{t('node.estimateValue', { day: number(estimate.perDay), month: number(estimate.perMonth) })}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label={t('node.balance')}>{balance}</Descriptions.Item>
+        </Descriptions>
+        <Typography.Text type="secondary" className="probe-dnspup-help">
+          {t('node.estimateExtra', { addresses: number(addresses), points: number(data?.estimate.checkpoints_per_round ?? 0) })}
+          {data && addresses > data.max_addresses_per_round ? ` ${t('node.rotate', { max: data.max_addresses_per_round })}` : ''}
+        </Typography.Text>
+      </div>
       <Form form={form} layout="vertical" disabled={!data} requiredMark={false}>
-        <Form.Item name="interval_seconds" label={t('node.interval')}>
-          <Select options={intervalOptions} aria-label={t('node.interval')} />
-        </Form.Item>
-        <Form.Item name="probe_type" label={t('unified.node.probeType')} extra={t('unified.node.probeTypeExtra')}>
-          <Select aria-label={t('unified.node.probeType')}
-            options={nodeProbeTypes.map((value) => ({ value, label: t(`unified.node.probeTypes.${value}`) }))} />
-        </Form.Item>
-        <Form.Item name="groups" label={t('node.groups')} rules={[{ required: true, type: 'array', min: 1 }]}>
-          <Checkbox.Group aria-label={t('node.groups')}
-            options={dnspupMonitorGroups.map((value) => ({ value, label: t(`node.groupNames.${value}`) }))} />
-        </Form.Item>
-        <Space wrap size="large">
+        <div className="density-form-grid">
+          <Form.Item name="interval_seconds" label={t('node.interval')}>
+            <Select options={intervalOptions} aria-label={t('node.interval')} />
+          </Form.Item>
+          <Form.Item name="probe_type" label={t('unified.node.probeType')}>
+            <Select aria-label={t('unified.node.probeType')}
+              options={nodeProbeTypes.map((value) => ({ value, label: t(`unified.node.probeTypes.${value}`) }))} />
+          </Form.Item>
+          <Form.Item name="low_balance" label={t('node.lowBalance')} extra={t('node.lowBalanceExtra')} rules={[{ required: true }]}>
+            <InputNumber min={0} max={1_000_000_000} precision={0} aria-label={t('node.lowBalance')} />
+          </Form.Item>
+          <Form.Item className="density-span-all" name="groups" label={t('node.groups')} rules={[{ required: true, type: 'array', min: 1 }]}>
+            <Checkbox.Group aria-label={t('node.groups')}
+              options={dnspupMonitorGroups.map((value) => ({ value, label: t(`node.groupNames.${value}`) }))} />
+          </Form.Item>
+          <div className="density-span-all probe-dnspup-numbers">
           <Form.Item name="points_per_group" label={t('node.pointsPerGroup')} rules={[{ required: true }]}>
             <InputNumber min={1} max={20} precision={0} aria-label={t('node.pointsPerGroup')} />
           </Form.Item>
@@ -108,13 +116,10 @@ export function NodeProbeCard({ token }: { token: string }) {
           <Form.Item name="recovery_rounds" label={t('node.recoveryRounds')} rules={[{ required: true }]}>
             <InputNumber min={1} max={10} precision={0} aria-label={t('node.recoveryRounds')} />
           </Form.Item>
-        </Space>
-        <Form.Item name="low_balance" label={t('node.lowBalance')} extra={t('node.lowBalanceExtra')} rules={[{ required: true }]}>
-          <InputNumber min={0} max={1_000_000_000} precision={0} aria-label={t('node.lowBalance')} />
-        </Form.Item>
-        <SelectionFields form={form} prefix="selection" />
-        <Typography.Text type="secondary">{t('unified.node.lineAlertExtra')}</Typography.Text>
-        <Space wrap size="large">
+          </div>
+          <SelectionFields form={form} prefix="selection" />
+          <Typography.Text type="secondary" className="density-span-all probe-dnspup-help">{t('unified.node.lineAlertExtra')}</Typography.Text>
+          <div className="density-span-all probe-dnspup-numbers">
           <Form.Item name="line_alert_min_points" label={t('unified.node.lineAlertMinPoints')} rules={[{ required: true }]}>
             <InputNumber min={1} max={20} precision={0} aria-label={t('unified.node.lineAlertMinPoints')} />
           </Form.Item>
@@ -124,10 +129,11 @@ export function NodeProbeCard({ token }: { token: string }) {
           <Form.Item name="auto_diagnose" label={t('unified.node.autoDiagnose')} valuePropName="checked">
             <Switch aria-label={t('unified.node.autoDiagnose')} />
           </Form.Item>
-        </Space>
+          </div>
+        </div>
         <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>{t('node.save')}</Button>
       </Form>
-    </Space>
-  </Card>
+    </div>}
+  </PageSection>
 }
 

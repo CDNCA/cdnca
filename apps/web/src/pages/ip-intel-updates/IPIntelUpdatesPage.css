@@ -1,0 +1,50 @@
+/* 状态两张描述表并排，表单走 density-form-grid，操作行贴在表单下。色值只用 --cdnca-* 变量。 */
+.ipintel-page .cdnca-page-description {
+  max-width: 1040px;
+}
+
+/* 拉取状态与 IP 库两张表并排；放不下两列时叠成一列（最小列宽不超过容器，390 宽不出横向滚动）。 */
+.ipintel-status {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: 16px;
+}
+
+.ipintel-status > * {
+  min-width: 0;
+}
+
+.ipintel-page .ant-descriptions-header {
+  margin-bottom: 8px;
+}
+
+.ipintel-page .ant-descriptions-title {
+  font-size: 14px;
+}
+
+.ipintel-page .ant-descriptions-item-content {
+  overflow-wrap: anywhere;
+}
+
+.ipintel-page .ant-descriptions-item-label {
+  white-space: nowrap;
+}
+
+.ipintel-page .density-form-grid .ant-select {
+  width: 100%;
+}
+
+/* 启用开关和保存/测试/立即拉取同一行，紧跟在字段下方；窄屏自动换行。 */
+.ipintel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.ipintel-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cdnca-color-title);
+}

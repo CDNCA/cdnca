@@ -64,6 +64,27 @@ describe('IPIntelUpdatesPage', () => {
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBeTruthy()
   })
 
+  // 状态两张表并排在表单上方；清除已保存的 Secret 改成 Secret 下方的复选框，保存时发空串。
+  it('shows the state tables and clears the stored secret from the checkbox under the field', async () => {
+    const fetchMock = vi.fn<Fetch>(async (path, init) => {
+      if (path === '/v1/admin/ip-intel-updates' && !init?.method) return json(status)
+      if (path === '/v1/admin/ip-intel-updates' && init?.method === 'PUT') return json({ ...status, secret_configured: false })
+      return json({ error: { code: 'not_found', message: 'x', request_id: 'r' } }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<IPIntelUpdatesPage />)
+    await screen.findByDisplayValue('dnp_key_fake_page_0000')
+    expect(screen.getByText('拉取状态')).toBeInTheDocument()
+    expect(screen.getByText('已构建新库')).toBeInTheDocument()
+    expect(screen.getByText('连接与计划')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: '启用定时拉取' })).toBeChecked()
+    fireEvent.click(screen.getByRole('checkbox', { name: '清除已保存的 Secret' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true))
+    const [, init] = fetchMock.mock.calls.find(([, call]) => call?.method === 'PUT')!
+    expect(JSON.parse(String(init?.body)).api_secret).toBe('')
+  })
+
   // fix-fielderr-be5：保存 400 validation_error 带 details.field 时标在该输入框下，不弹窗
   it('marks a refused field under its box instead of the dialog', async () => {
     vi.stubGlobal('fetch', vi.fn<Fetch>(async (path, init) => {

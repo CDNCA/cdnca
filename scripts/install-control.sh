@@ -2970,7 +2970,7 @@ MODES['scripts/install-node.sh'] = 0o755
 # signed manifest names (configure-clickhouse.py ledgers and applies them).
 CLICKHOUSE_MIGRATION = re.compile(r'infra/clickhouse/migrations/([0-9]{3})_[a-z0-9]+(?:_[a-z0-9]+)*[.]up[.]sql')
 LIMITS = {name: SMALL for name in MODES}
-LIMITS.update({'native-management.tar': ARCHIVE, 'source.bundle': 512 << 20, 'control-upgrade-runner': ARCHIVE,
+LIMITS.update({'native-management.tar': ARCHIVE, 'source.bundle': 768 << 20, 'control-upgrade-runner': ARCHIVE,
                'analytics-history-bootstrap': ARCHIVE, 'nats-server': ARCHIVE})
 METADATA = {'install.manifest.json': SMALL, 'install.manifest.sig': 128}
 ALLOWED_MODES = {**MODES, 'release.manifest.sig': 0o644}

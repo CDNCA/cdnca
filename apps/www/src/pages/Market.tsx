@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { geoAreas } from '../../../web/src/api/geoAreas'
 import { PageHero, Section } from '../components/Blocks'
 import { marketApi, offerPrice, type PublicOffer, type PublicPlugin } from '../content/marketApi'
 import { href, type L, type Lang } from '../i18n'
@@ -26,6 +27,32 @@ const T = {
   howTo: { zh: '查看操作说明', en: 'How to do it' },
   more: { zh: '更多条目请登录后查看。', en: 'Sign in to see more.' },
   trial: { zh: '天试用', en: '-day trial' },
+  area: { zh: '节点大区', en: 'Node area' },
+  areaAll: { zh: '全部大区', en: 'All areas' },
+  areaWhole: { zh: '（全部）', en: ' (all)' },
+  areaEmpty: { zh: '所选大区暂无供货方上架节点，可以换一个大区看看。', en: 'No supplier has listed nodes in this area yet; try another area.' },
+}
+
+// 大区来自 libs/geoarea 生成的控制台镜像（apps/web/src/api/geoAreas.ts，web_mirror_test.go 保证一致）。
+// 「全球」在市场接口里等于不过滤，所以不单列；每个大洲一组：先是整个大洲，再是它下面的区域。
+const CONTINENTS = geoAreas.filter((a) => a.level === 'continent')
+const areaName = (a: { name_zh: string; name_en: string }, lang: Lang) => (lang === 'zh' ? a.name_zh : a.name_en)
+
+function AreaPicker({ lang, value, onChange }: { lang: Lang; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="market-area">
+      <span>{T.area[lang]}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{T.areaAll[lang]}</option>
+        {CONTINENTS.map((c) => (
+          <optgroup key={c.code} label={areaName(c, lang)}>
+            <option value={c.code}>{`${areaName(c, lang)}${T.areaWhole[lang]}`}</option>
+            {geoAreas.filter((a) => a.parent === c.code).map((a) => <option key={a.code} value={a.code}>{areaName(a, lang)}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  )
 }
 
 const BILLING: Record<string, L> = {
@@ -72,6 +99,8 @@ type State<T> = { status: 'loading' } | { status: 'ok'; items: T[]; more: boolea
 function useListing<T>(load: (signal: AbortSignal) => Promise<{ items: T[]; has_more: boolean }>) {
   const [state, setState] = useState<State<T>>({ status: 'loading' })
   useEffect(() => {
+    // 换筛选条件时先回到加载中，不把上一次的结果当成新条件的结果。
+    setState({ status: 'loading' })
     const ctl = new AbortController()
     load(ctl.signal).then(
       (r) => setState({ status: 'ok', items: r.items, more: r.has_more }),
@@ -93,8 +122,20 @@ function Fallback({ lang, state, guide }: { lang: Lang; state: 'loading' | 'erro
 }
 
 function NodeOffers({ lang }: { lang: Lang }) {
-  const s = useListing<PublicOffer>(marketApi.nodeOffers)
+  const [area, setArea] = useState('')
+  const load = useCallback((signal: AbortSignal) => marketApi.nodeOffers(signal, area), [area])
+  const s = useListing<PublicOffer>(load)
+  return (
+    <>
+      <AreaPicker lang={lang} value={area} onChange={setArea} />
+      <NodeOfferList lang={lang} s={s} area={area} />
+    </>
+  )
+}
+
+function NodeOfferList({ lang, s, area }: { lang: Lang; s: State<PublicOffer>; area: string }) {
   if (s.status !== 'ok') return <Fallback lang={lang} state={s.status} guide={SUBSCRIBE_GUIDE} />
+  if (!s.items.length && area) return <div role="status" className="card"><p>{T.areaEmpty[lang]}</p></div>
   if (!s.items.length) return <Fallback lang={lang} state="empty" guide={SUBSCRIBE_GUIDE} />
   return (
     <>

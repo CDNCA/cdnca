@@ -1,0 +1,97 @@
+/* 页卡内各分区纵向排列，分区内说明限行长、状态条一行、表单走 density-form-grid。色值只用 --cdnca-* 变量。 */
+.probe-dnspup-page .cdnca-page-description,
+.probe-dnspup-section-intro {
+  max-width: 1040px;
+}
+
+.probe-dnspup-sections,
+.probe-dnspup-section-body {
+  display: grid;
+  gap: 12px;
+}
+
+.probe-dnspup-sections {
+  gap: 16px;
+}
+
+.probe-dnspup-sections > *,
+.probe-dnspup-section-body > * {
+  min-width: 0;
+}
+
+/* 分区之间的间距由外层 grid 给，去掉 PageSection 相邻规则的额外上边距。 */
+.probe-dnspup-sections > .cdnca-page-section + .cdnca-page-section {
+  margin-top: 0;
+}
+
+.probe-dnspup-section-intro.ant-typography {
+  margin: 0;
+}
+
+.probe-dnspup-strip {
+  margin-bottom: 12px;
+}
+
+.probe-dnspup-section-body .probe-dnspup-strip {
+  margin-bottom: 4px;
+}
+
+.probe-dnspup-page .ant-descriptions-header {
+  margin-bottom: 8px;
+}
+
+.probe-dnspup-page .ant-descriptions-title {
+  font-size: 14px;
+}
+
+.probe-dnspup-page .ant-descriptions-item-content {
+  overflow-wrap: anywhere;
+}
+
+.probe-dnspup-help {
+  display: block;
+  font-size: 13px;
+}
+
+.density-form-grid > .probe-dnspup-help {
+  margin-bottom: 8px;
+}
+
+.probe-dnspup-page .density-form-grid .ant-select {
+  width: 100%;
+}
+
+.probe-dnspup-subtitle {
+  color: var(--cdnca-color-title);
+}
+
+/* 启用开关和保存/测试同一行，紧跟在字段下方；窄屏自动换行。 */
+.probe-dnspup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.probe-dnspup-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cdnca-color-title);
+}
+
+.probe-dnspup-override-form {
+  padding-top: 12px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+/* 短数字框（检测点数、比例、轮数）放进更窄的子网格：宽屏一行四个，390 宽一行两个。 */
+.probe-dnspup-numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
+  column-gap: 16px;
+}
+
+.probe-dnspup-numbers > * {
+  min-width: 0;
+}

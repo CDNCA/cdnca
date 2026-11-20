@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { renderToString } from 'react-dom/server'
 import { App } from '../App'
 import { offerPrice, type PublicOffer } from '../content/marketApi'
@@ -72,6 +73,40 @@ describe('/market', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(ok([]))))
     render(<App pathname="/market" />)
     expect(await screen.findAllByText('暂无公开数据。')).toHaveLength(2)
+  })
+
+  it('节点大区筛选：两级大区（无「全球」），选中后按 area 请求；空结果说明所选大区没有', async () => {
+    const fetchMock = vi.fn((url: string) => Promise.resolve(
+      url.includes('area=east_asia') ? ok([{ ...offer, id: 'o3', name: '香港 CN2' }])
+        : url.includes('area=africa') ? ok([])
+          : url.endsWith('/node-offers') ? ok([offer]) : ok([plugin])))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App pathname="/market" />)
+    const picker = screen.getByRole('combobox', { name: '节点大区' })
+    expect(within(picker).getByRole('option', { name: '全部大区' })).toHaveValue('')
+    expect(within(picker).getByRole('group', { name: '亚洲' })).toBeInTheDocument()
+    expect(within(picker).getByRole('option', { name: '亚洲（全部）' })).toHaveValue('asia')
+    expect(within(picker).getByRole('option', { name: '东南亚' })).toHaveValue('southeast_asia')
+    expect(within(picker).getByRole('option', { name: '大洋洲（全部）' })).toHaveValue('oceania')
+    expect(within(picker).queryByRole('option', { name: /全球/ })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 3, name: '华东 BGP' })).toBeInTheDocument()
+    await user.selectOptions(picker, 'east_asia')
+    expect(await screen.findByRole('heading', { level: 3, name: '香港 CN2' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 3, name: '华东 BGP' })).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(`${MARKET_PUBLIC_API}/node-offers?area=east_asia`, expect.objectContaining({ credentials: 'omit' }))
+    await user.selectOptions(picker, 'africa')
+    expect(await screen.findByText(/所选大区暂无供货方上架节点/)).toBeInTheDocument()
+    expect(screen.queryByText('暂无公开数据。')).not.toBeInTheDocument()
+    await user.selectOptions(picker, '')
+    expect(await screen.findByRole('heading', { level: 3, name: '华东 BGP' })).toBeInTheDocument()
+  })
+
+  it('英文页大区用英文名', () => {
+    const html = renderToString(<App pathname="/en/market" />)
+    expect(html).toContain('All areas')
+    expect(html).toContain('Southeast Asia')
+    expect(html).toContain('Asia (all)')
   })
 
   it('报价按供货方填写原样格式化', () => {

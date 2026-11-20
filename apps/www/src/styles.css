@@ -292,3 +292,6 @@ body.modal-open { overflow: hidden; }
 .arch-shield text { fill: #b42318; font-weight: 700; }
 .arch-shield { opacity: 0; animation: arch-shield 2.4s ease-out infinite; animation-delay: -.9s; }
 @keyframes arch-shield { 0%, 12% { opacity: 0; } 18% { opacity: 1; } 55%, 100% { opacity: 0; } }
+/* 市场页节点大区筛选 */
+.market-area { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: .95rem; color: var(--www-muted); }
+.market-area select { min-height: 40px; min-width: 200px; padding: 0 12px; border: 1px solid var(--cdnca-color-border); border-radius: 8px; background: #fff; color: var(--cdnca-color-title); font: inherit; }

@@ -524,7 +524,7 @@ test('new installation enables database-backed APIs with distinct private persis
     // cdncaCE: promotion and traffic-package billing are not part of the community edition.
     for (const key of ['PROMOTION_HTTP_ENABLED', 'TRAFFIC_PACKAGE_RUNTIME_ENABLED']) assert.equal(entries[key], undefined, key)
     assert.equal(entries.ANNOUNCEMENT_EXTERNAL_CHANNEL, 'disabled')
-    assert.equal(entries.NOTIFICATION_RUNTIME_ENABLED, 'false')
+    assert.equal(entries.NOTIFICATION_RUNTIME_ENABLED, 'auto')
     assert.equal(entries.TRAFFIC_PACKAGE_WORKLOAD_RUNTIME_ENABLED, undefined)
     assert.equal(entries.EDGE_PUBLISH_RUNTIME_ENABLED, undefined)
     // ui-fix4 F8: MFA (required by custom roles) and custom roles are on with their own keys.

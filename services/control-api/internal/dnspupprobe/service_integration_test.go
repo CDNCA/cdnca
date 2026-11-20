@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -179,6 +180,23 @@ func TestSettingsSecretRotationAndCapabilityTest(t *testing.T) {
 	if status, _ = f.service.Status(ctx, f.admin); !status.AsyncCapable || status.AccountCheckedAt == nil || status.MonthlyLimit != 1000 {
 		t.Fatalf("account facts not recorded %+v", status)
 	}
+	// No answer from dnspup keeps the recorded quota and capability, records the failed check
+	// and audits the cause.
+	saved := f.service.config.Transport
+	f.service.config.Transport = failingTransport{}
+	result, err = f.service.TestConnection(ctx, f.admin, "t1-transport", f.input(false, nil))
+	f.service.config.Transport = saved
+	if err != nil || result.OK || result.HTTPStatus != 0 || result.ErrorCode != "transport_error" {
+		t.Fatalf("transport failure %+v %v", result, err)
+	}
+	if status, _ = f.service.Status(ctx, f.admin); !status.AsyncCapable || status.MonthlyLimit != 1000 ||
+		status.AccountErrorCode != "transport_error" || status.AccountCheckedAt == nil {
+		t.Fatalf("transport failure overwrote the account facts %+v", status)
+	}
+	if f.count(t, `SELECT count(*) FROM audit_events WHERE action=$1 AND result='failure'
+		AND payload->>'transport_error' LIKE '%egress proxy refused: 407%'`, ActionTest) != 1 {
+		t.Fatal("transport failure cause not audited")
+	}
 	// A dnspup without async capability fails the test.
 	f.fake.Do(func(s *dnspuptest.Server) { s.Async = false })
 	if result, _ = f.service.TestConnection(ctx, f.admin, "t2", f.input(false, nil)); result.OK || result.ErrorCode != "async_unavailable" {
@@ -282,4 +300,11 @@ func TestRuntimeProbesDegradesAndAlertsOnce(t *testing.T) {
 	if f.count(t, `SELECT count(*) FROM audit_events WHERE action=$1`, ActionDegrade) < 3 {
 		t.Fatal("degrades not audited")
 	}
+}
+
+// failingTransport fails every call without an answer, the way a refusing egress proxy fails it.
+type failingTransport struct{}
+
+func (failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("egress proxy refused: 407")
 }

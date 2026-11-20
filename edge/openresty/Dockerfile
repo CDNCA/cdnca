@@ -118,7 +118,7 @@ RUN set -eu; \
 		echo 'a3b460a97eb27937730b8a28721bc2aba4a8309c80201a3a1204de3c1d068b46  /usr/local/share/cdnca/security/cdnca_rule_interp.lua' | sha256sum -c -; \
 		echo 'c1719686a77f8d1cdaffc35852c76c5c4200f5a44926b3cd49ac0b099c25586a  /usr/local/share/cdnca/security/cdnca_ua.lua' | sha256sum -c -; \
 		echo 'ac3bb86b0f0bde5fac47308a91213cedaab39e26dc827284a3aba31bbde58778  /usr/local/share/cdnca/security/cdnca_banlist.lua' | sha256sum -c -; \
-		echo '5011685413909ce4b8b2ff010e3d505378d3c9ac6797218afc16118c80b990c0  /usr/local/share/cdnca/dynroute/cdnca_site.lua' | sha256sum -c -; \
+		echo '77a3b4fca1ccb88a275a56cab6e0a666001cc23d70aecaebf0a2088635d1a009  /usr/local/share/cdnca/dynroute/cdnca_site.lua' | sha256sum -c -; \
 		echo '92e59b1f7abe2fa3dba6f180e890ec12164f60c36ac9e20783817dd23343e0bb  /usr/local/share/cdnca/dynroute/cdnca_site_admin.lua' | sha256sum -c -; \
 		echo '66bc1559487b74f24cc5219df766ed46987e19785feb9b6cb4eeb8a8250c686f  /usr/local/share/cdnca/dynroute/cdnca_tls.lua' | sha256sum -c -; \
 		echo '95b2185b927cdf68e8d83287080d678fafb93f90509899d1276827078684fe58  /usr/local/share/cdnca/dynroute/cdnca_origin.lua' | sha256sum -c -; \
@@ -149,7 +149,7 @@ RUN set -eu; \
 		echo '2eca890fb7c2845541cba744cf76b9a2ad880068e3e2f1961377f32ffaa19dad  /opt/cdnca/l4geo/cdnca_l4_geo.lua' | sha256sum -c -; \
 		echo 'a50bfda12abcfac7906c405bd8d7eaf81010c29c840ddce2a4459ce453cebe83  /usr/local/share/cdnca/security/cdnca_iplib.lua' | sha256sum -c -; \
 		echo 'a50bfda12abcfac7906c405bd8d7eaf81010c29c840ddce2a4459ce453cebe83  /opt/cdnca/l4geo/cdnca_iplib.lua' | sha256sum -c -; \
-		echo '16e2461367f5f2acdc799bc1a855e6fb20c29ea7862c395954fa8b5a59a752dc  /usr/local/share/cdnca/dynroute/cdnca_dynroute.lua' | sha256sum -c -; \
+		echo '6229be063241d0cb4c836b834b560ee191c353f2dd66378d3be12073e980842c  /usr/local/share/cdnca/dynroute/cdnca_dynroute.lua' | sha256sum -c -; \
 		echo '1e9ff22748e05660ca4dc01f2340315c16f965357b880940a1504dd1bcfe9616  /usr/local/share/cdnca/dynroute/cdnca_telemetry.lua' | sha256sum -c -; \
 		echo '8bb4d8252e1d9179024902e3e0718c17f5389306162e0494908fcee7738019ba  /usr/local/share/cdnca/dynroute/cdnca_webp.lua' | sha256sum -c -; \
 		echo '0dca4914a233493be30273245f4a8674c9d24f35ad678d921d583a0817d6fcdb  /usr/local/share/cdnca/dynroute/cdnca_rum.lua' | sha256sum -c -; \

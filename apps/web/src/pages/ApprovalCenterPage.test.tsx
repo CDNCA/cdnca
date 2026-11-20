@@ -91,27 +91,47 @@ describe('ApprovalCenterPage', () => {
 })
 
 describe('ApprovalCenterSettings', () => {
-  it('starts off with the first batch preselected and saves the choice', async () => {
+  const catalog = approvalApi.approvalRules.map((name, index) => ({ name, default: index < 4, grouped: name === 'stream.batch_delete', target_path: '/' }))
+
+  it('starts off with nothing held and preselects the first batch when first turned on (Q7)', async () => {
     authenticate(['approvals.manage'])
-    vi.spyOn(approvalCenterApi, 'settings').mockResolvedValue({
-      enabled: false, rules: [], revision: 0,
-      catalog: approvalApi.approvalRules.map((name, index) => ({ name, default: index < 4, grouped: name === 'stream.batch_delete', target_path: '/' })),
-    })
+    vi.spyOn(approvalCenterApi, 'settings').mockResolvedValue({ enabled: false, rules: [], revision: 0, catalog })
     const save = vi.spyOn(approvalCenterApi, 'saveSettings').mockImplementation(async (_token, input) => ({ ...input, revision: 1, catalog: [] }))
     const user = userEvent.setup()
     renderWithProviders(<ApprovalCenterSettings />)
     const toggle = await screen.findByRole('switch', { name: '启用审批中心' })
     expect(toggle).not.toBeChecked()
     expect(screen.getByText('审批人：平台所有者与平台管理员。')).toBeInTheDocument()
+    // 存储的规则为空时网关不拦任何操作，界面同样不勾选。
+    expect(screen.getByRole('checkbox', { name: /批量删除网站/ })).not.toBeChecked()
+    await user.click(toggle)
     expect(screen.getByRole('checkbox', { name: /批量删除网站/ })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /删除用户/ })).not.toBeChecked()
-    await user.click(toggle)
     await user.click(screen.getByRole('checkbox', { name: /删除用户/ }))
     await user.click(screen.getByRole('button', { name: /保存/ }))
     await waitFor(() => expect(save).toHaveBeenCalledWith('approver', {
       enabled: true, revision: 0,
       rules: ['site.batch_delete', 'cache.whole_site_purge', 'firewall.policy', 'control.upgrade', 'user.delete'],
     }))
+  })
+
+  it('saves the stored empty rules unchanged when nothing was touched', async () => {
+    authenticate(['approvals.manage'])
+    vi.spyOn(approvalCenterApi, 'settings').mockResolvedValue({ enabled: false, rules: [], revision: 0, catalog })
+    const save = vi.spyOn(approvalCenterApi, 'saveSettings').mockImplementation(async (_token, input) => ({ ...input, revision: 1, catalog: [] }))
+    const user = userEvent.setup()
+    renderWithProviders(<ApprovalCenterSettings />)
+    await user.click(await screen.findByRole('button', { name: /保存/ }))
+    await waitFor(() => expect(save).toHaveBeenCalledWith('approver', { enabled: false, revision: 0, rules: [] }))
+  })
+
+  it('keeps an explicitly saved empty rule list when the center is turned on again', async () => {
+    authenticate(['approvals.manage'])
+    vi.spyOn(approvalCenterApi, 'settings').mockResolvedValue({ enabled: false, rules: [], revision: 2, catalog })
+    const user = userEvent.setup()
+    renderWithProviders(<ApprovalCenterSettings />)
+    await user.click(await screen.findByRole('switch', { name: '启用审批中心' }))
+    expect(screen.getByRole('checkbox', { name: /批量删除网站/ })).not.toBeChecked()
   })
 
   it('renders nothing without approval permissions', () => {

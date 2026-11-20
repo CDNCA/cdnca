@@ -58,7 +58,7 @@ ssh_guard_setup() {
   ssh_guard_render >"${SSH_GUARD_JAIL}.new"
   mv -f -- "${SSH_GUARD_JAIL}.new" "$SSH_GUARD_JAIL"
   if ! fail2ban-client -t >/dev/null 2>&1; then
-    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 $SSH_GUARD_JAIL）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
+    ssh_guard_log "$(msg "警告：fail2ban 配置检查失败，SSH 防爆破未启用（见 ${SSH_GUARD_JAIL}）" "warning: fail2ban configuration check failed; SSH brute-force protection is off (see $SSH_GUARD_JAIL)")"
     return 0
   fi
   systemctl enable fail2ban >/dev/null 2>&1 || true

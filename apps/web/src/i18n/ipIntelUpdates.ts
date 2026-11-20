@@ -2,11 +2,11 @@ import i18n from './index'
 
 const zhCN = {
   title: 'IP 库实时更新（dnspup）',
-  intro: '授权端只免费提供一次基础 IP 库，之后不再刷新。填写你自己的 dnspup 客户 API Key 后，主控按下面的计划拉取最新快照并在本地构建 IP 库，节点自动使用数据较新的一份；拉取失败或授权到期时节点继续使用基础库。dnspup 按次直接向你收费（测试连接不计费）。',
+  intro: '填写你自己的 dnspup 客户 API Key，主控按计划拉取最新快照并在本地构建 IP 库，节点自动使用数据较新的一份，拉取失败或授权到期时继续使用授权端提供的基础库。',
   notLicensed: '当前授权不含「IP 库实时更新」模块，可以查看但不能启用、测试或立即拉取。',
   forbidden: '需要 IP 库更新管理权限',
   form: {
-    enabled: '启用定时拉取', url: 'dnspup 接口地址', apiKey: 'API Key', apiSecret: 'API Secret',
+    title: '连接与计划', enabled: '启用定时拉取', url: 'dnspup 接口地址', apiKey: 'API Key', apiSecret: 'API Secret',
     secretKeep: '已配置（指纹 {{fingerprint}}），留空保持不变', secretUnset: '未配置', clearSecret: '清除已保存的 Secret',
     interval: '拉取间隔（小时）', anchor: '对齐时间', timeZone: '时区',
     save: '保存', test: '测试连接', checkNow: '立即拉取', running: '拉取中…',
@@ -40,11 +40,11 @@ type Messages = typeof zhCN
 
 const enUS: Messages = {
   title: 'IP intelligence live updates (dnspup)',
-  intro: 'The licence service ships the base IP library once, free, and never refreshes it. With your own dnspup customer API key the control plane pulls the latest snapshot on the schedule below and builds the library locally; nodes use whichever library has newer data and keep the base library when a pull fails or the licence ends. dnspup bills you per download (connection tests are free).',
+  intro: 'With your own dnspup customer API key the control plane pulls the latest snapshot on schedule and builds the IP library locally. Nodes use whichever library has newer data and keep the base library from the licence service when a pull fails or the licence ends.',
   notLicensed: 'The licence does not include the IP intelligence live updates module: you can view this page but not enable, test or pull.',
   forbidden: 'IP intelligence update management permission required',
   form: {
-    enabled: 'Scheduled pulls', url: 'dnspup endpoint', apiKey: 'API key', apiSecret: 'API secret',
+    title: 'Connection and schedule', enabled: 'Scheduled pulls', url: 'dnspup endpoint', apiKey: 'API key', apiSecret: 'API secret',
     secretKeep: 'Set (fingerprint {{fingerprint}}); leave empty to keep', secretUnset: 'Not set', clearSecret: 'Clear the saved secret',
     interval: 'Interval (hours)', anchor: 'Aligned at', timeZone: 'Time zone',
     save: 'Save', test: 'Test connection', checkNow: 'Pull now', running: 'Pulling…',

@@ -79,6 +79,27 @@ describe('ProbeDNSPupPage', () => {
     expect(JSON.parse(String(init?.body)).api_secret).toBe('dnp_secret_fake_rotated_000000')
   })
 
+  // 账户状态是「连接与来源」分区顶上的一行状态条；清除已保存的 Secret 改成 Secret 下方的复选框，保存时发空串。
+  it('shows the account strip in the connection section and clears the stored secret from the checkbox', async () => {
+    const fetchMock = vi.fn<Fetch>(async (path, init) => {
+      if (path === '/v1/admin/probe-dnspup' && !init?.method) return json(status)
+      if (path === '/v1/admin/probe-dnspup' && init?.method === 'PUT') return json({ ...status, secret_configured: false })
+      return json({ error: { code: 'not_found', message: 'x', request_id: 'r' } }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<ProbeDNSPupPage />)
+    await screen.findByDisplayValue('dnp_key_fake_probe_0000')
+    const section = screen.getByRole('heading', { name: '连接与来源' }).closest('section')!
+    expect(within(section).getByText('运行状态')).toBeInTheDocument()
+    expect(within(section).getByText('42 / 10000')).toBeInTheDocument()
+    expect(within(section).getByRole('switch', { name: '启用 dnspup 拨测' })).toBeChecked()
+    fireEvent.click(within(section).getByRole('checkbox', { name: '清除已保存的 Secret' }))
+    fireEvent.click(within(section).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true))
+    const [, init] = fetchMock.mock.calls.find(([, call]) => call?.method === 'PUT')!
+    expect(JSON.parse(String(init?.body)).api_secret).toBe('')
+  })
+
   it('shows the pause and is view-only without the licence module', async () => {
     vi.stubGlobal('fetch', vi.fn<Fetch>(async () => json({ ...status, licensed: false, active: false,
       paused_until: '2026-10-20T03:00:00Z', pause_reason: 'quota_exceeded', pause_code: 'quota_exceeded' })))

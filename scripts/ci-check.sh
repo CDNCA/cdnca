@@ -206,6 +206,8 @@ check_release_scripts() {
     scripts/native-control-install-package.test.mjs \
     scripts/native-management-schema-build.test.mjs \
     scripts/edge-agent-release-build.test.mjs \
+    tests/edge-lua-inventory.test.mjs \
+    tests/edge-openresty-runtime-parity.test.mjs \
     tests/install-control-*.test.mjs \
     tests/control-optional-env-template.test.mjs \
     tests/install-preflight.test.mjs \

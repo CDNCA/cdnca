@@ -2,12 +2,11 @@ import i18n from './index'
 
 const zhCN = {
   title: 'dnspup 拨测',
-  intro: '用你自己的 dnspup 客户 API Key，从 dnspup 全国检测点拨测源站与聚合边缘第三方 CDN 接入点，作为节点拨测之外的独立来源。每个检测点算一票，与节点票合并判定；额度不足、限流或 Key 被拒时自动暂停并改用其它来源，同时发告警。dnspup 每次受理扣 1 次月额度（测试连接不计费）。',
+  intro: '用你自己的 dnspup 客户 API Key，从 dnspup 全国检测点拨测源站与聚合边缘第三方 CDN 接入点，作为节点拨测之外的独立来源；每个检测点算一票，与节点票合并判定。',
   notLicensed: '当前授权不含「dnspup 拨测」模块，可以查看但不能启用或测试。',
   forbidden: '需要 dnspup 拨测管理权限',
-  limits: 'dnspup 的 HTTP 拨测只能连接 URL 本身的主机：源站回源 Host 与连接地址不同（如 IP 源站带站点域名）或自定义 CA 的源站不会派给 dnspup；聚合边缘第三方 CDN 接入点用 TCP 连接 443 判定连通。',
   form: {
-    enabled: '启用 dnspup 拨测', baseURL: 'dnspup 接口地址', apiKey: 'API Key', apiSecret: 'API Secret',
+    title: '连接与来源', enabled: '启用 dnspup 拨测', baseURL: 'dnspup 接口地址', apiKey: 'API Key', apiSecret: 'API Secret',
     secretKeep: '已配置（指纹 {{fingerprint}}），留空保持不变；填新值即换钥', secretUnset: '未配置', clearSecret: '清除已保存的 Secret',
     sourceDomain: '绑定的服务器域名', sourceDomainExtra: 'Key 绑定服务器域名时填写（请求会签名）；绑定固定 IP 时留空',
     originSources: '源站拨测来源顺序', edgeSources: '聚合边缘拨测来源顺序',
@@ -18,7 +17,7 @@ const zhCN = {
   sources: { node: '节点拨测', dnspup: 'dnspup 检测点', controller: '主控直拨' },
   node: {
     title: '节点可用性拨测',
-    intro: '用 dnspup 运营商检测点按频率拨测每个节点 IP 的端口，结果进节点「监控日志」。本机探测与 dnspup 多数检测点都失败才暂停节点解析；只有 dnspup 失败只告警。未启用插件、频率关闭、暂停或额度用完时只用节点本机探测，不会因缺少拨测数据判节点离线。',
+    intro: '用 dnspup 运营商检测点按频率拨测每个节点 IP 的端口，结果进节点「监控日志」。本机探测与 dnspup 多数检测点都失败才暂停节点解析，只有 dnspup 失败时只告警。',
     inactive: 'dnspup 拨测未在使用（未授权、未启用、未配置 Key 或已暂停），节点只由本机探测判定。',
     interval: '拨测频率', intervals: { off: '关闭', every: '每 {{minutes}} 分钟' },
     groups: '检测点运营商/地区', groupNames: { domestic: '国内（不限运营商）', telecom: '电信', unicom: '联通', mobile: '移动', overseas: '海外' },
@@ -26,7 +25,7 @@ const zhCN = {
     lowBalance: '余额预警线（次）', lowBalanceExtra: '本月剩余次数低于此值时自动降频（频率 ×3）并通知管理员',
     save: '保存节点拨测设置', saved: '节点拨测设置已保存',
     estimate: '预计消耗', estimateValue: '每天约 {{day}} 次 · 每月约 {{month}} 次',
-    estimateExtra: 'dnspup 按请求计量：每个节点 IP 每轮扣 1 次，与检测点数无关（当前 {{addresses}} 个节点 IP，每轮 {{points}} 个检测点）。点数请到 dnspup 充值，插件不代收费。',
+    estimateExtra: 'dnspup 按请求计量：每个节点 IP 每轮扣 1 次，与检测点数无关（当前 {{addresses}} 个节点 IP，每轮 {{points}} 个检测点）。',
     rotate: '节点 IP 超过 {{max}} 个时每轮轮流拨测一部分，单个节点的拨测间隔相应变长。',
     balance: 'dnspup 余额', balanceValue: '剩余 {{remaining}} / {{limit}} 次', balanceUnlimited: '不限额（已用 {{used}} 次）',
     balanceUnknown: '尚未读取（测试连接或首轮拨测后显示）',
@@ -65,7 +64,7 @@ const zhCN = {
       probeTypes: { tcping: 'TCP 连接', https: 'HTTPS' },
       edgeHTTPS: {
         title: '聚合边缘候选改用 HTTPS 拨测',
-        limits: 'dnspup 按接入点域名发 https://接入点/，Host 与 SNI 都是接入点域名（dnspup 不能改成网站域名），所以只判断 TLS 能完成、边缘回了 500 以下的响应，不代表网站本身可用。接入点证书要覆盖接入点域名，否则每个检测点都会判失败。接入点是 IP 的仍用 TCP 连接拨测（dnspup 不能对 IP 指定 SNI）。',
+        limits: 'HTTPS 拨测以接入点域名作为 Host 与 SNI，边缘回 500 以下即判可用；接入点证书需覆盖接入点域名。接入点是 IP 时使用 TCP 连接拨测。',
       },
       account: '账户本月 {{used}} / {{limit}} 次，各用途预计合计 {{projected}} 次',
       accountUnlimited: '账户不限额，各用途预计合计 {{projected}} 次',
@@ -92,7 +91,6 @@ const zhCN = {
     },
     node: {
       probeType: '拨测类型', probeTypes: { tcping: 'TCP 连接（tcping）', ping: 'ICMP（ping）', http: 'HTTP（有应答即可达）' },
-      probeTypeExtra: 'https 不可选：dnspup 不能对节点 IP 指定 SNI，证书必然不匹配',
       lineAlertMinPoints: '线路告警：格内失败点数至少', lineAlertRounds: '线路告警：连续失败轮数',
       lineAlertExtra: '按「运营商 · 地区」统计（例如「移动 · 广东 3 个点连续失败」），进通知中心；只做诊断，不改变节点调度',
       autoDiagnose: '线路告警首次触发时自动 mtr 一次（计入排障额度）',
@@ -114,12 +112,11 @@ type Messages = typeof zhCN
 
 const enUS: Messages = {
   title: 'dnspup probing',
-  intro: 'With your own dnspup customer API key, dnspup checkpoints probe origins and aggregated edge third-party CDN access points as a probe source next to your nodes. Each checkpoint is one vote, counted together with node votes; when the quota runs out, the rate limit is hit or the key is refused, dnspup pauses, the other sources take over and an alert is sent. dnspup charges one monthly unit per accepted probe (the connection test is free).',
+  intro: 'With your own dnspup customer API key, dnspup checkpoints probe origins and aggregated edge third-party CDN access points as a probe source next to your nodes; each checkpoint is one vote, counted together with node votes.',
   notLicensed: 'The licence lacks the dnspup probing module: you can view but not enable or test.',
   forbidden: 'Requires the dnspup probing permission',
-  limits: 'dnspup HTTP probes connect to the URL host itself: origins reached under a different Host (e.g. an IP origin with the site domain) or with a custom CA are not sent to dnspup; aggregated edge third-party CDN access points are judged by a TCP connect to port 443.',
   form: {
-    enabled: 'Enable dnspup probing', baseURL: 'dnspup API base URL', apiKey: 'API key', apiSecret: 'API secret',
+    title: 'Connection and sources', enabled: 'Enable dnspup probing', baseURL: 'dnspup API base URL', apiKey: 'API key', apiSecret: 'API secret',
     secretKeep: 'Set (fingerprint {{fingerprint}}); leave empty to keep, enter a new one to rotate', secretUnset: 'Not set',
     clearSecret: 'Clear the stored secret',
     sourceDomain: 'Bound server domain', sourceDomainExtra: 'For a key bound to a server domain (requests are signed); empty for an IP-bound key',
@@ -131,7 +128,7 @@ const enUS: Messages = {
   sources: { node: 'Node probes', dnspup: 'dnspup checkpoints', controller: 'Control plane direct probe' },
   node: {
     title: 'Node availability probing',
-    intro: 'dnspup carrier checkpoints probe every node IP and port at the chosen interval; the results go to the node monitoring log. A node is paused only when the local probe and most dnspup checkpoints both fail; dnspup failing alone only alerts. While the plugin is not in use, the interval is off, the source is paused or the quota is used up, only the local probe decides: missing dnspup data never marks a node offline.',
+    intro: 'dnspup carrier checkpoints probe every node IP and port at the chosen interval; the results go to the node monitoring log. A node is paused only when the local probe and most dnspup checkpoints both fail; dnspup failing alone only alerts.',
     inactive: 'dnspup probing is not in use (not licensed, disabled, no key pair or paused): nodes are judged by the local probe only.',
     interval: 'Probe interval', intervals: { off: 'Off', every: 'Every {{minutes}} min' },
     groups: 'Checkpoint carriers / regions', groupNames: { domestic: 'Mainland (any carrier)', telecom: 'China Telecom', unicom: 'China Unicom', mobile: 'China Mobile', overseas: 'Overseas' },
@@ -139,7 +136,7 @@ const enUS: Messages = {
     lowBalance: 'Low balance threshold (requests)', lowBalanceExtra: 'Below this many requests left this month the interval triples and administrators are notified',
     save: 'Save node probing settings', saved: 'Node probing settings saved',
     estimate: 'Estimated use', estimateValue: 'About {{day}} per day · about {{month}} per month',
-    estimateExtra: 'dnspup meters requests: one per node IP and round, whatever the checkpoint count ({{addresses}} node IPs now, {{points}} checkpoints per round). Top up on dnspup; the plugin does not charge.',
+    estimateExtra: 'dnspup meters requests: one per node IP and round, whatever the checkpoint count ({{addresses}} node IPs now, {{points}} checkpoints per round).',
     rotate: 'With more than {{max}} node IPs each round probes a share in turn, so each node is probed less often.',
     balance: 'dnspup balance', balanceValue: '{{remaining}} / {{limit}} requests left', balanceUnlimited: 'Unlimited ({{used}} used)',
     balanceUnknown: 'Not read yet (shown after a connection test or the first round)',
@@ -178,7 +175,7 @@ const enUS: Messages = {
       probeTypes: { tcping: 'TCP connect', https: 'HTTPS' },
       edgeHTTPS: {
         title: 'Aggregated edge candidates probe over HTTPS',
-        limits: 'dnspup requests https://<access point>/ with the access point name as Host and SNI (dnspup cannot use the site name), so a vote only means TLS completed and the edge answered below 500, not that the site itself works. The access point certificate must cover the access point name, or every checkpoint fails. Access points that are IPs stay on TCP connect (dnspup cannot set SNI for an IP).',
+        limits: 'HTTPS probes use the access point name as Host and SNI; an edge answer below 500 counts as up. The access point certificate needs to cover the access point name. Access points that are IPs use TCP connect.',
       },
       account: 'Account {{used}} / {{limit}} this month; purposes project {{projected}} in total',
       accountUnlimited: 'Unlimited account; purposes project {{projected}} in total',
@@ -205,7 +202,6 @@ const enUS: Messages = {
     },
     node: {
       probeType: 'Probe type', probeTypes: { tcping: 'TCP connect (tcping)', ping: 'ICMP (ping)', http: 'HTTP (any answer is reachable)' },
-      probeTypeExtra: 'https is not offered: dnspup cannot send an SNI to a node IP, so the certificate never matches',
       lineAlertMinPoints: 'Line alert: failed points in a cell at least', lineAlertRounds: 'Line alert: consecutive failed rounds',
       lineAlertExtra: 'Counted per carrier · area (e.g. "China Mobile · 广东 3 points failing"), sent to the notification center; diagnosis only, node scheduling is unchanged',
       autoDiagnose: 'Run one mtr when a line alert first fires (metered as diagnosis)',

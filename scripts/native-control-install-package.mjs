@@ -30,7 +30,9 @@ const signedPaths = payloadPaths.filter((name) => name !== 'source.bundle').conc
 const modes = Object.fromEntries(payloadPaths.map((name) => [name, ['native-management.tar', 'source.bundle'].includes(name)
   ? 0o600 : ['control-upgrade-runner', 'analytics-history-bootstrap', 'nats-server', 'cdnca-ed25519'].includes(name) || name.endsWith('.sh') ? 0o755 : 0o644]))
 modes['release.manifest.sig'] = 0o644
-const limits = Object.fromEntries(payloadPaths.map((name) => [name, name === 'source.bundle' ? 512 << 20
+// source.bundle carries the whole Git history and grows with it: 768 MiB (was 512 MiB).
+// The outer package stays under `maximum` (1 GiB, also install-control.sh's download limit).
+const limits = Object.fromEntries(payloadPaths.map((name) => [name, name === 'source.bundle' ? 768 << 20
   : ['native-management.tar', 'control-upgrade-runner', 'analytics-history-bootstrap', 'nats-server'].includes(name) ? binaryLimit : smallLimit]))
 limits['release.manifest.sig'] = 128
 

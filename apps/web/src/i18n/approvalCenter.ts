@@ -8,7 +8,7 @@ const zhCN = {
   approvers: '审批人：平台所有者与平台管理员。',
   enabled: '启用审批中心',
   rulesLabel: '需要审批的操作',
-  firstBatch: '默认勾选',
+  firstBatch: '首次启用时勾选',
   save: '保存',
   saved: '审批中心设置已保存',
   rules: {
@@ -57,7 +57,7 @@ const enUS: typeof zhCN = {
   approvers: 'Approvers: platform owners and platform administrators.',
   enabled: 'Turn on the approval center',
   rulesLabel: 'Operations that need approval',
-  firstBatch: 'Checked by default',
+  firstBatch: 'Checked on first enable',
   save: 'Save',
   saved: 'Approval center settings saved',
   rules: {

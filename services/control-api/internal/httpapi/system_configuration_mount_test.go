@@ -75,3 +75,36 @@ func TestSystemConfigurationMountFactoryFailuresBlockInitialization(t *testing.T
 		t.Fatalf("typed-nil factory error = %v", err)
 	}
 }
+
+// POST /v1/admin/system-mail-settings/tests answered Go's plain 404 because only the exact
+// settings path was mounted; the handler serves the test send itself.
+func TestSystemMailSettingsMountServesTestSend(t *testing.T) {
+	probe := &systemConfigurationMountProbe{}
+	api := New(nil, nil, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32), SystemMailSettingsHandlerFactory: func() (http.Handler, error) {
+		return probe, nil
+	}})
+	if err := api.InitializationError(); err != nil {
+		t.Fatal(err)
+	}
+	wantRequests := []string{
+		"GET /v1/admin/system-mail-settings",
+		"PUT /v1/admin/system-mail-settings",
+		"POST /v1/admin/system-mail-settings/tests",
+	}
+	for _, requestLine := range wantRequests {
+		method, path, _ := strings.Cut(requestLine, " ")
+		response := httptest.NewRecorder()
+		api.Handler().ServeHTTP(response, httptest.NewRequest(method, path, nil))
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("mounted %s status=%d", requestLine, response.Code)
+		}
+	}
+	if !slices.Equal(probe.requests, wantRequests) {
+		t.Fatalf("mounted requests=%q, want %q", probe.requests, wantRequests)
+	}
+	unrelated := httptest.NewRecorder()
+	api.Handler().ServeHTTP(unrelated, httptest.NewRequest(http.MethodPost, "/v1/admin/system-mail-settings/other", nil))
+	if unrelated.Code != http.StatusNotFound || probe.calls != len(wantRequests) {
+		t.Fatalf("unrelated response=(status=%d calls=%d)", unrelated.Code, probe.calls)
+	}
+}

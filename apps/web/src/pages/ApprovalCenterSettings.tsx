@@ -20,12 +20,16 @@ export function ApprovalCenterSettings() {
   const canManage = permissions.includes('approvals.manage')
   const visible = canManage || permissions.includes('approvals.read')
   const settings = useQuery({ queryKey: ['approval-center', 'settings'], queryFn: () => approvalCenterApi.settings(token), enabled: visible && Boolean(token) })
-  // null = untouched: show the saved values (never saved: the first batch preselected, Q7).
+  // null = untouched: show the saved values exactly as the gate applies them (empty rules hold nothing).
   const [draft, setDraft] = useState<{ enabled: boolean; rules: ApprovalRule[] } | null>(null)
   const saved = settings.data
   const enabled = draft?.enabled ?? saved?.enabled ?? false
-  const rules = draft?.rules ?? (saved ? (saved.revision === 0 ? saved.catalog.filter((rule) => rule.default).map((rule) => rule.name) : saved.rules) : [])
-  const setEnabled = (value: boolean) => setDraft({ enabled: value, rules })
+  const rules = draft?.rules ?? saved?.rules ?? []
+  // Q7: turning the never-saved center on preselects the first batch; an untouched save keeps the stored rules.
+  const setEnabled = (value: boolean) => setDraft({
+    enabled: value,
+    rules: value && !draft && saved?.revision === 0 && rules.length === 0 ? saved.catalog.filter((rule) => rule.default).map((rule) => rule.name) : rules,
+  })
   const setRules = (value: ApprovalRule[]) => setDraft({ enabled, rules: value })
   const save = useMutation({
     mutationFn: () => approvalCenterApi.saveSettings(token, { enabled, rules, revision: settings.data?.revision ?? 0 }),

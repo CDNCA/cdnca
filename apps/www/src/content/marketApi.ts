@@ -55,7 +55,9 @@ async function getPage<T>(path: string, signal?: AbortSignal): Promise<Page<T>> 
 }
 
 export const marketApi = {
-  nodeOffers: (signal?: AbortSignal) => getPage<PublicOffer>('/node-offers', signal),
+  // area：libs/geoarea 大洲或区域代码（市场公开接口按在服节点国家过滤），空为不过滤。
+  nodeOffers: (signal?: AbortSignal, area = '') =>
+    getPage<PublicOffer>(area ? `/node-offers?area=${encodeURIComponent(area)}` : '/node-offers', signal),
   plugins: (signal?: AbortSignal) => getPage<PublicPlugin>('/plugins', signal),
 }
 

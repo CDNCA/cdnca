@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App, Button, Card, Form, Input, InputNumber, Popconfirm, Radio, Select, Space, Switch, Table, Tag, Typography } from 'antd'
+import { Alert, App, Button, Form, Input, InputNumber, Popconfirm, Radio, Select, Skeleton, Space, Switch, Table, Tag, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../../api/auth'
@@ -16,7 +16,7 @@ import { useSessionStore } from '../../auth/session'
 import { MetricTrendChart } from '../../components/MetricTrendChart'
 import TenantScopeSelect from '../../components/TenantScopeSelect'
 import '../../i18n/probeDNSPup'
-import { FeedbackWhen, useFeedback } from '@cdnca/ui'
+import { FeedbackWhen, PageSection, useFeedback } from '@cdnca/ui'
 import { SelectionFields, selectionOf, type SelectionValues } from './SelectionFields'
 
 function useReason() {
@@ -48,16 +48,16 @@ export function PurposesCard({ token }: { token: string }) {
   const number = (value: number) => new Intl.NumberFormat(i18n.resolvedLanguage ?? i18n.language).format(value)
   const set = (purpose: string, change: Partial<ProbePurposeInput>) =>
     setDraft((current) => ({ ...current, [purpose]: { ...current[purpose], ...change } }))
-  if (query.error) return <Card title={t('unified.purposes.title')}><FeedbackWhen title={reason(query.error)} /></Card>
+  if (query.error) return <PageSection title={t('unified.purposes.title')}><FeedbackWhen title={reason(query.error)} /></PageSection>
   const data = query.data
   const state = (item: ProbePurposeStatus) => {
     if (item.gate.stopped) return <Tag color="red">{t('unified.purposes.gate.stopped')} · {t(`unified.purposes.reasons.${item.gate.reason ?? 'disabled'}`)}</Tag>
     if (item.gate.factor > 1) return <Tag color="orange">{t('unified.purposes.gate.slowed', { factor: item.gate.factor })}</Tag>
     return <Tag color="green">{t('unified.purposes.gate.normal')}</Tag>
   }
-  return <Card title={t('unified.purposes.title')} loading={query.isLoading}>
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Typography.Paragraph type="secondary">{t('unified.purposes.intro')}</Typography.Paragraph>
+  return <PageSection title={t('unified.purposes.title')}>
+    {query.isLoading ? <Skeleton active /> : <div className="probe-dnspup-section-body">
+      <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('unified.purposes.intro')}</Typography.Paragraph>
       {data ? <Typography.Text strong>{data.monthly_limit > 0
         ? t('unified.purposes.account', { used: number(data.monthly_used), limit: number(data.monthly_limit), projected: number(data.projected_monthly) })
         : t('unified.purposes.accountUnlimited', { projected: number(data.projected_monthly) })}</Typography.Text> : null}
@@ -82,9 +82,9 @@ export function PurposesCard({ token }: { token: string }) {
           { title: t('unified.purposes.columns.projected'), render: (_, item) => number(item.gate.projected_monthly) },
           { title: t('unified.purposes.columns.state'), render: (_, item) => state(item) },
         ]} />
-      <Button type="primary" loading={save.isPending} disabled={!data} onClick={() => save.mutate()}>{t('unified.purposes.save')}</Button>
-    </Space>
-  </Card>
+      <div><Button type="primary" loading={save.isPending} disabled={!data} onClick={() => save.mutate()}>{t('unified.purposes.save')}</Button></div>
+    </div>}
+  </PageSection>
 }
 
 function percent(value: number) {
@@ -129,9 +129,9 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
       {t('unified.matrix.cell', { availability: percent(cell.availability), latency: cell.avg_latency_ms })}</Tag>
     {cell.top_failure ? <Typography.Text type="danger">{t(`unified.failures.${cell.top_failure}`)}</Typography.Text> : null}
   </Space> : '—'
-  return <Card title={t('unified.matrix.title')}>
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Typography.Paragraph type="secondary">{t('unified.matrix.intro')}</Typography.Paragraph>
+  return <PageSection title={t('unified.matrix.title')}>
+    <div className="probe-dnspup-section-body">
+      <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('unified.matrix.intro')}</Typography.Paragraph>
       <Space wrap>
         <Select value={subject} onChange={setSubject} aria-label={t('unified.matrix.subject')} style={{ minWidth: 160 }}
           options={(['node'] as const).map((value) => ({ value, label: t(`unified.matrix.subjects.${value}`) }))} />
@@ -151,12 +151,12 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
           columns={[{ title: t('unified.matrix.area'), dataIndex: 'area', render: (area: string) => area || t('unified.matrix.unknownArea') },
             ...carriers.map((carrier) => ({ title: t(`unified.carriers.${carrier}`), key: carrier,
               render: (_: unknown, row: { area: string }) => cellText(cellOf(row.area, carrier)) }))]} />
-        <Typography.Text strong>{t('unified.matrix.history')}</Typography.Text>
+        <Typography.Text strong className="probe-dnspup-subtitle">{t('unified.matrix.history')}</Typography.Text>
         <MetricTrendChart status="success" points={matrix.data.series.map((point) => ({
           label: new Date(point.at).toLocaleString(), value: Math.round(point.availability * 1000) / 10 }))} />
       </> : null}
-      <Typography.Text strong>{t('unified.matrix.diagnose')}</Typography.Text>
       <Space wrap>
+        <Typography.Text strong className="probe-dnspup-subtitle">{t('unified.matrix.diagnose')}</Typography.Text>
         <Input value={target} onChange={(event) => setTarget(event.target.value)} aria-label={t('unified.matrix.diagnoseTarget')}
           placeholder={t('unified.matrix.diagnoseTarget')} style={{ width: 240 }} />
         <Input value={points} onChange={(event) => setPoints(event.target.value)} aria-label={t('unified.matrix.diagnosePoints')}
@@ -168,8 +168,8 @@ export function MatrixCard({ token, initialNode }: { token: string; initialNode?
         message={diagnosis.status === 'pending' ? t('unified.matrix.diagnoseRunning') : diagnosis.status === 'completed'
           ? t('unified.matrix.diagnoseDone') : t('unified.matrix.diagnoseFailed', { code: diagnosis.error_code ?? '' })}
         description={diagnosis.status === 'completed' ? <pre className="probe-traces">{JSON.stringify(diagnosis.traces, null, 2)}</pre> : undefined} /> : null}
-    </Space>
-  </Card>
+    </div>
+  </PageSection>
 }
 
 interface OverrideForm extends SelectionValues {
@@ -197,7 +197,7 @@ function NodePicker({ token, value, onChange }: { token: string; value?: string;
   })
   const options = (query.data?.items ?? []).map((node): SubjectOption => ({ value: node.id, label: `${node.name} (ID ${node.display_id})` }))
   if (picked && picked.value === value && !options.some((option) => option.value === picked.value)) options.unshift(picked)
-  return <Select aria-label={t('unified.overrides.node')} showSearch filterOption={false} onSearch={setSearch} style={{ width: 360 }}
+  return <Select aria-label={t('unified.overrides.node')} showSearch filterOption={false} onSearch={setSearch}
     placeholder={t('unified.overrides.nodePlaceholder')} loading={query.isFetching} options={options} value={value}
     notFoundContent={query.isError ? t('unified.overrides.listFailed') : t('unified.overrides.noMatch')}
     onChange={(next: string) => { setPicked(options.find((option) => option.value === next)); onChange?.(next) }} />
@@ -252,11 +252,11 @@ export function OverridesCard({ token }: { token: string }) {
     onSuccess: () => { void refresh(); void message.success(t('unified.overrides.removed')) },
     onError: (error) => void feedback.error(reason(error)),
   })
-  if (query.error) return <Card title={t('unified.overrides.title')}><FeedbackWhen title={reason(query.error)} /></Card>
-  return <Card title={t('unified.overrides.title')} loading={query.isLoading}
+  if (query.error) return <PageSection title={t('unified.overrides.title')}><FeedbackWhen title={reason(query.error)} /></PageSection>
+  return <PageSection title={t('unified.overrides.title')}
     extra={<Button onClick={() => setAdding((value) => !value)}>{t('unified.overrides.add')}</Button>}>
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Typography.Paragraph type="secondary">{t('unified.overrides.intro')}</Typography.Paragraph>
+    {query.isLoading ? <Skeleton active /> : <div className="probe-dnspup-section-body">
+      <Typography.Paragraph type="secondary" className="probe-dnspup-section-intro">{t('unified.overrides.intro')}</Typography.Paragraph>
       <Table rowKey="id" size="small" pagination={false} dataSource={query.data?.items ?? []}
         locale={{ emptyText: t('unified.overrides.empty') }} scroll={{ x: true }}
         columns={[
@@ -274,7 +274,9 @@ export function OverridesCard({ token }: { token: string }) {
           { title: '', render: (_, item) => <Popconfirm title={t('unified.overrides.remove')} onConfirm={() => remove.mutate(item.id)}>
             <Button size="small" danger>{t('unified.overrides.remove')}</Button></Popconfirm> },
         ]} />
-      {adding ? <Form form={form} layout="vertical" requiredMark={false} initialValues={{ kind: 'node', group_scope: 'platform', probe_type: 'inherit', selection_enabled: false, points_per_group: 3 }}>
+      {adding ? <Form form={form} layout="vertical" requiredMark={false} className="probe-dnspup-override-form"
+        initialValues={{ kind: 'node', group_scope: 'platform', probe_type: 'inherit', selection_enabled: false, points_per_group: 3 }}>
+        <div className="density-form-grid">
         <Form.Item name="kind" label={t('unified.overrides.subject')}>
           <Select aria-label={t('unified.overrides.subject')} options={(['node', 'line_group'] as const).map((value) => ({ value, label: t(`unified.overrides.kinds.${value}`) }))} />
         </Form.Item>
@@ -292,7 +294,7 @@ export function OverridesCard({ token }: { token: string }) {
                 onChange={(scopeID) => form.setFieldsValue({ tenant_scope_id: scopeID || undefined, line_group_id: undefined })} />
             </Form.Item> : null}
           <Form.Item name="line_group_id" label={t('unified.overrides.lineGroup')} rules={[{ required: true, message: t('unified.overrides.required') }]}>
-            <Select aria-label={t('unified.overrides.lineGroup')} showSearch optionFilterProp="label" style={{ width: 360 }}
+            <Select aria-label={t('unified.overrides.lineGroup')} showSearch optionFilterProp="label"
               placeholder={t('unified.overrides.lineGroupPlaceholder')} loading={lineGroups.isFetching} options={lineGroups.data ?? []}
               notFoundContent={lineGroups.isError ? t('unified.overrides.listFailed') : t('unified.overrides.noMatch')} />
           </Form.Item></>
@@ -304,8 +306,9 @@ export function OverridesCard({ token }: { token: string }) {
             ...nodeProbeTypes.map((value) => ({ value, label: t(`unified.node.probeTypes.${value}`) }))]} />
         </Form.Item>
         <SelectionFields form={form} />
+        </div>
         <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>{t('unified.overrides.save')}</Button>
       </Form> : null}
-    </Space>
-  </Card>
+    </div>}
+  </PageSection>
 }

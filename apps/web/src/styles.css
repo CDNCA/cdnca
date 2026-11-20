@@ -5633,7 +5633,7 @@ body.i-theme-dark {
 /* 两个并列的分区（如两段配置文本框），窄屏自动叠回一列。 */
 .density-split {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
   gap: 16px;
 }
 

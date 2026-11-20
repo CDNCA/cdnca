@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -251,11 +252,14 @@ func (service *Service) testConnection(ctx context.Context, actor Actor, key str
 		result.Tools = []string{}
 	}
 	var apiErr *APIError
+	transportDetail := "" // set when dnspup gave no answer at all
 	switch {
 	case errors.As(accountErr, &apiErr):
 		result.HTTPStatus, result.ErrorCode = apiErr.Status, apiErr.Code
 	case accountErr != nil:
 		result.HTTPStatus, result.ErrorCode = 0, "transport_error"
+		transportDetail = transportSummary(accountErr)
+		service.config.Logger.Warn("dnspup connection test got no answer", "base_url", input.BaseURL, "error", transportDetail)
 	case !result.AsyncCapable:
 		result.OK, result.ErrorCode = false, "async_unavailable"
 	case !result.HTTPAllowed && !result.TCPAllowed:
@@ -270,18 +274,39 @@ func (service *Service) testConnection(ctx context.Context, actor Actor, key str
 		// The stored key's account facts (only when testing the stored pair).
 		if sameEndpoint(current, input.BaseURL, input.APIKey) && current.SourceDomain == input.SourceDomain &&
 			(secretState == "stored" || secretDigest(secret)[:16] == current.Fingerprint) {
-			if _, err := tx.Exec(ctx, `UPDATE probe_dnspup_state SET account_checked_at=$1,async_capable=$2,monthly_limit=$3,
+			if transportDetail != "" {
+				// No answer says nothing about the account: keep the last known quota and capability, record the failed check.
+				if _, err := tx.Exec(ctx, `UPDATE probe_dnspup_state SET account_checked_at=$1,account_error_code=$2,updated_at=$1
+					WHERE singleton`, now, result.ErrorCode); err != nil {
+					return err
+				}
+			} else if _, err := tx.Exec(ctx, `UPDATE probe_dnspup_state SET account_checked_at=$1,async_capable=$2,monthly_limit=$3,
 				monthly_used=$4,account_error_code=$5,updated_at=$1 WHERE singleton`, now, result.AsyncCapable,
 				max(result.MonthlyLimit, 0), max(result.MonthlyUsed, 0), result.ErrorCode); err != nil {
 				return err
 			}
 		}
-		if err := service.appendAudit(ctx, tx, &actor, ActionTest, outcome, map[string]any{"base_url": input.BaseURL,
+		payload := map[string]any{"base_url": input.BaseURL,
 			"api_key": input.APIKey, "secret": map[bool]string{true: "typed", false: "stored"}[secretState != "stored"],
-			"http_status": result.HTTPStatus, "error_code": result.ErrorCode}); err != nil {
+			"http_status": result.HTTPStatus, "error_code": result.ErrorCode}
+		if transportDetail != "" {
+			payload["transport_error"] = transportDetail
+		}
+		if err := service.appendAudit(ctx, tx, &actor, ActionTest, outcome, payload); err != nil {
 			return err
 		}
 		return recordWrite(ctx, tx, actor, key, "test", digest, body, now)
 	})
 	return result, err
+}
+
+// transportSummary is the cause of a failed dnspup call for the audit log and the journal: the error text (the
+// request URL and the dialer or proxy failure; credentials travel in headers and never appear in it), cut to 300
+// bytes.
+func transportSummary(err error) string {
+	text := strings.ToValidUTF8(err.Error(), "")
+	if len(text) > 300 {
+		text = strings.ToValidUTF8(text[:300], "")
+	}
+	return text
 }

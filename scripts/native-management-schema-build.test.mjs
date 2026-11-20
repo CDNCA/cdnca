@@ -72,7 +72,7 @@ function schemaBuildFixture(t, head = 270) {
   let ancestor
   if ([275, 277].includes(head)) {
     // Read real historical objects without copying or mutating the shared repository.
-    fs.writeFileSync(path.join(repo, '.git/objects/info/alternates'), git(repository, ['rev-parse', '--git-path', 'objects']) + '\n')
+    fs.writeFileSync(path.join(repo, '.git/objects/info/alternates'), path.resolve(repository, git(repository, ['rev-parse', '--git-path', 'objects'])) + '\n')
     const baseline = head === 275 ? baseline117 : baseline122
     git(repo, ['update-ref', 'HEAD', baseline]); git(repo, ['read-tree', baseline])
     realExec('tar', ['-xf', '-', '-C', repo], { input: realExec('git', ['archive', baseline, 'services/control-api/migrations'], { cwd: repo, maxBuffer: 32 << 20 }) })

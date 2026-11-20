@@ -629,13 +629,13 @@ test('each large-file cap and the total package cap reject sparse oversize files
   const fixture = nativeControlInstallFixture(t)
   withNativeControlInstallCommands(t, fixture); prepareNativeControlInstallPackage(fixture.options)
   const payload = path.join(fixture.options.outputDir, 'payload'), metadata = JSON.parse(fs.readFileSync(path.join(fixture.options.outputDir, 'install.manifest.json')))
-  for (const [name, limit] of [['native-management.tar', 285229182], ['control-upgrade-runner', 285229182], ['analytics-history-bootstrap', 285229182], ['source.bundle', 512 << 20]]) {
+  for (const [name, limit] of [['native-management.tar', 285229182], ['control-upgrade-runner', 285229182], ['analytics-history-bootstrap', 285229182], ['source.bundle', 768 << 20]]) {
     const filename = path.join(payload, name), saved = fs.readFileSync(filename)
     fs.truncateSync(filename, limit + 1)
     assert.throws(() => createNativeControlInstallManifest(payload, metadata), /size limit/)
     fs.writeFileSync(filename, saved)
   }
-  for (const [name, size] of [['native-management.tar', 285229182], ['control-upgrade-runner', 285229182], ['source.bundle', 512 << 20]]) {
+  for (const [name, size] of [['native-management.tar', 285229182], ['control-upgrade-runner', 285229182], ['source.bundle', 768 << 20]]) {
     fs.truncateSync(path.join(payload, name), size)
   }
   assert.throws(() => createNativeControlInstallManifest(payload, metadata), /outer package exceeds size limit/)

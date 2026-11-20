@@ -1702,7 +1702,7 @@ func (s *Server) Handler() http.Handler {
 			"/v1/admin/system-user-settings",
 		}},
 		{handler: s.systemMailSettingsHandler, preserveRaw: true, patterns: []string{
-			"/v1/admin/system-mail-settings",
+			"/v1/admin/system-mail-settings", "/v1/admin/system-mail-settings/tests",
 		}},
 		{handler: s.systemOtherSettingsHandler, preserveRaw: true, patterns: []string{
 			"/v1/admin/system-other-settings",
