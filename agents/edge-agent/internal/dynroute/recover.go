@@ -40,6 +40,7 @@ func (runtime *Runtime) Recover(ctx context.Context) error {
 		if missing := missingConfigurationReference(runtime.confPath()); missing != "" {
 			return runtime.discardStale(missing)
 		}
+		removeStaleUnixListeners(runtime.confPath())
 		if err := runtime.openresty(ctx, runtime.confPath()); err != nil {
 			return err
 		}
