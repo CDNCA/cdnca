@@ -573,6 +573,8 @@ func (runtime *Runtime) install(ctx context.Context, conf []byte) (reloaded, sta
 	if err := os.Rename(candidate, runtime.confPath()); err != nil {
 		return false, false, nil, err
 	}
+	// A start, and a reload adding a listener, bind every unix path anew.
+	removeStaleUnixListeners(runtime.confPath())
 	pid, alive := runtime.masterPID()
 	if !alive {
 		if err := runtime.openresty(ctx, runtime.confPath()); err != nil {
